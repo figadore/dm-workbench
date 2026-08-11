@@ -1,0 +1,1433 @@
+# DM Assistant Harness — Incremental Implementation Plan
+
+## How to Use This Plan
+
+This plan turns the product goals and architecture into small, resumable tasks. It is intentionally ordered so that each phase leaves a working capability and does not require the entire campaign ontology to be complete.
+
+- `PROJECT_STATUS.md` identifies the current task and is the live source of handoff state.
+- Task IDs in this document are stable. Use them in handoffs and, when applicable, commit subjects.
+- Task IDs group work by domain; numeric order is not the execution order across or within phases. Follow explicit dependencies and the current status file. P7-11 was added without renumbering stable P7 IDs and intentionally runs before P7-09/P7-10.
+- When a design detail here conflicts with `dm-assistant-technical-architecture.md`, the architecture wins until the documents are reconciled explicitly.
+
+## Delivery Strategy
+
+Use a dungeon-first vertical path so the primary capability appears before the entire campaign-memory model is complete:
+
+1. scaffold the reproducible Python Workbench package/test foundation (P0-01; the remaining P0 platform tasks can continue in parallel);
+2. add an independently packaged, in-process pure dungeon kernel from typed synthetic specs—topology, seeded layout, geometry validation, deterministic SVG, PNG, low-ink tiled PDF, and Roll20 exports (P7-02 through P7-08);
+3. complete preparation persistence and the model-independent Dungeon Studio so a human-authored brief/spec can be versioned, previewed, regenerated, exported, and approved without a provider (P7-01 and P7-11, after the required P0 platform tasks);
+4. add immutable sources, filtered lexical grounding, and the common generation-context envelope with a narrow `DungeonGenerationContext` (P1 and P4-03/P4-04 scope/context work), while building P3's canonical revision/change-set boundary before any profile/rules operation or generated fact can become canonical; semantic retrieval remains eval-driven rather than critical path;
+5. add the private `pi-ai` gateway, model/task profiles, shared provider/settings/stream UI foundation, and constrained grounded dungeon intent/repair in the existing Studio (P4-02/P4-05/P4-06 and P7-09/P7-10);
+6. add synthetic normalized party/creature inputs and the Encounter Studio as a Workbench feature, then real adapters when formats are chosen (P4-01, P6, and P8); decide only after P8 whether a narrow `encounter-mechanics` package is justified;
+7. extend the established revision boundary with precise campaign-memory state and the general Ask web workflow in parallel where useful (P5 and P4-07, with P2 only where retrieval evals justify it);
+8. add session-close extraction from what actually happened (P9);
+9. harden, back up, and deploy the Python app, in-process dungeon package, private model gateway, and PostgreSQL system (P10), while moving security, secrecy, eval, and backup checks into every earlier persisted slice.
+
+The early dungeon kernel is deliberately pure and file/fixture driven: it does not need PostgreSQL, an LLM, or copyrighted data to prove that code—not the model—can create valid practical grids. It is a Python package boundary inside the same Workbench deployment, not a service. Persistence, domain-specific context, and grounded generation are integrated afterward. The canonical approval boundary must exist before generated material can promote facts into campaign state; until P3 is complete, that promotion path remains unavailable.
+
+## Confirmed Scope
+
+### Included in the initial release
+
+- One exposed campaign and one DM principal.
+- Python/FastAPI modular monolith and shared CLI application services, with one independently packaged in-process pure dungeon kernel.
+- PostgreSQL 16 with pgvector in the same instance.
+- Immutable source revisions, chunks, corpus snapshots, and exact citations.
+- Campaign and rules source classification.
+- Lexical plus vector retrieval.
+- Independent first-party web/CLI interaction with a private Node gateway using pinned `@earendil-works/pi-ai` for model auth/catalog/transport.
+- Canonical revisions, readable summaries, detailed audit history, and human review.
+- Entities, predicates, events, propositions/assertions, basic relative time, knowledge, belief, and provenance.
+- Complete supplied character-sheet and important-item profiles once a source format is selected.
+- Practical seeded square-grid dungeon generation with deterministic topology, geometry, validation, and targeted regeneration.
+- Deterministic internal/optional SVG, DM/clean PNG, low-ink exact-scale tiled Letter/A4 PDF, and Roll20-compatible image/grid exports.
+- Complete authorized/generated creature stat blocks and party/playstyle-aware combat encounters.
+- Social, exploration, puzzle, trap, hazard, and mixed encounter packages.
+- Session-note extraction into proposals only.
+- A small common generation-context envelope with separate versioned dungeon, encounter, and later task payloads.
+
+### Explicitly deferred
+
+- Player accounts or player-facing API routes.
+- Custom-calendar calculations and date arithmetic.
+- Alternate timeline inheritance/merging.
+- Live combat state such as current HP, slots, initiative, tactical positioning, or token synchronization.
+- Regional/world map generation and illustration-first dungeon maps.
+- Direct Roll20 API/dynamic-lighting automation and live shared token/cursor state.
+- `@earendil-works/pi-agent-core`, Pi extensions, and MCP integration until a measured open-ended-loop or external-client use case requires them.
+- Streaming transcript ingestion.
+- Autonomous agents or autonomous canonical writes.
+- Automatic rewriting of human-authored Markdown.
+- Git as a canonical data store; optional log export may come later.
+- Local chat-model infrastructure and image-model enhancement. A small local embedding runtime is an initial P2 candidate, not this deferred item.
+- Neo4j, a dedicated vector database, a message broker, or additional/domain microservices beyond the documented private model-runtime gateway.
+- A preemptive `encounter-engine` package; begin in the Workbench and extract only cohesive deterministic mechanics if P8 evidence justifies it.
+- A universal all-purpose generation-context payload; each workflow owns a narrow versioned context schema inside the common envelope.
+
+## Recommended Implementation Defaults
+
+These defaults remove avoidable setup decisions. Change them only with a documented reason.
+
+| Concern | Default |
+| --- | --- |
+| Runtime | Python 3.12 managed by `uv` |
+| Packaging | Root Workbench `pyproject.toml`/`src/` distribution plus a `uv` workspace member for `packages/dungeon-engine` when P7-02 begins; no empty future packages |
+| API | FastAPI |
+| CLI | Typer, calling the same services as the API |
+| Validation/config | Pydantic 2 and `pydantic-settings` |
+| Database | PostgreSQL + pgvector |
+| SQL/migrations | SQLAlchemy 2 synchronous sessions, psycopg 3, Alembic |
+| Model transport/auth | Private Node 22.19+ gateway with an exactly pinned `@earendil-works/pi-ai`; npm lockfile |
+| Agent workflow | Bounded Python task workflows initially; `pi-agent-core` deferred pending measured need |
+| User interface | Typer CLI plus thin FastAPI templates/HTMX-or-vanilla-JS web UI with SSE |
+| Internal transport | Private/loopback HTTP + SSE between Python and the Node gateway; `httpx` client |
+| Tests | pytest; unit, PostgreSQL integration, and golden eval suites |
+| Quality | Ruff formatting/linting and mypy (or Pyright if deliberately substituted) |
+| IDs | UUID4 opaque IDs initially |
+| Content hashes | SHA-256 over exact source bytes; keep any normalized rename fingerprint separate |
+| Generated assets | Platform-owned content-addressed local volume behind an `AssetStore` interface reused by preparation artifacts and prompt attachments |
+| Generation context | Small `GenerationContextEnvelope` for shared scope/provenance plus separate strict payload schemas such as `DungeonGenerationContext` and `EncounterGenerationContext` |
+| Dungeon boundary | In-process pure `dm-dungeon` workspace package; no FastAPI, SQLAlchemy, retrieval, Workbench, or provider imports |
+| Encounter boundary | Workbench feature/module initially; consider extracting only `encounter-mechanics` after P8 measurements |
+| Initial map representation | Versioned square-grid dungeon package; deterministic SVG as primary renderer |
+| Logging | Structured application logs with request/run/revision IDs; no secret/context bodies by default |
+
+Synchronous database access is the simpler initial choice for a small deployment and CLI/API transaction sharing. Do not introduce async SQLAlchemy unless measured concurrency requires it. Python owns bounded workflows and durable run state; the Node gateway owns only chat-provider credentials and normalized `pi-ai` transport. Embedding providers remain separate Python adapters and never reuse Codex OAuth.
+
+## Target Repository Shape
+
+Create this incrementally; do not generate empty modules for distant phases.
+
+```text
+.
+├── AGENTS.md
+├── README.md
+├── PROJECT_STATUS.md
+├── dm-assistant-project-goals.md
+├── dm-assistant-technical-architecture.md
+├── dm-assistant-implementation-plan.md
+├── pyproject.toml       # Workbench distribution; becomes uv workspace root in P7-02
+├── uv.lock
+├── .gitignore
+├── .env.example
+├── compose.yaml
+├── alembic.ini
+├── migrations/         # one database and one ordered Alembic history
+├── packages/
+│   └── dungeon-engine/ # added in P7-02; loaded in-process, never a service
+│       ├── pyproject.toml
+│       ├── src/dm_dungeon/
+│       │   ├── contracts/
+│       │   ├── topology/
+│       │   ├── layout/
+│       │   ├── validation/
+│       │   ├── rendering/
+│       │   └── export/
+│       └── tests/
+├── model-gateway/       # added in P4, not during P0 scaffold
+│   ├── package.json
+│   ├── package-lock.json
+│   ├── tsconfig.json
+│   └── src/
+├── src/dm_assistant/
+│   ├── api/
+│   ├── web/             # shared shell starts with P7-11; P4/P9 extend it
+│   ├── cli/
+│   ├── config.py
+│   ├── db/
+│   ├── modules/         # feature-owned application/domain/repository ports
+│   │   ├── library/
+│   │   ├── chronicle/
+│   │   ├── profiles/
+│   │   ├── preparation/
+│   │   ├── sessions/
+│   │   └── assistant/
+│   ├── orchestration/
+│   │   ├── context/     # envelope plus task-specific compiler policies
+│   │   ├── dungeons/    # Workbench workflow around dm_dungeon
+│   │   └── encounters/  # remains app-local unless P8 proves an extraction seam
+│   └── adapters/
+│       ├── assets/
+│       ├── embeddings/
+│       └── model_gateway/
+└── tests/
+    ├── unit/
+    ├── integration/
+    ├── evals/
+    └── fixtures/        # synthetic content only
+```
+
+The tree describes ownership, not directories to create during P0-01. Add each feature only with its first working task. In particular, do not create an `encounter-engine` workspace member speculatively.
+
+## Dependency Map and Dungeon-First Fast Path
+
+```text
+P0-01 Python Workbench package/test scaffold
+    |
+    +--> P7-02..P7-08 pure dm_dungeon workspace package (synthetic specs)
+    |          |
+    |          +--> remaining required P0 + P7-01 prep/assets + P7-11 model-independent Studio
+    |
+    +--> remaining P0 -> P1 versioned sources + lexical retrieval
+                           |
+                           +--> P4-03/P4-04 scope + envelope + DungeonGenerationContext
+                           |          |
+                           |          +--> P4 gateway/task profiles/settings + P7-09/P7-10 grounded Studio
+                           |                         |
+                           |                         +--> P4-07 general Ask web workflow
+                           |
+                           +--> P2 embeddings/hybrid retrieval only when evals justify it
+                           |
+                           +--> P3 canonical revisions/review -> P5 structured campaign knowledge
+                                    |                             |
+                                    |                             +--> P9 session-close extraction
+                                    +--> canonical P4 rules/profile operations + reviewed P6 profiles
+
+P3 revision boundary + P6 normalized party/item inputs + P4 rules/creature access + P7 dungeon package
+    |
+    v
+P8 Encounter Studio + EncounterGenerationContext + app-local deterministic mechanics
+    |
+    +--> optional post-eval encounter-mechanics extraction decision
+    +--> P9 session-close extraction
+
+All persisted/user-visible slices -> incremental security/secrecy/backup/eval gates
+All release paths -> P10 aggregate hardening/deployment gate
+```
+
+P7-02 through P7-08 initially read/write fixture JSON and temporary output directories from the isolated `dm_dungeon` package. P7-01 and P7-11 then give those immutable packages durable artifact/asset lineage and a provider-independent Workbench workflow. P1 plus P4 scope/context work adds a pinned `GenerationContextEnvelope<DungeonGenerationContext>` before model-assisted generation. P6/P8 use synthetic profiles until real formats are selected. P9 requires P5 plus the prepared-artifact contracts from P7/P8. `PROJECT_STATUS.md` must always name the single next task rather than asking an agent to infer a branch.
+
+---
+
+## P0 — Foundation and Reproducible Development
+
+### Goal
+
+Create the smallest executable application and migration/test environment. Do not implement campaign behavior yet.
+
+### P0-01 — Scaffold the Python package
+
+**Work**
+
+- Add root `pyproject.toml` with Python 3.12, runtime dependencies, and dev groups. Keep the Workbench as the root distribution and make later conversion to a `uv` workspace straightforward, but do not create `packages/dungeon-engine` until P7-02.
+- Add `.gitignore` for virtual environments, caches, `.env`, local database/data mounts, and generated provider/export artifacts without broadly ignoring future source directories.
+- Add the `src/dm_assistant` package.
+- Add a Typer entry point named `dm` with `dm --help` and `dm version`.
+- Add a minimal FastAPI app factory with no business routes.
+- Add one unit test proving package/CLI/API imports work.
+- Configure Ruff and static type checking.
+- Generate and commit/update `uv.lock` when repository workflow permits.
+
+**Done when**
+
+```text
+uv sync --all-groups
+uv run dm --help
+uv run pytest tests/unit
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy src
+```
+
+all pass on a Python 3.12 environment.
+
+**Dungeon-first handoff:** P7-02 may begin immediately after P0-01 because the typed dungeon kernel needs no database, provider, or source corpus. P0-02 through P0-04 can continue before persistence/API integration.
+
+### P0-02 — Configuration and structured logging
+
+**Work**
+
+- Add typed settings for environment, database URL, log level, source roots, single-DM API token, private model-gateway URL/policy, and separate embedding-runtime/provider policy.
+- Add a reusable single-DM authentication dependency/middleware; all future non-health API routes must opt in by default rather than remembering to add auth individually.
+- Add `.env.example` with placeholders only.
+- Add structured logs carrying request ID, ingestion/embedding/model/generation-run ID, change-set ID, and campaign revision where available.
+- Add secret-field redaction and tests.
+- Establish domain error types that API and CLI can render consistently.
+
+**Done when**
+
+- Invalid/missing required settings fail with a concise message.
+- Logs do not print database passwords, API tokens, or source text.
+- Non-health test routes reject missing/invalid DM credentials without echoing them.
+- Unit tests cover config precedence and redaction.
+
+### P0-03 — PostgreSQL/pgvector and migrations
+
+**Work**
+
+- Add `compose.yaml` for PostgreSQL with pgvector; pin an explicit image version.
+- Add health checks and a named local development volume.
+- Add SQLAlchemy session/transaction helpers.
+- Configure Alembic and create a foundation migration enabling required extensions.
+- Add minimal `campaign` and schema-version tables only if needed to prove migrations.
+- Add PostgreSQL integration-test markers/fixtures.
+
+**Done when**
+
+```text
+docker compose up -d postgres
+uv run alembic upgrade head
+uv run pytest tests/integration
+uv run alembic downgrade base
+uv run alembic upgrade head
+```
+
+passes in an environment with Docker/PostgreSQL.
+
+### P0-04 — Health endpoints and contributor loop
+
+**Work**
+
+- Add `/health/live` without database dependency.
+- Add `/health/ready` that checks schema/database readiness without leaking config.
+- Add `dm doctor` to report safe environment readiness.
+- Document local commands in `README.md` once they exist.
+- Add a single aggregate check command or script used by humans and CI.
+
+**Phase gate P0**
+
+- Fresh checkout can install, lint, test, migrate, start the API, and run `dm doctor` using documented commands.
+- A failed database connection is distinguishable from a dead API process.
+- `PROJECT_STATUS.md` records whether the P7-02 dungeon fast path is underway/complete and identifies the next platform integration task with actual command results.
+
+---
+
+## P1 — Immutable Documents, Corpus Snapshots, and Lexical Search
+
+### Goal
+
+Ingest Markdown safely and answer search queries with exact, immutable citations—without embeddings or an LLM.
+
+### P1-01 — Document/source schema
+
+**Work**
+
+Create and migrate the architecture's source layer:
+
+- logical document and path-history/source-registry records;
+- immutable document revision;
+- authority class, document type, corpus, ruleset metadata, and visibility policy;
+- document chunk with heading path, ordinal, character offsets, page metadata, and full-text vector;
+- ingestion run;
+- corpus snapshot and snapshot-document membership.
+
+Add database constraints for campaign/corpus ownership, revision uniqueness, source hash identity, and immutable revision content.
+
+**Done when**
+
+- Migration round-trip passes.
+- Database tests reject invalid corpus/visibility combinations and mutation of immutable revision content through application services.
+
+### P1-02 — Source registry and idempotent revision ingestion
+
+**Work**
+
+- Assign a document UUID on first ingestion.
+- Store current path plus path history and content hash.
+- Re-ingesting unchanged content returns the existing revision.
+- Editing creates one new revision.
+- Exact-content move/rename retains logical identity.
+- Ambiguous moved-and-edited files produce a review/error state rather than silent duplication/merge.
+- Missing files retire the path/document only through an explicit reconciliation action; they do not delete revisions.
+
+Use an allowlisted source root and reject path traversal/symlink escapes.
+
+**Done when**
+
+Integration tests cover unchanged, edited, moved, duplicated, missing, disallowed, and ambiguous sources.
+
+### P1-03 — Markdown parser and deterministic chunker
+
+**Work**
+
+- Preserve the exact source snapshot.
+- Parse front matter as metadata without making Obsidian syntax mandatory.
+- Chunk by heading and semantic block with bounded size/overlap.
+- Preserve heading path and exact source offsets for every chunk.
+- Label code blocks/tables safely rather than losing them.
+- Version parser/chunker behavior.
+
+Create synthetic fixtures containing headings, lists, tables, code fences, Unicode names, links, and instruction-like malicious text.
+
+**Done when**
+
+- Re-running the same parser/chunker version produces the same chunk identities/content.
+- Every chunk maps back to the expected source span.
+- No test fixture source instructions affect application control flow.
+
+### P1-04 — Atomic corpus snapshot activation
+
+**Work**
+
+- Build a candidate snapshot from selected logical-document heads.
+- Activate it only after all chunks/full-text indexes are ready.
+- Preserve the prior active snapshot on failure.
+- Record ingestion configuration and parser/chunker versions.
+- Add provenance-drift detection when accepted evidence text changes or disappears; emit a warning/proposal later, never an automatic canonical retraction.
+
+**Done when**
+
+- Queries never see a half-ingested document set.
+- A failed ingestion leaves the previous snapshot queryable.
+- Snapshot IDs reproduce the exact revision set.
+
+### P1-05 — Filtered PostgreSQL lexical retrieval
+
+**Work**
+
+- Implement lexical search scoped by campaign, corpus snapshot, corpus, authority class, visibility, and ruleset.
+- Boost headings/exact names without relying solely on English stemming.
+- Return bounded snippets and stable citation IDs.
+- Exclude plans from historical-fact search by default while allowing an explicit DM preparation query.
+- Keep campaign and rules corpora separate.
+
+**Done when**
+
+- Exact D&D-like names and natural prose terms are both retrievable in synthetic fixtures.
+- Unauthorized/wrong-authority/wrong-ruleset chunks never enter candidates or counts.
+
+### P1-06 — CLI/API source and search surface
+
+**Work**
+
+Add shared services and thin interfaces resembling:
+
+```text
+dm ingest <path> --authority <class> --visibility dm_only
+dm documents
+dm show-document <id> [--revision <id>]
+dm search <query> [scope options]
+```
+
+Add equivalent versioned API routes. Include resolved query scope and citations in results.
+
+**Phase gate P1**
+
+- A synthetic campaign vault can be ingested twice without duplicates.
+- An edited note creates a new immutable revision and snapshot.
+- `dm search` returns exact source spans and never treats a plan as an occurred fact by default.
+- No LLM or embedding credential is required.
+
+---
+
+## P2 — Embeddings, Hybrid Retrieval, and Retrieval Evals
+
+### Goal
+
+Add semantic retrieval without changing source identity or treating vectors as truth.
+
+### P2-01 — Independent embedding runtime/model abstraction
+
+**Work**
+
+- Document in code/config that `pi-ai` and ChatGPT Codex OAuth are not embedding services.
+- Add embedding-profile metadata: runtime kind (`local`/`hosted`), provider, exact model/revision/license, dimensions, distance metric, normalization/preprocessing version, config hash, and enabled status.
+- Add chunk embeddings keyed by exact chunk content hash and embedding model/profile.
+- Define a narrow Python embedding protocol for document batches and query text; keep credentials/config separate from the Node chat-model gateway.
+- Implement a deterministic fake provider for tests.
+- Add a benchmark/eval spike for a small local CPU/ONNX adapter first; do not select the permanent model until retrieval quality, memory, latency, dimensions, and license are recorded.
+- Preserve a hosted adapter seam whose API key/retention policy must be configured explicitly.
+- Prevent mixed vector dimensions or incompatible normalization/distance profiles in an index/partition.
+
+**Done when**
+
+- Two embedding profiles/model versions can coexist without overwriting one another.
+- Tests require no network calls.
+
+### P2-02 — Resumable embedding runs
+
+**Work**
+
+- Add synchronous/batched embedding execution with durable run/item state and bounded local memory/batch size.
+- Skip already-computed content-hash/profile pairs.
+- Retry bounded transient failures and make cancellation/restart safe.
+- Activate a vector-ready corpus generation only after required embeddings exist.
+- Record runtime/model revision, batch size, dimensions, latency, memory observations, and cost/token metadata when applicable.
+
+**Done when**
+
+An interrupted synthetic run resumes without duplicate calls or partial serving state.
+
+### P2-03 — Scope-safe vector retrieval
+
+**Work**
+
+- Apply campaign/snapshot/authority/visibility/rules filters before candidate material can enter model context.
+- Add bounded nearest-neighbor search for the active embedding model.
+- Ensure snippets/citations resolve to immutable chunks.
+- Verify that excluded chunks cannot leak through metadata, result counts, or logs.
+
+### P2-04 — Hybrid fusion baseline
+
+**Work**
+
+- Combine lexical and vector rankings with reciprocal rank fusion.
+- Deduplicate overlapping chunks/revisions.
+- Add exact-name boosts and bounded neighboring-context expansion.
+- Do not add a learned reranker until baseline evals demonstrate need.
+
+### P2-05 — Retrieval run records and eval harness
+
+**Work**
+
+- Persist query scope, snapshot, retrieval versions, candidates/scores, selected chunks, timing, and citations.
+- Build synthetic golden cases for exact names, vague recollections, plans versus canon, rules edition filters, and DM-only exclusion.
+- Report source recall and latency; make eval output diffable.
+
+**Phase gate P2**
+
+- Hybrid retrieval improves at least one semantic fixture without regressing exact-name/security fixtures.
+- Re-running an eval against pinned versions is reproducible.
+- There is still a useful lexical-only fallback when the local/hosted embedding runtime or query embedding fails.
+- The selected first embedding profile has a recorded quality/resource comparison; it was not chosen merely because `pi-ai` supplies chat models.
+
+---
+
+## P3 — Canonical Revisions, Review, and Change Logging
+
+### Goal
+
+Build the authority boundary before any model can propose structured campaign facts.
+
+### P3-01 — Campaign revision and change-set schema
+
+**Work**
+
+Implement:
+
+- campaign head revision;
+- immutable campaign revision with parent, sequence, summary, origin, reviewer, and timestamp;
+- draft/in-review/committed/abandoned change set;
+- versioned, schema-validated change item payload;
+- item dependencies and review state;
+- change-set source links and idempotency key;
+- extraction/manual origin metadata.
+
+Do not add model extraction yet.
+
+### P3-02 — Operation registry and validation boundary
+
+**Work**
+
+- Define a versioned operation registry and payload schemas.
+- Start with safe foundation operations such as campaign metadata and no-op/test fixtures.
+- Separate hard structural errors from overridable semantic warnings.
+- Ensure operation handlers can write only inside the commit transaction.
+- Ensure direct ORM calls are not exposed through API/model surfaces.
+
+### P3-03 — Review/edit/reject workflow
+
+**Work**
+
+Add shared services and CLI/API operations:
+
+```text
+dm changes create
+dm review <change-set-id>
+dm changes accept|edit|reject <item-id>
+dm validate <change-set-id>
+```
+
+Review output includes source, proposed before/after state, warnings, and dependencies.
+
+### P3-04 — Atomic commit and optimistic concurrency
+
+**Work**
+
+- Revalidate against the base campaign revision.
+- Reject/rebase stale change sets explicitly.
+- Resolve change-set-local IDs.
+- Commit accepted dependency closure atomically.
+- Advance the campaign head in the same transaction.
+- Make commit idempotent.
+- Keep old revisions queryable.
+
+Test injected failure at several points to prove no partial canonical revision is visible.
+
+### P3-05 — Human-readable history and diff
+
+**Work**
+
+Implement:
+
+```text
+dm commit <change-set-id> --summary <optional-edit>
+dm history
+dm show-revision <revision-id>
+dm diff <old-revision> <new-revision>
+```
+
+A deterministic or model-drafted summary can be edited by the DM. Detailed accepted/rejected item history remains available regardless of summary wording.
+
+### P3-06 — Optional append-only exporter
+
+**Work (optional after the phase gate)**
+
+- Export revision summaries/details as idempotent Markdown and/or JSONL.
+- Make export rebuildable from PostgreSQL.
+- Do not roll back canonical commits if export fails.
+- Leave automatic Git commits disabled/configurable.
+
+**Phase gate P3**
+
+- No canonical state changes before `commit`.
+- A stale or failing commit creates no partial revision.
+- Every revision has a readable summary and full audit details.
+- `dm diff` and historical revision reads are deterministic.
+
+---
+
+## P4 — Rules/Creature Retrieval, `pi-ai` Model Gateway, Context Compilation, and First-Party Ask
+
+### Goal
+
+Provide reusable scope resolution, task-specific context compilation, private model transport, and the general cited Ask workflow. These tasks are capability tracks rather than one prerequisite block: P4-03/P4-04 can ground Dungeon Studio before the full general Ask UI, while P4-02/P4-05 supply its model transport/orchestration later.
+
+### P4-01 — Rules/creature source metadata and profile operations
+
+**Work**
+
+- Add official/authorized rules and creature-source metadata, edition, book, chapter, section, page, and extraction provenance.
+- Add campaign rules profiles, creature collections, and ordered sources through P3 change-set operations.
+- Add house-rule/table-ruling source classification and precedence.
+- Require explicit comparison intent before mixing editions.
+
+Real copyrighted rule/bestiary text stays outside Git; use synthetic mechanics and creatures in tests.
+
+### P4-02 — Private Node `pi-ai` model gateway and credential boundary
+
+**Work**
+
+- Add `model-gateway/` as a small TypeScript/Node 22.19+ package with an npm lockfile and an exactly pinned `@earendil-works/pi-ai` version (0.84.1 was the evaluated baseline; deliberately re-verify if newer at implementation).
+- Use the current provider/`Models` API. Do not copy older `@mariozechner/pi-ai` `getOAuthApiKey()` examples or read Pi's normal auth file.
+- Register only configured/allowlisted providers: OpenAI Codex OAuth, the deterministic faux provider, and one selected API-key fallback before release; add others through the same provider-factory boundary without changing Python workflows.
+- Implement a dedicated persistent `CredentialStore` with per-provider serialized modify/refresh, atomic restrictive-permission writes, and no token-returning endpoint.
+- Expose internal health, non-secret auth status, provider/model/capability listing, login-event/prompt coordination, logout, normalized stream, and cancellation contracts.
+- Prefer device-code ChatGPT login for headless Proxmox; browser/manual-code login may remain an explicitly tested alternative.
+- Document/verify applicable provider subscription terms and usage limits; do not assume OAuth permits arbitrary unattended workloads.
+- Normalize text/thinking/tool-call/usage/error events and propagate cancellation; enforce request/output/attachment limits.
+- Bind the gateway to loopback/private container networking and allow only the Python service to call model endpoints.
+- Use `pi-ai`'s faux provider for automated contract tests; live OAuth/model tests are manual/opt-in and never run in CI.
+- Do **not** add `@earendil-works/pi-agent-core` in this task.
+
+### P4-03 — Task scope and intent analysis
+
+**Work**
+
+- Resolve campaign revision, corpus snapshot, DM principal, timeline/cursor defaults, authority intent, rules profile, and explicit task type before retrieval/model selection.
+- Implement deterministic intent/scope defaults in Python; a selected model/tool call can never broaden scope.
+- Reject attempts to broaden campaign, principal, source authority, rules profile, or visibility through prompt/tool input.
+
+### P4-04 — Context envelope and task-specific context packets
+
+**Work**
+
+- Define a small versioned `GenerationContextEnvelope[T]` containing only common provenance/scope fields: context kind and payload version, campaign revision, corpus snapshot, optional rules profile, visibility scope, immutable source references/citations, and canonical payload hash.
+- Define strict domain payloads only as workflows need them. The first preparation payload is `DungeonGenerationContext`; campaign/rules answers use their own question packet schemas rather than growing the generation payload.
+- Keep dungeon fields focused on selected location lore/geography, themes, factions, hooks, tone, and coarse party/capacity constraints. Do not add encounter mechanics or speculative future fields.
+- Make unknown envelope/payload versions and unknown fields fail explicitly; round-trip canonical serialization and hash tests.
+- Build task-specific typed sections for applicable narrative evidence, rules/creature evidence, conflicts/unknowns, and answer schema.
+- Apply per-section token budgets, overlap deduplication, and bounded neighbor expansion.
+- Label every excerpt with authority, edition/profile, visibility, and citation ID, and delimit retrieved text as untrusted evidence.
+- Persist the resolved envelope or its content-addressed canonical payload plus source links with each generation/model run for replay and inspection.
+
+**Done when**
+
+- A dungeon context and a campaign/rules answer packet can share scope/provenance value objects without sharing unrelated payload fields.
+- Tests prove that a model cannot broaden envelope scope and that changing selected context changes the payload hash.
+- There is no universal optional-field `GenerationContext` model.
+
+### P4-05 — Model/task profiles, bounded ask loop, citation checks, and abstention
+
+**Work**
+
+- Add versioned model-endpoint/profile and task-profile records/configuration: runtime adapter, provider/model ID, observed capabilities, normalized effort, context policy/budgets, tools, output schema/token limit, prompt/instruction version, and fallback order.
+- Validate profiles against the gateway catalog; map `fast`/`standard`/`deep` only to reasoning levels supported by the selected model and preserve explicit per-run overrides in lineage.
+- Add a Python gateway client and bounded tool loop. Python validates completed arguments against server-owned schemas, executes application services, appends bounded results, and enforces a per-task turn/tool/cost/time budget.
+- Add a text-first `dm ask` and equivalent authenticated API service; preserve direct retrieval/debug output independent of any model. P4-07 extends the shared service with validated input attachments.
+- Require supplied citation IDs for factual/rules claims and verify each was authorized and present in the packet.
+- Label official rules versus house-rule overrides and return explicit unknown/conflict diagnostics when evidence is inadequate.
+- Exclude approval/commit and arbitrary file/SQL access from all model tools.
+- Record exact package/provider/model/task-profile/instruction/schema versions, structured inputs/results, usage, timing, and tool interactions without credentials or unrestricted hidden reasoning.
+
+### P4-06 — Shared model settings, login, and stream UI foundation
+
+**Work**
+
+- Extend the shared server-rendered Workbench shell established by the model-independent Dungeon Studio with small HTMX/vanilla-JavaScript behavior and SSE; do not replace it or start a large SPA.
+- Reuse the P7-11 single-DM Workbench login/session shell; add model-provider settings, OAuth device-code progress, non-secret auth status, model/task-profile/effort selection, and logout/re-auth behavior without creating a parallel authentication flow.
+- Add reusable streamed/cancellable/reconnectable durable model-run status components that Dungeon Studio and later Ask workflows can call through shared application services.
+- Show capability/profile validation and safe provider errors without returning credentials, source context bodies, or unrestricted provider responses to the browser.
+- Contract-test the shell/settings/run components against the faux provider; do not add a generic chat page in this task.
+
+**Done when**
+
+- The DM can complete device-code setup, inspect non-secret auth/model/profile status, select a supported effort, start/cancel a synthetic bounded run, and reconnect to its durable status.
+- P7-09/P7-10 can reuse the settings and stream components without depending on the general Ask workflow.
+
+### P4-07 — General Ask web workflow and comparison baseline
+
+**Work**
+
+- Add prompt entry, pasted/dragged image upload, streamed cited response, cancellation, reconnectable durable run status, errors/unknowns, and conversation/run history using P4-05/P4-06 services; extend the shared CLI/API ask service with validated attachment IDs.
+- Reuse the platform-owned content-addressed `AssetStore` introduced with P7-01; add input-attachment ownership, MIME/size/retention policy, and opaque-ID metadata without creating a second blob store.
+- Send only validated attachment IDs to the gateway and provide authenticated preview/download routes.
+- Keep preparation review, canonical review/commit, and model output visually and operationally distinct.
+- Add a small model-comparison harness: fixed synthetic tasks, capability/schema/tool checks, latency/usage, objective answer checks, and blinded DM ratings. Do not assign Luna/Terra/Sol roles based on names alone.
+
+**Phase gate P4**
+
+- In the first-party web UI, the DM can complete device-code login, select an available model/task profile and supported effort, ask a synthetic narrative/rules question, see a streamed concise cited answer, cancel it, and resume/inspect the durable run.
+- An optional pasted image reaches a vision-capable model through a content-addressed attachment without exposing arbitrary paths.
+- Switching model/task profile changes no Python domain semantics, and the exact resolved profile is recorded.
+- Context inspection shows the resolved common envelope and the task-specific payload version; unrelated dungeon/encounter/session fields are absent rather than null-filled.
+- Edition, creature-source collection, and house-rule precedence is visible; authorized creature records have exact citations before stat normalization.
+- Plans are not reported as events, and no complete vault dump is sent to the gateway/provider.
+- OAuth tokens are absent from the browser, Python payloads, PostgreSQL campaign data, logs, and normal backups.
+- CLI lexical retrieval remains usable when the gateway/model or embedding runtime is unavailable.
+- The initial model-comparison report exists; model defaults are not justified by branding alone.
+
+---
+
+## P5 — Structured Campaign Knowledge and Provenance
+
+### Goal
+
+Add precise answers for identity, state, events, perspectives, and relative history through the revision engine.
+
+### P5-01 — Entities, aliases, mentions, and merge history
+
+**Work**
+
+- Migrate entities, aliases, source mentions, and merge redirects.
+- Add operation handlers for create, alias, merge, split/review correction, and archive.
+- Keep secret/temporal state out of generic entity properties.
+- Add exact and fuzzy candidate resolution with no automatic ambiguous merge.
+
+### P5-02 — Predicate catalog
+
+**Work**
+
+- Add versioned predicate definitions, type/value constraints, inverse/symmetric/transitive metadata, functional/exclusivity rules, examples, and status.
+- Seed a small tested vocabulary only.
+- Add find/propose/deprecate operations through change sets.
+- Derive inverse/symmetric edges in query logic rather than duplicating canon.
+
+### P5-03 — Events, participants, and evidence
+
+**Work**
+
+- Add canonical events, participants/roles, visibility, and revision ranges.
+- Add typed source references and many-to-many event evidence.
+- Treat plans/allegations as source/proposition content, not canonical events.
+- Add event supersession/retraction operations.
+
+### P5-04 — Sessions, basic temporal anchors, and relations
+
+**Work**
+
+Implement only:
+
+- session provenance containers and session-document links, with display numbers that do not imply story chronology;
+- main timeline;
+- event/scene-relative anchors;
+- table-session markers for player knowledge;
+- unknown/approximate values;
+- BEFORE/AFTER/DURING/OVERLAPS/SIMULTANEOUS relations needed by fixtures;
+- strict-order cycle detection;
+- story cursor/default cursor.
+
+Preserve raw fictional date text, but do not implement a calendar adapter or date arithmetic.
+
+### P5-05 — Propositions and perspective assertions
+
+**Work**
+
+- Add immutable proposition content with typed entity/event/literal object and explicit polarity.
+- Add reality, knowledge, unaware, belief, suspicion, claim, and public-record assertion modes.
+- Separate proposition content time, holder stance time, and campaign revision time.
+- Add visibility, provenance, derivation, semantic certainty, supersession, and retraction.
+- Add optional tracked-knowledge completeness for important secrets.
+
+### P5-06 — Deterministic validation and projections
+
+**Work**
+
+- Enforce type/object/cardinality/exclusivity rules.
+- Detect explicit overlapping contradictions at the same perspective/time.
+- Validate knowledge/unaware intervals and suspicious unsupported reveals.
+- Add derivation-cycle checks.
+- Build revision/cursor/mode/holder-aware active-state queries.
+- Keep any materialized projection rebuildable and revision-keyed.
+
+### P5-07 — High-level query services
+
+Implement and test services resembling:
+
+```text
+resolve_entity
+get_state
+get_event
+get_holder_knowledge
+explain_provenance
+find_related_threads
+```
+
+Cover questions such as:
+
+- Is Deren dead at the current cursor?
+- What does Mira believe?
+- Who is recorded as knowing the killer's identity?
+- Why does Mira distrust Rowan?
+- Where was the seal last seen?
+- Is the chronology genuinely unknown?
+
+### P5-08 — Structured retrieval/context integration and evals
+
+**Work**
+
+- Prefer accepted structured state for factual questions.
+- Expand only bounded provenance and supporting narrative.
+- Surface conflicts rather than letting narrative silently override structure.
+- Add frozen evals for perspective, retcon, relative time, entity collisions, plans, and knowledge incompleteness.
+
+**Phase gate P5**
+
+- Manual change sets can establish and revise a small synthetic campaign.
+- State, belief, knowledge, event, relative-time, and provenance questions are correct at old and current campaign revisions.
+- Unsupported chronology/knowledge is reported as unknown/no recorded knowledge.
+- A retcon preserves the prior system history.
+
+---
+
+## P6 — Character Sheets and Important Story Items
+
+### Goal
+
+Give the DM precise access to supplied mechanical profiles without forcing every sheet cell into the ontology.
+
+### P6-01 — Versioned normalized profile schemas
+
+**Work**
+
+- Add schema-versioned character-sheet and item-profile snapshots with revision ranges and source provenance.
+- If the selected format is binary, add a content-addressed immutable source-asset revision and link derived text/parsed output to it; do not force binary support into P1 preemptively.
+- Define validated internal Pydantic shapes for common 5e/2024 fields.
+- Separate source-reported and computed fields.
+- Store formula/rules-profile version for computed values.
+- Do not include live tactical tracking tables.
+
+### P6-02 — Adapter protocol and synthetic reference adapter
+
+**Work**
+
+- Define adapter discovery, source-type detection, parse result, warnings, and provenance-span behavior.
+- Implement a small internal JSON/Markdown fixture adapter solely to exercise the pipeline.
+- Keep raw text/JSON source as a P1 document revision; use the P6 binary source-asset extension only if the chosen adapter requires it.
+- Make unsupported formats fail with a clear message rather than best-effort hallucination.
+
+### P6-03 — First real character-sheet adapter
+
+**Blocked input:** the real source format has not been chosen.
+
+When known:
+
+- add representative redacted/synthetic fixtures for that format;
+- parse all stable fields available from the source;
+- preserve unknown/custom fields;
+- identify source limitations (for example, static PDF text order);
+- never call an external character service without explicit credentials/terms.
+
+This task may be skipped temporarily without blocking P7/P8 if normalized synthetic party/creature fixtures exist.
+
+### P6-04 — Profile diff/review operations
+
+**Work**
+
+- Produce field-level diffs between snapshots.
+- Propose sheet/item updates through P3 change sets.
+- Group noisy list changes such as spells/inventory.
+- Flag conflicts between sheet inventory and canonical possession/location assertions.
+- Include a concise profile-change summary in the campaign revision.
+
+### P6-05 — Profile query and context integration
+
+**Work**
+
+Support questions such as:
+
+- What is Rowan's passive Perception and how was it computed?
+- Which saving throws is Mira proficient in?
+- Which prepared/known spells are relevant to this scene?
+- Who carries the seal, what does its profile say, and who knows its true function?
+
+Return source snapshot citations and distinguish sheet data from accepted story state.
+
+**Phase gate P6**
+
+- A synthetic and, when available, real-format sheet can be ingested, reviewed, committed, diffed, and queried.
+- Important item mechanics and temporal possession/location remain distinct but answerable together.
+- No live-combat state was accidentally introduced.
+
+---
+
+## P7 — Dungeon Primitives, Layout, Rendering, and Export
+
+### Goal
+
+Deliver a reproducible practical dungeon capability in three boundaries: an independently packaged pure `dm_dungeon` kernel, a model-independent Workbench Dungeon Studio, and later grounded model orchestration. Build deterministic geometry/rendering and the usable human workflow before adding LLM orchestration.
+
+### P7-01 — Preparation artifacts, generation runs, and asset store
+
+**Work**
+
+- Migrate preparation artifact, immutable artifact version, generation run, generated asset, and artifact-asset role records.
+- Implement `draft`, `approved_for_play`, `used`, and `retired` lifecycles without conflating them with campaign canon.
+- Add readable artifact-version summaries and parent lineage.
+- Define the platform-owned `AssetStore` port and implement the first SHA-256 local-volume adapter for generated assets, using temporary files plus atomic rename. Keep generic blob identity/storage metadata separate from dungeon-specific asset roles; P4 prompt attachments reuse this port later.
+- Pin campaign/corpus/rules/party inputs, generation-context envelope kind/payload version/hash and source links, seed, schema versions, generator/renderer versions, model task-profile/tool runs, and validation report.
+
+**Done when**
+
+- Repeated asset writes deduplicate safely.
+- Artifact approval cannot mutate canonical campaign state.
+- An immutable version and its assets remain reconstructable/auditable after newer versions exist.
+
+### P7-02 — Pure dungeon package and versioned primitive vocabulary
+
+**Work**
+
+- Add `packages/dungeon-engine` as the first `uv` workspace member, with import package `dm_dungeon`; do not turn it into a process or network API.
+- Establish package dependency tests that prohibit imports from `dm_assistant`, FastAPI, SQLAlchemy, provider/model clients, retrieval, or Workbench repositories.
+- Keep fixture/file adapters and canonical JSON serialization inside the package test/CLI boundary so the kernel runs without PostgreSQL or provider configuration.
+
+Define typed Pydantic/JSON schemas for:
+
+- `DungeonBrief`;
+- floor and room-role/topology graph;
+- room capacity/size constraints;
+- corridors, normal/locked/trapped/secret doors, stairs, and vertical links;
+- gates, keys, clues, loops, branches, and secret bypasses;
+- features, terrain, hazards, zones, labels, encounter slots, and position anchors;
+- DM/player/render layers;
+- exact renderer-neutral `DungeonPackage`.
+
+Default to orthogonal square cells and five feet per cell. Use stable opaque IDs. Do not represent every tile as a canonical ontology assertion.
+
+**Done when**
+
+- Hand-authored synthetic packages round-trip through JSON without information loss.
+- Unknown schema versions fail explicitly.
+- DM-only fields require an explicit visibility/layer classification.
+- The package imports and test suite run independently of the Workbench application, database, and model gateway.
+
+### P7-03 — Topology, gating, and puzzle-dependency validator
+
+**Work**
+
+- Validate required-room reachability from entrances/exits.
+- Verify requested loops, branches, chokepoints, secret routes, and floor transitions.
+- Model lock/key and clue/gate dependencies and reject impossible acquisition order/cycles.
+- Return structured diagnostic codes, affected IDs, severity, and repair hints.
+- Add Hypothesis (or an explicitly justified equivalent) as a dev dependency and property-based tests over generated topology graphs.
+
+### P7-04 — Seeded orthogonal layout engine
+
+**Work**
+
+- Select/document a deterministic first algorithm (for example, graph-guided room placement plus orthogonal corridor routing).
+- Place constrained rooms on per-floor grids without requiring LLM coordinates.
+- Route corridors and align doors/stairs.
+- Support fixed/locked components and targeted regeneration.
+- Record every random choice through one explicit seed/random source.
+- Fail with diagnostics rather than silently dropping requested topology.
+
+**Done when**
+
+- Identical spec/seed/generator version yields byte-equivalent structured layout.
+- Different seeds produce valid alternatives.
+- Regenerating one unlocked component preserves all locked IDs/geometry.
+
+### P7-05 — Geometry, pathfinding, and capacity validation
+
+**Work**
+
+- Detect overlapping rooms, invalid walls/doors/stairs, out-of-bounds cells, disconnected walkable regions, and blocked transitions.
+- Validate minimum corridor/door widths and requested room capacities.
+- Expose pathfinding between required anchors.
+- Validate floor-transition pairs and grid scale.
+- Add encounter-fit hooks for creature footprints, starting anchors, ranges, cover, and objectives; P8 supplies encounter details.
+
+### P7-06 — Deterministic SVG renderer and secrecy layers
+
+**Work**
+
+- Render walls, doors, secret doors, stairs, grid, terrain/features, labels, and markers from exact geometry.
+- Produce separate DM and player variants.
+- Keep stable element IDs/data attributes for deterministic tests, targeted regeneration, and future Roll20 wall/door adapters.
+- Define style themes as code/configuration, not model-authored SVG/CSS.
+- Add deterministic SVG snapshot tests and explicit player-export leak checks.
+
+### P7-07 — PNG and low-ink stitchable PDF exporters
+
+**Work**
+
+- Rasterize grid-on/gridless PNG at configurable pixels per cell/DPI without changing geometry.
+- Print each five-foot cell at exactly one inch.
+- Export Letter and A4 one-sheet/tiled PDFs without content rescaling.
+- Use a low-ink default theme: white floors, bold wall outlines, light-gray grid, sparse grayscale-safe symbols/hatching, and no large dark fills/textures.
+- Include an assembly overview, floor/map/version ID, page row/column IDs, crop/cut and registration marks, configurable overlap strips, adjacent-page alignment marks, safe printer margins, and actual-size instructions.
+- Include a one-inch calibration square/ruler on appropriate pages.
+- Support both trim-and-butt and overlap-and-tape assembly workflows.
+- Test PDF page boxes, physical grid scale, overlap geometry, adjacency alignment, ink-coverage proxy/budget, and DM/clean secrecy variants.
+- Keep renderer/export version metadata in each asset.
+
+### P7-08 — Roll20-compatible exporter
+
+**Work**
+
+- Export correctly sized Roll20 grid-on and gridless PNG maps plus grid width/height, pixels per cell, scale/origin, floor metadata, and an optional token-placement manifest.
+- Preserve wall/door geometry for future dynamic-lighting adapters without promising direct Roll20 import/API support now.
+- Validate file paths/hashes/dimensions and prevent DM-only metadata from entering clean exports.
+
+### P7-11 — Model-independent Dungeon Studio vertical slice
+
+Task IDs group work by domain rather than execution order; this task runs after P7-01/P7-02..P7-08 and before P7-09/P7-10.
+
+**Work**
+
+- Add shared Workbench application services plus CLI/API operations to import or create a hand-authored brief/spec, generate, inspect, validate, render, compare versions, lock components, regenerate a component, export, and approve for play.
+- Add the first thin server-rendered Workbench shell, minimal single-DM browser login/session over the centralized P0 auth policy, and Dungeon Studio views for diagnostics, DM/clean previews, version comparison, context/input lineage, downloads, and explicit human approval.
+- Persist package inputs/outputs through P7-01 repositories without exposing ORM models to `dm_dungeon`.
+- Build fixed-seed golden/property fixtures and a provider-independent end-to-end test from brief/spec through approved preparation artifact.
+- Keep all generation and review usable when the model gateway is absent.
+
+**Done when**
+
+- A DM can complete the deterministic dungeon workflow through CLI and web without PostgreSQL objects or model/provider concerns entering the pure package.
+- Preparation approval changes no canonical campaign state.
+- The shared shell is reusable by P4 model settings/Ask and P9 review rather than being a dungeon-only application.
+
+### P7-09 — Constrained LLM dungeon tools and repair loop
+
+**Work**
+
+- Add Python-owned bounded model tools for brief/topology intent, room/connection/features, generation, validation, and targeted regeneration, transported through the P4 `pi-ai` gateway under a pinned dungeon task profile.
+- Compile authorized campaign hooks/lore plus requested constraints into `GenerationContextEnvelope<DungeonGenerationContext>`; reject unrelated encounter/session fields and pin its payload version/hash/source links.
+- Let code assign IDs, calculate geometry, validate, and render.
+- Feed structured diagnostics—not raw renderer internals—into bounded repair calls with explicit turn/time/usage limits.
+- Record structured model outputs and generator inputs for replay.
+- Never let the model write arbitrary files, SVG, or approved artifacts.
+
+### P7-10 — Grounded Dungeon Studio integration and final eval gate
+
+**Work**
+
+- Extend the P7-11 CLI/API/web workflow with model-assisted brief/topology creation, bounded diagnostic repair, streamed/cancellable run status, and comparison against hand-authored or prior versions.
+- Add a context inspector showing the resolved common envelope, `DungeonGenerationContext` payload version, selected citations/authority labels, and payload hash without exposing secret credentials or unrestricted source bodies.
+- Preserve the fully model-independent path and make gateway failure degrade to inspect/validate/render/export/manual-regeneration behavior.
+- Extend fixed-seed golden and property-based fixtures with faux-provider contract cases.
+- Measure first-pass validity, repair count, targeted-edit preservation, render/export correctness, context relevance, and DM edits.
+
+Example flow:
+
+```text
+dm dungeon generate --brief crypt.md --seed 1842
+dm dungeon validate <version-id>
+dm dungeon render <version-id> --variants dm,player
+dm dungeon regenerate <version-id> --component room:<id> --lock-rest
+dm dungeon export <version-id> --format print-pdf
+dm dungeon export <version-id> --format roll20
+dm prep approve <version-id>
+```
+
+**Phase gate P7**
+
+- The independently runnable `dm_dungeon` package turns a constrained brief into a connected, non-overlapping, multi-floor practical grid with reproducible seed behavior and passes dependency-isolation tests.
+- The model-independent Dungeon Studio completes import/create through preview/export/approval with no gateway credential.
+- Required topology/gating/path/capacity validations pass or block approval with actionable diagnostics.
+- DM/clean SVG and PNG plus Roll20-compatible image/metadata validate.
+- Letter/A4 PDF pages print at one inch per five-foot cell, use the low-ink theme, and can be assembled reliably using overview/page IDs/cut/registration/overlap/alignment marks.
+- Clean artifacts contain no secret doors, traps, encounter markers, or puzzle solutions.
+- Targeted regeneration preserves locked components.
+- No regional/world or illustration-first renderer has been introduced.
+- Model-assisted runs pin a narrow `DungeonGenerationContext`; there is no universal optional-field generation payload.
+
+---
+
+## P8 — Creature Profiles and Party-Aware Encounter Generation
+
+### Goal
+
+Populate dungeon spaces with complete, rules-grounded combat and noncombat encounters adapted to a pinned party/playstyle snapshot. Begin as a Workbench feature: isolate deterministic mechanics in cohesive modules, but do not assume the creative/orchestration workflow is a reusable engine package.
+
+### P8-01 — Complete creature profile schema and source adapters
+
+**Work**
+
+- Define/migrate complete edition-tagged creature profile snapshots and lineage.
+- Cover all normal 5e/2024 stat-block sections, including optional legendary/mythic/lair/spellcasting sections.
+- Implement synthetic fixture and adapter contracts for authorized bestiary sources.
+- Preserve source citations and prohibit real copyrighted fixtures in Git.
+- Require generated/rescaled variants to store a complete stat block plus parent/diff rationale.
+- Validate declared challenge/XP against edition-specific monster-building guidance where available; otherwise mark it provisional for explicit DM review.
+
+### P8-02 — Party generation and playstyle snapshots
+
+**Work**
+
+- Pin character-sheet versions, party level/composition, rules profile, and generation assumptions.
+- Add DM-approved playstyle inputs: optimization/tactical skill, risk/lethality preference, desired duration, rest cadence, strengths/weaknesses, favored/avoided mechanics, and accessibility needs.
+- Allow one-off current-resource overrides without creating live combat state.
+- Make permanent inferred playstyle changes reviewable rather than automatic.
+
+### P8-03 — Edition-aware deterministic difficulty evaluator
+
+**Work**
+
+- Implement the selected official encounter budget/threshold calculation from cited rules/profile data as deterministic, side-effect-free Workbench mechanics with no model/provider dependency.
+- Report official baseline separately from playstyle/party-adjusted recommendation.
+- Validate creature quantities, multipliers/assumptions, generated-variant challenge estimates, and scaling changes.
+- Use golden arithmetic fixtures and boundary/property tests.
+- Do not let an LLM mark unsupported arithmetic as valid.
+
+### P8-04 — Typed encounter package schemas
+
+**Work**
+
+Define common fields plus type-specific schemas for:
+
+- combat;
+- social;
+- exploration/skill challenge;
+- puzzle;
+- trap;
+- environmental hazard;
+- mixed encounters.
+
+Include stakes/objectives, dungeon room/zone IDs, complete participants, triggers, positions/waves, terrain interactions, tactics, checks/DCs, clues/hints/solutions/counterplay, outcomes, rewards/consequences, scaling variants, citations, and DM/player-safe content.
+
+Define a strict versioned `EncounterGenerationContext` carried by `GenerationContextEnvelope`. It contains pinned party mechanics/playstyle, rules assumptions, authorized creature candidates, difficulty/experience targets, dungeon room geometry, pacing/resource pressure, and selected lore. It is not a subclass or null-filled variant of `DungeonGenerationContext`.
+
+### P8-05 — Combat composition, map fit, and tactics
+
+**Work**
+
+- Select authorized creatures/variants that satisfy theme, difficulty target, and party inputs.
+- Validate creature footprint/movement/range against room geometry, corridors, cover, chokepoints, and objective space.
+- Place starting anchors/waves deterministically within allowed zones.
+- Generate tactics, morale, surrender/retreat, reinforcement triggers, and non-kill resolutions.
+- Produce easier/harder variants by changing composition/objectives/terrain/tactics with recalculated metrics—not merely adding HP.
+
+### P8-06 — Noncombat, trap, hazard, and puzzle validators
+
+**Work**
+
+- Social encounters require actor goals, leverage, escalation, and multiple resolutions.
+- Exploration/skill challenges require obstacles, approaches, consequences, and anti-single-roll structure where appropriate.
+- Traps/hazards require detection, trigger, effect, counterplay, disable/bypass, and consequences.
+- Puzzles require an explicit solution model, clue path, hint ladder, alternate reasonable handling, failure behavior, and reset/recovery.
+- Player exports omit solutions, hidden DCs, and DM-only triggers unless explicitly published.
+
+### P8-07 — Constrained LLM encounter/custom-creature tools
+
+**Work**
+
+- Compile party, playstyle, dungeon geometry, selected campaign lore, rules, and authorized creature candidates into `GenerationContextEnvelope<EncounterGenerationContext>` and pin its version/hash/source links.
+- Add tools to propose/scale/validate encounters and full custom creature variants through an explicit pinned encounter task profile and bounded `pi-ai` gateway loop.
+- Keep deterministic budget/map-fit/stat-block validators authoritative.
+- Record citations, model outputs, diagnostics, and repair lineage.
+- Ensure generated encounters remain preparation artifacts, never canonical events.
+
+### P8-08 — Dungeon-wide population and pacing
+
+**Work**
+
+- Assign encounter slots across rooms/floors while considering variety, difficulty curve, expected attrition, rest opportunities, clues/keys, factions, treasure, and optional/bypass routes.
+- Avoid treating every room as isolated or requiring combat.
+- Link encounters to stable dungeon room/zone/marker IDs.
+- Allow regeneration/scaling of one encounter without rewriting the dungeon.
+
+### P8-09 — Encounter review, export, and eval gate
+
+**Work**
+
+- Add CLI/API generation, inspect, validate, compare, scale, export, and approve operations.
+- Render complete DM packets and player-safe handouts/package components.
+- Test arithmetic, stat completeness, room fit, puzzle completeness, secrecy, artifact lineage, and reproducibility.
+- Track DM acceptance/edit rate by encounter type and difficulty target.
+- Measure whether deterministic difficulty/stat/map-fit/type validators form a stable independently reusable boundary. At the phase gate, record a retain-in-Workbench or extract-`encounter-mechanics` decision; do not create an `encounter-engine` package by default.
+
+Example flow:
+
+```text
+dm encounter generate --dungeon <id> --party main --difficulty hard
+dm encounter validate <version-id>
+dm encounter scale <version-id> --difficulty deadly
+dm encounter export <version-id> --include-map
+dm prep approve <version-id>
+```
+
+**Phase gate P8**
+
+- Combat packages include complete stat blocks, source/variant lineage, deterministic baseline/adjusted difficulty, map-fit validation, tactics, objectives, and recalculated scaling options.
+- Noncombat/puzzle/trap/hazard packages satisfy their type-specific completeness validators.
+- Dungeon-wide population demonstrates varied pacing and preserves stable room links.
+- Player outputs reveal no DM-only solution, hidden trigger, or secret map data.
+- Artifact approval/usage does not alter campaign canon.
+- The encounter workflow uses its own narrow context payload. Any package extraction is supported by measured cohesion/reuse and is limited to deterministic mechanics rather than assumed for the whole workflow.
+
+---
+
+## P9 — Session-Close Extraction and Review
+
+### Goal
+
+Turn prose session notes into an evidence-linked draft change set while preserving full DM control.
+
+### P9-01 — Extraction runs and stage contracts
+
+**Work**
+
+- Link/create the session provenance record and its note/summary document revisions.
+- Add extraction-run records linked to session, note revision, base campaign revision, any used dungeon/encounter artifact versions, gateway/package/task-profile/tool-schema/instruction versions, and multiple model/tool interactions.
+- Define versioned structured outputs and stable change-set-local IDs.
+- Make retry/idempotency behavior explicit.
+- Never insert placeholder canonical rows during extraction.
+
+### P9-02 — Entity and source-span resolution
+
+**Work**
+
+- Extract mentions with exact note spans.
+- Resolve confident aliases, surface ambiguous candidates, and propose new entities.
+- Carry stable candidate IDs through all later stages.
+- Require review for merges/new aliases with collisions.
+
+### P9-03 — Event/participant extraction
+
+**Work**
+
+- Extract occurred events separately from plans, hypotheticals, recaps, and in-world allegations.
+- Add participants, roles, location, and approximate/relative anchors.
+- Link every explicit item to source evidence.
+- Group event and dependent consequences for review.
+
+### P9-04 — State, perspective, temporal, and thread extraction
+
+**Work**
+
+Extract candidate:
+
+- propositions and reality assertions;
+- status/location/relationship changes;
+- knowledge, belief, suspicion, claims, and reveals;
+- quests/unresolved-thread changes;
+- temporal relations;
+- retcons/supersessions/retractions;
+- character/item changes only when supported by notes/profile sources;
+- rooms/encounters reached, revealed, altered, bypassed, resolved, or left active, without assuming the prepared outcome occurred.
+
+Use several bounded structured calls under pinned extraction task profiles only where evals show one call is insufficient; do not create named autonomous agents or require `pi-agent-core`.
+
+### P9-05 — Conflict and continuity analysis
+
+**Work**
+
+- Run deterministic validation first.
+- Add a model-assisted reviewer only for semantic warnings that deterministic rules cannot express.
+- Detect likely dead-character appearances, impossible location overlap, knowledge leakage, stale functional state, and source authority confusion.
+- Treat warnings as review aids, not automatic rejection/canon.
+
+### P9-06 — Grouped review ergonomics
+
+**Work**
+
+- Implement the primary grouped review in the first-party web UI while preserving equivalent CLI/API services.
+- Show session source excerpt, event group, before/after state, dependencies, explicit/inferred labels, and warnings.
+- Support accept/edit/reject at group and item levels.
+- Revalidate after edits.
+- Keep rejected content available in the source/run history.
+- Measure DM edits/rejections to improve extraction precision.
+
+### P9-07 — End-to-end close-session command
+
+Implement:
+
+```text
+dm close-session <notes.md>
+dm review <change-set-id>
+dm commit <change-set-id>
+dm history
+```
+
+Closing a session must not change any canonical answer before commit.
+
+**Phase gate P9**
+
+- A synthetic session note produces a reviewable, cited change set.
+- No proposal becomes canonical before explicit commit.
+- Approved changes update state atomically and produce a readable log summary.
+- Rejected changes do not pollute canonical queries.
+- Re-running the same extraction configuration does not duplicate the run/change set.
+- Prepared dungeon/encounter usage informs extraction but never pre-populates canonical outcomes.
+
+---
+
+## P10 — Security, Operations, Deployment, and Release Gate
+
+### Goal
+
+Make the Python domain service, private Node model gateway, PostgreSQL store, and thin web UI dependable on the intended Proxmox deployment.
+
+### P10-01 — Single-DM authentication and centralized policy enforcement audit
+
+**Work**
+
+- Audit the P0 single-DM credential enforcement across every non-health route and fail deployment readiness if it is unset.
+- Bind/route the authenticated Python web/API service according to the home-network policy; prove the Node gateway is reachable only from the Python service/private container network.
+- Enforce centralized campaign/visibility/source/model-task policy in all search and generation paths.
+- Keep labels ready for future principals without implementing player accounts/RLS yet.
+
+### P10-02 — Adversarial and leakage tests
+
+**Work**
+
+- Add prompt-injection source fixtures.
+- Test path traversal, oversized/malformed input, wrong campaign, wrong authority, wrong rules edition, inaccessible snippets/citations/counts, player-map/handout secret leakage, malicious generation specs, wrong/unknown context payload kinds or cross-domain fields, asset-store escapes, attachment-ID/path abuse, model attempts to broaden scope/approve/commit, and OAuth/token leakage across browser/Python/log/error boundaries.
+- Treat any secret/cross-campaign leakage as release blocking.
+
+### P10-03 — Backup, restore, and rebuild
+
+**Work**
+
+- Document application-consistent PostgreSQL backup plus source and approved generated-asset backup; keep gateway OAuth credentials outside ordinary campaign backups and document safe re-login or separately encrypted secret recovery.
+- Add restore drill instructions.
+- Prove document/corpus citations and artifact lineage survive restore.
+- Prove lexical/vector projections and rebuildable rendered assets can be rebuilt from source/spec revisions and pinned generator/renderer metadata.
+- Do not rely solely on a Proxmox snapshot.
+
+### P10-04 — Container image and Proxmox deployment
+
+**Work**
+
+- Add pinned non-root Python Workbench and Node model-gateway images; the Workbench image installs the locked in-process `dm_dungeon` workspace package and does not expose a separate dungeon service.
+- Add production Compose/environment examples without secrets; expose only the authenticated Python application and keep the gateway on a private network.
+- Add migration/startup procedure, health checks, resource limits, and separate database/source/content-addressed-asset/scratch-volume guidance.
+- Prefer a VM for Docker Compose unless the chosen LXC deployment explicitly accepts nesting/security tradeoffs.
+
+### P10-05 — Durable jobs and observability
+
+**Work**
+
+- Ensure ingestion/embedding/dungeon/encounter/render/export/extraction runs can be diagnosed/retried after restart.
+- Add bounded job leasing only if synchronous commands are no longer adequate; keep PostgreSQL as the first durable mechanism.
+- Add safe metrics/logs for latency, error rate, `pi-ai` model usage/cost where available, embedding runtime/cost, queue/run state, and active task-profile/schema/generator/index versions.
+
+### P10-06 — Full eval and operational acceptance
+
+Run the complete frozen suites and a restore/rebuild drill. Record baseline:
+
+- answer correctness and citation precision;
+- per-task model/profile capability, schema/tool success, blinded DM preference, fallback behavior, and effort/cost/latency;
+- retrieval source recall plus embedding-profile quality/memory/index/query latency against lexical-only;
+- extraction precision/recall and DM review burden;
+- dungeon package dependency isolation, model-independent Studio operation, first-pass validity, repair count, targeted-regeneration preservation, context relevance, and render/export correctness;
+- encounter arithmetic/stat completeness/map fit and DM acceptance by type/difficulty;
+- leakage failures, including player map/puzzle packages (must be zero);
+- mid-session query latency;
+- model/embedding cost;
+- backup/restore duration.
+
+**Release gate P10**
+
+The first release satisfies all milestone acceptance criteria in the architecture document and has a tested rollback/restore path.
+
+---
+
+## Later Backlog (Do Not Pull Forward Casually)
+
+- `B-01`: Markdown/JSONL revision-log exporter enhancements and optional Git commits.
+- `B-02`: Player accounts, explicit audience management, and PostgreSQL RLS defense in depth.
+- `B-03`: Player-safe/NPC-scoped context and direct interaction.
+- `B-04`: Custom calendar adapters and interval algebra expansion.
+- `B-05`: Persistent scenes and live transcript ingestion.
+- `B-06`: Live character/combat resources.
+- `B-07`: Automated Markdown view generation with reviewed diffs.
+- `B-08`: Alternate timeline inheritance and branch semantics.
+- `B-09`: Local chat-LLM serving; a small local embedding adapter is evaluated in P2.
+- `B-10`: Dedicated queue/vector/graph infrastructure, only after measurements justify it.
+- `B-11`: Polished illustrated dungeon textures/image-model enhancement.
+- `B-12`: Direct Roll20 upload, dynamic-lighting, walls/doors, and token automation where supported.
+- `B-13`: Optional local/private MCP adapter.
+- `B-14`: Optional Pi extension or another external agent-host adapter.
+- `B-15`: Regional/world map generation.
+- `B-16`: Adopt `@earendil-works/pi-agent-core` only if open-ended multi-turn/steering needs justify moving the bounded loop into the gateway.
+- `B-17`: Extract a standalone `encounter-mechanics` package only if the P8 decision records a stable reusable deterministic boundary; never extract the full encounter workflow merely for symmetry with dungeons.
+
+## Test and Fixture Policy
+
+### Test layers
+
+1. **Unit/property tests:** parsers, hashing, scope resolution, strict task-specific context schemas/hashes, validation, rank fusion, diff logic, topology/gating, geometry/pathfinding, print tiling/ink budgets, encounter arithmetic, secrecy transforms, model/task-profile routing, `pi-ai` faux-provider contracts, and fake embedding providers. Add an import/dependency test proving `dm_dungeon` cannot depend on Workbench, database, web, retrieval, or provider modules.
+2. **Database integration tests:** migrations, constraints, transaction failure, temporal queries, FTS/vector filtering, revision/artifact history, and asset metadata.
+3. **API/CLI/web/gateway contract tests:** shared service behavior, platform `AssetStore` reuse, context-envelope/domain-payload contracts, OAuth-event/token boundaries, normalized model streams, image attachments, cancellation/reconnect, and safe error rendering.
+4. **Golden/snapshot evals:** pinned corpus/campaign/artifact inputs with expected answers/source IDs, dungeon packages, SVG exports, and encounter metrics.
+5. **Security/adversarial tests:** prompt injection, source authority, visibility, cross-campaign, path, and model tool boundaries.
+6. **Operational tests:** idempotent retries, backup/restore, and index rebuilds.
+
+### Fixture rules
+
+- Use a small synthetic campaign with deliberately conflicting beliefs, plans, retcons, aliases, split scenes, and important items.
+- Use invented rules text rather than copyrighted sourcebook excerpts.
+- Use synthetic character sheets with no real player data.
+- Use invented creature stat blocks, fixed-seed dungeon briefs/packages, and combat/noncombat/puzzle fixtures.
+- Keep separate dungeon and encounter context fixtures with only their relevant fields; tests must not normalize them into one universal optional-field payload.
+- Give fixture entities/rooms/artifacts stable IDs only inside fixture loaders; tests should not depend on production UUID values.
+- Freeze clock/provider behavior where reproducibility matters.
+
+## Migration Discipline
+
+- Never edit an applied/shared migration merely to make a later schema change easier; create a new migration.
+- Migration names should include the task ID where practical.
+- Every migration receives an upgrade test; reversible migrations receive downgrade coverage.
+- Data backfills are idempotent and resumable.
+- Canonical-history migrations preserve old revision semantics or include an explicit, reviewed conversion report.
+- Do not put model calls in a database migration.
+
+A likely migration sequence is:
+
+```text
+0001_p0_foundation
+0002_p1_documents_and_snapshots
+0003_p2_embeddings_and_retrieval_runs
+0004_p3_campaign_revisions_and_change_sets
+0005_p4_rules_model_task_profiles_and_runs
+0006_p5_knowledge_core
+0007_p6_character_and_item_profiles
+0008_p7_prep_artifacts_dungeons_and_assets
+0009_p8_creatures_parties_and_encounters
+0010_p9_extraction_runs
+```
+
+The exact grouping may change, but dependency order should not.
+
+## Credit-Aware Stop and Handoff Procedure
+
+When remaining context/credits look low, do not start another task. Leave the repository in a state another agent can understand in minutes.
+
+1. Stop at the nearest safe transaction/migration boundary.
+2. Run the task's focused tests plus `git diff --check`.
+3. Run `git status --short --branch`.
+4. Update `PROJECT_STATUS.md` with the exact task state, files, migrations, tests, errors, assumptions, and next first action.
+5. If work is incomplete, mark it **WIP** and say whether the current code is runnable/safe.
+6. If commits are expected, use the task ID in the subject; otherwise record a suggested subject.
+7. Do not leave generated credentials, real campaign data, temporary provider output, or unexplained database state.
+
+A good final handoff sentence is concrete:
+
+> Next: P1-03. Start by adding `MarkdownChunker` tests for heading paths and exact offsets in `tests/unit/documents/test_chunker.py`; P1-01/P1-02 migrations and ingestion tests pass with `uv run pytest tests/integration/documents`.
+
+A bad handoff is:
+
+> Continue ingestion work.
