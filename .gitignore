@@ -21,6 +21,11 @@ build/
 dist/
 *.egg-info/
 
+# Node gateway dependencies and build output
+/model-gateway/node_modules/
+/model-gateway/dist/
+/model-gateway/*.tsbuildinfo
+
 # Local databases, writable data, and generated output
 /.data/
 /local-data/

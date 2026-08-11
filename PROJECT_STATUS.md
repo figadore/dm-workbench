@@ -7,8 +7,8 @@
 - **Last updated:** 2026-08-11
 - **Lifecycle:** implementation underway; the provider-independent Dungeon Studio, deterministic dungeon kernel, PostgreSQL foundation, preparation lifecycle, immutable Library source registry, and P2's independent embeddings, hybrid retrieval, retrieval audit, and eval baseline are complete. The active priority is standalone prompt-to-dungeon-package generation.
 - **Current phase:** P4/P7 — Standalone prompted Dungeon Studio vertical slice.
-- **Current task:** Roadmap reprioritized from P3 canonical revisions to the standalone prompt-to-dungeon-package path.
-- **Next task:** **P4-02 — Private Node `pi-ai` model gateway and credential boundary**.
+- **Current task:** P4-02 complete; roadmap remains reprioritized from P3 canonical revisions to the standalone prompt-to-dungeon-package path.
+- **Next task:** **P4-03 — Task scope and intent analysis**.
 - **Schema head:** `0006_library_retrieval_runs`.
 - **Public baseline:** history begins with the final architecture/roadmap snapshot, uses the public GitHub author identity, and is licensed `AGPL-3.0-only`.
 
@@ -27,6 +27,7 @@ Always inspect `git status --short --branch` and the latest log before changing 
 - **P2-03:** vector search that requires an explicit active snapshot and compatible completed run, applies the exact lexical authorization filters before nearest-neighbor ranking, returns only immutable chunk citations/snippets, and falls back to filtered lexical retrieval when vectors are unavailable.
 - **P2-04:** deterministic versioned reciprocal-rank fusion over bounded authorized lexical/vector results, exact-name boosts, citation/span deduplication, and bounded authorized neighboring-source context without a learned reranker.
 - **P2-05:** immutable source-body-free retrieval audit records with scope/version/citation/score/timing pins, synthetic diffable golden retrieval cases, and deterministic source-recall/latency evaluation reporting.
+- **P4-02:** private Node 22.19+ `pi-ai` gateway package with a lockfile-pinned `0.84.1` provider/`Models` integration, allowlisted OpenAI Codex OAuth/OpenAI API-key/faux providers, restrictive serialized credential persistence, internal-token-protected HTTP/SSE contracts, display-safe login events, normalized streams, and cancellation.
 
 Migrations are `0001_foundation`, `0002_preparation`, `0003_library_sources`, `0004_library_embeddings`, `0005_library_embedding_runs`, and `0006_library_retrieval_runs`.
 
@@ -46,12 +47,11 @@ The public history contains three reviewed snapshots: final architecture/roadmap
 - Player-facing exports fail closed and omit DM-only data and fingerprints.
 - Real campaign text, proprietary rules/bestiary content, character sheets, credentials, and provider responses are not fixtures.
 
-## Next Exact Task — P4-02
+## Next Exact Task — P4-03
 
-1. Add the private `model-gateway/` Node package with a pinned `@earendil-works/pi-ai` release, npm lockfile, faux-provider contract support, and no campaign/domain persistence.
-2. Implement loopback/private-network health, non-secret provider/model capability, normalized stream, cancellation, and device-code event contracts; never return OAuth credentials to Python or the browser.
-3. Test only deterministic faux-provider behavior in CI. Keep live provider/OAuth verification manual and opt-in.
-4. Do not add P3 canonical schema, campaign retrieval, a general Ask surface, or `pi-agent-core` to this task.
+1. Add standalone task-scope resolution and bounded prompt/attachment analysis for the prompt-to-dungeon workflow.
+2. Keep campaign grounding optional; do not add canonical P3 writes, a general Ask surface, or any model/tool loop in this task.
+3. Add synthetic tests for ambiguous/unknown prompt scope and attachment validation.
 
 ## Last Verification
 
@@ -89,6 +89,14 @@ P2-05 static diagnostics passed:
 - focused editor diagnostics for retrieval audit contracts/models/migration/service, synthetic eval harness/golden suite, Library exports, and audit integration coverage → no errors.
 - The terminal wrapper remains blocked before command execution because `rg` is absent, so the focused unit/eval/PostgreSQL tests, migration round-trip, and `git diff --check` remain pending.
 
+P4-02 checks passed:
+
+- `npm --prefix model-gateway run check` → passed.
+- `npm --prefix model-gateway run build` → passed.
+- `npm --prefix model-gateway test` → `4 passed` using only Pi's deterministic faux provider plus an in-memory login runtime.
+- `git diff --check` → clean.
+- `npm --prefix model-gateway audit --omit=dev --audit-level=low` could not query npm's advisory endpoint because the sandbox network allowlist blocked it; repeat from a network-permitted review environment.
+
 The aggregate isolated gate from the prior public-history state also passed:
 
 - frozen sync and both wheel builds;
@@ -103,10 +111,10 @@ The aggregate isolated gate from the prior public-history state also passed:
 
 ## Handoff
 
-- **Status:** P1-01 through P1-06 and P2-01 through P2-05 complete; standalone prompt-to-dungeon-package work is now prioritized before P3.
-- **Changed:** P2-05 adds `0006_library_retrieval_runs`, immutable `retrieval_run` audit records with source-body/vector/query safeguards, `LibraryRetrievalAuditService`, synthetic diffable golden cases/eval reporting, audit immutability and fallback coverage, and this handoff update.
-- **Checks:** focused editor diagnostics for all P2-01/P2-05 Python files and tests report no errors. The terminal tool is blocked before execution because `rg` is unavailable; focused `pytest`, migration round-trip, Ruff, mypy, and `git diff --check` have not run for P2.
-- **Problems:** P2-01/P2-05 have no application-code diagnostics. Restore `rg`/the terminal wrapper before relying on the pending executable checks. The P2 phase gate still needs executable retrieval-eval evidence, including a real local runtime/profile quality-resource comparison, before selecting an ONNX model.
-- **Working tree:** terminal context reports that `copilot p2 implementation` committed successfully; exact current Git status remains unavailable because the terminal wrapper cannot start. This documentation change leaves the user-modified retrieval golden fixture untouched.
-- **Next:** P4-02; first create the narrow private Node gateway with a pinned `pi-ai` package and deterministic faux-provider contract tests, without any campaign-state or preparation-write behavior.
-- **Suggested commit:** `Plan prioritize standalone prompted Dungeon Studio`.
+- **Status:** P1-01 through P1-06, P2-01 through P2-05, and P4-02 are complete; standalone prompt-to-dungeon-package work remains prioritized before P3.
+- **Changed:** P4-02 adds the independent `model-gateway/` Node package (`@earendil-works/pi-ai` exactly pinned to `0.84.1` with an npm lockfile), private host validation, internal-token-protected health/catalog/auth/login/stream/cancellation endpoints, a `0600` atomic credential store, normalized SSE events, deterministic faux-provider tests, and the matching root ignore rules. It creates no campaign/domain persistence.
+- **Checks:** `npm --prefix model-gateway run check`, `npm --prefix model-gateway run build`, and `npm --prefix model-gateway test` passed (`4 passed`). `git diff --check` is clean. The sandbox blocked npm's advisory endpoint during `npm audit`; rerun that command from a network-permitted dependency-review environment. Earlier P2 executable checks remain outstanding despite terminal recovery.
+- **Problems:** No P4-02 application-code failures remain. The P2 phase gate still needs executable retrieval-eval evidence, including a real local runtime/profile quality-resource comparison, before selecting an ONNX model.
+- **Working tree:** `.gitignore` is modified and `model-gateway/` is untracked. No user changes were reverted.
+- **Next:** P4-03; first add a small typed standalone dungeon task-scope contract and synthetic ambiguity/unknown tests without introducing model orchestration.
+- **Suggested commit:** `P4-02 add private pi-ai model gateway`.
