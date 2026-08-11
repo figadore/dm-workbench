@@ -2,7 +2,7 @@
 
 A self-hosted, AI-assisted dungeon/encounter generator, campaign memory, and context compiler for a human Dungeon Master running D&D 5e/2024-era campaigns.
 
-The project is currently in the planning stage. Application code has not been scaffolded yet.
+The project is in early implementation. The Python 3.12 Workbench package, CLI, API factory, and unit-test scaffold are in place.
 
 ## Start Here
 
@@ -40,7 +40,7 @@ For an implementation session or return after a break, conserve context:
 
 ## Current Next Step
 
-Begin **P0-01**: scaffold the root Python Workbench package, CLI, tests, and development tooling. Do not add the dungeon workspace package or Node/`pi-ai` gateway during this scaffold. As soon as P0-01 passes, the dungeon-first fast path moves to **P7-02**, which adds `packages/dungeon-engine` as an in-process `uv` workspace member. The model-independent Dungeon Studio follows before grounded model orchestration. [`PROJECT_STATUS.md`](PROJECT_STATUS.md) contains the exact handoff.
+Begin **P7-02** on the dungeon-first fast path: add `packages/dungeon-engine` as an independently tested, in-process `uv` workspace member and define its versioned primitive vocabulary. Clarify deterministic generated-component identity before implementing the package; do not add database, web, retrieval, or model-provider dependencies to `dm_dungeon`. [`PROJECT_STATUS.md`](PROJECT_STATUS.md) contains the exact handoff.
 
 ## License and Third-Party Marks
 

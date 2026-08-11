@@ -1,0 +1,46 @@
+[project]
+name = "dm-assistant"
+dynamic = ["version"]
+description = "A self-hosted workbench for dungeon masters"
+readme = "README.md"
+license = "AGPL-3.0-only"
+license-files = ["LICENSE"]
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.115,<1",
+    "typer>=0.15,<1",
+    "uvicorn>=0.34,<1",
+]
+
+[project.scripts]
+dm = "dm_assistant.cli.main:app"
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28,<1",
+    "mypy>=1.15,<2",
+    "pytest>=8.3,<10",
+    "ruff>=0.11,<1",
+]
+
+[tool.hatch.version]
+path = "src/dm_assistant/__init__.py"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true

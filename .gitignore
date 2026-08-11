@@ -1,0 +1,36 @@
+# Python environments and local secrets
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Python caches and test/tool output
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Distribution artifacts
+build/
+dist/
+*.egg-info/
+
+# Local databases, writable data, and generated output
+/.data/
+/local-data/
+/postgres-data/
+/scratch/
+/exports/
+/generated/
+/provider-artifacts/
+
+# Editor and operating-system files
+.DS_Store
+*.swp
+*~
