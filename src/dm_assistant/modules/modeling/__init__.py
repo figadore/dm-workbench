@@ -1,6 +1,6 @@
-"""Feature-owned Workbench modules."""
+"""Model/task profile contracts for bounded gateway runs."""
 
-from dm_assistant.modules.modeling import (
+from dm_assistant.modules.modeling.contracts import (
     DungeonIntentV1,
     GatewayModelCatalogEntry,
     GatewayModelKey,
@@ -8,8 +8,8 @@ from dm_assistant.modules.modeling import (
     ModelRunInput,
     ModelRunRecord,
     PromptMessage,
-    ReasoningEffort,
     ReasoningLevel,
+    ReasoningEffort,
     ResolvedModelRunProfile,
     TaskProfile,
     ToolCall,
@@ -18,7 +18,6 @@ from dm_assistant.modules.modeling import (
     resolve_reasoning_level,
     resolve_run_profile,
 )
-from dm_assistant.modules.scope import TaskScope, TaskType, resolve_task_scope
 
 __all__ = [
     "DungeonIntentV1",
@@ -28,16 +27,13 @@ __all__ = [
     "ModelRunInput",
     "ModelRunRecord",
     "PromptMessage",
-    "ReasoningEffort",
     "ReasoningLevel",
+    "ReasoningEffort",
     "ResolvedModelRunProfile",
     "TaskProfile",
     "ToolCall",
     "ToolInvocationRecord",
     "ToolResult",
-    "TaskScope",
-    "TaskType",
     "resolve_reasoning_level",
     "resolve_run_profile",
-    "resolve_task_scope",
 ]

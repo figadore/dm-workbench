@@ -1,0 +1,233 @@
+"""Bounded gateway loop tests for model-task orchestration."""
+
+import json
+import uuid
+
+import pytest
+from pydantic import BaseModel, Field
+
+from dm_assistant.modules.modeling import (
+    DungeonIntentV1,
+    GatewayModelCatalogEntry,
+    GatewayModelKey,
+    ModelEndpointProfile,
+    ModelRunInput,
+    ResolvedModelRunProfile,
+    PromptMessage,
+    ReasoningEffort,
+    ReasoningLevel,
+    TaskProfile,
+    ToolCall,
+    ToolResult,
+    resolve_run_profile,
+)
+from dm_assistant.orchestration.modeling import (
+    GatewayCompletion,
+    ModelRunAbstained,
+    ModelTaskRunner,
+    ServerTool,
+    build_dungeon_intent_tool_result,
+)
+
+
+class BriefToolInput(BaseModel):
+    model_config = {"extra": "forbid", "frozen": True, "strict": True}
+
+    rooms: int = Field(ge=1)
+
+
+class FakeClient:
+    def __init__(self, completions: tuple[GatewayCompletion, ...]) -> None:
+        self._completions = list(completions)
+
+    def complete(
+        self,
+        *,
+        profile: object,
+        messages: tuple[PromptMessage, ...],
+        allowed_tools: tuple[str, ...],
+    ) -> GatewayCompletion:
+        del profile, messages, allowed_tools
+        if not self._completions:
+            raise AssertionError("unexpected extra gateway call")
+        return self._completions.pop(0)
+
+
+def _resolved_profile() -> tuple[
+    TaskProfile,
+    ResolvedModelRunProfile,
+    ModelTaskRunner,
+    ServerTool,
+]:
+    catalog_entry = GatewayModelCatalogEntry(
+        provider_id="faux",
+        model_id="faux_deterministic_v1",
+        runtime_adapter="pi_ai",
+        observed_capabilities=("text", "tool_calls"),
+        supported_reasoning_levels=(ReasoningLevel.LOW, ReasoningLevel.MEDIUM),
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+    )
+    endpoint_profile = ModelEndpointProfile(
+        profile_id=uuid.uuid4(),
+        profile_version="1.0.0",
+        runtime_adapter="pi_ai",
+        provider_id="faux",
+        model_id="faux_deterministic_v1",
+        supported_efforts=(ReasoningEffort.FAST, ReasoningEffort.STANDARD),
+        default_effort=ReasoningEffort.STANDARD,
+        observed_capabilities=("text", "tool_calls"),
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+        fallback_order=(GatewayModelKey(provider_id="faux", model_id="fallback"),),
+    )
+    task_profile = TaskProfile(
+        profile_id=uuid.uuid4(),
+        profile_version="1.0.0",
+        task_name="dungeon_intent_v1",
+        prompt_version="prompt-1",
+        instruction_version="instructions-1",
+        output_schema_name="dungeon_intent_v1",
+        output_schema_version="1.0.0",
+        allowed_tools=("set_brief",),
+        turn_budget=2,
+        tool_budget=1,
+        time_budget_seconds=30,
+        token_budget=512,
+    )
+    resolved = resolve_run_profile(
+        endpoint_profile=endpoint_profile,
+        task_profile=task_profile,
+        catalog_entry=catalog_entry,
+    )
+    tool = ServerTool(
+        name="set_brief",
+        input_schema=BriefToolInput,
+        handler=lambda _: build_dungeon_intent_tool_result(
+            tool_name="set_brief",
+            call_id="call-1",
+            payload={"status": "ok"},
+            citation_ids=("cite-1", "rules-1"),
+            official_rule_ids=("rules-1",),
+        ),
+    )
+    client = FakeClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(tool_name="set_brief", call_id="call-1", arguments={"rooms": 3}),
+                ),
+                input_tokens=10,
+                output_tokens=4,
+            ),
+            GatewayCompletion(
+                content=DungeonIntentV1(
+                    intent="Build a three-room dungeon.",
+                    requested_constraints=("single entrance",),
+                    citation_ids=("cite-1", "rules-1"),
+                    official_rules=("five-foot grid",),
+                    house_rule_overrides=("wider corridors",),
+                ).model_dump_json(),
+                input_tokens=6,
+                output_tokens=12,
+            ),
+        )
+    )
+    runner = ModelTaskRunner(client)
+    return task_profile, resolved, runner, tool
+
+
+def test_bounded_loop_executes_server_tool_and_records_run_lineage() -> None:
+    task_profile, resolved, runner, tool = _resolved_profile()
+    run_input = ModelRunInput(
+        messages=(PromptMessage(role="user", content="Create a synthetic dungeon intent."),),
+        authorized_citation_ids=("cite-1", "rules-1"),
+    )
+
+    output, record = runner.run(
+        profile=resolved,
+        run_input=run_input,
+        output_schema=DungeonIntentV1,
+        tools={tool.name: tool},
+    )
+
+    assert output.intent == "Build a three-room dungeon."
+    assert record.status == "succeeded"
+    assert record.resolved_profile.requested_effort is ReasoningEffort.STANDARD
+    assert record.resolved_profile.output_schema_version == task_profile.output_schema_version
+    assert record.tool_invocations[0].result.citation_ids == ("cite-1", "rules-1")
+    assert record.usage_input_tokens == 16
+    assert record.usage_output_tokens == 16
+
+
+def test_bounded_loop_abstains_when_citations_are_unauthorized() -> None:
+    catalog_entry = GatewayModelCatalogEntry(
+        provider_id="faux",
+        model_id="faux_deterministic_v1",
+        runtime_adapter="pi_ai",
+        observed_capabilities=("text",),
+        supported_reasoning_levels=(ReasoningLevel.LOW, ReasoningLevel.MEDIUM),
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+    )
+    endpoint_profile = ModelEndpointProfile(
+        profile_id=uuid.uuid4(),
+        profile_version="1.0.0",
+        runtime_adapter="pi_ai",
+        provider_id="faux",
+        model_id="faux_deterministic_v1",
+        supported_efforts=(ReasoningEffort.FAST, ReasoningEffort.STANDARD),
+        default_effort=ReasoningEffort.STANDARD,
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+    )
+    task_profile = TaskProfile(
+        profile_id=uuid.uuid4(),
+        profile_version="1.0.0",
+        task_name="dungeon_intent_v1",
+        prompt_version="prompt-1",
+        instruction_version="instructions-1",
+        output_schema_name="dungeon_intent_v1",
+        output_schema_version="1.0.0",
+        turn_budget=2,
+        tool_budget=1,
+        time_budget_seconds=30,
+        token_budget=512,
+    )
+    resolved = resolve_run_profile(
+        endpoint_profile=endpoint_profile,
+        task_profile=task_profile,
+        catalog_entry=catalog_entry,
+    )
+    client = FakeClient(
+        (
+            GatewayCompletion(
+                content=json.dumps(
+                    {
+                        "intent": "Build a synthetic dungeon.",
+                        "citation_ids": ("unauthorized-cite",),
+                        "official_rules": (),
+                        "house_rule_overrides": (),
+                        "requested_constraints": (),
+                        "unknowns": (),
+                        "conflicts": (),
+                        "abstain_reason": None,
+                    }
+                ),
+                input_tokens=4,
+                output_tokens=6,
+            ),
+        )
+    )
+    runner = ModelTaskRunner(client)
+
+    with pytest.raises(ModelRunAbstained, match="unauthorized evidence"):
+        runner.run(
+            profile=resolved,
+            run_input=ModelRunInput(
+                messages=(PromptMessage(role="user", content="Ask for a dungeon intent."),),
+                authorized_citation_ids=("cite-1",),
+            ),
+            output_schema=DungeonIntentV1,
+            tools={},
+        )

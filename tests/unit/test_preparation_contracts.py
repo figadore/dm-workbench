@@ -9,9 +9,12 @@ from dm_assistant.modules.preparation import (
     ArtifactAssetRole,
     AttachArtifactAsset,
     ContextSourceLink,
+    DungeonGenerationContext,
+    GenerationContextEnvelope,
     GenerationContextPin,
     StartGenerationRun,
     ToolRunPin,
+    VisibilityPolicy,
     canonical_json_sha256,
 )
 
@@ -36,6 +39,36 @@ def context_pin() -> GenerationContextPin:
             ),
         ),
     )
+
+
+def test_generation_context_envelope_round_trips_hash_and_rejects_grounding() -> None:
+    payload = DungeonGenerationContext(
+        context_version="1.0.0",
+        prompt_input_sha256="a" * 64,
+        requested_constraints=("single entrance", "low light"),
+        preparation_owner_id="dm",
+        standalone_provenance="prompt_to_dungeon",
+    )
+    envelope = GenerationContextEnvelope(
+        context_kind="dungeon_generation",
+        payload_version="1.0.0",
+        visibility_policy=VisibilityPolicy.DM_ONLY,
+        payload=payload.model_dump(mode="json"),
+        payload_sha256=canonical_json_sha256(payload.model_dump(mode="json")),
+    )
+
+    assert envelope.payload_sha256 == canonical_json_sha256(payload.model_dump(mode="json"))
+    assert envelope.campaign_revision_id is None
+    assert envelope.corpus_snapshot_id is None
+    assert envelope.rules_profile_id is None
+
+    with pytest.raises(ValidationError, match="does not match payload"):
+        GenerationContextEnvelope.model_validate(
+            {
+                **envelope.model_dump(),
+                "payload_sha256": "b" * 64,
+            }
+        )
 
 
 def test_context_pin_verifies_canonical_payload_hash() -> None:

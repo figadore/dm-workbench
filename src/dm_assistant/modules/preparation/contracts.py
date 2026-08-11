@@ -132,6 +132,42 @@ class GenerationContextPin(ContractModel):
         return self
 
 
+class DungeonGenerationContext(ContractModel):
+    """Standalone dungeon prompt provenance without campaign grounding by default."""
+
+    context_version: VersionText
+    prompt_input_sha256: Sha256Hex
+    requested_constraints: tuple[ShortText, ...] = ()
+
+    @model_validator(mode="after")
+    def normalize_constraints(self) -> Self:
+        object.__setattr__(self, "requested_constraints", tuple(self.requested_constraints))
+        return self
+    preparation_owner_id: ShortText
+    standalone_provenance: ShortText
+
+
+class GenerationContextEnvelope(ContractModel):
+    """Common generation envelope carrying only narrow shared provenance fields."""
+
+    context_kind: Slug
+    payload_version: VersionText
+    campaign_revision_id: UUID | None = None
+    corpus_snapshot_id: UUID | None = None
+    rules_profile_id: UUID | None = None
+    visibility_policy: VisibilityPolicy = VisibilityPolicy.DM_ONLY
+    source_links: tuple[ContextSourceLink, ...] = ()
+    payload: dict[str, JsonValue]
+    payload_sha256: Sha256Hex
+
+    @model_validator(mode="after")
+    def verify_payload_hash(self) -> Self:
+        actual = canonical_json_sha256(self.payload)
+        if actual != self.payload_sha256:
+            raise ValueError("generation context payload hash does not match payload")
+        return self
+
+
 class ToolRunPin(ContractModel):
     """Immutable identity of one bounded deterministic/model tool invocation."""
 
