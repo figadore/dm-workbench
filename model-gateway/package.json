@@ -1,0 +1,25 @@
+{
+  "name": "dm-assistant-model-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Private model transport and credential boundary for DM Assistant",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "check": "tsc --noEmit --project tsconfig.json",
+    "start": "node dist/src/index.js",
+    "test": "node --import tsx --test tests/**/*.test.ts"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "0.84.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3"
+  }
+}

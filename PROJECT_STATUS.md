@@ -7,8 +7,8 @@
 - **Last updated:** 2026-08-11
 - **Lifecycle:** implementation underway; the provider-independent Dungeon Studio, deterministic dungeon kernel, PostgreSQL foundation, preparation lifecycle, immutable Library source registry, and P2's independent embeddings, hybrid retrieval, retrieval audit, and eval baseline are complete. The active priority is standalone prompt-to-dungeon-package generation.
 - **Current phase:** P4/P7 — Standalone prompted Dungeon Studio vertical slice.
-- **Current task:** P4-02 complete; roadmap remains reprioritized from P3 canonical revisions to the standalone prompt-to-dungeon-package path.
-- **Next task:** **P4-03 — Task scope and intent analysis**.
+- **Current task:** P4-03 complete; roadmap remains reprioritized from P3 canonical revisions to the standalone prompt-to-dungeon-package path.
+- **Next task:** **P4-04 — Context envelope and task-specific context packets**.
 - **Schema head:** `0006_library_retrieval_runs`.
 - **Public baseline:** history begins with the final architecture/roadmap snapshot, uses the public GitHub author identity, and is licensed `AGPL-3.0-only`.
 
@@ -28,6 +28,7 @@ Always inspect `git status --short --branch` and the latest log before changing 
 - **P2-04:** deterministic versioned reciprocal-rank fusion over bounded authorized lexical/vector results, exact-name boosts, citation/span deduplication, and bounded authorized neighboring-source context without a learned reranker.
 - **P2-05:** immutable source-body-free retrieval audit records with scope/version/citation/score/timing pins, synthetic diffable golden retrieval cases, and deterministic source-recall/latency evaluation reporting.
 - **P4-02:** private Node 22.19+ `pi-ai` gateway package with a lockfile-pinned `0.84.1` provider/`Models` integration, allowlisted OpenAI Codex OAuth/OpenAI API-key/faux providers, restrictive serialized credential persistence, internal-token-protected HTTP/SSE contracts, display-safe login events, normalized streams, and cancellation.
+- **P4-03:** bounded task-scope contract in Python with explicit DM-only defaults, standalone-dungeon rejection of grounding fields, and a typed `TaskScope`/`TaskType` resolution helper that prevents prompt-level scope broadening.
 
 Migrations are `0001_foundation`, `0002_preparation`, `0003_library_sources`, `0004_library_embeddings`, `0005_library_embedding_runs`, and `0006_library_retrieval_runs`.
 
@@ -47,11 +48,11 @@ The public history contains three reviewed snapshots: final architecture/roadmap
 - Player-facing exports fail closed and omit DM-only data and fingerprints.
 - Real campaign text, proprietary rules/bestiary content, character sheets, credentials, and provider responses are not fixtures.
 
-## Next Exact Task — P4-03
+## Next Exact Task — P4-04
 
-1. Add standalone task-scope resolution and bounded prompt/attachment analysis for the prompt-to-dungeon workflow.
-2. Keep campaign grounding optional; do not add canonical P3 writes, a general Ask surface, or any model/tool loop in this task.
-3. Add synthetic tests for ambiguous/unknown prompt scope and attachment validation.
+1. Define a strict versioned `GenerationContextEnvelope[T]` and first `DungeonGenerationContext` payload without growing a universal optional-field model.
+2. Keep scope/provenance fields narrow, hashed, and replayable while rejecting unknown envelope fields or payload versions.
+3. Add synthetic hash round-trip and scope-change tests before any dungeon-generation model/tool loop is introduced.
 
 ## Last Verification
 
@@ -97,6 +98,11 @@ P4-02 checks passed:
 - `git diff --check` → clean.
 - `npm --prefix model-gateway audit --omit=dev --audit-level=low` could not query npm's advisory endpoint because the sandbox network allowlist blocked it; repeat from a network-permitted review environment.
 
+P4-03 checks passed:
+
+- `PYTHONPATH=src /home/codespace/.python/current/bin/python -m pytest -q tests/unit/test_task_scope_contracts.py tests/unit/test_preparation_contracts.py` → `8 passed in 0.38s`.
+- `git diff --check` → clean.
+
 The aggregate isolated gate from the prior public-history state also passed:
 
 - frozen sync and both wheel builds;
@@ -111,10 +117,10 @@ The aggregate isolated gate from the prior public-history state also passed:
 
 ## Handoff
 
-- **Status:** P1-01 through P1-06, P2-01 through P2-05, and P4-02 are complete; standalone prompt-to-dungeon-package work remains prioritized before P3.
-- **Changed:** P4-02 adds the independent `model-gateway/` Node package (`@earendil-works/pi-ai` exactly pinned to `0.84.1` with an npm lockfile), private host validation, internal-token-protected health/catalog/auth/login/stream/cancellation endpoints, a `0600` atomic credential store, normalized SSE events, deterministic faux-provider tests, and the matching root ignore rules. It creates no campaign/domain persistence.
-- **Checks:** `npm --prefix model-gateway run check`, `npm --prefix model-gateway run build`, and `npm --prefix model-gateway test` passed (`4 passed`). `git diff --check` is clean. The sandbox blocked npm's advisory endpoint during `npm audit`; rerun that command from a network-permitted dependency-review environment. Earlier P2 executable checks remain outstanding despite terminal recovery.
-- **Problems:** No P4-02 application-code failures remain. The P2 phase gate still needs executable retrieval-eval evidence, including a real local runtime/profile quality-resource comparison, before selecting an ONNX model.
-- **Working tree:** `.gitignore` is modified and `model-gateway/` is untracked. No user changes were reverted.
-- **Next:** P4-03; first add a small typed standalone dungeon task-scope contract and synthetic ambiguity/unknown tests without introducing model orchestration.
-- **Suggested commit:** `P4-02 add private pi-ai model gateway`.
+- **Status:** P1-01 through P1-06, P2-01 through P2-05, P4-02, and P4-03 are complete; standalone prompt-to-dungeon-package work remains prioritized before P3.
+- **Changed:** P4-02 adds the independent `model-gateway/` Node package (`@earendil-works/pi-ai` exactly pinned to `0.84.1` with an npm lockfile), private host validation, internal-token-protected health/catalog/auth/login/stream/cancellation endpoints, a `0600` atomic credential store, normalized SSE events, deterministic faux-provider tests, and the matching root ignore rules. P4-03 adds the bounded Python `TaskScope`/`TaskType` contract in [src/dm_assistant/modules/scope.py](src/dm_assistant/modules/scope.py) and focused synthetic tests in [tests/unit/test_task_scope_contracts.py](tests/unit/test_task_scope_contracts.py).
+- **Checks:** `npm --prefix model-gateway run build` and `npm --prefix model-gateway test` passed (`4 passed`). `PYTHONPATH=src /home/codespace/.python/current/bin/python -m pytest -q tests/unit/test_task_scope_contracts.py tests/unit/test_preparation_contracts.py` passed (`8 passed in 0.38s`). `git diff --check` is clean. The sandbox blocked npm's advisory endpoint during `npm audit`; rerun that command from a network-permitted dependency-review environment. Earlier P2 executable checks remain outstanding despite terminal recovery.
+- **Problems:** No P4-02 or P4-03 application-code failures remain. The P2 phase gate still needs executable retrieval-eval evidence, including a real local runtime/profile quality-resource comparison, before selecting an ONNX model.
+- **Working tree:** `.gitignore`, `PROJECT_STATUS.md`, and `model-gateway/` are modified/untracked. No user changes were reverted.
+- **Next:** P4-04; define the narrow generation-context envelope and the first typed `DungeonGenerationContext` payload without widening to a universal optional-field `GenerationContext`.
+- **Suggested commit:** `P4-03 add bounded task scope contract`.
