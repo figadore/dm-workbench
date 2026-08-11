@@ -9,13 +9,20 @@ from sqlalchemy import Engine
 
 from dm_assistant import __version__
 from dm_assistant.adapters.assets import LocalAssetStore
+from dm_assistant.adapters.sources import LocalSourceReader
 from dm_assistant.api.dungeons import create_dungeon_api_router
 from dm_assistant.api.errors import domain_error_handler
+from dm_assistant.api.library import create_library_api_router
 from dm_assistant.api.middleware import SecurityObservabilityMiddleware
 from dm_assistant.campaigns import CampaignCatalog
 from dm_assistant.config import Settings, load_settings
 from dm_assistant.db import build_engine
 from dm_assistant.errors import DomainError, ResourceNotFoundError
+from dm_assistant.modules.library.catalog import LibraryDocumentCatalog
+from dm_assistant.modules.library.retrieval import LibraryLexicalSearchService
+from dm_assistant.modules.library.service import LibraryIngestionService
+from dm_assistant.modules.library.snapshots import CorpusSnapshotService
+from dm_assistant.modules.library.workflows import LibrarySourceWorkflow
 from dm_assistant.modules.preparation import PreparationService
 from dm_assistant.observability import configure_logging
 from dm_assistant.orchestration.dungeons import DungeonStudioService
@@ -68,6 +75,21 @@ def create_app(
     )
     resolved_dungeons = dungeon_studio or DungeonStudioService(resolved_preparation)
     resolved_campaigns = campaign_catalog or CampaignCatalog(database_engine)
+    library_catalog = LibraryDocumentCatalog(database_engine)
+    library_search = LibraryLexicalSearchService(database_engine)
+    library_ingestion = LibraryIngestionService(
+        database_engine,
+        LocalSourceReader(
+            {
+                f"root-{index}": path
+                for index, path in enumerate(resolved_settings.source_roots)
+            }
+        ),
+    )
+    library_sources = LibrarySourceWorkflow(
+        library_ingestion,
+        CorpusSnapshotService(database_engine),
+    )
     application.state.settings = resolved_settings
     application.state.readiness_check = resolved_readiness_check
     application.state.preparation_service = resolved_preparation
@@ -79,6 +101,13 @@ def create_app(
     )
     application.add_exception_handler(DomainError, domain_error_handler)
     application.include_router(create_dungeon_api_router(resolved_dungeons))
+    application.include_router(
+        create_library_api_router(
+            library_catalog,
+            library_search,
+            library_sources,
+        )
+    )
     application.include_router(
         create_web_router(
             settings=resolved_settings,

@@ -221,6 +221,46 @@ class SourceScope(LibraryContract):
         return self
 
 
+class LexicalSearchQuery(LibraryContract):
+    """Authorized lexical search scope and bounded result settings."""
+
+    scope: SourceScope
+    query: str = Field(min_length=1, max_length=500)
+    snapshot_id: uuid.UUID | None = None
+    authority_classes: tuple[AuthorityClass, ...] = ()
+    visible_policies: tuple[SourceVisibility, ...] = (
+        SourceVisibility.DM_ONLY,
+        SourceVisibility.EXPLICIT_AUDIENCE,
+        SourceVisibility.ALL_CAMPAIGN_PLAYERS,
+        SourceVisibility.PUBLIC,
+    )
+    rulesets: tuple[Ruleset, ...] = ()
+    include_preparation: bool = False
+    limit: int = Field(default=10, ge=1, le=100)
+    snippet_chars: int = Field(default=320, ge=80, le=2000)
+
+    @field_validator("query")
+    @classmethod
+    def require_search_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("search query must contain non-whitespace text")
+        return value
+
+
+class LexicalSearchResult(LibraryContract):
+    """Bounded lexical evidence with an immutable chunk citation."""
+
+    citation_id: str
+    document_id: uuid.UUID
+    document_revision_id: uuid.UUID
+    chunk_id: uuid.UUID
+    heading_path: tuple[str, ...]
+    start_offset: int
+    end_offset: int
+    snippet: str
+    score: float
+
+
 class SourceLocator(LibraryContract):
     root_label: RootLabel
     relative_path: RelativeSourcePath

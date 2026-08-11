@@ -98,6 +98,10 @@ def test_openapi_is_authenticated_and_exposes_only_health_routes(
         "/api/dungeons/approve",
         "/api/dungeons/{artifact_id}",
         "/api/dungeons/{artifact_id}/compare",
+        "/api/library/documents",
+        "/api/library/documents/{document_id}",
+        "/api/library/ingest",
+        "/api/library/search",
     }
     assert "/login" not in schema["paths"]
 

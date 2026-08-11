@@ -7,8 +7,8 @@
 - **Last updated:** 2026-08-11
 - **Lifecycle:** implementation underway; the provider-independent Dungeon Studio, deterministic dungeon kernel, PostgreSQL foundation, preparation lifecycle, and immutable Library source registry are complete.
 - **Current phase:** P1 — Immutable campaign/rules sources and lexical grounding.
-- **Current task:** **P1-02 — Source registry and idempotent revision ingestion** is complete.
-- **Next task:** **P1-03 — Markdown parser and deterministic chunker**.
+- **Current task:** **P1 — Immutable campaign/rules sources and lexical grounding** is complete.
+- **Next task:** **P2-01 — Independent embedding runtime/model abstraction**.
 - **Schema head:** `0003_library_sources`.
 - **Public baseline:** history begins with the final architecture/roadmap snapshot, uses the public GitHub author identity, and is licensed `AGPL-3.0-only`.
 
@@ -41,20 +41,25 @@ The public history contains three reviewed snapshots: final architecture/roadmap
 - Player-facing exports fail closed and omit DM-only data and fingerprints.
 - Real campaign text, proprietary rules/bestiary content, character sheets, credentials, and provider responses are not fixtures.
 
-## Next Exact Task — P1-03
+## Next Exact Task — P2-01
 
-1. Read P1-03 and the architecture sections for document revisions/chunks, source authority, and untrusted evidence.
-2. Define strict versioned Markdown parser/chunker contracts for front matter, headings, semantic block kinds, exact source spans, page metadata, bounded size/overlap, diagnostics, and deterministic identities.
-3. Preserve exact revision text and treat headings, lists, tables, fenced code, Unicode, links, and hostile instruction-like text as untrusted data.
-4. Emit zero-based half-open offsets and verify every chunk maps exactly to its immutable revision text.
-5. Persist chunks only for novel revisions; unchanged and move-only outcomes must not duplicate them.
-6. Add synthetic deterministic/adversarial unit and PostgreSQL integration coverage.
-
-Do not activate snapshots, search, embed, call a model, or write canonical campaign state during P1-03.
+1. Read P2-01 and the architecture runtime-boundary requirements for embeddings.
+2. Define a provider-independent embedding profile/runtime contract separate from chat-model transport.
+3. Keep lexical retrieval as the usable baseline without an embedding credential.
+4. Add only synthetic/fake embedding providers and fixtures; do not add chat-model embeddings.
 
 ## Last Verification
 
-The aggregate isolated gate passed:
+P1 implementation checks passed:
+
+- `pytest -q tests/unit/test_markdown_chunker.py` → `4 passed in 0.04s`
+- `pytest -q tests/unit` → `104 passed in 3.19s`
+- Docker-backed `pytest -q tests/integration` → `33 passed in 19.31s`
+- strict mypy across `src/dm_assistant` → no issues
+- Ruff across `src` and `tests` → all checks passed
+- `git diff --check` → clean
+
+The aggregate isolated gate from the prior public-history state also passed:
 
 - frozen sync and both wheel builds;
 - migration base/head round trips through `0003_library_sources`;
@@ -68,10 +73,10 @@ The aggregate isolated gate passed:
 
 ## Handoff
 
-- **Status:** P1-02 complete.
-- **Changed:** Workbench platform through P1-02, three migrations, pure dungeon package, web/API/CLI workflows, tests, public documentation, AGPL licensing, and sanitized three-commit public history.
-- **Checks:** the complete aggregate gate, public-history secret scan, license packaging verification, and Git object-graph checks passed.
-- **Problems:** none unresolved; model and embedding runtimes remain intentionally disabled.
-- **Working tree:** public `main` is committed and clean; local-only exclusions remain outside public history.
-- **Next:** P1-03; begin with strict parser/chunker contracts and one adversarial synthetic Markdown fixture.
-- **Suggested commit:** `P1-03 parse and deterministically chunk Markdown sources`.
+- **Status:** P1-01 through P1-06 complete.
+- **Changed:** Workbench platform through P1-02, three migrations, pure dungeon package, web/API/CLI workflows, tests, public documentation, AGPL licensing, sanitized three-commit public history, deterministic Markdown parsing/chunking, chunk persistence, snapshot publication, filtered lexical retrieval, and shared Library CLI/API source/document/search adapters.
+- **Checks:** Docker-backed full integration suite (`33 passed`), full root unit suite (`104 passed`), strict mypy across application code, Ruff across source/tests, diagnostics, and `git diff --check` passed.
+- **Problems:** none unresolved in P1; model and embedding runtimes remain intentionally disabled by design.
+- **Working tree:** local P1 changes remain uncommitted across Library modules, runtime, CLI/API adapters, integration/unit tests, and this handoff file.
+- **Next:** P2-01; first read the embedding runtime architecture constraints and define the profile/runtime contract without adding a provider dependency.
+- **Suggested commit:** `P1 complete immutable Library sources and lexical search surface`.

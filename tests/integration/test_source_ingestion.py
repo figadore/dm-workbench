@@ -142,7 +142,14 @@ def test_first_unchanged_and_edited_ingestion_are_idempotent(
         run_statuses = connection.execute(
             select(IngestionRun.status).order_by(IngestionRun.started_at)
         ).scalars()
-        chunk_count = connection.scalar(select(func.count()).select_from(DocumentChunk))
+        chunks = connection.execute(
+            select(
+                DocumentChunk.document_revision_id,
+                DocumentChunk.start_offset,
+                DocumentChunk.end_offset,
+                DocumentChunk.content,
+            ).order_by(DocumentChunk.document_revision_id, DocumentChunk.ordinal)
+        ).all()
     assert revisions == [
         (1, first_text, len(first_text.encode())),
         (2, second_text, len(second_text.encode())),
@@ -151,7 +158,14 @@ def test_first_unchanged_and_edited_ingestion_are_idempotent(
     assert paths[0].valid_to is not None
     assert paths[1].valid_to is None
     assert list(run_statuses) == ["succeeded", "succeeded", "succeeded"]
-    assert chunk_count == 0
+    assert len(chunks) == 4
+    assert all(
+        content[start_offset:end_offset] == chunk_content
+        for revision_id, start_offset, end_offset, chunk_content in chunks
+        for content in (
+            first_text if revision_id == created.revision_id else second_text,
+        )
+    )
 
 
 def test_copy_is_explicit_duplicate_and_exact_rename_retains_identity(

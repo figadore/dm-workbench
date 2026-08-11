@@ -17,6 +17,19 @@ from dm_assistant.doctor import (
     render_doctor_json,
 )
 from dm_assistant.errors import DomainError, InvalidInputError, format_cli_error
+from dm_assistant.modules.library import (
+    AuthorityClass,
+    CorpusKind,
+    DocumentType,
+    IngestSource,
+    LexicalSearchQuery,
+    RevisionClassification,
+    Ruleset,
+    SourceLocator,
+    SourceScope,
+    SourceVisibility,
+    VisibilityLabel,
+)
 from dm_assistant.orchestration.dungeons import (
     CreateDungeonWorkflow,
     ExportDungeonWorkflow,
@@ -42,8 +55,14 @@ dungeon_app = typer.Typer(
     help="Provider-independent Dungeon Studio workflows.",
     no_args_is_help=True,
 )
+library_app = typer.Typer(
+    name="library",
+    help="Immutable source documents and scoped lexical search.",
+    no_args_is_help=True,
+)
 app.add_typer(campaign_app, name="campaign")
 app.add_typer(dungeon_app, name="dungeon")
+app.add_typer(library_app, name="library")
 
 
 @app.callback()
@@ -98,6 +117,147 @@ def campaign_list() -> None:
                         {"id": str(campaign.id), "name": campaign.name}
                         for campaign in runtime.campaigns.list_campaigns()
                     ],
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+            )
+
+
+@library_app.command("ingest")
+def library_ingest(
+    relative_path: str,
+    campaign_id: Annotated[UUID | None, typer.Option("--campaign")] = None,
+    corpus: Annotated[CorpusKind, typer.Option("--corpus")] = CorpusKind.CAMPAIGN,
+    root: Annotated[str, typer.Option("--root")] = "root-0",
+    title: Annotated[str, typer.Option("--title")] = "Source document",
+    document_type: Annotated[DocumentType, typer.Option("--document-type")] = (
+        DocumentType.REFERENCE_LORE
+    ),
+    authority: Annotated[AuthorityClass, typer.Option("--authority")] = (
+        AuthorityClass.REFERENCE
+    ),
+    visibility: Annotated[SourceVisibility, typer.Option("--visibility")] = (
+        SourceVisibility.DM_ONLY
+    ),
+    ruleset: Annotated[Ruleset | None, typer.Option("--ruleset")] = None,
+) -> None:
+    """Ingest one allowlisted Markdown/text source as an immutable revision."""
+    with _render_domain_errors():
+        with workbench_runtime() as runtime:
+            _emit_model(
+                runtime.library_sources.ingest(
+                    IngestSource(
+                        scope=SourceScope(campaign_id=campaign_id, corpus=corpus),
+                        locator=SourceLocator(
+                            root_label=root,
+                            relative_path=relative_path,
+                        ),
+                        classification=RevisionClassification(
+                            corpus=corpus,
+                            document_type=document_type,
+                            authority_class=authority,
+                            ruleset=ruleset,
+                            visibility=VisibilityLabel(policy=visibility),
+                        ),
+                        title=title,
+                    )
+                )
+            )
+
+
+@library_app.command("documents")
+def library_documents(
+    campaign_id: Annotated[UUID | None, typer.Option("--campaign")] = None,
+    corpus: Annotated[CorpusKind, typer.Option("--corpus")] = CorpusKind.CAMPAIGN,
+) -> None:
+    """List immutable Library documents in one campaign/rules scope."""
+    with _render_domain_errors():
+        with workbench_runtime() as runtime:
+            scope = SourceScope(campaign_id=campaign_id, corpus=corpus)
+            typer.echo(
+                json.dumps(
+                    [
+                        {
+                            "id": str(item.id),
+                            "source_path": item.source_path,
+                            "retired": item.retired,
+                        }
+                        for item in runtime.library_catalog.list_documents(scope)
+                    ],
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+            )
+
+
+@library_app.command("show-document")
+def library_show_document(
+    document_id: UUID,
+    campaign_id: Annotated[UUID | None, typer.Option("--campaign")] = None,
+    corpus: Annotated[CorpusKind, typer.Option("--corpus")] = CorpusKind.CAMPAIGN,
+    revision_id: Annotated[UUID | None, typer.Option("--revision")] = None,
+) -> None:
+    """Show one immutable document revision, latest by default."""
+    with _render_domain_errors():
+        with workbench_runtime() as runtime:
+            detail = runtime.library_catalog.show_document(
+                SourceScope(campaign_id=campaign_id, corpus=corpus),
+                document_id,
+                revision_id,
+            )
+            typer.echo(
+                json.dumps(
+                    {
+                        "id": str(detail.id),
+                        "source_path": detail.source_path,
+                        "revision_id": str(detail.revision_id),
+                        "revision_number": detail.revision_number,
+                        "content_hash": detail.content_hash,
+                        "content": detail.content_snapshot,
+                        "title": detail.title,
+                        "document_type": detail.document_type,
+                        "authority_class": detail.authority_class,
+                        "ruleset": detail.ruleset,
+                        "visibility_policy": detail.visibility_policy,
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+            )
+
+
+@library_app.command("search")
+def library_search(
+    query: str,
+    campaign_id: Annotated[UUID | None, typer.Option("--campaign")] = None,
+    corpus: Annotated[CorpusKind, typer.Option("--corpus")] = CorpusKind.CAMPAIGN,
+    include_preparation: Annotated[bool, typer.Option("--include-preparation")] = False,
+) -> None:
+    """Search the active snapshot and return scoped immutable citations."""
+    with _render_domain_errors():
+        with workbench_runtime() as runtime:
+            scope = SourceScope(campaign_id=campaign_id, corpus=corpus)
+            results = runtime.library_search.search(
+                LexicalSearchQuery(
+                    scope=scope,
+                    query=query,
+                    include_preparation=include_preparation,
+                    visible_policies=(SourceVisibility.DM_ONLY,),
+                )
+            )
+            typer.echo(
+                json.dumps(
+                    {
+                        "scope": {
+                            "campaign_id": str(campaign_id)
+                            if campaign_id is not None
+                            else None,
+                            "corpus": corpus.value,
+                        },
+                        "results": [item.model_dump(mode="json") for item in results],
+                    },
+                    ensure_ascii=False,
                     separators=(",", ":"),
                     sort_keys=True,
                 )

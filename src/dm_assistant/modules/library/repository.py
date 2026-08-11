@@ -11,6 +11,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from dm_assistant.modules.library.contracts import SourceScope
 from dm_assistant.modules.library.models import (
     Document,
+    DocumentChunk,
     DocumentPathHistory,
     DocumentRevision,
     IngestionRun,
@@ -53,6 +54,8 @@ class LibraryRepository(Protocol):
     def add_path(self, path: DocumentPathHistory) -> None: ...
 
     def add_revision(self, revision: DocumentRevision) -> None: ...
+
+    def add_chunk(self, chunk: DocumentChunk) -> None: ...
 
     def flush(self) -> None: ...
 
@@ -179,6 +182,9 @@ class SqlAlchemyLibraryRepository:
 
     def add_revision(self, revision: DocumentRevision) -> None:
         self._session.add(revision)
+
+    def add_chunk(self, chunk: DocumentChunk) -> None:
+        self._session.add(chunk)
 
     def flush(self) -> None:
         self._session.flush()

@@ -26,8 +26,14 @@ from dm_assistant.modules.library.contracts import (
     SourcePresence,
     SourceScope,
 )
+from dm_assistant.modules.library.markdown import (
+    chunker_version,
+    parse_markdown_document,
+    parser_version,
+)
 from dm_assistant.modules.library.models import (
     Document,
+    DocumentChunk,
     DocumentPathHistory,
     DocumentRevision,
     IngestionRun,
@@ -40,8 +46,6 @@ from dm_assistant.modules.library.repository import (
 RepositoryFactory = Callable[[Session], LibraryRepository]
 IdFactory = Callable[[], uuid.UUID]
 Clock = Callable[[], datetime]
-_EXACT_UTF8_VERSION = "exact-utf8-v1"
-_NO_CHUNKER_VERSION = "not-run"
 
 
 class LibraryIngestionService:
@@ -546,11 +550,38 @@ class LibraryIngestionService:
             visibility_audience=list(classification.visibility.audience_ids),
             source_path=source.source_path,
             source_metadata=dict(command.source_metadata),
-            parser_version=_EXACT_UTF8_VERSION,
+            parser_version=parser_version(),
             ingestion_run_id=run.id,
             ingested_at=self._timestamp(),
         )
         repository.add_revision(revision)
+        repository.flush()
+        parsed = parse_markdown_document(source.content)
+        for chunk in parsed.chunks:
+            repository.add_chunk(
+                DocumentChunk(
+                    id=self._id_factory(),
+                    campaign_id=revision.campaign_id,
+                    corpus=revision.corpus,
+                    document_revision_id=revision.id,
+                    ordinal=chunk.ordinal,
+                    heading_path=list(chunk.heading_path),
+                    start_offset=chunk.start_offset,
+                    end_offset=chunk.end_offset,
+                    page_start=None,
+                    page_end=None,
+                    content=chunk.content,
+                    content_hash=chunk.content_hash,
+                    search_vector="",
+                    fts_config="simple",
+                    chunker_version=chunker_version(),
+                    authority_class=revision.authority_class,
+                    ruleset=revision.ruleset,
+                    visibility_policy=revision.visibility_policy,
+                    visibility_audience=list(revision.visibility_audience),
+                    chunk_metadata=dict(chunk.metadata),
+                )
+            )
         repository.flush()
         return revision
 
@@ -646,8 +677,8 @@ class LibraryIngestionService:
                     corpus=scope.corpus.value,
                     source_root_label=root_label,
                     configuration={"action": action, **configuration},
-                    parser_version=_EXACT_UTF8_VERSION,
-                    chunker_version=_NO_CHUNKER_VERSION,
+                    parser_version=parser_version(),
+                    chunker_version=chunker_version(),
                     status=IngestionStatus.RUNNING.value,
                     summary={},
                     started_at=started_at,
