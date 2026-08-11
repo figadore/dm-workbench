@@ -2,7 +2,7 @@
 
 ## How to Use This Plan
 
-This plan turns the product goals and architecture into small, resumable tasks. It is intentionally ordered so that each phase leaves a working capability and does not require the entire campaign ontology to be complete.
+This plan turns the product goals and architecture into small, resumable tasks. It is intentionally ordered so that each phase leaves a working capability and does not require the entire campaign ontology to be complete. The active priority is the standalone prompt-to-dungeon-package vertical slice described below; task IDs remain stable even when execution order changes.
 
 - `PROJECT_STATUS.md` identifies the current task and is the live source of handoff state.
 - Task IDs in this document are stable. Use them in handoffs and, when applicable, commit subjects.
@@ -16,14 +16,30 @@ Use a dungeon-first vertical path so the primary capability appears before the e
 1. scaffold the reproducible Python Workbench package/test foundation (P0-01; the remaining P0 platform tasks can continue in parallel);
 2. add an independently packaged, in-process pure dungeon kernel from typed synthetic specs—topology, seeded layout, geometry validation, deterministic SVG, PNG, low-ink tiled PDF, and Roll20 exports (P7-02 through P7-08);
 3. complete preparation persistence and the model-independent Dungeon Studio so a human-authored brief/spec can be versioned, previewed, regenerated, exported, and approved without a provider (P7-01 and P7-11, after the required P0 platform tasks);
-4. add immutable sources, filtered lexical grounding, and the common generation-context envelope with a narrow `DungeonGenerationContext` (P1 and P4-03/P4-04 scope/context work), while building P3's canonical revision/change-set boundary before any profile/rules operation or generated fact can become canonical; semantic retrieval remains eval-driven rather than critical path;
-5. add the private `pi-ai` gateway, model/task profiles, shared provider/settings/stream UI foundation, and constrained grounded dungeon intent/repair in the existing Studio (P4-02/P4-05/P4-06 and P7-09/P7-10);
-6. add synthetic normalized party/creature inputs and the Encounter Studio as a Workbench feature, then real adapters when formats are chosen (P4-01, P6, and P8); decide only after P8 whether a narrow `encounter-mechanics` package is justified;
-7. extend the established revision boundary with precise campaign-memory state and the general Ask web workflow in parallel where useful (P5 and P4-07, with P2 only where retrieval evals justify it);
-8. add session-close extraction from what actually happened (P9);
-9. harden, back up, and deploy the Python app, in-process dungeon package, private model gateway, and PostgreSQL system (P10), while moving security, secrecy, eval, and backup checks into every earlier persisted slice.
+4. add immutable sources, filtered lexical grounding, and the common generation-context envelope with a narrow `DungeonGenerationContext` (P1/P2 and P4-03/P4-04); campaign grounding stays optional and eval-driven rather than becoming a prerequisite for the first prompted dungeon;
+5. prioritize the standalone prompt-to-dungeon-package path: private `pi-ai` transport, standalone scope/context, a bounded dungeon task profile, constrained intent/repair, then stream/settings integration in the existing Studio (P4-02 through P4-06 and P7-09/P7-10);
+6. build P3's canonical revision/change-set boundary separately before any generated fact, rules/profile operation, or session outcome can become campaign canon;
+7. add synthetic normalized party/creature inputs and the Encounter Studio as a Workbench feature, then real adapters when formats are chosen (P4-01, P6, and P8); decide only after P8 whether a narrow `encounter-mechanics` package is justified;
+8. extend the established revision boundary with precise campaign-memory state and the general Ask web workflow in parallel where useful (P5 and P4-07);
+9. add session-close extraction from what actually happened (P9);
+10. harden, back up, and deploy the Python app, in-process dungeon package, private model gateway, and PostgreSQL system (P10), while moving security, secrecy, eval, and backup checks into every earlier persisted slice.
 
-The early dungeon kernel is deliberately pure and file/fixture driven: it does not need PostgreSQL, an LLM, or copyrighted data to prove that code—not the model—can create valid practical grids. It is a Python package boundary inside the same Workbench deployment, not a service. Persistence, domain-specific context, and grounded generation are integrated afterward. The canonical approval boundary must exist before generated material can promote facts into campaign state; until P3 is complete, that promotion path remains unavailable.
+The early dungeon kernel is deliberately pure and file/fixture driven: it does not need PostgreSQL, an LLM, or copyrighted data to prove that code—not the model—can create valid practical grids. It is a Python package boundary inside the same Workbench deployment, not a service. Persistence, domain-specific context, and prompted generation are integrated afterward. The canonical approval boundary must exist before generated material can promote facts into campaign state; until P3 is complete, that promotion path remains unavailable.
+
+### Priority: Standalone Prompt-to-Dungeon Package
+
+The next product milestone is a bounded workflow:
+
+```text
+DM prompt
+    -> versioned typed dungeon intent
+    -> deterministic DungeonPackage generation and validation
+    -> preview, targeted regeneration, export, and preparation approval
+```
+
+This path is independent of campaign **facts**. A campaign remains the private Workbench ownership container required by the existing preparation-artifact, asset, approval, and audit schema, but a standalone request does not require a campaign revision, corpus snapshot, retrieval query, citations, rules profile, or canonical write. Its `DungeonGenerationContext` records explicit standalone provenance plus the prompt/input hash and requested constraints; it contains no campaign lore by default. The DM may opt into campaign grounding later through the existing Library/context path, but grounding is never implicit.
+
+The model may author only strict high-level intent such as theme, room roles, connections, gates, features, and constraints. The Workbench and pure `dm_dungeon` package own IDs, geometry, connectivity, validation, rendering, exports, and all preparation persistence. The model cannot approve artifacts, commit canon, write arbitrary files, or emit renderer syntax. A first-class ownership container independent of even a campaign record is explicitly out of this milestone and requires a separate architecture decision; do not make preparation ownership nullable as incidental prompt-work scope.
 
 ## Confirmed Scope
 
@@ -167,21 +183,23 @@ P0-01 Python Workbench package/test scaffold
     +--> P7-02..P7-08 pure dm_dungeon workspace package (synthetic specs)
     |          |
     |          +--> remaining required P0 + P7-01 prep/assets + P7-11 model-independent Studio
+    |                         |
+    |                         +--> P4-02 private pi-ai gateway
+    |                                      |
+    |                                      +--> P4-03 standalone scope + P4-04 DungeonGenerationContext
+    |                                                    |
+    |                                                    +--> P4-05 bounded dungeon task profile
+    |                                                                  |
+    |                                                                  +--> P7-09 prompt-to-intent/repair
+    |                                                                                |
+    |                                                                                +--> P4-06 stream/settings UI + P7-10 Studio integration
     |
-    +--> remaining P0 -> P1 versioned sources + lexical retrieval
-                           |
-                           +--> P4-03/P4-04 scope + envelope + DungeonGenerationContext
-                           |          |
-                           |          +--> P4 gateway/task profiles/settings + P7-09/P7-10 grounded Studio
-                           |                         |
-                           |                         +--> P4-07 general Ask web workflow
-                           |
-                           +--> P2 embeddings/hybrid retrieval only when evals justify it
-                           |
-                           +--> P3 canonical revisions/review -> P5 structured campaign knowledge
-                                    |                             |
-                                    |                             +--> P9 session-close extraction
-                                    +--> canonical P4 rules/profile operations + reviewed P6 profiles
+    +--> P1/P2 Library grounding and retrieval (optional explicit context for prompted dungeons)
+    |
+    +--> P3 canonical revisions/review -> P5 structured campaign knowledge
+                 |                             |
+                 |                             +--> P9 session-close extraction
+                 +--> canonical P4 rules/profile operations + reviewed P6 profiles
 
 P3 revision boundary + P6 normalized party/item inputs + P4 rules/creature access + P7 dungeon package
     |
@@ -195,7 +213,7 @@ All persisted/user-visible slices -> incremental security/secrecy/backup/eval ga
 All release paths -> P10 aggregate hardening/deployment gate
 ```
 
-P7-02 through P7-08 initially read/write fixture JSON and temporary output directories from the isolated `dm_dungeon` package. P7-01 and P7-11 then give those immutable packages durable artifact/asset lineage and a provider-independent Workbench workflow. P1 plus P4 scope/context work adds a pinned `GenerationContextEnvelope<DungeonGenerationContext>` before model-assisted generation. P6/P8 use synthetic profiles until real formats are selected. P9 requires P5 plus the prepared-artifact contracts from P7/P8. `PROJECT_STATUS.md` must always name the single next task rather than asking an agent to infer a branch.
+P7-02 through P7-08 initially read/write fixture JSON and temporary output directories from the isolated `dm_dungeon` package. P7-01 and P7-11 then give those immutable packages durable artifact/asset lineage and a provider-independent Workbench workflow. The priority P4/P7 path adds a pinned standalone `GenerationContextEnvelope<DungeonGenerationContext>` before model-assisted generation; P1/P2 grounding becomes an explicit opt-in augmentation rather than a dependency. P6/P8 use synthetic profiles until real formats are selected. P9 requires P5 plus the prepared-artifact contracts from P7/P8. `PROJECT_STATUS.md` must always name the single next task rather than asking an agent to infer a branch.
 
 ---
 
@@ -581,7 +599,7 @@ A deterministic or model-drafted summary can be edited by the DM. Detailed accep
 
 ### Goal
 
-Provide reusable scope resolution, task-specific context compilation, private model transport, and the general cited Ask workflow. These tasks are capability tracks rather than one prerequisite block: P4-03/P4-04 can ground Dungeon Studio before the full general Ask UI, while P4-02/P4-05 supply its model transport/orchestration later.
+Provide reusable scope resolution, task-specific context compilation, and private model transport. The active P4/P7 priority is the standalone prompted Dungeon Studio; the general cited Ask workflow remains a later consumer. These tasks are capability tracks rather than one prerequisite block: P4-02 through P4-05 establish the bounded prompt-to-intent path, P4-06 and P7-10 integrate it into Studio, and P4-07 follows that milestone.
 
 ### P4-01 — Rules/creature source metadata and profile operations
 
@@ -617,6 +635,7 @@ Real copyrighted rule/bestiary text stays outside Git; use synthetic mechanics a
 - Resolve campaign revision, corpus snapshot, DM principal, timeline/cursor defaults, authority intent, rules profile, and explicit task type before retrieval/model selection.
 - Implement deterministic intent/scope defaults in Python; a selected model/tool call can never broaden scope.
 - Reject attempts to broaden campaign, principal, source authority, rules profile, or visibility through prompt/tool input.
+- For the prioritized standalone dungeon task, resolve only the authenticated DM, preparation-artifact campaign owner, explicit task type, and standalone provenance. Campaign revision, corpus snapshot, rules profile, and retrieval are absent unless the DM explicitly enables grounded generation.
 
 ### P4-04 — Context envelope and task-specific context packets
 
@@ -624,6 +643,7 @@ Real copyrighted rule/bestiary text stays outside Git; use synthetic mechanics a
 
 - Define a small versioned `GenerationContextEnvelope[T]` containing only common provenance/scope fields: context kind and payload version, campaign revision, corpus snapshot, optional rules profile, visibility scope, immutable source references/citations, and canonical payload hash.
 - Define strict domain payloads only as workflows need them. The first preparation payload is `DungeonGenerationContext`; campaign/rules answers use their own question packet schemas rather than growing the generation payload.
+- Implement the first `DungeonGenerationContext` as a standalone packet: explicit standalone provenance, prompt/input hash, requested constraints, and the preparation owner. It contains no campaign revision, corpus snapshot, rules profile, or citations unless a later explicit grounding selection adds them.
 - Keep dungeon fields focused on selected location lore/geography, themes, factions, hooks, tone, and coarse party/capacity constraints. Do not add encounter mechanics or speculative future fields.
 - Make unknown envelope/payload versions and unknown fields fail explicitly; round-trip canonical serialization and hash tests.
 - Build task-specific typed sections for applicable narrative evidence, rules/creature evidence, conflicts/unknowns, and answer schema.
@@ -644,7 +664,8 @@ Real copyrighted rule/bestiary text stays outside Git; use synthetic mechanics a
 - Add versioned model-endpoint/profile and task-profile records/configuration: runtime adapter, provider/model ID, observed capabilities, normalized effort, context policy/budgets, tools, output schema/token limit, prompt/instruction version, and fallback order.
 - Validate profiles against the gateway catalog; map `fast`/`standard`/`deep` only to reasoning levels supported by the selected model and preserve explicit per-run overrides in lineage.
 - Add a Python gateway client and bounded tool loop. Python validates completed arguments against server-owned schemas, executes application services, appends bounded results, and enforces a per-task turn/tool/cost/time budget.
-- Add a text-first `dm ask` and equivalent authenticated API service; preserve direct retrieval/debug output independent of any model. P4-07 extends the shared service with validated input attachments.
+- Prioritize a `dungeon_intent_v1` task profile that produces only strict typed dungeon intent and may invoke only server-owned Dungeon Studio operations. It has no source-retrieval tool by default and no approval, commit, file, SQL, or renderer-syntax access.
+- Defer the text-first `dm ask` and its authenticated API service to P4-07; preserve direct retrieval/debug output independent of any model.
 - Require supplied citation IDs for factual/rules claims and verify each was authorized and present in the packet.
 - Label official rules versus house-rule overrides and return explicit unknown/conflict diagnostics when evidence is inadequate.
 - Exclude approval/commit and arbitrary file/SQL access from all model tools.
@@ -658,7 +679,7 @@ Real copyrighted rule/bestiary text stays outside Git; use synthetic mechanics a
 - Reuse the P7-11 single-DM Workbench login/session shell; add model-provider settings, OAuth device-code progress, non-secret auth status, model/task-profile/effort selection, and logout/re-auth behavior without creating a parallel authentication flow.
 - Add reusable streamed/cancellable/reconnectable durable model-run status components that Dungeon Studio and later Ask workflows can call through shared application services.
 - Show capability/profile validation and safe provider errors without returning credentials, source context bodies, or unrestricted provider responses to the browser.
-- Contract-test the shell/settings/run components against the faux provider; do not add a generic chat page in this task.
+- Contract-test the shell/settings/run components against the faux provider; first integrate them with the standalone Dungeon Studio workflow and do not add a generic chat page in this task.
 
 **Done when**
 
@@ -668,6 +689,8 @@ Real copyrighted rule/bestiary text stays outside Git; use synthetic mechanics a
 ### P4-07 — General Ask web workflow and comparison baseline
 
 **Work**
+
+This task intentionally follows the standalone prompt-to-dungeon-package milestone. It must reuse the established gateway, profile, and stream components rather than delaying P7-09/P7-10.
 
 - Add prompt entry, pasted/dragged image upload, streamed cited response, cancellation, reconnectable durable run status, errors/unknowns, and conversation/run history using P4-05/P4-06 services; extend the shared CLI/API ask service with validated attachment IDs.
 - Reuse the platform-owned content-addressed `AssetStore` introduced with P7-01; add input-attachment ownership, MIME/size/retention policy, and opaque-ID metadata without creating a second blob store.
@@ -1013,7 +1036,8 @@ Task IDs group work by domain rather than execution order; this task runs after 
 **Work**
 
 - Add Python-owned bounded model tools for brief/topology intent, room/connection/features, generation, validation, and targeted regeneration, transported through the P4 `pi-ai` gateway under a pinned dungeon task profile.
-- Compile authorized campaign hooks/lore plus requested constraints into `GenerationContextEnvelope<DungeonGenerationContext>`; reject unrelated encounter/session fields and pin its payload version/hash/source links.
+- Start with the standalone path: compile the DM prompt/input hash and requested constraints into `GenerationContextEnvelope<DungeonGenerationContext>` with explicit standalone provenance and no retrieved campaign source. A campaign owns the resulting preparation artifact but contributes no facts by default.
+- Add authorized campaign hooks/lore only after an explicit grounding selection; reject unrelated encounter/session fields and pin the resulting payload version/hash/source links.
 - Let code assign IDs, calculate geometry, validate, and render.
 - Feed structured diagnostics—not raw renderer internals—into bounded repair calls with explicit turn/time/usage limits.
 - Record structured model outputs and generator inputs for replay.
@@ -1023,7 +1047,7 @@ Task IDs group work by domain rather than execution order; this task runs after 
 
 **Work**
 
-- Extend the P7-11 CLI/API/web workflow with model-assisted brief/topology creation, bounded diagnostic repair, streamed/cancellable run status, and comparison against hand-authored or prior versions.
+- Extend the P7-11 CLI/API/web workflow with standalone prompt-to-brief/topology creation, bounded diagnostic repair, streamed/cancellable run status, and comparison against hand-authored or prior versions. Campaign-grounded generation is an explicit later mode, not the default.
 - Add a context inspector showing the resolved common envelope, `DungeonGenerationContext` payload version, selected citations/authority labels, and payload hash without exposing secret credentials or unrestricted source bodies.
 - Preserve the fully model-independent path and make gateway failure degrade to inspect/validate/render/export/manual-regeneration behavior.
 - Extend fixed-seed golden and property-based fixtures with faux-provider contract cases.
@@ -1032,6 +1056,7 @@ Task IDs group work by domain rather than execution order; this task runs after 
 Example flow:
 
 ```text
+dm dungeon prompt "A flooded archive beneath a lighthouse" --campaign <workspace-id> --seed 1842
 dm dungeon generate --brief crypt.md --seed 1842
 dm dungeon validate <version-id>
 dm dungeon render <version-id> --variants dm,player

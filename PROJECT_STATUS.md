@@ -5,10 +5,10 @@
 ## Snapshot
 
 - **Last updated:** 2026-08-11
-- **Lifecycle:** implementation underway; the provider-independent Dungeon Studio, deterministic dungeon kernel, PostgreSQL foundation, preparation lifecycle, immutable Library source registry, and P2's independent embeddings, hybrid retrieval, retrieval audit, and eval baseline are complete.
-- **Current phase:** P2 — Embeddings, hybrid retrieval, and retrieval evals is complete.
-- **Current task:** **P2-05 — Retrieval run records and eval harness** is complete.
-- **Next task:** **P3-01 — Campaign revision and change-set schema**.
+- **Lifecycle:** implementation underway; the provider-independent Dungeon Studio, deterministic dungeon kernel, PostgreSQL foundation, preparation lifecycle, immutable Library source registry, and P2's independent embeddings, hybrid retrieval, retrieval audit, and eval baseline are complete. The active priority is standalone prompt-to-dungeon-package generation.
+- **Current phase:** P4/P7 — Standalone prompted Dungeon Studio vertical slice.
+- **Current task:** Roadmap reprioritized from P3 canonical revisions to the standalone prompt-to-dungeon-package path.
+- **Next task:** **P4-02 — Private Node `pi-ai` model gateway and credential boundary**.
 - **Schema head:** `0006_library_retrieval_runs`.
 - **Public baseline:** history begins with the final architecture/roadmap snapshot, uses the public GitHub author identity, and is licensed `AGPL-3.0-only`.
 
@@ -46,12 +46,12 @@ The public history contains three reviewed snapshots: final architecture/roadmap
 - Player-facing exports fail closed and omit DM-only data and fingerprints.
 - Real campaign text, proprietary rules/bestiary content, character sheets, credentials, and provider responses are not fixtures.
 
-## Next Exact Task — P3-01
+## Next Exact Task — P4-02
 
-1. Read the P3 architecture ownership and canonical-write invariants before schema work.
-2. Add campaign head revision plus immutable campaign revisions and draft/in-review/committed/abandoned change-set records.
-3. Pin versioned structured change-item payloads, dependencies, source links, origin, and idempotency keys without exposing a commit path yet.
-4. Prove database-level campaign isolation and immutable revision audit behavior with synthetic integration fixtures.
+1. Add the private `model-gateway/` Node package with a pinned `@earendil-works/pi-ai` release, npm lockfile, faux-provider contract support, and no campaign/domain persistence.
+2. Implement loopback/private-network health, non-secret provider/model capability, normalized stream, cancellation, and device-code event contracts; never return OAuth credentials to Python or the browser.
+3. Test only deterministic faux-provider behavior in CI. Keep live provider/OAuth verification manual and opt-in.
+4. Do not add P3 canonical schema, campaign retrieval, a general Ask surface, or `pi-agent-core` to this task.
 
 ## Last Verification
 
@@ -103,10 +103,10 @@ The aggregate isolated gate from the prior public-history state also passed:
 
 ## Handoff
 
-- **Status:** P1-01 through P1-06 and P2-01 through P2-05 complete.
+- **Status:** P1-01 through P1-06 and P2-01 through P2-05 complete; standalone prompt-to-dungeon-package work is now prioritized before P3.
 - **Changed:** P2-05 adds `0006_library_retrieval_runs`, immutable `retrieval_run` audit records with source-body/vector/query safeguards, `LibraryRetrievalAuditService`, synthetic diffable golden cases/eval reporting, audit immutability and fallback coverage, and this handoff update.
 - **Checks:** focused editor diagnostics for all P2-01/P2-05 Python files and tests report no errors. The terminal tool is blocked before execution because `rg` is unavailable; focused `pytest`, migration round-trip, Ruff, mypy, and `git diff --check` have not run for P2.
 - **Problems:** P2-01/P2-05 have no application-code diagnostics. Restore `rg`/the terminal wrapper before relying on the pending executable checks. The P2 phase gate still needs executable retrieval-eval evidence, including a real local runtime/profile quality-resource comparison, before selecting an ONNX model.
-- **Working tree:** includes P2 contracts, configuration, migrations through `0006_library_retrieval_runs`, models, execution/retrieval/audit/eval services, and tests; exact Git status was not available because the terminal wrapper could not start.
-- **Next:** P3-01; first read the campaign-revision architecture section and define immutable revision/change-set models with no canonical commit operation exposed.
-- **Suggested commit:** `P2 complete embeddings, hybrid retrieval, and eval audit baseline`.
+- **Working tree:** terminal context reports that `copilot p2 implementation` committed successfully; exact current Git status remains unavailable because the terminal wrapper cannot start. This documentation change leaves the user-modified retrieval golden fixture untouched.
+- **Next:** P4-02; first create the narrow private Node gateway with a pinned `pi-ai` package and deterministic faux-provider contract tests, without any campaign-state or preparation-write behavior.
+- **Suggested commit:** `Plan prioritize standalone prompted Dungeon Studio`.
