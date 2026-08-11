@@ -106,6 +106,8 @@ class Settings(DatabaseSettings):
     embedding_provider_policy: EmbeddingProviderPolicy = (
         EmbeddingProviderPolicy.DISABLED
     )
+    embedding_api_key: SecretStr | None = None
+    embedding_hosted_retention_approved: bool = False
 
     @field_validator("api_token", "session_secret")
     @classmethod
@@ -164,6 +166,12 @@ class Settings(DatabaseSettings):
                 raise ValueError(
                     "disabled embedding runtime requires disabled provider policy"
                 )
+            if self.embedding_api_key is not None:
+                raise ValueError("disabled embedding runtime cannot use an API key")
+            if self.embedding_hosted_retention_approved:
+                raise ValueError(
+                    "disabled embedding runtime cannot approve hosted retention"
+                )
         elif self.embedding_provider_policy is EmbeddingProviderPolicy.DISABLED:
             raise ValueError(
                 "enabled embedding runtime requires an enabled provider policy"
@@ -174,6 +182,17 @@ class Settings(DatabaseSettings):
             is not EmbeddingProviderPolicy.HOSTED_ALLOWED
         ):
             raise ValueError("hosted embedding runtime requires hosted_allowed policy")
+        elif self.embedding_runtime is EmbeddingRuntime.HOSTED:
+            if self.embedding_api_key is None:
+                raise ValueError("hosted embedding runtime requires an API key")
+            if not self.embedding_hosted_retention_approved:
+                raise ValueError(
+                    "hosted embedding runtime requires retention acknowledgement"
+                )
+        elif self.embedding_api_key is not None:
+            raise ValueError("local embedding runtime cannot use a hosted API key")
+        elif self.embedding_hosted_retention_approved:
+            raise ValueError("local embedding runtime cannot approve hosted retention")
         return self
 
     def logging_secret_values(self) -> tuple[str, ...]:
@@ -185,6 +204,8 @@ class Settings(DatabaseSettings):
             self.api_token.get_secret_value(),
             self.session_secret.get_secret_value(),
         ]
+        if self.embedding_api_key is not None:
+            values.append(self.embedding_api_key.get_secret_value())
         if parsed.password:
             values.append(parsed.password)
         return tuple(values)

@@ -1,0 +1,50 @@
+[
+  {
+    "case_id": "canon_excludes_plan",
+    "query": "Where did the party find the Starfall Amulet?",
+    "expected_citation_ids": [
+      "synthetic:canon_starfall"
+    ],
+    "expected_mode": "hybrid"
+  },
+  {
+    "case_id": "dm_visibility_excludes_public",
+    "query": "What is hidden in the Moonwell cache?",
+    "expected_citation_ids": [
+      "synthetic:dm_moonwell"
+    ],
+    "expected_mode": "hybrid"
+  },
+  {
+    "case_id": "exact_name",
+    "query": "Starfall Amulet",
+    "expected_citation_ids": [
+      "synthetic:canon_starfall"
+    ],
+    "expected_mode": "hybrid"
+  },
+  {
+    "case_id": "lexical_fallback",
+    "query": "Moonwell Key",
+    "expected_citation_ids": [
+      "synthetic:canon_moonwell"
+    ],
+    "expected_mode": "lexical_fallback"
+  },
+  {
+    "case_id": "ruleset_filter",
+    "query": "starfall reaction",
+    "expected_citation_ids": [
+      "synthetic:rules_2014_starfall"
+    ],
+    "expected_mode": "hybrid"
+  },
+  {
+    "case_id": "vague_recollection",
+    "query": "the token recovered below the bridge",
+    "expected_citation_ids": [
+      "synthetic:canon_starfall"
+    ],
+    "expected_mode": "hybrid"
+  }
+]

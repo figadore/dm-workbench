@@ -9,14 +9,26 @@ import pytest
 from sqlalchemy import Engine, insert, select, text, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
+from dm_assistant.adapters.embeddings import (
+    DeterministicFakeEmbeddingProvider,
+    DistanceMetric,
+    EmbeddingProfileSpec,
+    EmbeddingRuntimeKind,
+    TransientEmbeddingError,
+)
 from dm_assistant.db import Campaign
+from dm_assistant.modules.library.embedding_runs import EmbeddingRunService
 from dm_assistant.modules.library.models import (
     CorpusSnapshot,
     CorpusSnapshotDocument,
     Document,
     DocumentChunk,
+    DocumentChunkEmbedding,
     DocumentPathHistory,
     DocumentRevision,
+    EmbeddingProfile,
+    EmbeddingRun,
+    EmbeddingRunItem,
     IngestionRun,
 )
 
@@ -411,6 +423,340 @@ def test_chunks_preserve_exact_offsets_metadata_and_lexical_projection(
                 .where(DocumentChunk.id == chunk_id)
                 .values(content="changed")
             )
+
+
+def test_embedding_profiles_pin_exact_chunk_hashes_and_vector_dimensions(
+    db_engine: Engine,
+) -> None:
+    content = _DEFAULT_CONTENT
+    start = content.index("The")
+    chunk_content = content[start:]
+    profile_id = uuid.uuid4()
+    alternate_profile_id = uuid.uuid4()
+    with db_engine.begin() as connection:
+        campaign_id = _campaign(connection)
+        run_id = _run(connection, campaign_id=campaign_id, corpus="campaign")
+        document_id = _document(connection, campaign_id=campaign_id, corpus="campaign")
+        revision_id = _revision(
+            connection,
+            campaign_id=campaign_id,
+            corpus="campaign",
+            document_id=document_id,
+            ingestion_run_id=run_id,
+            content=content,
+        )
+        chunk_id = uuid.uuid4()
+        connection.execute(
+            insert(DocumentChunk).values(
+                id=chunk_id,
+                campaign_id=campaign_id,
+                corpus="campaign",
+                document_revision_id=revision_id,
+                ordinal=0,
+                heading_path=["Arrival"],
+                start_offset=start,
+                end_offset=len(content),
+                page_start=None,
+                page_end=None,
+                content=chunk_content,
+                content_hash=_sha256(chunk_content),
+                fts_config="english",
+                chunker_version="synthetic-chunker-v1",
+                authority_class="canonical_claim",
+                ruleset=None,
+                visibility_policy="dm_only",
+                visibility_audience=[],
+                chunk_metadata={},
+            )
+        )
+        for profile, revision in (
+            (profile_id, "synthetic-v1"),
+            (alternate_profile_id, "synthetic-v2"),
+        ):
+            connection.execute(
+                insert(EmbeddingProfile).values(
+                    id=profile,
+                    runtime_kind="local",
+                    provider="synthetic",
+                    model="synthetic-embedding",
+                    model_revision=revision,
+                    license="synthetic-test-only",
+                    dimensions=3,
+                    distance_metric="cosine",
+                    normalization_version="l2-v1",
+                    preprocessing_version="plain-text-v1",
+                    config_hash=_sha256(revision),
+                    enabled=True,
+                )
+            )
+        connection.execute(
+            text(
+                "INSERT INTO document_chunk_embedding "
+                "(id, document_chunk_id, embedding_profile_id, "
+                "chunk_content_hash, embedding) "
+                "VALUES (:id, :chunk_id, :profile_id, :content_hash, "
+                "CAST(:embedding AS vector))"
+            ),
+            {
+                "id": uuid.uuid4(),
+                "chunk_id": chunk_id,
+                "profile_id": profile_id,
+                "content_hash": _sha256(chunk_content),
+                "embedding": "[0.2,0.3,0.4]",
+            },
+        )
+
+    with pytest.raises(DBAPIError, match="dimensions do not match profile"):
+        with db_engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO document_chunk_embedding "
+                    "(id, document_chunk_id, embedding_profile_id, "
+                    "chunk_content_hash, embedding) "
+                    "VALUES (:id, :chunk_id, :profile_id, :content_hash, "
+                    "CAST(:embedding AS vector))"
+                ),
+                {
+                    "id": uuid.uuid4(),
+                    "chunk_id": chunk_id,
+                    "profile_id": alternate_profile_id,
+                    "content_hash": _sha256(chunk_content),
+                    "embedding": "[0.2,0.3]",
+                },
+            )
+
+    with pytest.raises(DBAPIError, match="hash does not match source chunk"):
+        with db_engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO document_chunk_embedding "
+                    "(id, document_chunk_id, embedding_profile_id, "
+                    "chunk_content_hash, embedding) "
+                    "VALUES (:id, :chunk_id, :profile_id, :content_hash, "
+                    "CAST(:embedding AS vector))"
+                ),
+                {
+                    "id": uuid.uuid4(),
+                    "chunk_id": chunk_id,
+                    "profile_id": alternate_profile_id,
+                    "content_hash": "0" * 64,
+                    "embedding": "[0.2,0.3,0.4]",
+                },
+            )
+
+    with pytest.raises(DBAPIError, match="embedding profile metadata is immutable"):
+        with db_engine.begin() as connection:
+            connection.execute(
+                update(EmbeddingProfile)
+                .where(EmbeddingProfile.id == profile_id)
+                .values(dimensions=4)
+            )
+
+    with pytest.raises(DBAPIError, match="chunk embeddings are immutable"):
+        with db_engine.begin() as connection:
+            connection.execute(
+                update(DocumentChunkEmbedding)
+                .where(DocumentChunkEmbedding.document_chunk_id == chunk_id)
+                .values(chunk_content_hash="0" * 64)
+            )
+
+
+class _SyntheticInterruption(BaseException):
+    pass
+
+
+class _InterruptAfterOneBatch:
+    def __init__(self, profile: EmbeddingProfileSpec) -> None:
+        self.profile = profile
+        self.calls = 0
+        self._delegate = DeterministicFakeEmbeddingProvider(profile)
+
+    def embed_documents(self, documents: object) -> object:
+        self.calls += 1
+        if self.calls > 1:
+            raise _SyntheticInterruption()
+        return self._delegate.embed_documents(documents)  # type: ignore[arg-type]
+
+    def embed_query(self, query: str) -> object:
+        return self._delegate.embed_query(query)
+
+
+class _CountingFakeProvider(DeterministicFakeEmbeddingProvider):
+    def __init__(self, profile: EmbeddingProfileSpec) -> None:
+        super().__init__(profile)
+        self.calls = 0
+
+    def embed_documents(self, documents: object) -> object:
+        self.calls += 1
+        return super().embed_documents(documents)  # type: ignore[arg-type]
+
+
+class _TransientOnceProvider(_CountingFakeProvider):
+    def embed_documents(self, documents: object) -> object:
+        self.calls += 1
+        if self.calls == 1:
+            raise TransientEmbeddingError("synthetic transient failure")
+        return DeterministicFakeEmbeddingProvider.embed_documents(  # type: ignore[arg-type]
+            self, documents
+        )
+
+
+def test_interrupted_embedding_run_resumes_without_duplicate_provider_calls(
+    db_engine: Engine,
+) -> None:
+    content = "# Arrival\nFirst synthetic fact.\nSecond synthetic fact."
+    first_start = content.index("First")
+    second_start = content.index("Second")
+    profile_id = uuid.uuid4()
+    with db_engine.begin() as connection:
+        campaign_id = _campaign(connection)
+        run_id = _run(connection, campaign_id=campaign_id, corpus="campaign")
+        document_id = _document(connection, campaign_id=campaign_id, corpus="campaign")
+        revision_id = _revision(
+            connection,
+            campaign_id=campaign_id,
+            corpus="campaign",
+            document_id=document_id,
+            ingestion_run_id=run_id,
+            content=content,
+        )
+        for ordinal, (start, end) in enumerate(
+            ((first_start, second_start - 1), (second_start, len(content)))
+        ):
+            chunk_content = content[start:end]
+            connection.execute(
+                insert(DocumentChunk).values(
+                    id=uuid.uuid4(),
+                    campaign_id=campaign_id,
+                    corpus="campaign",
+                    document_revision_id=revision_id,
+                    ordinal=ordinal,
+                    heading_path=["Arrival"],
+                    start_offset=start,
+                    end_offset=end,
+                    page_start=None,
+                    page_end=None,
+                    content=chunk_content,
+                    content_hash=_sha256(chunk_content),
+                    fts_config="english",
+                    chunker_version="synthetic-chunker-v1",
+                    authority_class="canonical_claim",
+                    ruleset=None,
+                    visibility_policy="dm_only",
+                    visibility_audience=[],
+                    chunk_metadata={},
+                )
+            )
+        snapshot_id = uuid.uuid4()
+        connection.execute(
+            insert(CorpusSnapshot).values(
+                id=snapshot_id,
+                campaign_id=campaign_id,
+                corpus="campaign",
+                parent_snapshot_id=None,
+                ingestion_run_id=run_id,
+                state="candidate",
+            )
+        )
+        connection.execute(
+            insert(CorpusSnapshotDocument).values(
+                corpus_snapshot_id=snapshot_id,
+                document_id=document_id,
+                document_revision_id=revision_id,
+                campaign_id=campaign_id,
+                corpus="campaign",
+                ordinal=0,
+            )
+        )
+        connection.execute(
+            update(CorpusSnapshot)
+            .where(CorpusSnapshot.id == snapshot_id)
+            .values(state="active", activated_at=datetime.now(UTC))
+        )
+        profile = EmbeddingProfileSpec(
+            runtime_kind=EmbeddingRuntimeKind.LOCAL,
+            provider="synthetic",
+            model="synthetic-embedding",
+            model_revision="synthetic-v1",
+            license="synthetic-test-only",
+            dimensions=8,
+            distance_metric=DistanceMetric.COSINE,
+            normalization_version="l2-v1",
+            preprocessing_version="plain-text-v1",
+            config_hash=_sha256("synthetic-v1"),
+            enabled=True,
+        )
+        connection.execute(
+            insert(EmbeddingProfile).values(id=profile_id, **profile.model_dump())
+        )
+
+    service = EmbeddingRunService(db_engine)
+    run = service.create_run(
+        corpus_snapshot_id=snapshot_id,
+        embedding_profile_id=profile_id,
+        batch_size=1,
+        max_attempts=2,
+    )
+    interrupted_provider = _InterruptAfterOneBatch(profile)
+    with pytest.raises(_SyntheticInterruption):
+        service.execute(run.id, interrupted_provider)  # type: ignore[arg-type]
+
+    resumed_provider = _CountingFakeProvider(profile)
+    completed = service.execute(run.id, resumed_provider)
+
+    assert interrupted_provider.calls == 2
+    assert resumed_provider.calls == 1
+    assert completed.status == "succeeded"
+    assert completed.item_counts == {"succeeded": 2}
+    with db_engine.begin() as connection:
+        item_attempts = tuple(
+            connection.execute(
+                select(EmbeddingRunItem.attempt_count).order_by(EmbeddingRunItem.id)
+            ).scalars()
+        )
+        embedding_count = connection.scalar(
+            select(text("count(*)")).select_from(DocumentChunkEmbedding)
+        )
+        stored_run = connection.get(EmbeddingRun, run.id)
+    assert sorted(item_attempts) == [1, 2]
+    assert embedding_count == 2
+    assert stored_run is not None
+    assert stored_run.status == "succeeded"
+
+    retry_profile_id = uuid.uuid4()
+    retry_profile = profile.model_copy(
+        update={
+            "model_revision": "synthetic-v2",
+            "config_hash": _sha256("synthetic-v2"),
+        }
+    )
+    with db_engine.begin() as connection:
+        connection.execute(
+            insert(EmbeddingProfile).values(
+                id=retry_profile_id,
+                **retry_profile.model_dump(),
+            )
+        )
+    retry_run = service.create_run(
+        corpus_snapshot_id=snapshot_id,
+        embedding_profile_id=retry_profile_id,
+        batch_size=1,
+        max_attempts=2,
+    )
+    transient_provider = _TransientOnceProvider(retry_profile)
+    retried = service.execute(retry_run.id, transient_provider)  # type: ignore[arg-type]
+
+    assert transient_provider.calls == 3
+    assert retried.status == "succeeded"
+    with db_engine.begin() as connection:
+        retry_attempts = tuple(
+            connection.execute(
+                select(EmbeddingRunItem.attempt_count)
+                .where(EmbeddingRunItem.embedding_run_id == retry_run.id)
+                .order_by(EmbeddingRunItem.id)
+            ).scalars()
+        )
+    assert sorted(retry_attempts) == [1, 2]
 
 
 def test_snapshot_membership_is_scope_safe_isolated_and_immutable(

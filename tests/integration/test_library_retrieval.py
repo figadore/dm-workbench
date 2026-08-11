@@ -4,8 +4,15 @@ import uuid
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine
+from sqlalchemy import Engine, insert, text
+from sqlalchemy.exc import DBAPIError
 
+from dm_assistant.adapters.embeddings import (
+    DeterministicFakeEmbeddingProvider,
+    DistanceMetric,
+    EmbeddingProfileSpec,
+    EmbeddingRuntimeKind,
+)
 from dm_assistant.adapters.sources import LocalSourceReader
 from dm_assistant.db import Campaign, build_session_factory, transactional_session
 from dm_assistant.modules.library import (
@@ -14,15 +21,24 @@ from dm_assistant.modules.library import (
     DocumentType,
     IngestSource,
     LexicalSearchQuery,
+    HybridRetrievalMode,
+    HybridSearchQuery,
+    LibraryHybridSearchService,
+    LibraryVectorSearchService,
     LibraryIngestionService,
     LibraryLexicalSearchService,
+    LibraryRetrievalAuditService,
     RevisionClassification,
     Ruleset,
     SourceLocator,
     SourceScope,
     SourceVisibility,
+    VectorRetrievalMode,
+    VectorSearchQuery,
     VisibilityLabel,
 )
+from dm_assistant.modules.library.embedding_runs import EmbeddingRunService
+from dm_assistant.modules.library.models import EmbeddingProfile, RetrievalRun
 
 pytestmark = pytest.mark.integration
 
@@ -187,3 +203,186 @@ def test_lexical_search_filters_scope_visibility_and_preparation(
         )
     )
     assert len(other_results) == 0
+
+
+def test_vector_search_requires_completed_pinned_run_and_preserves_scope_filters(
+    db_engine: Engine,
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "vault"
+    root.mkdir()
+    (root / "fact.md").write_text(
+        "# Moonwell Key\nThe party recovered the Moonwell Key.\n",
+        encoding="utf-8",
+    )
+    (root / "secret.md").write_text(
+        "# Moonwell Secret\nThe Moonwell Key opens the hidden cache.\n",
+        encoding="utf-8",
+    )
+    (root / "plan.md").write_text(
+        "# Moonwell Plan\nThe party will recover the Moonwell Key.\n",
+        encoding="utf-8",
+    )
+    campaign_id = _campaign(db_engine, "Synthetic Vector Retrieval Campaign")
+    service = _service(db_engine, root)
+    fact = _ingest(service, campaign_id, "fact.md")
+    _ingest(service, campaign_id, "secret.md", visibility=SourceVisibility.PUBLIC)
+    _ingest(
+        service,
+        campaign_id,
+        "plan.md",
+        authority=AuthorityClass.PREPARATION,
+        document_type=DocumentType.PLAN_OR_ADVENTURE,
+    )
+    from dm_assistant.modules.library import CorpusSnapshotService
+
+    scope = SourceScope(campaign_id=campaign_id, corpus=CorpusKind.CAMPAIGN)
+    snapshots = CorpusSnapshotService(db_engine)
+    snapshot_id = snapshots.build_candidate(scope)
+    snapshots.activate(snapshot_id, scope)
+    profile = EmbeddingProfileSpec(
+        runtime_kind=EmbeddingRuntimeKind.LOCAL,
+        provider="synthetic",
+        model="synthetic-embedding",
+        model_revision="synthetic-v1",
+        license="synthetic-test-only",
+        dimensions=8,
+        distance_metric=DistanceMetric.COSINE,
+        normalization_version="l2-v1",
+        preprocessing_version="plain-text-v1",
+        config_hash="f" * 64,
+        enabled=True,
+    )
+    profile_id = uuid.uuid4()
+    with transactional_session(build_session_factory(db_engine)) as session:
+        session.execute(insert(EmbeddingProfile).values(id=profile_id, **profile.model_dump()))
+    provider = DeterministicFakeEmbeddingProvider(profile)
+    embedding_runs = EmbeddingRunService(db_engine)
+    run = embedding_runs.create_run(
+        corpus_snapshot_id=snapshot_id,
+        embedding_profile_id=profile_id,
+        batch_size=10,
+        max_attempts=2,
+    )
+    completed_run = embedding_runs.execute(run.id, provider)
+    assert completed_run.status == "succeeded"
+
+    lexical = LibraryLexicalSearchService(db_engine)
+    vector = LibraryVectorSearchService(db_engine, lexical)
+    request = VectorSearchQuery(
+        lexical=LexicalSearchQuery(
+            scope=scope,
+            snapshot_id=snapshot_id,
+            query="Moonwell Key",
+            visible_policies=(SourceVisibility.DM_ONLY,),
+        ),
+        embedding_run_id=run.id,
+    )
+    vector_result = vector.search(request, provider)
+
+    assert vector_result.mode is VectorRetrievalMode.VECTOR
+    assert [result.document_id for result in vector_result.results] == [fact.document_id]
+    assert vector_result.results[0].citation_id == (
+        f"chunk:{vector_result.results[0].chunk_id}"
+    )
+    assert "Moonwell Key" in vector_result.results[0].snippet
+
+    fallback_result = vector.search(
+        request.model_copy(update={"embedding_run_id": uuid.uuid4()}),
+        provider,
+    )
+    assert fallback_result.mode is VectorRetrievalMode.LEXICAL_FALLBACK
+    assert [result.document_id for result in fallback_result.results] == [fact.document_id]
+
+    hybrid = LibraryHybridSearchService(db_engine, lexical, vector)
+    hybrid_request = HybridSearchQuery(
+        lexical=request.lexical,
+        embedding_run_id=run.id,
+        neighboring_chunks_each_side=1,
+    )
+    hybrid_result = hybrid.search(hybrid_request, provider)
+
+    assert hybrid_result.mode is HybridRetrievalMode.HYBRID
+    assert [result.document_id for result in hybrid_result.results] == [fact.document_id]
+    assert hybrid_result.results[0].neighboring_chunks == ()
+
+    hybrid_fallback = hybrid.search(
+        hybrid_request.model_copy(update={"embedding_run_id": uuid.uuid4()}),
+        provider,
+    )
+    assert hybrid_fallback.mode is HybridRetrievalMode.LEXICAL_FALLBACK
+    assert [result.document_id for result in hybrid_fallback.results] == [fact.document_id]
+
+    audit = LibraryRetrievalAuditService(db_engine, lexical, vector, hybrid)
+    audited = audit.search(hybrid_request, provider)
+
+    assert audited.mode.value == "hybrid"
+    assert audited.embedding_run_id == run.id
+    assert audited.query_sha256 != request.lexical.query
+    assert audited.selected_citation_ids == (
+        f"chunk:{hybrid_result.results[0].chunk_id}",
+    )
+    assert audited.candidates[0].citation_id == audited.selected_citation_ids[0]
+    with db_engine.begin() as connection:
+        stored = connection.get(RetrievalRun, audited.id)
+        candidate_keys = connection.scalar(
+            text(
+                "SELECT array_agg(key ORDER BY key) "
+                "FROM retrieval_run, jsonb_object_keys(candidates->0) AS key "
+                "WHERE id = :id"
+            ),
+            {"id": audited.id},
+        )
+    assert stored is not None
+    assert stored.resolved_scope["corpus_snapshot_id"] == str(snapshot_id)
+    assert stored.query_sha256 not in {request.lexical.query, "Moonwell Key"}
+    assert candidate_keys == ["citation_id", "lexical_rank", "score", "vector_rank"]
+
+    with pytest.raises(DBAPIError, match="retrieval runs are immutable"):
+        with db_engine.begin() as connection:
+            connection.execute(
+                text("UPDATE retrieval_run SET mode = 'lexical_fallback' WHERE id = :id"),
+                {"id": audited.id},
+            )
+
+    with pytest.raises(DBAPIError, match="candidate record is invalid"):
+        with db_engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO retrieval_run "
+                    "(id, corpus_snapshot_id, embedding_run_id, mode, query_sha256, "
+                    "retrieval_versions, resolved_scope, candidates, "
+                    "selected_citation_ids, duration_milliseconds) "
+                    "VALUES (:id, :snapshot_id, NULL, 'lexical_fallback', :query_hash, "
+                    "CAST(:versions AS jsonb), CAST(:scope AS jsonb), "
+                    "CAST(:candidates AS jsonb), CAST(:selected AS jsonb), 1.0)"
+                ),
+                {
+                    "id": uuid.uuid4(),
+                    "snapshot_id": snapshot_id,
+                    "query_hash": "a" * 64,
+                    "versions": '{"lexical":"postgresql-fts-v1"}',
+                    "scope": (
+                        '{"campaign_id":"'
+                        + str(campaign_id)
+                        + '","corpus":"campaign","corpus_snapshot_id":"'
+                        + str(snapshot_id)
+                        + '","authority_classes":[],"visible_policies":["dm_only"],'
+                        '"rulesets":[],"include_preparation":false,'
+                        '"limit":10,"snippet_chars":320}'
+                    ),
+                    "candidates": (
+                        '[{"citation_id":"chunk:'
+                        + str(uuid.uuid4())
+                        + '","score":1.0,"snippet":"forbidden source body"}]'
+                    ),
+                    "selected": '["chunk:' + str(uuid.uuid4()) + '"]',
+                },
+            )
+
+    fallback_audit = audit.search(
+        hybrid_request.model_copy(update={"embedding_run_id": uuid.uuid4()}),
+        provider,
+    )
+    assert fallback_audit.mode.value == "lexical_fallback"
+    assert fallback_audit.embedding_run_id is None

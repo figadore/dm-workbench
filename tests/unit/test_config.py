@@ -231,6 +231,43 @@ def test_settings_reject_inconsistent_runtime_policies(
 
 
 @pytest.mark.parametrize(
+    ("updates", "message"),
+    (
+        (
+            {
+                "embedding_runtime": EmbeddingRuntime.HOSTED,
+                "embedding_provider_policy": EmbeddingProviderPolicy.HOSTED_ALLOWED,
+            },
+            "requires an API key",
+        ),
+        (
+            {
+                "embedding_runtime": EmbeddingRuntime.HOSTED,
+                "embedding_provider_policy": EmbeddingProviderPolicy.HOSTED_ALLOWED,
+                "embedding_api_key": "hosted-embedding-secret",
+            },
+            "retention acknowledgement",
+        ),
+    ),
+)
+def test_hosted_embeddings_require_separate_credential_and_retention_acknowledgement(
+    tmp_path: Path,
+    updates: dict[str, object],
+    message: str,
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        Settings(
+            database_url="postgresql+psycopg://user:password@db/app",
+            source_roots=(tmp_path,),
+            asset_root=tmp_path / "assets",
+            scratch_root=tmp_path / "scratch",
+            api_token=_BASE_TOKEN,
+            session_secret=_SESSION_SECRET,
+            **updates,
+        )
+
+
+@pytest.mark.parametrize(
     "url",
     (
         "https://public.example.com",
@@ -256,6 +293,7 @@ def test_model_gateway_rejects_public_hosts_and_embedded_credentials(
 
 def test_logging_secret_values_include_token_dsn_and_password(tmp_path: Path) -> None:
     database_url = "postgresql+psycopg://user:super-secret-password@db/app"
+    embedding_api_key = "hosted-embedding-secret"
     settings = Settings(
         database_url=database_url,
         source_roots=(tmp_path,),
@@ -263,11 +301,16 @@ def test_logging_secret_values_include_token_dsn_and_password(tmp_path: Path) ->
         scratch_root=tmp_path / "scratch",
         api_token=_BASE_TOKEN,
         session_secret=_SESSION_SECRET,
+        embedding_runtime=EmbeddingRuntime.HOSTED,
+        embedding_provider_policy=EmbeddingProviderPolicy.HOSTED_ALLOWED,
+        embedding_api_key=embedding_api_key,
+        embedding_hosted_retention_approved=True,
     )
 
     assert settings.logging_secret_values() == (
         database_url,
         _BASE_TOKEN,
         _SESSION_SECRET,
+        embedding_api_key,
         "super-secret-password",
     )

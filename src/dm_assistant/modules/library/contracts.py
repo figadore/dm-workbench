@@ -261,6 +261,138 @@ class LexicalSearchResult(LibraryContract):
     score: float
 
 
+class VectorRetrievalMode(StrEnum):
+    """Whether evidence was ranked by vectors or the lexical fallback."""
+
+    VECTOR = "vector"
+    LEXICAL_FALLBACK = "lexical_fallback"
+
+
+class VectorSearchQuery(LibraryContract):
+    """A vector request pinned to both retrieval snapshot and completed run."""
+
+    lexical: LexicalSearchQuery
+    embedding_run_id: uuid.UUID
+
+    @model_validator(mode="after")
+    def require_explicit_snapshot(self) -> Self:
+        if self.lexical.snapshot_id is None:
+            raise ValueError("vector search requires an explicit corpus snapshot")
+        return self
+
+
+class VectorSearchResult(LibraryContract):
+    """One vector-ranked immutable chunk citation."""
+
+    citation_id: str
+    document_id: uuid.UUID
+    document_revision_id: uuid.UUID
+    chunk_id: uuid.UUID
+    heading_path: tuple[str, ...]
+    start_offset: int
+    end_offset: int
+    snippet: str
+    score: float
+
+
+class VectorSearchResponse(LibraryContract):
+    """Bounded evidence and an inspectable ranking mode without vector payloads."""
+
+    mode: VectorRetrievalMode
+    results: tuple[VectorSearchResult, ...]
+
+
+class HybridRetrievalMode(StrEnum):
+    """Whether hybrid ranking had an eligible vector candidate set."""
+
+    HYBRID = "hybrid"
+    LEXICAL_FALLBACK = "lexical_fallback"
+
+
+class HybridSearchQuery(LibraryContract):
+    """Versioned deterministic fusion settings over a pinned search scope."""
+
+    lexical: LexicalSearchQuery
+    embedding_run_id: uuid.UUID
+    rrf_version: Literal["rrf-v1"] = "rrf-v1"
+    rrf_rank_constant: int = Field(default=60, ge=1, le=1000)
+    exact_name_boost: float = Field(default=0.1, ge=0, le=1)
+    neighboring_chunks_each_side: int = Field(default=1, ge=0, le=2)
+
+    @model_validator(mode="after")
+    def require_explicit_snapshot(self) -> Self:
+        if self.lexical.snapshot_id is None:
+            raise ValueError("hybrid search requires an explicit corpus snapshot")
+        return self
+
+
+class NeighboringChunk(LibraryContract):
+    """An authorized adjacent span that gives a selected citation local context."""
+
+    citation_id: str
+    chunk_id: uuid.UUID
+    heading_path: tuple[str, ...]
+    start_offset: int
+    end_offset: int
+    snippet: str
+
+
+class HybridSearchResult(LibraryContract):
+    """One fused immutable citation with optional bounded adjacent evidence."""
+
+    citation_id: str
+    document_id: uuid.UUID
+    document_revision_id: uuid.UUID
+    chunk_id: uuid.UUID
+    heading_path: tuple[str, ...]
+    start_offset: int
+    end_offset: int
+    snippet: str
+    score: float
+    lexical_rank: int | None = Field(default=None, ge=1)
+    vector_rank: int | None = Field(default=None, ge=1)
+    neighboring_chunks: tuple[NeighboringChunk, ...] = ()
+
+
+class HybridSearchResponse(LibraryContract):
+    """Fused bounded evidence without raw vector data or hidden candidates."""
+
+    mode: HybridRetrievalMode
+    rrf_version: Literal["rrf-v1"]
+    results: tuple[HybridSearchResult, ...]
+
+
+class RetrievalRunMode(StrEnum):
+    """Resolved ranking path recorded for reproducible retrieval audit."""
+
+    HYBRID = "hybrid"
+    LEXICAL_FALLBACK = "lexical_fallback"
+
+
+class RetrievalCandidateRecord(LibraryContract):
+    """Source-body-free candidate rank data retained by a retrieval audit run."""
+
+    citation_id: str = Field(pattern=r"^chunk:[0-9a-f-]{36}$")
+    score: float
+    lexical_rank: int | None = Field(default=None, ge=1)
+    vector_rank: int | None = Field(default=None, ge=1)
+
+
+class RetrievalRunSnapshot(LibraryContract):
+    """Immutable retrieval audit record with scope/version and citation pins only."""
+
+    id: uuid.UUID
+    corpus_snapshot_id: uuid.UUID
+    embedding_run_id: uuid.UUID | None
+    mode: RetrievalRunMode
+    query_sha256: Sha256
+    retrieval_versions: dict[str, str]
+    resolved_scope: dict[str, JsonValue]
+    candidates: tuple[RetrievalCandidateRecord, ...]
+    selected_citation_ids: tuple[str, ...]
+    duration_milliseconds: float = Field(ge=0)
+
+
 class SourceLocator(LibraryContract):
     root_label: RootLabel
     relative_path: RelativeSourcePath

@@ -16,6 +16,8 @@ from dm_assistant.modules.library import (
     SourceLocator,
     SourceScope,
     SourceVisibility,
+    HybridSearchQuery,
+    VectorSearchQuery,
     VisibilityLabel,
 )
 
@@ -143,3 +145,17 @@ def test_ingestion_command_requires_consistent_scope_and_explicit_retirement() -
                 "confirm_retirement": False,
             }
         )
+
+
+def test_vector_search_contract_requires_a_pinned_snapshot() -> None:
+    campaign_scope = SourceScope(campaign_id=uuid.uuid4(), corpus=CorpusKind.CAMPAIGN)
+    lexical = {
+        "scope": campaign_scope,
+        "query": "synthetic query",
+    }
+
+    with pytest.raises(ValidationError, match="explicit corpus snapshot"):
+        VectorSearchQuery(lexical=lexical, embedding_run_id=uuid.uuid4())
+
+    with pytest.raises(ValidationError, match="explicit corpus snapshot"):
+        HybridSearchQuery(lexical=lexical, embedding_run_id=uuid.uuid4())
