@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Dungeon version comparison{% endblock %}
+{% block content %}
+<p><a href="/dungeons/{{ artifact_id }}?campaign_id={{ campaign_id }}">← Artifact</a></p>
+<h1>Version comparison</h1>
+<p><code>{{ comparison.left_version_id }}</code> → <code>{{ comparison.right_version_id }}</code></p>
+{% for heading, values in [("Added", comparison.added_component_ids), ("Removed", comparison.removed_component_ids), ("Changed", comparison.changed_component_ids), ("Unchanged", comparison.unchanged_component_ids)] %}
+<section><h2>{{ heading }} ({{ values|length }})</h2><p>{% for value in values %}<code>{{ value }}</code>{% if not loop.last %}, {% endif %}{% else %}None{% endfor %}</p></section>
+{% endfor %}
+{% endblock %}

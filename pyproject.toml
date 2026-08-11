@@ -7,7 +7,14 @@ license = "AGPL-3.0-only"
 license-files = ["LICENSE"]
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "alembic>=1.15,<2",
+    "dm-dungeon",
     "fastapi>=0.115,<1",
+    "jinja2>=3.1,<4",
+    "psycopg[binary]>=3.2,<4",
+    "pydantic-settings>=2.8,<3",
+    "python-multipart>=0.0.20,<1",
+    "sqlalchemy>=2.0,<3",
     "typer>=0.15,<1",
     "uvicorn>=0.34,<1",
 ]
@@ -18,6 +25,12 @@ dm = "dm_assistant.cli.main:app"
 [build-system]
 requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"
+
+[tool.uv.sources]
+dm-dungeon = { workspace = true }
+
+[tool.uv.workspace]
+members = ["packages/dungeon-engine"]
 
 [dependency-groups]
 dev = [
@@ -32,11 +45,19 @@ path = "src/dm_assistant/__init__.py"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "integration: requires the isolated PostgreSQL integration database",
+]
 
 [tool.ruff]
 target-version = "py312"
 line-length = 88
-src = ["src", "tests"]
+src = [
+    "src",
+    "tests",
+    "packages/dungeon-engine/src",
+    "packages/dungeon-engine/tests",
+]
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I", "UP", "B"]

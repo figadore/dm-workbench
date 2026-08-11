@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}{{ detail.title }} — Dungeon Studio{% endblock %}
+{% block content %}
+<p><a href="/dungeons?campaign_id={{ campaign_id }}">← Dungeon Studio</a></p>
+<h1>{{ detail.title }}</h1>
+<p>Lifecycle: <span class="status">{{ detail.lifecycle }}</span></p>
+<p><strong>Preparation only:</strong> approved-for-play does not establish planned events as campaign canon.</p>
+{% for version in versions|reverse %}
+<article>
+  <h2>Version {{ version.version_number }}{% if version.id == detail.current_version_id %} (current){% endif %}</h2>
+  <p>{{ version.change_summary }}</p>
+  <p><code>{{ version.id }}</code> · parent <code>{{ version.parent_version_id or "none" }}</code> · spec hash <code>{{ version.specification_sha256 }}</code></p>
+  <details><summary>Validation and pinned input</summary><pre>{{ version.validation_report|tojson(indent=2) }}</pre><pre>{{ version.input_pins.model_dump(mode="json")|tojson(indent=2) }}</pre></details>
+  {% if generation_runs[version.id] %}<details><summary>Generation run, schemas, tools, and renderer lineage</summary><pre>{{ generation_runs[version.id].model_dump(mode="json")|tojson(indent=2) }}</pre></details>{% endif %}
+  <div class="assets">
+  {% for asset in version_assets[version.id] %}
+    <div>
+      <strong>{{ asset.role.value }} #{{ asset.ordinal }}</strong><br>
+      <a href="/assets/{{ asset.asset_id }}?campaign_id={{ campaign_id }}">Open/download ({{ asset.media_type }})</a>
+      {% if asset.media_type in ["image/png", "image/svg+xml"] %}<br><img class="preview" src="/assets/{{ asset.asset_id }}?campaign_id={{ campaign_id }}" alt="{{ asset.role.value }} preview">{% endif %}
+    </div>
+  {% endfor %}
+  </div>
+  {% if version.id == detail.current_version_id and detail.lifecycle == "draft" %}
+  <form method="post" action="/dungeons/{{ detail.artifact_id }}/export">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="campaign_id" value="{{ campaign_id }}"><input type="hidden" name="artifact_version_id" value="{{ version.id }}">
+    <button type="submit">Create PDF and Roll20 exports</button>
+  </form>
+  <form method="post" action="/dungeons/{{ detail.artifact_id }}/regenerate">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="campaign_id" value="{{ campaign_id }}"><input type="hidden" name="parent_version_id" value="{{ version.id }}">
+    <label>New seed<input name="seed" type="number" required></label>
+    <label>Locked component IDs (comma-separated)<input name="locked_component_ids"></label>
+    <label>Readable change summary<textarea name="change_summary" required>Regenerate selected unlocked dungeon geometry.</textarea></label>
+    <button type="submit">Regenerate new immutable draft</button>
+  </form>
+  <form class="danger" method="post" action="/dungeons/{{ detail.artifact_id }}/approve">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="campaign_id" value="{{ campaign_id }}"><input type="hidden" name="artifact_version_id" value="{{ version.id }}">
+    <label>Approval reason<textarea name="reason" required>Reviewed deterministic package, diagnostics, clean preview, and exports.</textarea></label>
+    <button type="submit">Approve preparation for play (not canon)</button>
+  </form>
+  {% endif %}
+</article>
+{% endfor %}
+{% if versions|length > 1 %}
+<section><h2>Compare versions</h2><form method="get" action="/dungeons/{{ detail.artifact_id }}/compare"><input type="hidden" name="campaign_id" value="{{ campaign_id }}"><label>Left<select name="left">{% for version in versions %}<option value="{{ version.id }}">v{{ version.version_number }}</option>{% endfor %}</select></label><label>Right<select name="right">{% for version in versions|reverse %}<option value="{{ version.id }}">v{{ version.version_number }}</option>{% endfor %}</select></label><button type="submit">Compare exact components</button></form></section>
+{% endif %}
+{% endblock %}

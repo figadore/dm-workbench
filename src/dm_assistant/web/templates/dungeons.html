@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Dungeon Studio{% endblock %}
+{% block content %}
+<h1>Dungeon Studio</h1>
+<p>Deterministic provider-independent preparation. Approval here never commits campaign canon.</p>
+{% if campaigns %}
+<form method="get" action="/dungeons">
+  <label for="campaign_id">Campaign</label>
+  <select id="campaign_id" name="campaign_id">
+    {% for campaign in campaigns %}
+      <option value="{{ campaign.id }}" {% if campaign.id == selected_campaign_id %}selected{% endif %}>{{ campaign.name }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit">Switch campaign</button>
+</form>
+<section>
+  <h2>Preparation artifacts</h2>
+  {% if artifacts %}
+  <table><thead><tr><th>Title</th><th>Lifecycle</th><th>Current version</th></tr></thead><tbody>
+  {% for artifact in artifacts %}
+    <tr><td><a href="/dungeons/{{ artifact.id }}?campaign_id={{ selected_campaign_id }}">{{ artifact.title }}</a></td><td>{{ artifact.lifecycle.value }}</td><td><code>{{ artifact.current_version_id or "none" }}</code></td></tr>
+  {% endfor %}
+  </tbody></table>
+  {% else %}<p>No dungeon artifacts yet.</p>{% endif %}
+</section>
+<section>
+  <h2>Generate from a LayoutRequest</h2>
+  <form method="post" action="/dungeons/generate">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="campaign_id" value="{{ selected_campaign_id }}">
+    <label for="title">Artifact title</label>
+    <input id="title" name="title" required maxlength="200">
+    <label for="layout_request_json">Versioned LayoutRequest JSON</label>
+    <textarea id="layout_request_json" name="layout_request_json" required></textarea>
+    <button type="submit">Generate deterministic draft</button>
+  </form>
+</section>
+{% else %}
+<section><h2>Create the first campaign root</h2><p>This creates only the workspace root; it does not commit any campaign facts.</p><form method="post" action="/campaigns"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>Campaign name<input name="name" required maxlength="200"></label><button type="submit">Create campaign workspace</button></form></section>
+{% endif %}
+{% endblock %}

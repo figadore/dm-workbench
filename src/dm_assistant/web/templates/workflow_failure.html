@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}Dungeon generation diagnostics{% endblock %}
+{% block content %}
+<h1>Dungeon generation did not produce a version</h1>
+<p>The failed run and structured diagnostics were retained. No partial package was approved or made canonical.</p>
+<pre>{{ result.model_dump(mode="json")|tojson(indent=2) }}</pre>
+<p><a href="/dungeons">Return to Dungeon Studio</a></p>
+{% endblock %}

@@ -1,0 +1,98 @@
+"""Pure deterministic dungeon contracts and generation kernel."""
+
+from dm_dungeon.contracts import DungeonBrief, DungeonPackage, DungeonTopology
+from dm_dungeon.export import (
+    AssemblyMode,
+    PaperSize,
+    PdfArtifact,
+    PdfExportRequest,
+    PngArtifact,
+    PngExportRequest,
+    export_pdf,
+    export_png,
+    write_pdf_artifact,
+    write_png_artifact,
+)
+from dm_dungeon.layout import (
+    LayoutRequest,
+    LayoutResult,
+    LockedLayoutComponents,
+    generate_layout,
+    load_layout_request_json,
+    read_layout_request,
+    write_layout_result,
+)
+from dm_dungeon.rendering import (
+    RenderAudience,
+    SvgRenderRequest,
+    SvgRenderResult,
+    SvgThemeName,
+    render_svg,
+    write_svg,
+)
+from dm_dungeon.serialization import (
+    dungeon_package_json_schema,
+    load_dungeon_package_json,
+    read_dungeon_package,
+    to_canonical_json,
+    write_dungeon_package,
+)
+from dm_dungeon.validation import (
+    EncounterFitQuery,
+    EncounterFitResult,
+    GeometryValidationReport,
+    PathQuery,
+    PathResult,
+    TopologyValidationReport,
+    evaluate_encounter_fit,
+    find_anchor_path,
+    validate_geometry,
+    validate_topology,
+)
+
+__version__ = "0.1.0"
+
+__all__ = [
+    "DungeonBrief",
+    "DungeonPackage",
+    "AssemblyMode",
+    "DungeonTopology",
+    "EncounterFitQuery",
+    "EncounterFitResult",
+    "GeometryValidationReport",
+    "LayoutRequest",
+    "LayoutResult",
+    "LockedLayoutComponents",
+    "PaperSize",
+    "PathQuery",
+    "PathResult",
+    "PdfArtifact",
+    "PdfExportRequest",
+    "PngArtifact",
+    "PngExportRequest",
+    "RenderAudience",
+    "SvgRenderRequest",
+    "SvgRenderResult",
+    "SvgThemeName",
+    "TopologyValidationReport",
+    "__version__",
+    "dungeon_package_json_schema",
+    "evaluate_encounter_fit",
+    "export_pdf",
+    "export_png",
+    "find_anchor_path",
+    "generate_layout",
+    "load_dungeon_package_json",
+    "load_layout_request_json",
+    "read_dungeon_package",
+    "read_layout_request",
+    "render_svg",
+    "to_canonical_json",
+    "validate_geometry",
+    "validate_topology",
+    "write_dungeon_package",
+    "write_layout_result",
+    "write_pdf_artifact",
+    "write_png_artifact",
+    "write_svg",
+]

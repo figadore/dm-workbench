@@ -55,7 +55,7 @@ The following are non-negotiable invariants:
 8. **Every commit is explainable.** Each canonical revision has a concise human-readable summary plus the complete accepted-item/evidence audit trail.
 9. **The LLM expresses intent; code owns mechanics.** Models may choose themes, room roles, topology constraints, encounter goals, and tactics. They do not author raw SVG, pixel geometry, pathfinding, export packages, or trusted difficulty arithmetic.
 10. **Preparation is not canon.** Approving a dungeon or encounter as ready for play does not assert that its planned inhabitants/events occurred. Played outcomes enter canon only through the normal change-set workflow.
-11. **Generation is reproducible and inspectable.** Every artifact version pins its input scope, seed, schemas, generator/renderer versions, rules profile, party snapshot, model/tool runs, validation report, and parent lineage.
+11. **Generation is reproducible and inspectable.** Every artifact version pins its input scope, seed, schemas, generator/renderer versions, rules profile, party snapshot, model/tool runs, validation report, and parent lineage. Application/database aggregate IDs may use UUID4, but component IDs inside deterministic generated packages must be retained from input or derived reproducibly from pinned input, seed, and generator version; deterministic generation must never call `uuid4()`.
 12. **Context contracts remain task-specific.** A small common generation-context envelope carries scope, provenance, visibility, citations, and a payload hash; dungeon, encounter, session-preparation, and future scene contexts use separate versioned payload schemas rather than one universal optional-field object.
 13. **Package separation does not imply service separation.** The pure dungeon package runs in the Python Workbench process and cannot import Workbench persistence, HTTP, retrieval, or model orchestration. Encounter package extraction remains a measured later decision.
 
@@ -92,6 +92,18 @@ Operational requirements for the first useful deployment are modest but importan
 - database/embedding API credentials use secrets/environment configuration; chat-provider API/OAuth credentials live only in a dedicated gateway credential store with restrictive permissions and never in campaign documents, browser storage, ordinary logs, or normal campaign backups;
 - ingestion, embedding, model, generation, and extraction runs have durable database records so a process restart can be diagnosed or retried without requiring a message broker;
 - derived indexes/embeddings can be rebuilt from document revisions, and rendered outputs can be rebuilt from pinned preparation specifications/generator versions.
+
+### Runtime Configuration, Authentication, and Logs
+
+The Python process loads one immutable typed `DM_*` settings object. PostgreSQL URL, absolute allowlisted source roots, and a 32-or-more-character single-DM API token are required; model-gateway enablement/URL and embedding runtime/provider policy are separate fields so Codex/chat credentials can never be mistaken for embedding configuration. Startup configuration errors expose invalid field names, not supplied values. `.env.example` contains placeholders only.
+
+The initial API security boundary is default-deny middleware: every path, including documentation/schema routes, requires an exact Bearer token except the explicit `/health/live` and `/health/ready` allowlist added by P0-04. Comparison is constant-time and all failures use one generic response. Later browser sessions must enter through this same centralized policy rather than creating unprotected feature routers.
+
+Application logs are one-object-per-line JSON and carry a validated request ID plus ingestion, embedding, model, generation-run, change-set, and campaign-revision IDs when bound. They log route templates rather than attacker-controlled paths and never request/response bodies, prompts, source/context text, authorization values, or provider payloads. Recursive key redaction, configured-secret replacement, and credential-URL scrubbing happen in the formatter. Expected domain errors expose the same stable safe code/message through API and CLI adapters; unexpected exception text/stacks are not public responses or ordinary structured-log fields.
+
+P0-04 makes only exact health routes public. `/health/live` performs no dependency work. `/health/ready` checks PostgreSQL major version, exact pgvector version, and exact Alembic head but publishes only component states—not versions, reason codes, URLs, SQL, or exceptions. The local `dm doctor` reuses the same readiness report and may show safe component versions/reason categories; it never shows configuration values. The repository's container gate creates only a disposable `*_test` database, runs migration round trips and all quality gates, and removes its volume/network on exit.
+
+P7-11 adds a signed single-DM browser session without putting the API token in the cookie. A separate 32+ character session secret signs short-lived HMAC-SHA256 claims containing only principal, expiry, and random CSRF token; API and session secrets must differ. Browser writes require a constant-time CSRF match, while authenticated Bearer API writes remain suitable for CLI clients. Cookies are HttpOnly/SameSite-strict (and Secure in production); templates escape data and responses apply a restrictive no-script CSP. Only login and exact health paths bypass authentication.
 
 ## Proposed Technology Stack
 
@@ -156,6 +168,8 @@ private model gateway   deterministic mechanics
 
 The separately packaged dungeon kernel owns its brief/topology/layout/package schemas, topology and geometry algorithms, diagnostics, renderers, and exporters. The Workbench owns context compilation, model calls, repositories, artifact lifecycle, and human review. Dependency tests should fail if the dungeon package imports FastAPI, SQLAlchemy, Workbench modules, provider clients, or campaign repositories.
 
+The provider-independent P7-11 `DungeonStudioService` is the first concrete orchestrator across those boundaries. It accepts a strict `LayoutRequest`, records a pin-complete run, invokes generation plus topology/geometry validation, produces DM/player SVG/PNG previews, and persists a `dungeon-studio-v1` specification containing both exact request and resulting `DungeonPackage`. Regeneration reconstructs that request and copies only explicitly selected exact lock components; PostgreSQL parent lineage remains authoritative even though the pure package has no repository concept. PDF/Roll20 export, asset download, comparison, and approval all call the same service from JSON API, CLI, and server-rendered routes. No model gateway or source retrieval is consulted.
+
 Encounter composition is less clearly separable. Initially, keep its orchestration and contracts in the Workbench while isolating deterministic difficulty, stat-block, puzzle-completeness, and map-fit functions. After P8 evals reveal the actual seam, either retain that module or extract only a cohesive `encounter-mechanics` package. Do not pre-create an empty `encounter-engine` package.
 
 ### Database
@@ -173,6 +187,10 @@ PostgreSQL should initially serve several roles:
 Generated artifact specifications, lineage, validation reports, and asset metadata also live in PostgreSQL. Large rendered binaries live on the content-addressed asset volume rather than being duplicated in hot relational tables.
 
 This avoids maintaining separate relational and vector systems initially.
+
+P0-03 pins `pgvector/pgvector:0.8.1-pg16-bookworm` and binds its development port only to loopback. The Workbench uses SQLAlchemy 2 synchronous sessions over psycopg 3 (`postgresql+psycopg`), with hidden SQL parameters, pre-ping, and an explicit unit-of-work context: success commits once, every exception rolls back, and the session always closes. Connection probes map driver failures to one secret-safe domain error.
+
+Alembic reads only validated `DM_DATABASE_URL`; no URL or credential is stored in `alembic.ini`. Its ordered `alembic_version` table is the schema-version authority, so a duplicate application schema-version table is not added. The foundation revision installs `vector` and creates only the minimal `campaign` aggregate. Integration migrations are destructive only against an explicitly configured database whose name ends in `_test`, and the gate proves upgrade/downgrade/upgrade, model/migration drift, constraints, extension version, and transaction behavior.
 
 ### Markdown
 
@@ -194,6 +212,8 @@ Obsidian can remain the editing interface, but the architecture should not depen
 The initial blob store can be a local mounted directory addressed by SHA-256 content hash. It is a platform-owned `AssetStore` port rather than a facility owned by prompt upload or dungeon code; the first consumer implements the narrow interface and later consumers reuse it. PostgreSQL records media type, byte size, hash, logical role, storage locator, and either input-attachment/run ownership or renderer/export/artifact-version metadata. Writes use temporary files plus atomic rename; duplicate content is reused. Prompt uploads enforce MIME/size limits and retention, are retrieved only by opaque attachment ID, and never grant the model gateway arbitrary path access.
 
 The canonical dungeon/map specification is the source for rebuildable outputs. SVG/PNG/PDF exports can be regenerated when renderer versions remain available, but approved exports should still be retained/backed up when exact visual reproducibility matters. An S3-compatible object store can replace the directory later through a narrow interface without changing artifact identity.
+
+The P7-01 local adapter streams to a configurable scratch root on the same filesystem, hashes and `fsync`s the complete temporary file, then publishes through an atomic no-overwrite hard link at `sha256/<prefix>/<hash>`. An existing destination is byte-size/hash verified rather than replaced. Reads accept only a validated hash-derived locator and reverify regular-file type, size, and hash. PostgreSQL blob metadata is globally deduplicated by SHA-256 while ownership/presentation remains in separate artifact-version role rows.
 
 ### Vector Retrieval and Embedding Runtime
 
@@ -493,6 +513,8 @@ finished_at NULL
 
 A generation run records deterministic stages and model-gateway/tool interactions separately. Its generation-context envelope is validated against the named domain payload schema; it is not an untyped dumping ground for all possible context. Replaying the same pinned inputs and versions should reproduce the structured layout; a model call may require replaying its recorded structured output unless the provider guarantees deterministic inference.
 
+P7-01 adds monotonically numbered immutable versions with a canonical specification hash, same-artifact parent constraints, same-campaign artifact/run constraints, and immutable asset-role rows. Database triggers reject version/asset/lifecycle-event mutation and allow a generation run to change exactly once from `running` to a terminal status while preserving all input/version/model/tool pins. Every artifact lifecycle change has an immutable actor/reason/version event. Creating a child of approved/used preparation returns it to `draft`; `retired` is terminal. These tables have no relationship to a canonical change set or campaign revision write. Input revision/snapshot UUIDs remain opaque pins until their owning schemas are added, at which point later migrations add ownership foreign keys without rewriting preparation history.
+
 ## Dungeon Generation Architecture
 
 Dungeon generation should be a constrained compilation pipeline:
@@ -560,6 +582,14 @@ metadata
 
 Initial generation should favor orthogonal square-grid geometry. Each floor is laid out independently but stairs/vertical connections must pair and validate. Regional/world maps and arbitrary illustration-first geometry are out of scope.
 
+#### Initial Deterministic Layout Algorithm
+
+The P7-04 baseline is graph-guided per-floor rectangle placement followed by orthogonal corridor routing. It validates topology first, installs locked floor/room geometry before any new placement, orders remaining rooms by stable graph traversal, and uses bounded deterministic retries to choose size-conforming non-overlapping rectangles. A single explicit SHA-256 counter-based random source owns every seeded ordering and tie-break; code must not call module-global randomness.
+
+Connections route between room-boundary anchors over the square grid and compress to orthogonal polylines. Door segments align to the selected boundary anchor, and cross-floor connections emit paired stair or vertical-link endpoints. Failure to place or route any requested component returns structured diagnostics rather than a partial package. Input component IDs are retained; auxiliary IDs derive from the package ID, generator version, and stable component key (including a seed only when identity itself is seed-created), so geometry randomization does not casually break stable references. Targeted regeneration passes exact locked components back into the request and must preserve them byte-for-byte.
+
+This first algorithm optimizes for reproducibility, inspectability, and clean failure rather than compact or organic-looking maps. P7-05 separately validates full geometry, pathfinding, and capacity before any output is approved.
+
 ### Dungeon Primitives and Model Tools
 
 The application should expose operations such as:
@@ -576,7 +606,7 @@ validate_dungeon(...)
 regenerate_component(component_id, ...)
 ```
 
-The server assigns IDs, validates every operation, and decides exact placement. A model can request a loop or secret bypass; code computes a realizable route. Regeneration can lock accepted rooms/floors and change only a selected component.
+The server validates every operation, owns component identity, and decides exact placement. A model may supply already-established opaque IDs; otherwise deterministic code derives them from the pinned input, seed, generator version, and stable component key. Random UUID4 remains suitable for application/database aggregate IDs but is prohibited inside deterministic package generation. A model can request a loop or secret bypass; code computes a realizable route. Regeneration can lock accepted rooms/floors and change only a selected component.
 
 ### Deterministic Dungeon Validation
 
@@ -595,6 +625,8 @@ At minimum validate:
 
 Graph and geometry diagnostics should be structured (`code`, affected IDs, severity, repair hints) so a model can repair a specification without receiving renderer internals.
 
+The P7-05 square-grid validator rasterizes room polygons using half-open cell bounds, expands orthogonal corridor centerlines to their declared widths, subtracts explicit blocking terrain/features, and connects paired vertical endpoints. Deterministic breadth-first search is authoritative for anchor-to-anchor reachability. Creature footprints are axis-aligned cell rectangles whose query point is the top-left occupied cell. Encounter-fit hooks report conservative spatial facts—usable cells, footprint placement, anchor/objective reachability, open range, and cover-feature IDs—without composing encounters or performing rules/difficulty arithmetic.
+
 ## Map Rendering and Export
 
 The exact dungeon package is renderer-neutral. SVG is the first deterministic rendering layer because it preserves grids, semantic layers/IDs, labels, and exact geometry at any scale. It is primarily an implementation/intermediate format and optional download, not something the DM must edit. PNG is rasterized from the same package for Roll20 and ordinary web viewing.
@@ -603,6 +635,8 @@ Render at least two information variants:
 
 - **DM map:** secrets, traps, encounter markers, room IDs/notes, puzzle annotations, and all connections;
 - **clean/player-safe map:** no secret doors, hidden areas, trap markers, creature starts, or puzzle solutions unless deliberately published.
+
+The P7-06 SVG renderer filters components against both mandatory visibility and render-layer export policy **before** constructing XML; CSS hiding is never a secrecy mechanism. SVG element IDs and `data-*` attributes are deterministic and stable, but player output contains no element or metadata record for a filtered component. Initial presentation is selected only from code-owned `low_ink` and `draft` themes; model-authored SVG/CSS is not accepted.
 
 ### Low-Ink Table Printing
 
@@ -629,9 +663,13 @@ Each tiled PDF should include:
 
 The exporter should support trim-and-butt and overlap-and-tape workflows. Tests must inspect PDF page boxes and rendered calibration geometry so "fit to page" mistakes are detectable before a session.
 
+P7-07 uses Pillow to rasterize the already-filtered trusted `svg-v1` subset into deterministic PNG bytes and ReportLab's invariant vector canvas for PDF pages; `pypdf` is test-only inspection tooling. This avoids a native Cairo runtime while preserving one secrecy boundary. Tile drawing uses the SVG's 72-pixels-per-cell coordinate system directly as PDF points—no tile-page content scaling—so every five-foot cell remains exactly 72 points/one inch. Export manifests record source SVG/asset hashes, audience/theme/grid settings, page boxes, source viewports, actual overlap and adjacency, calibration size, and an ink-coverage proxy.
+
 ### Roll20 and Web Output
 
 The first Roll20 adapter should guarantee correctly sized grid-on and gridless PNG variants plus grid width/height, pixels per cell, scale/origin, floor metadata, and an optional token-placement manifest. Direct Roll20 API upload and dynamic-lighting automation depend on the available Roll20 integration surface and can come later; wall/door geometry should be retained so those exports remain possible.
+
+The P7-08 bundle is a deterministic ZIP with fixed safe basenames, paired PNG asset/source hashes and dimensions, five-foot square setup metadata, visible room-wall polygons and door segments, and optional explicitly visible anchor placements. It is setup metadata—not an API uploader or dynamic-lighting import format. Player filtering happens before every asset and metadata projection; clean manifests omit full-package hashes so changes to DM-only source fields cannot create a hidden-data fingerprint. Adapters revalidate PNG dimensions/hashes, canonical manifest bytes, ZIP paths/content, grid consistency, and bundle hashes before writing.
 
 A richer web presentation is a later rendering concern, not a separate geometry source. Polished artwork must never replace or distort validated tactical geometry.
 
@@ -1256,8 +1294,28 @@ created_at
 corpus_snapshot_document
 ------------------------
 corpus_snapshot_id
+document_id
 document_revision_id
+ordinal
 ```
+
+The initial P1 relational boundary enforces these details in PostgreSQL rather than relying on callers:
+
+- `campaign` corpus rows always have a campaign owner; `rules` rows may be global or campaign-owned for later house-rule/profile use. Scope is copied onto revisions, chunks, runs, snapshots, and membership rows so cross-campaign/cross-corpus links can be rejected before retrieval.
+- Source paths are normalized, safe relative locators. A logical key and active path are unique within an owner/corpus scope, including the global-rules `NULL` owner case. Path-history rows retain old locators while the document identity remains stable.
+- Revision numbers and exact UTF-8 SHA-256 content hashes are unique per logical document. PostgreSQL verifies the hash against the stored source snapshot, and database triggers reject revision update/delete attempts.
+- Chunk offsets are zero-based, half-open character offsets into that exact revision. PostgreSQL verifies the copied chunk text and SHA-256 against the source span, derives a stored `tsvector`, and rejects update/delete attempts. Chunk authority/ruleset inherit the revision; a chunk visibility override may only narrow the parent policy.
+- Snapshot membership pins one revision and ordinal per logical document, is append-only while the snapshot is a candidate, and becomes closed when activated. Candidate/active/superseded transitions and ingestion-run pins are constrained independently of any later vector index.
+
+P1-01 defines these persistence guards only. P1-02 adds one transactional Library reconciliation service over a narrow read-only filesystem port:
+
+- Callers select a configured **named source root** plus a normalized relative POSIX locator; absolute paths, traversal, backslashes, unknown roots, non-regular files, symbolic-link components, and files outside the opened root are rejected. The local adapter performs bounded descriptor-relative no-follow reads and exact strict UTF-8 decoding before persistence.
+- A per-campaign/corpus PostgreSQL advisory lock serializes the bounded filesystem read and identity decision. Every attempt has a durable ingestion run; expected access/decoding failures terminate it safely without creating a document.
+- Same-path/same-hash input reuses the exact revision. Novel same-path content records a `content_changed` path event and one revision. Returning to an already-known hash reuses that immutable revision while the path event records the new current content.
+- A unique exact-hash source whose old locator is missing is an exact move and retains identity. If the original remains present, the copy becomes a distinct document with explicit duplicate IDs. Multiple exact missing candidates, or any missing active candidate for novel content, return `review_required` with stable candidate IDs and make no document/path/revision mutation.
+- Files become retired only through the explicit root-scoped missing reconciliation command. Retirement retains the current locator/hash and every revision; a later same-path return restores identity and appends a revision only for genuinely new content.
+
+P1-02 still does not parse Markdown, create chunks, activate serving snapshots, search, embed, invoke a model, or modify canonical campaign state. Those remain later P1/P2/P3 responsibilities rather than being hidden in source adapters.
 
 A completed ingestion run may activate a corpus snapshot as soon as immutable chunks and lexical indexes are ready; P1 must not wait for an embedding runtime. A separate retrieval-index generation links that snapshot to an embedding profile and becomes `vector_ready` only after all required vectors exist. Queries/evals pin the snapshot plus retrieval-index generation (or explicit lexical-only mode), so narrative answers remain reproducible while sources are edited or vectors are rebuilt.
 
@@ -1283,6 +1341,8 @@ creature_or_bestiary_record
 dungeon_or_encounter_brief
 house_rule_or_ruling
 ```
+
+Revision authority is typed separately from document shape: `canonical_claim`, `raw_record`, `preparation`, `reference`, `official_rules`, and `user_authored_rules`. `canonical_claim` means only that the source presents a claim about canon; it does not bypass the canonical change-set approval boundary. Initial ruleset labels are `dnd_5e_2014`, `dnd_5e_2024`, `system_agnostic`, and `other`.
 
 Rules and bestiary sources should distinguish official/user-authored source, edition, book, and extraction provenance. Classification controls retrieval defaults, not automatic canonization. Even a `canon_note` produces structured changes only through approval; conversely, unstructured details in an approved narrative note remain retrievable without having to become propositions.
 

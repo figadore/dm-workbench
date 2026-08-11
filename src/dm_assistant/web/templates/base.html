@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}DM Workbench{% endblock %}</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; }
+    body { margin: 0; background: #f4f2ed; color: #202020; }
+    header { background: #29251f; color: white; padding: .8rem 1.2rem; display: flex; gap: 1rem; align-items: center; }
+    header a { color: white; }
+    main { max-width: 1100px; margin: 1.5rem auto; padding: 0 1rem; }
+    section, article { background: white; border: 1px solid #ccc; border-radius: .35rem; padding: 1rem; margin: 1rem 0; }
+    label { display: block; font-weight: 650; margin-top: .7rem; }
+    input, textarea, select { box-sizing: border-box; width: 100%; padding: .55rem; }
+    textarea { min-height: 8rem; font-family: ui-monospace, monospace; }
+    button { margin-top: .8rem; padding: .55rem .9rem; cursor: pointer; }
+    .danger { border-color: #9d2b2b; }
+    .status { display: inline-block; border: 1px solid #777; border-radius: 1rem; padding: .15rem .55rem; }
+    .assets { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .75rem; }
+    .preview { max-width: 100%; max-height: 320px; border: 1px solid #aaa; }
+    code, pre { overflow-wrap: anywhere; white-space: pre-wrap; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; border-bottom: 1px solid #ddd; padding: .45rem; vertical-align: top; }
+  </style>
+</head>
+<body>
+<header>
+  <strong>DM Workbench</strong>
+  <a href="/dungeons">Dungeon Studio</a>
+  {% if csrf_token %}
+  <form method="post" action="/logout" style="margin-left:auto">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit">Log out</button>
+  </form>
+  {% endif %}
+</header>
+<main>{% block content %}{% endblock %}</main>
+</body>
+</html>

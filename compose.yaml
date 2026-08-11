@@ -1,0 +1,24 @@
+name: dm-assistant
+
+services:
+  postgres:
+    image: docker.io/pgvector/pgvector:0.8.1-pg16-bookworm
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-dm_assistant}
+      POSTGRES_USER: ${POSTGRES_USER:-dm_assistant}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - dm-assistant-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 5s
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+volumes:
+  dm-assistant-postgres-data:

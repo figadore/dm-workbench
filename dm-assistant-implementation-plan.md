@@ -83,7 +83,7 @@ These defaults remove avoidable setup decisions. Change them only with a documen
 | Internal transport | Private/loopback HTTP + SSE between Python and the Node gateway; `httpx` client |
 | Tests | pytest; unit, PostgreSQL integration, and golden eval suites |
 | Quality | Ruff formatting/linting and mypy (or Pyright if deliberately substituted) |
-| IDs | UUID4 opaque IDs initially |
+| IDs | UUID4 opaque IDs for application/database aggregates; input-provided or deterministically derived opaque IDs inside generated packages |
 | Content hashes | SHA-256 over exact source bytes; keep any normalized rename fingerprint separate |
 | Generated assets | Platform-owned content-addressed local volume behind an `AssetStore` interface reused by preparation artifacts and prompt attachments |
 | Generation context | Small `GenerationContextEnvelope` for shared scope/provenance plus separate strict payload schemas such as `DungeonGenerationContext` and `EncounterGenerationContext` |
@@ -912,7 +912,7 @@ Define typed Pydantic/JSON schemas for:
 - DM/player/render layers;
 - exact renderer-neutral `DungeonPackage`.
 
-Default to orthogonal square cells and five feet per cell. Use stable opaque IDs. Do not represent every tile as a canonical ontology assertion.
+Default to orthogonal square cells and five feet per cell. Use stable opaque IDs. IDs inside deterministic packages must be retained from input specifications or derived reproducibly from pinned input, seed, and generator version; never call `uuid4()` in deterministic generation. Do not represent every tile as a canonical ontology assertion.
 
 **Done when**
 

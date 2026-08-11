@@ -2,7 +2,7 @@
 
 A self-hosted, AI-assisted dungeon/encounter generator, campaign memory, and context compiler for a human Dungeon Master running D&D 5e/2024-era campaigns.
 
-The project is in early implementation. The Python 3.12 Workbench package, CLI, API factory, and unit-test scaffold are in place.
+The project is in early implementation. The Python 3.12 Workbench, provider-independent Dungeon Studio, deterministic dungeon/export kernel, PostgreSQL preparation lifecycle, and immutable allowlisted Library source registry are in place.
 
 ## Start Here
 
@@ -38,9 +38,80 @@ For an implementation session or return after a break, conserve context:
 - The web shell is organized into Library, Chronicle, Dungeon/Encounter Studios, Session Desk, Assistant, and Settings while retaining separate preparation-approval and canonical-commit workflows.
 - DM-only interface initially, including supplied character sheets and important story items.
 
+## Isolated Development
+
+Project dependencies are installed only in a container-managed project virtual environment. Copy `.env.example` to ignored `.env`, replace every placeholder—including different random 32+ character `DM_API_TOKEN` and `DM_SESSION_SECRET` values—and leave model/embedding policies disabled while those runtimes are absent.
+
+Start the pinned PostgreSQL 16/pgvector service, migrate, and run the API on the private Compose network:
+
+```bash
+cp .env.example .env
+podman compose up -d postgres
+podman run --rm -it \
+  --network dm-assistant_default \
+  -p 127.0.0.1:8000:8000 \
+  -e UV_LINK_MODE=copy \
+  -v "$PWD:/workspace" \
+  -v dm-assistant-dev-venv:/workspace/.venv \
+  -w /workspace \
+  ghcr.io/astral-sh/uv:0.9.5-python3.12-bookworm-slim \
+  sh -lc 'uv sync --all-packages --all-groups --frozen && \
+    uv run --frozen alembic upgrade head && \
+    uv run --frozen dm doctor && \
+    exec uv run --frozen uvicorn dm_assistant.api.app:create_app \
+      --factory --host 0.0.0.0 --port 8000'
+```
+
+Liveness has no database dependency; readiness verifies PostgreSQL 16, pgvector 0.8.1, and exact Alembic head. Every other path—including docs/schema—is authenticated:
+
+```bash
+curl http://127.0.0.1:8000/health/live
+curl http://127.0.0.1:8000/health/ready
+curl -H 'Authorization: Bearer <DM_API_TOKEN>' \
+  http://127.0.0.1:8000/openapi.json
+```
+
+Run the complete frozen gate—including a disposable safety-named test database, migration round trip, `dm doctor`, all tests, lint, formatting, mypy, and diff checks—with one command. It removes its database volume/network even on failure:
+
+```bash
+./scripts/check-container.sh
+# Docker alternative:
+CONTAINER_ENGINE=docker ./scripts/check-container.sh
+```
+
+Stop the development database with `podman compose down`; add `-v` only when intentionally deleting local development data.
+
+## Provider-Independent Dungeon Studio
+
+After migration, create the workspace root with `uv run --frozen dm campaign create "My Campaign"` (or the first-login web form), then log in at `http://127.0.0.1:8000/login` with `DM_API_TOKEN`. The signed browser session contains no API token; all browser writes require CSRF. Dungeon Studio can ingest a versioned `LayoutRequest` JSON, generate and validate exact geometry, inspect run/input/version lineage, compare/regenerate with locks, preview DM/player maps, create PDF/Roll20 exports, download assets, and explicitly approve preparation for play without a model gateway.
+
+The same application workflow is available through authenticated `/api/dungeons` routes and CLI commands:
+
+```bash
+uv run --frozen dm dungeon generate /data/campaign/layout-request.json \
+  --campaign <campaign-uuid> --title "Sunken Archive"
+uv run --frozen dm dungeon inspect <artifact-uuid> --campaign <campaign-uuid>
+uv run --frozen dm dungeon compare <left-version> <right-version> \
+  --campaign <campaign-uuid>
+uv run --frozen dm dungeon regenerate <artifact-uuid> <parent-version> \
+  --campaign <campaign-uuid> --seed 888888 --lock room_entrance \
+  --summary "Regenerate unlocked geometry."
+uv run --frozen dm dungeon export <version-uuid> --campaign <campaign-uuid>
+uv run --frozen dm dungeon approve <artifact-uuid> <version-uuid> \
+  --campaign <campaign-uuid> --reason "Reviewed for play."
+```
+
+`approved_for_play` is preparation state only. It does not make planned encounters, discoveries, deaths, treasure, or any other event canonical.
+
+## Immutable Library Foundation
+
+Alembic revision `0003_library_sources` defines campaign/global-rules source scopes, stable logical documents and safe relative path history, exact immutable UTF-8 revisions with verified SHA-256 identity, typed authority/document/ruleset/visibility metadata, exact-span chunks with PostgreSQL full-text vectors, terminal ingestion-run pins, and candidate/active corpus snapshots. Database guards reject cross-scope membership, broader child visibility, source/chunk mutation, and membership changes after activation.
+
+The internal P1-02 Library service now ingests bounded strict-UTF-8 files through named allowlisted roots, rejects traversal/symlinks/non-files, reuses unchanged revisions, appends novel edits, retains identity across exact moves, records explicit duplicates, returns review-required ambiguity without mutation, and retires missing files only through an explicit reconciliation call. Public CLI/API ingestion remains deferred to P1-06; no Markdown parser, chunks, search, embeddings, model calls, or canonical writes are involved yet.
+
 ## Current Next Step
 
-Begin **P7-02** on the dungeon-first fast path: add `packages/dungeon-engine` as an independently tested, in-process `uv` workspace member and define its versioned primitive vocabulary. Clarify deterministic generated-component identity before implementing the package; do not add database, web, retrieval, or model-provider dependencies to `dm_dungeon`. [`PROJECT_STATUS.md`](PROJECT_STATUS.md) contains the exact handoff.
+Begin **P1-03** on the grounding path: implement the versioned deterministic Markdown parser/chunker with exact heading/block offsets and adversarial synthetic fixtures. [`PROJECT_STATUS.md`](PROJECT_STATUS.md) contains the exact handoff.
 
 ## License and Third-Party Marks
 
