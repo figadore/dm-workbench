@@ -18,6 +18,16 @@ from dm_assistant.modules.modeling.contracts import (
     resolve_reasoning_level,
     resolve_run_profile,
 )
+from dm_assistant.modules.modeling.workbench import (
+    LoginEvent,
+    LoginSession,
+    ModelWorkbenchService,
+    RunEvent,
+    RunSnapshot,
+    SelectionSnapshot,
+    WorkbenchModelSummary,
+    WorkbenchProviderSummary,
+)
 
 __all__ = [
     "DungeonIntentV1",
@@ -34,6 +44,14 @@ __all__ = [
     "ToolCall",
     "ToolInvocationRecord",
     "ToolResult",
+    "LoginEvent",
+    "LoginSession",
+    "ModelWorkbenchService",
+    "RunEvent",
+    "RunSnapshot",
+    "SelectionSnapshot",
+    "WorkbenchModelSummary",
+    "WorkbenchProviderSummary",
     "resolve_reasoning_level",
     "resolve_run_profile",
 ]

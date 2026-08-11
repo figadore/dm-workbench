@@ -2,10 +2,11 @@
 
 import uuid
 from pathlib import Path
+from collections.abc import Iterable
 from typing import Annotated
 
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
 from dm_assistant.auth import (
@@ -18,6 +19,8 @@ from dm_assistant.auth import (
 from dm_assistant.campaigns import CampaignCatalog
 from dm_assistant.config import RuntimeEnvironment, Settings
 from dm_assistant.errors import ForbiddenError, InvalidInputError
+from dm_assistant.modules.modeling import ReasoningEffort
+from dm_assistant.modules.modeling.workbench import ModelWorkbenchService
 from dm_assistant.modules.preparation import PreparationService
 from dm_assistant.orchestration.dungeons import (
     CreateDungeonWorkflow,
@@ -37,10 +40,12 @@ def create_web_router(
     campaigns: CampaignCatalog,
     dungeons: DungeonStudioService,
     preparation: PreparationService,
+    model_workbench: ModelWorkbenchService | None = None,
 ) -> APIRouter:
     """Build the shared shell using injected application services only."""
     router = APIRouter(include_in_schema=False)
     session_codec = SessionCodec(settings.session_secret)
+    resolved_model_workbench = model_workbench or ModelWorkbenchService()
 
     @router.get("/login", response_class=HTMLResponse)
     def login_page(request: Request) -> HTMLResponse:
@@ -90,10 +95,14 @@ def create_web_router(
     def dungeon_list(
         request: Request,
         campaign_id: uuid.UUID | None = None,
+        login_id: uuid.UUID | None = None,
+        run_id: uuid.UUID | None = None,
     ) -> HTMLResponse:
         available = campaigns.list_campaigns()
         selected = campaign_id or (available[0].id if available else None)
         artifacts = preparation.list_artifacts(selected) if selected is not None else ()
+        login = resolved_model_workbench.get_login(login_id) if login_id is not None else None
+        active_run = resolved_model_workbench.get_run(run_id) if run_id is not None else None
         return _template(
             request,
             "dungeons.html",
@@ -101,7 +110,105 @@ def create_web_router(
                 "campaigns": available,
                 "selected_campaign_id": selected,
                 "artifacts": artifacts,
+                "model_providers": resolved_model_workbench.providers(),
+                "model_selection": resolved_model_workbench.selection(),
+                "model_task_profiles": resolved_model_workbench.task_profiles(),
+                "model_login": login,
+                "model_active_run": active_run.model_dump(mode="json") if active_run else None,
             },
+        )
+
+    @router.post("/modeling/logins")
+    def model_login_start(
+        request: Request,
+        provider_id: Annotated[str, Form()],
+        campaign_id: Annotated[uuid.UUID | None, Form()] = None,
+    ) -> RedirectResponse:
+        login = resolved_model_workbench.begin_login(provider_id)
+        return RedirectResponse(
+            _dungeons_url(campaign_id=campaign_id, login_id=login.login_id),
+            status_code=303,
+        )
+
+    @router.post("/modeling/logins/{login_id}")
+    def model_login_complete(
+        request: Request,
+        login_id: uuid.UUID,
+        code: Annotated[str, Form()],
+        campaign_id: Annotated[uuid.UUID | None, Form()] = None,
+    ) -> RedirectResponse:
+        login = resolved_model_workbench.complete_login(login_id, code)
+        return RedirectResponse(
+            _dungeons_url(campaign_id=campaign_id, login_id=login.login_id),
+            status_code=303,
+        )
+
+    @router.post("/modeling/logout")
+    def model_logout(
+        request: Request,
+        provider_id: Annotated[str, Form()],
+        campaign_id: Annotated[uuid.UUID | None, Form()] = None,
+    ) -> RedirectResponse:
+        resolved_model_workbench.logout(provider_id)
+        return RedirectResponse(
+            _dungeons_url(campaign_id=campaign_id),
+            status_code=303,
+        )
+
+    @router.post("/modeling/selection")
+    def model_selection(
+        request: Request,
+        provider_id: Annotated[str, Form()],
+        model_id: Annotated[str, Form()],
+        task_profile_id: Annotated[uuid.UUID, Form()],
+        effort: Annotated[str, Form()],
+        campaign_id: Annotated[uuid.UUID | None, Form()] = None,
+    ) -> RedirectResponse:
+        resolved_model_workbench.set_selection(
+            provider_id=provider_id,
+            model_id=model_id,
+            task_profile_id=task_profile_id,
+            effort=ReasoningEffort(effort),
+        )
+        return RedirectResponse(
+            _dungeons_url(campaign_id=campaign_id),
+            status_code=303,
+        )
+
+    @router.post("/modeling/runs")
+    def model_run_start(
+        request: Request,
+        prompt: Annotated[str, Form()],
+        campaign_id: Annotated[uuid.UUID | None, Form()] = None,
+    ) -> RedirectResponse:
+        run = resolved_model_workbench.start_run(prompt=prompt)
+        return RedirectResponse(
+            _dungeons_url(campaign_id=campaign_id, run_id=run.run_id),
+            status_code=303,
+        )
+
+    @router.post("/modeling/runs/{run_id}/cancel")
+    def model_run_cancel(
+        request: Request,
+        run_id: uuid.UUID,
+        campaign_id: Annotated[uuid.UUID | None, Form()] = None,
+    ) -> RedirectResponse:
+        resolved_model_workbench.cancel_run(run_id)
+        return RedirectResponse(
+            _dungeons_url(campaign_id=campaign_id, run_id=run_id),
+            status_code=303,
+        )
+
+    @router.get("/modeling/runs/{run_id}/events")
+    def model_run_events(run_id: uuid.UUID) -> StreamingResponse:
+        def iterator() -> Iterable[bytes]:
+            for event in resolved_model_workbench.stream_run_events(run_id):
+                yield f"data: {event.model_dump_json()}\n\n".encode("utf-8")
+
+        return StreamingResponse(
+            iterator(),
+            media_type="text/event-stream; charset=utf-8",
+            headers={"Cache-Control": "no-store"},
         )
 
     @router.post("/campaigns")
@@ -343,12 +450,30 @@ def _template(
         status_code=status_code,
     )
     response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; img-src 'self'; style-src 'self' 'unsafe-inline'; "
+        "default-src 'self'; img-src 'self'; connect-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
         "base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
     )
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["X-Content-Type-Options"] = "nosniff"
     return response
+
+
+def _dungeons_url(
+    *,
+    campaign_id: uuid.UUID | None = None,
+    login_id: uuid.UUID | None = None,
+    run_id: uuid.UUID | None = None,
+) -> str:
+    params: list[str] = []
+    if campaign_id is not None:
+        params.append(f"campaign_id={campaign_id}")
+    if login_id is not None:
+        params.append(f"login_id={login_id}")
+    if run_id is not None:
+        params.append(f"run_id={run_id}")
+    query = f"?{'&'.join(params)}" if params else ""
+    return f"/dungeons{query}"
 
 
 def _media_extension(media_type: str) -> str:

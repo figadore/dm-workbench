@@ -23,6 +23,7 @@ from dm_assistant.modules.library.retrieval import LibraryLexicalSearchService
 from dm_assistant.modules.library.service import LibraryIngestionService
 from dm_assistant.modules.library.snapshots import CorpusSnapshotService
 from dm_assistant.modules.library.workflows import LibrarySourceWorkflow
+from dm_assistant.modules.modeling import ModelWorkbenchService
 from dm_assistant.modules.preparation import PreparationService
 from dm_assistant.observability import configure_logging
 from dm_assistant.orchestration.dungeons import DungeonStudioService
@@ -40,6 +41,7 @@ def create_app(
     preparation_service: PreparationService | None = None,
     dungeon_studio: DungeonStudioService | None = None,
     campaign_catalog: CampaignCatalog | None = None,
+    model_workbench: ModelWorkbenchService | None = None,
 ) -> FastAPI:
     """Create the default-authenticated DM Assistant HTTP application."""
     resolved_settings = settings if settings is not None else load_settings()
@@ -75,6 +77,7 @@ def create_app(
     )
     resolved_dungeons = dungeon_studio or DungeonStudioService(resolved_preparation)
     resolved_campaigns = campaign_catalog or CampaignCatalog(database_engine)
+    resolved_model_workbench = model_workbench or ModelWorkbenchService()
     library_catalog = LibraryDocumentCatalog(database_engine)
     library_search = LibraryLexicalSearchService(database_engine)
     library_ingestion = LibraryIngestionService(
@@ -94,6 +97,7 @@ def create_app(
     application.state.readiness_check = resolved_readiness_check
     application.state.preparation_service = resolved_preparation
     application.state.dungeon_studio = resolved_dungeons
+    application.state.model_workbench = resolved_model_workbench
     application.add_middleware(
         SecurityObservabilityMiddleware,
         settings=resolved_settings,
@@ -114,6 +118,7 @@ def create_app(
             campaigns=resolved_campaigns,
             dungeons=resolved_dungeons,
             preparation=resolved_preparation,
+            model_workbench=resolved_model_workbench,
         )
     )
 

@@ -133,6 +133,119 @@ async def browser_flow(
         assert after.headers["location"] == "/login"
 
 
+async def model_flow(
+    application: FastAPI,
+    campaign_id: uuid.UUID,
+) -> None:
+    transport = httpx.ASGITransport(app=application)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+        follow_redirects=False,
+    ) as client:
+        await client.post(
+            "/login",
+            data={"token": TEST_API_TOKEN},
+            headers={"Accept": "text/html"},
+        )
+        page = await client.get(
+            f"/dungeons?campaign_id={campaign_id}",
+            headers={"Accept": "text/html"},
+        )
+        assert "Model settings" in page.text
+        assert "Begin device-code login" in page.text
+        csrf_match = re.search(r'name="csrf_token" value="([^"]+)"', page.text)
+        assert csrf_match is not None
+        csrf_token = csrf_match.group(1)
+
+        login = await client.post(
+            "/modeling/logins",
+            data={
+                "csrf_token": csrf_token,
+                "campaign_id": str(campaign_id),
+                "provider_id": "faux",
+            },
+            headers={"Accept": "text/html"},
+        )
+        assert login.status_code == 303
+        login_page = await client.get(login.headers["location"], headers={"Accept": "text/html"})
+        assert "ABCD-1234" in login_page.text
+
+        await client.post(
+            login.headers["location"],
+            data={
+                "csrf_token": csrf_token,
+                "campaign_id": str(campaign_id),
+                "code": "ABCD-1234",
+            },
+            headers={"Accept": "text/html"},
+        )
+
+        selected = await client.post(
+            "/modeling/selection",
+            data={
+                "csrf_token": csrf_token,
+                "campaign_id": str(campaign_id),
+                "provider_id": "faux",
+                "model_id": "faux_deterministic_v1",
+                "task_profile_id": "11111111-1111-1111-1111-111111111111",
+                "effort": "standard",
+            },
+            headers={"Accept": "text/html"},
+        )
+        assert selected.status_code == 303
+
+        started = await client.post(
+            "/modeling/runs",
+            data={
+                "csrf_token": csrf_token,
+                "campaign_id": str(campaign_id),
+                "prompt": "Create a synthetic dungeon intent.",
+            },
+            headers={"Accept": "text/html"},
+        )
+        assert started.status_code == 303
+        run_url = started.headers["location"]
+        run_id_match = re.search(r"run_id=([0-9a-f-]+)", run_url)
+        assert run_id_match is not None
+        run_id = run_id_match.group(1)
+
+        cancelled = await client.post(
+            f"/modeling/runs/{run_id}/cancel",
+            data={
+                "csrf_token": csrf_token,
+                "campaign_id": str(campaign_id),
+            },
+            headers={"Accept": "text/html"},
+        )
+        assert cancelled.status_code == 303
+        cancelled_page = await client.get(
+            cancelled.headers["location"],
+            headers={"Accept": "text/html"},
+        )
+        assert "cancelled" in cancelled_page.text
+
+        second = await client.post(
+            "/modeling/runs",
+            data={
+                "csrf_token": csrf_token,
+                "campaign_id": str(campaign_id),
+                "prompt": "Create a second synthetic dungeon intent.",
+            },
+            headers={"Accept": "text/html"},
+        )
+        second_run_url = second.headers["location"]
+        second_run_match = re.search(r"run_id=([0-9a-f-]+)", second_run_url)
+        assert second_run_match is not None
+        second_run_id = second_run_match.group(1)
+        await asyncio.sleep(0.35)
+        completed_page = await client.get(second_run_url, headers={"Accept": "text/html"})
+        assert "completed" in completed_page.text
+        events = await client.get(f"/modeling/runs/{second_run_id}/events", headers={"Accept": "text/html"})
+        assert events.status_code == 200
+        assert "completed" in events.text
+
+
 def test_browser_login_signed_session_csrf_and_logout(
     test_settings: Settings,
 ) -> None:
@@ -162,3 +275,10 @@ def test_bearer_api_write_does_not_require_browser_csrf(
 ) -> None:
     application, _, campaign_id = web_app(test_settings)
     asyncio.run(bearer_api_flow(application, campaign_id))
+
+
+def test_model_settings_login_and_stream_shell(
+    test_settings: Settings,
+) -> None:
+    application, _, campaign_id = web_app(test_settings)
+    asyncio.run(model_flow(application, campaign_id))
