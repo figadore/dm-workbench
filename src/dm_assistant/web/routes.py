@@ -5,7 +5,7 @@ from pathlib import Path
 from collections.abc import Iterable
 from typing import Annotated
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
@@ -118,12 +118,121 @@ def create_web_router(
             },
         )
 
+    @router.get("/ask", response_class=HTMLResponse)
+    def ask_page(
+        request: Request,
+        campaign_id: uuid.UUID | None = None,
+        run_id: uuid.UUID | None = None,
+    ) -> HTMLResponse:
+        active_run = (
+            resolved_model_workbench.get_ask_run(run_id) if run_id is not None else None
+        )
+        return _template(
+            request,
+            "ask.html",
+            {
+                "campaign_id": campaign_id,
+                "model_providers": resolved_model_workbench.providers(),
+                "model_selection": resolved_model_workbench.selection(),
+                "model_task_profiles": resolved_model_workbench.task_profiles(),
+                "attachments": resolved_model_workbench.list_attachments(),
+                "ask_history": [
+                    item.model_dump(mode="json")
+                    for item in resolved_model_workbench.list_ask_runs()
+                ],
+                "ask_active_run": active_run.model_dump(mode="json") if active_run else None,
+            },
+        )
+
+    @router.post("/ask/attachments")
+    async def ask_upload_attachment(
+        request: Request,
+        file: Annotated[UploadFile, File()],
+        csrf_token: Annotated[str, Form()],
+        campaign_id: Annotated[uuid.UUID | None, Form()] = None,
+    ) -> RedirectResponse:
+        _require_csrf(request, csrf_token)
+        data = await file.read()
+        resolved_model_workbench.upload_attachment(
+            filename=file.filename or "upload.bin",
+            media_type=file.content_type or "application/octet-stream",
+            data=data,
+        )
+        return RedirectResponse(
+            _ask_url(campaign_id=campaign_id),
+            status_code=303,
+        )
+
+    @router.get("/ask/attachments/{attachment_id}")
+    def ask_download_attachment(attachment_id: uuid.UUID) -> Response:
+        record = resolved_model_workbench.get_attachment(attachment_id)
+        if record is None:
+            raise InvalidInputError("The attachment was not found.")
+        data = resolved_model_workbench.read_attachment(attachment_id)
+        disposition = "inline" if record.media_type.startswith("image/") else "attachment"
+        return Response(
+            content=data,
+            media_type=record.media_type,
+            headers={
+                "Content-Disposition": (
+                    f'{disposition}; filename="{record.filename}"'
+                ),
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
+    @router.post("/ask/runs")
+    def ask_start(
+        request: Request,
+        prompt: Annotated[str, Form()],
+        csrf_token: Annotated[str, Form()],
+        attachment_ids: Annotated[list[uuid.UUID] | None, Form()] = None,
+        campaign_id: Annotated[uuid.UUID | None, Form()] = None,
+    ) -> RedirectResponse:
+        _require_csrf(request, csrf_token)
+        run = resolved_model_workbench.ask(
+            prompt=prompt,
+            attachment_ids=tuple(attachment_ids or ()),
+        )
+        return RedirectResponse(
+            _ask_url(campaign_id=campaign_id, run_id=run.run_id),
+            status_code=303,
+        )
+
+    @router.post("/ask/runs/{run_id}/cancel")
+    def ask_cancel(
+        request: Request,
+        run_id: uuid.UUID,
+        csrf_token: Annotated[str, Form()],
+        campaign_id: Annotated[uuid.UUID | None, Form()] = None,
+    ) -> RedirectResponse:
+        _require_csrf(request, csrf_token)
+        resolved_model_workbench.cancel_ask_run(run_id)
+        return RedirectResponse(
+            _ask_url(campaign_id=campaign_id, run_id=run_id),
+            status_code=303,
+        )
+
+    @router.get("/ask/runs/{run_id}/events")
+    def ask_events(run_id: uuid.UUID) -> StreamingResponse:
+        def iterator() -> Iterable[bytes]:
+            for event in resolved_model_workbench.stream_ask_run_events(run_id):
+                yield f"data: {event.model_dump_json()}\n\n".encode("utf-8")
+
+        return StreamingResponse(
+            iterator(),
+            media_type="text/event-stream; charset=utf-8",
+            headers={"Cache-Control": "no-store"},
+        )
+
     @router.post("/modeling/logins")
     def model_login_start(
         request: Request,
         provider_id: Annotated[str, Form()],
+        csrf_token: Annotated[str, Form()],
         campaign_id: Annotated[uuid.UUID | None, Form()] = None,
     ) -> RedirectResponse:
+        _require_csrf(request, csrf_token)
         login = resolved_model_workbench.begin_login(provider_id)
         return RedirectResponse(
             _dungeons_url(campaign_id=campaign_id, login_id=login.login_id),
@@ -135,8 +244,10 @@ def create_web_router(
         request: Request,
         login_id: uuid.UUID,
         code: Annotated[str, Form()],
+        csrf_token: Annotated[str, Form()],
         campaign_id: Annotated[uuid.UUID | None, Form()] = None,
     ) -> RedirectResponse:
+        _require_csrf(request, csrf_token)
         login = resolved_model_workbench.complete_login(login_id, code)
         return RedirectResponse(
             _dungeons_url(campaign_id=campaign_id, login_id=login.login_id),
@@ -147,8 +258,10 @@ def create_web_router(
     def model_logout(
         request: Request,
         provider_id: Annotated[str, Form()],
+        csrf_token: Annotated[str, Form()],
         campaign_id: Annotated[uuid.UUID | None, Form()] = None,
     ) -> RedirectResponse:
+        _require_csrf(request, csrf_token)
         resolved_model_workbench.logout(provider_id)
         return RedirectResponse(
             _dungeons_url(campaign_id=campaign_id),
@@ -162,8 +275,10 @@ def create_web_router(
         model_id: Annotated[str, Form()],
         task_profile_id: Annotated[uuid.UUID, Form()],
         effort: Annotated[str, Form()],
+        csrf_token: Annotated[str, Form()],
         campaign_id: Annotated[uuid.UUID | None, Form()] = None,
     ) -> RedirectResponse:
+        _require_csrf(request, csrf_token)
         resolved_model_workbench.set_selection(
             provider_id=provider_id,
             model_id=model_id,
@@ -179,8 +294,10 @@ def create_web_router(
     def model_run_start(
         request: Request,
         prompt: Annotated[str, Form()],
+        csrf_token: Annotated[str, Form()],
         campaign_id: Annotated[uuid.UUID | None, Form()] = None,
     ) -> RedirectResponse:
+        _require_csrf(request, csrf_token)
         run = resolved_model_workbench.start_run(prompt=prompt)
         return RedirectResponse(
             _dungeons_url(campaign_id=campaign_id, run_id=run.run_id),
@@ -191,8 +308,10 @@ def create_web_router(
     def model_run_cancel(
         request: Request,
         run_id: uuid.UUID,
+        csrf_token: Annotated[str, Form()],
         campaign_id: Annotated[uuid.UUID | None, Form()] = None,
     ) -> RedirectResponse:
+        _require_csrf(request, csrf_token)
         resolved_model_workbench.cancel_run(run_id)
         return RedirectResponse(
             _dungeons_url(campaign_id=campaign_id, run_id=run_id),
@@ -474,6 +593,20 @@ def _dungeons_url(
         params.append(f"run_id={run_id}")
     query = f"?{'&'.join(params)}" if params else ""
     return f"/dungeons{query}"
+
+
+def _ask_url(
+    *,
+    campaign_id: uuid.UUID | None = None,
+    run_id: uuid.UUID | None = None,
+) -> str:
+    params: list[str] = []
+    if campaign_id is not None:
+        params.append(f"campaign_id={campaign_id}")
+    if run_id is not None:
+        params.append(f"run_id={run_id}")
+    query = f"?{'&'.join(params)}" if params else ""
+    return f"/ask{query}"
 
 
 def _media_extension(media_type: str) -> str:

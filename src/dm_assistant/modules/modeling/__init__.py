@@ -2,6 +2,7 @@
 
 from dm_assistant.modules.modeling.contracts import (
     DungeonIntentV1,
+    AskResponseV1,
     GatewayModelCatalogEntry,
     GatewayModelKey,
     ModelEndpointProfile,
@@ -31,6 +32,7 @@ from dm_assistant.modules.modeling.workbench import (
 
 __all__ = [
     "DungeonIntentV1",
+    "AskResponseV1",
     "GatewayModelCatalogEntry",
     "GatewayModelKey",
     "ModelEndpointProfile",

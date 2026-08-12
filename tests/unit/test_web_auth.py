@@ -246,6 +246,77 @@ async def model_flow(
         assert "completed" in events.text
 
 
+async def ask_flow(
+    application: FastAPI,
+    campaign_id: uuid.UUID,
+) -> None:
+    transport = httpx.ASGITransport(app=application)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+        follow_redirects=False,
+    ) as client:
+        await client.post(
+            "/login",
+            data={"token": TEST_API_TOKEN},
+            headers={"Accept": "text/html"},
+        )
+        ask_page = await client.get("/ask", headers={"Accept": "text/html"})
+        assert "Ask" in ask_page.text
+        csrf_match = re.search(r'name="csrf_token" value="([^"]+)"', ask_page.text)
+        assert csrf_match is not None
+        csrf_token = csrf_match.group(1)
+        await client.post(
+            "/modeling/selection",
+            data={
+                "csrf_token": csrf_token,
+                "campaign_id": str(campaign_id),
+                "provider_id": "faux",
+                "model_id": "faux_deterministic_v1",
+                "task_profile_id": "33333333-3333-3333-3333-333333333333",
+                "effort": "standard",
+            },
+            headers={"Accept": "text/html"},
+        )
+        upload = await client.post(
+            "/ask/attachments",
+            files={"file": ("note.txt", b"secret door clues", "text/plain")},
+            data={"campaign_id": str(campaign_id), "csrf_token": csrf_token},
+            headers={"Accept": "text/html"},
+        )
+        assert upload.status_code == 303
+        ask_page = await client.get("/ask", headers={"Accept": "text/html"})
+        attachment_match = re.search(
+            r'name="attachment_ids" form="ask-form" value="([0-9a-f-]+)"',
+            ask_page.text,
+        )
+        assert attachment_match is not None
+        attachment_id = attachment_match.group(1)
+
+        started = await client.post(
+            "/ask/runs",
+            data={
+                "csrf_token": csrf_token,
+                "campaign_id": str(campaign_id),
+                "prompt": "What does the note say about the dungeon?",
+                "attachment_ids": attachment_id,
+            },
+            headers={"Accept": "text/html"},
+        )
+        assert started.status_code == 303
+        run_url = started.headers["location"]
+        run_id_match = re.search(r"run_id=([0-9a-f-]+)", run_url)
+        assert run_id_match is not None
+        run_id = run_id_match.group(1)
+        await asyncio.sleep(0.35)
+        active = await client.get(f"/ask?run_id={run_id}", headers={"Accept": "text/html"})
+        assert "comparison baseline visible" in active.text
+        assert "attachments" in active.text.lower()
+        events = await client.get(f"/ask/runs/{run_id}/events", headers={"Accept": "text/html"})
+        assert events.status_code == 200
+        assert "completed" in events.text
+
+
 def test_browser_login_signed_session_csrf_and_logout(
     test_settings: Settings,
 ) -> None:
@@ -282,3 +353,10 @@ def test_model_settings_login_and_stream_shell(
 ) -> None:
     application, _, campaign_id = web_app(test_settings)
     asyncio.run(model_flow(application, campaign_id))
+
+
+def test_general_ask_workflow_and_comparison_baseline(
+    test_settings: Settings,
+) -> None:
+    application, _, campaign_id = web_app(test_settings)
+    asyncio.run(ask_flow(application, campaign_id))

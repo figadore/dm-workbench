@@ -77,7 +77,9 @@ def create_app(
     )
     resolved_dungeons = dungeon_studio or DungeonStudioService(resolved_preparation)
     resolved_campaigns = campaign_catalog or CampaignCatalog(database_engine)
-    resolved_model_workbench = model_workbench or ModelWorkbenchService()
+    resolved_model_workbench = model_workbench or ModelWorkbenchService(
+        asset_store=LocalAssetStore(resolved_settings.asset_root, resolved_settings.scratch_root)
+    )
     library_catalog = LibraryDocumentCatalog(database_engine)
     library_search = LibraryLexicalSearchService(database_engine)
     library_ingestion = LibraryIngestionService(

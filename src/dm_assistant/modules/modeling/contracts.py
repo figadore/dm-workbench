@@ -228,6 +228,19 @@ class DungeonIntentV1(ContractModel):
         return self
 
 
+class AskResponseV1(ContractModel):
+    """Strict typed answer payload for the general Ask workflow."""
+
+    answer: SummaryText
+    citation_ids: tuple[str, ...] = ()
+    official_rules: tuple[ShortText, ...] = ()
+    house_rule_overrides: tuple[ShortText, ...] = ()
+    unknowns: tuple[ShortText, ...] = ()
+    conflicts: tuple[ShortText, ...] = ()
+    attachment_ids: tuple[UUID, ...] = ()
+    comparison_summary: SummaryText | None = None
+
+
 def resolve_reasoning_level(effort: ReasoningEffort) -> ReasoningLevel:
     """Map a user-facing effort to the normalized gateway reasoning level."""
 
