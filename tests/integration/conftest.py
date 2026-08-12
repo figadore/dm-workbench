@@ -90,6 +90,9 @@ def _truncate_campaign_if_present(engine: Engine) -> None:
         campaign_entity_merge_history_exists = connection.scalar(
             text("SELECT to_regclass('public.campaign_entity_merge_history')")
         )
+        model_task_selection_exists = connection.scalar(
+            text("SELECT to_regclass('public.model_task_selection')")
+        )
         tables = []
         if campaign_exists is not None:
             tables.append("campaign")
@@ -107,5 +110,7 @@ def _truncate_campaign_if_present(engine: Engine) -> None:
             tables.append("campaign_entity_mention")
         if campaign_entity_merge_history_exists is not None:
             tables.append("campaign_entity_merge_history")
+        if model_task_selection_exists is not None:
+            tables.append("model_task_selection")
         if tables:
             connection.execute(text(f"TRUNCATE TABLE {', '.join(tables)} CASCADE"))

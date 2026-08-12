@@ -213,22 +213,31 @@ uv run --frozen dm model login-respond <login-id> <prompt-id>
 uv run --frozen dm model providers
 ```
 
-Repeat `login-status` until it reports `completed`, then use an exact model ID
-from `model providers`. Create an empty ownership workspace if needed and run
-the standalone prompt; this selects no campaign revision, corpus, rules profile,
-or retrieval context:
+Ordinarily the prompt command handles these defaults itself: it creates an
+empty `My Campaign` ownership workspace when none exists, uses the active
+campaign, reuses a saved task-specific provider/model/effort selection, starts
+and polls OAuth when login is required, generates and pins a seed, and persists
+the validated model-authored brief title. The normal command is therefore:
 
 ```bash
-uv run --frozen dm campaign create "Standalone Dungeons"
 uv run --frozen dm dungeon prompt \
-  "A flooded archive beneath a lighthouse" \
-  --campaign <workspace-id> \
-  --provider openai-codex \
-  --model <exact-model-id> \
-  --effort standard \
-  --seed 1842 \
-  --title "Flooded Archive"
+  "A flooded archive beneath a lighthouse"
 ```
+
+The first OAuth flow prints device-code instructions and resumes the original
+prompt after login completes. Provider/model/effort, campaign, seed, and title
+flags remain inspectable reproducibility overrides. Campaign roots can be
+created and switched without copying UUIDs into every command:
+
+```bash
+uv run --frozen dm campaign create "Main Campaign"
+uv run --frozen dm campaign use "Main Campaign"
+uv run --frozen dm campaign list
+```
+
+The standalone prompt selects no campaign revision, corpus, rules profile, or
+retrieval context yet; automatic bounded active-campaign grounding is a later
+explicit architecture update.
 
 Live OAuth/model checks are manual and opt-in. Verify the selected account and
 subscription permit the intended endpoint and workload. Automated checks use
@@ -243,7 +252,7 @@ npm --prefix model-gateway test
 
 ## Provider-Independent Dungeon Studio
 
-After migration, create the workspace root with `uv run --frozen dm campaign create "My Campaign"` (or the first-login web form), then log in at `http://127.0.0.1:8000/login` with `DM_API_TOKEN`. The signed browser session contains no API token; all browser writes require CSRF. Dungeon Studio can ingest a versioned `LayoutRequest` JSON, generate and validate exact geometry, inspect run/input/version lineage, compare/regenerate with locks, preview DM/player maps, create PDF/Roll20 exports, download assets, and explicitly approve preparation for play without a model gateway.
+After migration, the first prompt/list operation creates an empty `My Campaign` ownership root when needed; create or switch named roots with `dm campaign create` / `dm campaign use`. Then log in at `http://127.0.0.1:8000/login` with `DM_API_TOKEN`. The signed browser session contains no API token; all browser writes require CSRF. Dungeon Studio can ingest a versioned `LayoutRequest` JSON, generate and validate exact geometry, inspect run/input/version lineage, compare/regenerate with locks, preview DM/player maps, create PDF/Roll20 exports, download assets, and explicitly approve preparation for play without a model gateway.
 
 The same application workflow is available through authenticated `/api/dungeons` routes and CLI commands:
 

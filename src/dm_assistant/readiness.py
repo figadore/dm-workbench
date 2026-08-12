@@ -10,7 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 EXPECTED_POSTGRES_MAJOR = "16"
 EXPECTED_PGVECTOR_VERSION = "0.8.1"
-EXPECTED_SCHEMA_REVISION = "0007_campaign_knowledge_entities"
+EXPECTED_SCHEMA_REVISION = "0008_workbench_defaults"
 
 
 class ComponentName(StrEnum):

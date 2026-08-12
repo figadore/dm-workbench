@@ -6,6 +6,7 @@ from pathlib import Path
 from urllib.request import Request
 
 import pytest
+from sqlalchemy import Engine, text
 from typer.testing import CliRunner
 
 from dm_assistant.cli.main import app
@@ -105,8 +106,16 @@ def test_cli_generate_inspect_and_approve_use_shared_workflow(
     listed_campaigns = runner.invoke(app, ["campaign", "list"])
     assert listed_campaigns.exit_code == 0
     assert json.loads(listed_campaigns.output) == [
-        {"id": campaign_id, "name": "Synthetic CLI Campaign"}
+        {"active": True, "id": campaign_id, "name": "Synthetic CLI Campaign"}
     ]
+    second_campaign = runner.invoke(app, ["campaign", "create", "Second Workspace"])
+    assert second_campaign.exit_code == 0, second_campaign.output
+    second_id = json.loads(second_campaign.output)["id"]
+    switched = runner.invoke(app, ["campaign", "use", second_id])
+    assert switched.exit_code == 0, switched.output
+    assert json.loads(switched.output)["active"] is True
+    switched_back = runner.invoke(app, ["campaign", "use", campaign_id])
+    assert switched_back.exit_code == 0, switched_back.output
 
     generated = runner.invoke(
         app,
@@ -157,6 +166,7 @@ def test_cli_generate_inspect_and_approve_use_shared_workflow(
 
 def test_cli_prompt_uses_private_gateway_and_persists_package(
     postgres_url: str,
+    db_engine: Engine,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -215,28 +225,12 @@ def test_cli_prompt_uses_private_gateway_and_persists_package(
         raise AssertionError(f"unexpected gateway URL: {request.full_url}")
 
     monkeypatch.setattr("dm_assistant.adapters.model_gateway.urlopen", fake_urlopen)
-    created_campaign = runner.invoke(
-        app, ["campaign", "create", "Standalone Dungeon Workspace"]
-    )
-    assert created_campaign.exit_code == 0, created_campaign.output
-    campaign_id = json.loads(created_campaign.output)["id"]
-
     prompted = runner.invoke(
         app,
         [
             "dungeon",
             "prompt",
             "A flooded archive beneath a lighthouse.",
-            "--campaign",
-            campaign_id,
-            "--provider",
-            "faux",
-            "--model",
-            "faux-deterministic-v1",
-            "--seed",
-            "1842",
-            "--title",
-            "Prompted Archive",
             "--constraint",
             "flooded",
         ],
@@ -245,6 +239,16 @@ def test_cli_prompt_uses_private_gateway_and_persists_package(
     assert prompted.exit_code == 0, prompted.output
     result = json.loads(prompted.output)
     assert result["success"] is True
+    assert result["resolved"]["provider"] == "faux"
+    assert result["resolved"]["model"] == "faux-deterministic-v1"
+    assert result["resolved"]["title"] == package.brief.title
+    assert isinstance(result["resolved"]["seed"], int)
+    campaigns = runner.invoke(app, ["campaign", "list"])
+    assert campaigns.exit_code == 0, campaigns.output
+    campaign_list = json.loads(campaigns.output)
+    assert campaign_list[0]["active"] is True
+    assert campaign_list[0]["name"] == "My Campaign"
+    campaign_id = campaign_list[0]["id"]
     inspected = runner.invoke(
         app,
         [
@@ -256,4 +260,15 @@ def test_cli_prompt_uses_private_gateway_and_persists_package(
         ],
     )
     assert inspected.exit_code == 0, inspected.output
-    assert json.loads(inspected.output)["versions"] == [result["artifact_version_id"]]
+    detail = json.loads(inspected.output)
+    assert detail["versions"] == [result["artifact_version_id"]]
+    assert detail["title"] == package.brief.title
+    with db_engine.connect() as connection:
+        selection = connection.execute(
+            text(
+                "SELECT provider_id, model_id, effort "
+                "FROM model_task_selection "
+                "WHERE task_name = 'dungeon_generation_intent_v1'"
+            )
+        ).one()
+    assert tuple(selection) == ("faux", "faux-deterministic-v1", "standard")

@@ -1061,6 +1061,19 @@ Keep the stable P7-10 task ID, but deliver it as two ordered, independently test
 - A running Workbench can list the private gateway catalog, coordinate provider login without exposing credentials, select a compatible model/effort, and create an inspectable draft artifact through `dm dungeon prompt`.
 - Automated tests prove the same CLI/application path with a scripted faux gateway and PostgreSQL, while live-provider checks remain manual and opt-in.
 
+#### P7-10a.1 — Default resolution and first-run onboarding
+
+- Add one inspectable active campaign selection. The first campaign becomes active; if a prompt runs before any campaign exists, create one empty ownership campaign. Allow `dm campaign use` and make `--campaign` an optional override across Dungeon Studio CLI commands.
+- Persist a non-secret task-specific provider/model/effort default. If no compatible selection exists, choose through a versioned capability/capacity policy; exclude the faux provider outside tests.
+- When the selected/default provider is unauthenticated, start and poll gateway-owned OAuth inline, display device-code events, answer short-lived prompts without shell-history exposure, then resume the original dungeon request.
+- Make title and seed optional. Persist the validated model-authored `DungeonBrief.title`, generate and pin a seed when absent, and retain all explicit flags as reproducibility/debug overrides.
+- Keep defaults inspectable and code-resolved. A prompt/model can never select another campaign, broaden visibility, or silently enable campaign grounding.
+
+**P7-10a.1 done when**
+
+- On an empty migrated Workbench, `dm dungeon prompt "..."` can bootstrap its ownership campaign, complete login when required, select and save a compatible model, derive a title, pin a generated seed, and persist a draft without UUID/model/seed/title flags.
+- Switching the active campaign changes omitted-scope resolution; explicit `--campaign`, `--provider`, `--model`, `--effort`, `--seed`, and `--title` remain available and are pinned in lineage.
+
 #### P7-10b — Web streaming and final UX/eval gate
 
 - Add the authenticated Dungeon Studio prompt form over the P7-10a application service, with real provider/model/effort selection, OAuth/device-code progress, streamed/cancellable/reconnectable durable run status, and comparison against hand-authored or prior versions. Campaign-grounded generation is an explicit later mode, not the default.
@@ -1072,7 +1085,7 @@ Keep the stable P7-10 task ID, but deliver it as two ordered, independently test
 Example flow:
 
 ```text
-dm dungeon prompt "A flooded archive beneath a lighthouse" --campaign <workspace-id> --seed 1842
+dm dungeon prompt "A flooded archive beneath a lighthouse"
 dm dungeon generate --brief crypt.md --seed 1842
 dm dungeon validate <version-id>
 dm dungeon render <version-id> --variants dm,player

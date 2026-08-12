@@ -213,7 +213,7 @@ class DungeonPromptService:
         return self._dungeon_studio.create_prompted(
             CreatePromptedDungeonWorkflow(
                 campaign_id=command.campaign_id,
-                title=command.title,
+                title=command.title or request.brief.title,
                 layout_request=request,
                 created_by=command.created_by,
                 context=context,

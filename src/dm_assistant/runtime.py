@@ -17,6 +17,7 @@ from dm_assistant.modules.library.retrieval import LibraryLexicalSearchService
 from dm_assistant.modules.library.service import LibraryIngestionService
 from dm_assistant.modules.library.snapshots import CorpusSnapshotService
 from dm_assistant.modules.library.workflows import LibrarySourceWorkflow
+from dm_assistant.modules.modeling import ModelTaskSelectionStore
 from dm_assistant.modules.preparation import PreparationService
 from dm_assistant.orchestration.dungeons import (
     DungeonPromptService,
@@ -33,6 +34,7 @@ class WorkbenchRuntime:
     dungeons: DungeonStudioService
     model_gateway: PiGatewayClient | None
     dungeon_prompts: DungeonPromptService | None
+    model_selections: ModelTaskSelectionStore
     library_catalog: LibraryDocumentCatalog
     library_ingestion: LibraryIngestionService
     library_search: LibraryLexicalSearchService
@@ -69,6 +71,7 @@ def workbench_runtime(settings: Settings | None = None) -> Iterator[WorkbenchRun
             dungeons=dungeons,
             model_gateway=model_gateway,
             dungeon_prompts=dungeon_prompts,
+            model_selections=ModelTaskSelectionStore(engine),
             library_catalog=LibraryDocumentCatalog(engine),
             library_ingestion=library_ingestion,
             library_search=LibraryLexicalSearchService(engine),

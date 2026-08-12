@@ -341,6 +341,10 @@ metadata JSONB
 
 The head pointer advances in the same transaction that commits a change set. Defaults can be overridden by an authorized request and the resolved scope is always included in query/audit records.
 
+P7-10a.1 adds an inspectable single-DM Workbench selection without making preparation ownership nullable: exactly zero or one campaign row is marked active by a partial unique index. The first created campaign becomes active, and a first prompt with no campaigns lazily creates an empty `My Campaign` ownership root. `dm campaign use` switches the marker transactionally; explicit campaign IDs remain overrides and every run pins the resolved campaign. This active marker is a convenience scope default, not campaign canon and not permission for a model to choose another campaign.
+
+The same slice stores a non-secret task-specific provider/model/effort selection in PostgreSQL. Code resolves it against the live private-gateway catalog, falls back through a versioned compatibility/capacity policy, and coordinates gateway-owned OAuth when needed. Access/refresh tokens remain only in the gateway credential store. Generated seeds and model-authored validated brief titles are defaults, while explicit values remain reproducibility overrides. These conveniences do not implicitly enable source retrieval: the standalone dungeon profile still carries no campaign revision, corpus snapshot, rules profile, or citations until the grounded-context policy is implemented and reviewed separately.
+
 ## Entities
 
 An entity represents something that can participate in relationships, perspectives, or events.

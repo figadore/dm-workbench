@@ -99,8 +99,12 @@ def create_web_router(
         run_id: uuid.UUID | None = None,
     ) -> HTMLResponse:
         available = campaigns.list_campaigns()
-        selected = campaign_id or (available[0].id if available else None)
-        artifacts = preparation.list_artifacts(selected) if selected is not None else ()
+        active = next((item for item in available if item.active), None)
+        if active is None:
+            active = campaigns.ensure_active_campaign()
+            available = campaigns.list_campaigns()
+        selected = campaign_id or active.id
+        artifacts = preparation.list_artifacts(selected)
         login = resolved_model_workbench.get_login(login_id) if login_id is not None else None
         active_run = resolved_model_workbench.get_run(run_id) if run_id is not None else None
         return _template(

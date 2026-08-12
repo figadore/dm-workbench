@@ -22,6 +22,10 @@ from dm_assistant.modules.modeling.contracts import (
     resolve_run_profile,
     supported_from_reasoning,
 )
+from dm_assistant.modules.modeling.selections import (
+    ModelTaskSelectionStore,
+    TaskModelSelection,
+)
 from dm_assistant.modules.modeling.workbench import (
     LoginEvent,
     LoginSession,
@@ -42,11 +46,13 @@ __all__ = [
     "ModelEndpointProfile",
     "ModelRunInput",
     "ModelRunRecord",
+    "ModelTaskSelectionStore",
     "PromptMessage",
     "PromptText",
     "ReasoningLevel",
     "ReasoningEffort",
     "ResolvedModelRunProfile",
+    "TaskModelSelection",
     "TaskProfile",
     "ToolCall",
     "ToolInvocationRecord",

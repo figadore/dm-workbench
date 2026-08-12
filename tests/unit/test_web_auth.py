@@ -22,7 +22,11 @@ def web_app(test_settings: Settings) -> tuple[FastAPI, MagicMock, uuid.UUID]:
     campaign_id = uuid.uuid4()
     campaigns = MagicMock(spec=CampaignCatalog)
     campaigns.list_campaigns.return_value = (
-        CampaignSummary(id=campaign_id, name="Synthetic <script>alert(1)</script>"),
+        CampaignSummary(
+            id=campaign_id,
+            name="Synthetic <script>alert(1)</script>",
+            active=True,
+        ),
     )
     preparation = MagicMock(spec=PreparationService)
     preparation.list_artifacts.return_value = ()
@@ -168,7 +172,9 @@ async def model_flow(
             headers={"Accept": "text/html"},
         )
         assert login.status_code == 303
-        login_page = await client.get(login.headers["location"], headers={"Accept": "text/html"})
+        login_page = await client.get(
+            login.headers["location"], headers={"Accept": "text/html"}
+        )
         assert "ABCD-1234" in login_page.text
 
         await client.post(
@@ -239,9 +245,13 @@ async def model_flow(
         assert second_run_match is not None
         second_run_id = second_run_match.group(1)
         await asyncio.sleep(0.35)
-        completed_page = await client.get(second_run_url, headers={"Accept": "text/html"})
+        completed_page = await client.get(
+            second_run_url, headers={"Accept": "text/html"}
+        )
         assert "completed" in completed_page.text
-        events = await client.get(f"/modeling/runs/{second_run_id}/events", headers={"Accept": "text/html"})
+        events = await client.get(
+            f"/modeling/runs/{second_run_id}/events", headers={"Accept": "text/html"}
+        )
         assert events.status_code == 200
         assert "completed" in events.text
 
@@ -309,10 +319,14 @@ async def ask_flow(
         assert run_id_match is not None
         run_id = run_id_match.group(1)
         await asyncio.sleep(0.35)
-        active = await client.get(f"/ask?run_id={run_id}", headers={"Accept": "text/html"})
+        active = await client.get(
+            f"/ask?run_id={run_id}", headers={"Accept": "text/html"}
+        )
         assert "comparison baseline visible" in active.text
         assert "attachments" in active.text.lower()
-        events = await client.get(f"/ask/runs/{run_id}/events", headers={"Accept": "text/html"})
+        events = await client.get(
+            f"/ask/runs/{run_id}/events", headers={"Accept": "text/html"}
+        )
         assert events.status_code == 200
         assert "completed" in events.text
 

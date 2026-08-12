@@ -43,7 +43,7 @@ class PromptDungeonWorkflow(WorkflowModel):
     """DM request for standalone model-assisted dungeon generation."""
 
     campaign_id: UUID
-    title: str = Field(min_length=1, max_length=200)
+    title: str | None = Field(default=None, min_length=1, max_length=200)
     prompt: str = Field(min_length=1, max_length=4_000)
     seed: int
     created_by: str = Field(min_length=1, max_length=200)
