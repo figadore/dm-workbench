@@ -3,8 +3,11 @@
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
+from dm_assistant.modules.modeling import DungeonGenerationIntentV1, ModelRunRecord
+from dm_assistant.modules.preparation import GenerationContextPin, ToolRunPin
+from dm_assistant.modules.scope import TaskScope, TaskType
 from dm_dungeon import DungeonPackage, LayoutRequest
 
 
@@ -12,12 +15,21 @@ class WorkflowModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=False)
 
 
+class PromptedDungeonModelLineage(WorkflowModel):
+    """One validated model response retained for prompt replay and review."""
+
+    model_run_id: UUID
+    model_run: ModelRunRecord
+    intent: DungeonGenerationIntentV1
+
+
 class DungeonStudioSpecification(WorkflowModel):
-    """Immutable persisted input plus exact deterministic output."""
+    """Immutable persisted input plus exact deterministic output and lineage."""
 
     schema_version: Literal["1.0.0"]
     layout_request: LayoutRequest
     package: DungeonPackage
+    model_lineage: tuple[PromptedDungeonModelLineage, ...] = ()
 
 
 class CreateDungeonWorkflow(WorkflowModel):
@@ -25,6 +37,43 @@ class CreateDungeonWorkflow(WorkflowModel):
     title: str = Field(min_length=1, max_length=200)
     layout_request: LayoutRequest
     created_by: str = Field(min_length=1, max_length=200)
+
+
+class PromptDungeonWorkflow(WorkflowModel):
+    """DM request for standalone model-assisted dungeon generation."""
+
+    campaign_id: UUID
+    title: str = Field(min_length=1, max_length=200)
+    prompt: str = Field(min_length=1, max_length=4_000)
+    seed: int
+    created_by: str = Field(min_length=1, max_length=200)
+    scope: TaskScope
+    requested_constraints: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def require_standalone_scope(self) -> "PromptDungeonWorkflow":
+        if self.scope.task_type is not TaskType.STANDALONE_DUNGEON:
+            raise ValueError(
+                "prompted dungeon workflow requires standalone_dungeon scope"
+            )
+        if self.scope.grounding_enabled:
+            raise ValueError(
+                "standalone prompted dungeon workflow cannot use grounding"
+            )
+        return self
+
+
+class CreatePromptedDungeonWorkflow(WorkflowModel):
+    """Validated model intent ready for deterministic generation and persistence."""
+
+    campaign_id: UUID
+    title: str = Field(min_length=1, max_length=200)
+    layout_request: LayoutRequest
+    created_by: str = Field(min_length=1, max_length=200)
+    context: GenerationContextPin
+    model_task_profile_id: UUID
+    model_lineage: tuple[PromptedDungeonModelLineage, ...] = Field(min_length=1)
+    tool_runs: tuple[ToolRunPin, ...] = ()
 
 
 class RegenerateDungeonWorkflow(WorkflowModel):

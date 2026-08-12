@@ -78,6 +78,16 @@ model-gateway           # private Node process using pinned @earendil-works/pi-a
 postgres + pgvector
 ```
 
+The contributor inner loop and installed topology deliberately differ without
+changing application behavior. Contributors run Python/Node natively with only
+PostgreSQL in Compose for fast reloads and focused AI-assisted work. Local
+full-stack validation and Proxmox installation use the same Compose topology:
+separate non-root Workbench, gateway, and PostgreSQL containers; only the
+authenticated Workbench is host-published; the gateway uses private service DNS
+and a dedicated writable credential volume. Environment-specific URL and
+mount-path configuration is the only runtime distinction; the Python/gateway
+credential and authorization boundaries do not change.
+
 The 2-vCPU/4-GB baseline assumes hosted chat inference and lexical retrieval. A small local CPU embedding model may still fit, but P2 must benchmark model/runtime memory and batch behavior; plan roughly 6–8 GB if the selected embedding runtime must stay resident beside PostgreSQL and both application processes. Local chat-model serving requires separate capacity planning.
 
 The PostgreSQL data volume should live on reliable local/block storage rather than a network filesystem where possible. Campaign and rules Markdown can be mounted read-only for ingestion. A separate platform-owned writable asset volume stores content-addressed prompt attachments and generated SVG/PNG/PDF/map-package files; temporary upload/generation files use another scratch path and are never mistaken for approved assets.

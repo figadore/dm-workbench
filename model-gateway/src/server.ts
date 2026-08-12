@@ -170,13 +170,28 @@ function writePiEvent(response: ServerResponse, event: { readonly type: string; 
     }
     case "done": {
       const message = event.message as { usage: unknown; stopReason: unknown };
-      writeEvent(response, "usage", message.usage);
+      writeEvent(response, "usage", normalizeUsage(message.usage));
       writeEvent(response, "completion", { reason: message.stopReason });
       return;
     }
     case "error":
       writeEvent(response, "error", { code: "provider_error", message: "model stream failed" });
   }
+}
+
+function normalizeUsage(value: unknown): { input_tokens: number; output_tokens: number } {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return { input_tokens: 0, output_tokens: 0 };
+  }
+  const usage = value as Record<string, unknown>;
+  return {
+    input_tokens: nonNegativeInteger(usage.inputTokens ?? usage.input_tokens),
+    output_tokens: nonNegativeInteger(usage.outputTokens ?? usage.output_tokens),
+  };
+}
+
+function nonNegativeInteger(value: unknown): number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 0;
 }
 
 function writeSafeError(response: ServerResponse, error: unknown): void {

@@ -18,20 +18,24 @@ from dm_assistant.modules.preparation import (
     CreateArtifact,
     CreateArtifactVersion,
     FinishGenerationRun,
+    GenerationContextPin,
     GenerationStatus,
     PreparationService,
     StartGenerationRun,
+    ToolRunPin,
     TransitionArtifact,
     VisibilityPolicy,
     canonical_json_sha256,
 )
 from dm_assistant.orchestration.dungeons.contracts import (
     CreateDungeonWorkflow,
+    CreatePromptedDungeonWorkflow,
     DungeonStudioDetail,
     DungeonStudioSpecification,
     DungeonVersionComparison,
     DungeonWorkflowResult,
     ExportDungeonWorkflow,
+    PromptedDungeonModelLineage,
     RegenerateDungeonWorkflow,
 )
 from dm_dungeon import (
@@ -96,6 +100,35 @@ class DungeonStudioService:
             request=command.layout_request,
             change_summary="Create deterministic dungeon from hand-authored intent.",
             created_by=command.created_by,
+        )
+
+    def create_prompted(
+        self,
+        command: CreatePromptedDungeonWorkflow,
+    ) -> DungeonWorkflowResult:
+        """Persist a model-authored intent through the deterministic Studio path."""
+
+        artifact = self._preparation.create_artifact(
+            CreateArtifact(
+                campaign_id=command.campaign_id,
+                artifact_type=ArtifactType.DUNGEON,
+                title=command.title,
+                visibility_policy=VisibilityPolicy.DM_ONLY,
+                created_by=command.created_by,
+            )
+        )
+        return self._generate_version(
+            campaign_id=command.campaign_id,
+            artifact_id=artifact.id,
+            parent_version_id=None,
+            request=command.layout_request,
+            change_summary="Create deterministic dungeon from model-authored intent.",
+            created_by=command.created_by,
+            generation_kind="prompted_dungeon_layout",
+            context=command.context,
+            model_task_profile_id=command.model_task_profile_id,
+            model_lineage=command.model_lineage,
+            tool_runs=command.tool_runs,
         )
 
     def regenerate(
@@ -226,25 +259,45 @@ class DungeonStudioService:
         request: LayoutRequest,
         change_summary: str,
         created_by: str,
+        generation_kind: str = "dungeon_layout",
+        context: GenerationContextPin | None = None,
+        model_task_profile_id: uuid.UUID | None = None,
+        model_lineage: tuple[PromptedDungeonModelLineage, ...] = (),
+        tool_runs: tuple[ToolRunPin, ...] = (),
     ) -> DungeonWorkflowResult:
         request_document = json.loads(to_canonical_json(request))
+        input_scope: dict[str, JsonValue] = {
+            "artifact_id": str(artifact_id),
+            "layout_request_sha256": canonical_json_sha256(request_document),
+            "package_id": request.package_id,
+        }
+        schema_versions: dict[str, str] = {
+            "dungeon_brief": request.brief.schema_version,
+            "dungeon_topology": request.topology.schema_version,
+            "layout_request": request.schema_version,
+            "dungeon_package": "1.0.0",
+            "dungeon_studio": _STUDIO_SCHEMA_VERSION,
+        }
+        if model_lineage:
+            input_scope["model_lineage_sha256"] = canonical_json_sha256(
+                {
+                    "model_lineage": [
+                        item.model_dump(mode="json") for item in model_lineage
+                    ]
+                }
+            )
+            schema_versions["dungeon_generation_intent"] = model_lineage[
+                -1
+            ].intent.schema_version
+            schema_versions["model_run"] = "1.0.0"
         run = self._preparation.start_generation_run(
             StartGenerationRun(
                 campaign_id=campaign_id,
-                generation_kind="dungeon_layout",
+                generation_kind=generation_kind,
                 seed=request.seed,
-                input_scope={
-                    "artifact_id": str(artifact_id),
-                    "layout_request_sha256": canonical_json_sha256(request_document),
-                    "package_id": request.package_id,
-                },
-                schema_versions={
-                    "dungeon_brief": request.brief.schema_version,
-                    "dungeon_topology": request.topology.schema_version,
-                    "layout_request": request.schema_version,
-                    "dungeon_package": "1.0.0",
-                    "dungeon_studio": _STUDIO_SCHEMA_VERSION,
-                },
+                input_scope=input_scope,
+                context=context,
+                schema_versions=schema_versions,
                 generator_versions={
                     "dungeon_kernel": dm_dungeon.__version__,
                     "layout": request.generator_version,
@@ -255,6 +308,9 @@ class DungeonStudioService:
                     "pdf": "pdf-v1",
                     "roll20": "roll20-v1",
                 },
+                model_task_profile_id=model_task_profile_id,
+                model_run_ids=tuple(item.model_run_id for item in model_lineage),
+                tool_runs=tool_runs,
             )
         )
         layout = generate_layout(request)
@@ -347,6 +403,7 @@ class DungeonStudioService:
             schema_version=_STUDIO_SCHEMA_VERSION,
             layout_request=request,
             package=package,
+            model_lineage=model_lineage,
         )
         self._preparation.finish_generation_run(
             FinishGenerationRun(

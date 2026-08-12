@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import io
 import threading
 import time
 import uuid
@@ -12,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import BaseModel, ConfigDict, Field
 
 from dm_assistant.adapters.assets import AssetStore, StoredBlob
 from dm_assistant.modules.modeling import (
@@ -33,6 +32,7 @@ from dm_assistant.modules.modeling import (
 )
 from dm_assistant.orchestration.modeling import (
     GatewayCompletion,
+    GatewayToolSchema,
     ModelRunAbstained,
     ModelTaskRunner,
     ServerTool,
@@ -354,7 +354,8 @@ class ModelWorkbenchService:
                 login_id=login.login_id,
                 provider_id=login.provider_id,
                 status="completed",
-                events=login.events + (LoginEvent(type="complete", message="Login complete."),),
+                events=login.events
+                + (LoginEvent(type="complete", message="Login complete."),),
             )
             self._logins[login_id] = completed
             return completed
@@ -404,7 +405,9 @@ class ModelWorkbenchService:
         )
         with self._lock:
             self._runs[run_state.run_id] = run_state
-        thread = threading.Thread(target=self._run_worker, args=(run_state.run_id,), daemon=True)
+        thread = threading.Thread(
+            target=self._run_worker, args=(run_state.run_id,), daemon=True
+        )
         self._threads[run_state.run_id] = thread
         thread.start()
         return self.get_run(run_state.run_id)
@@ -412,7 +415,10 @@ class ModelWorkbenchService:
     def list_attachments(self) -> tuple[AskAttachmentRecord, ...]:
         with self._lock:
             return tuple(
-                sorted(self._attachments.values(), key=lambda attachment: attachment.created_at)
+                sorted(
+                    self._attachments.values(),
+                    key=lambda attachment: attachment.created_at,
+                )
             )
 
     def get_attachment(self, attachment_id: uuid.UUID) -> AskAttachmentRecord | None:
@@ -465,7 +471,9 @@ class ModelWorkbenchService:
             self._attachments[record.attachment_id] = record
         return record
 
-    def ask(self, *, prompt: str, attachment_ids: tuple[uuid.UUID, ...] = ()) -> AskRunSnapshot:
+    def ask(
+        self, *, prompt: str, attachment_ids: tuple[uuid.UUID, ...] = ()
+    ) -> AskRunSnapshot:
         selection = self.selection()
         with self._lock:
             attachments = tuple(
@@ -500,7 +508,11 @@ class ModelWorkbenchService:
     def list_ask_runs(self) -> tuple[AskRunSnapshot, ...]:
         with self._lock:
             runs = tuple(self._ask_runs.values())
-        return tuple(sorted((self._ask_snapshot(run) for run in runs), key=lambda item: item.run_id))
+        return tuple(
+            sorted(
+                (self._ask_snapshot(run) for run in runs), key=lambda item: item.run_id
+            )
+        )
 
     def cancel_ask_run(self, run_id: uuid.UUID) -> AskRunSnapshot:
         with self._lock:
@@ -511,7 +523,9 @@ class ModelWorkbenchService:
                 return self._ask_snapshot(run)
             run.cancelled.set()
             run.status = "cancelled"
-            run.events.append(RunEvent(type="cancelled", message="Ask request cancelled."))
+            run.events.append(
+                RunEvent(type="cancelled", message="Ask request cancelled.")
+            )
             return self._ask_snapshot(run)
 
     def stream_ask_run_events(self, run_id: uuid.UUID) -> Iterable[RunEvent]:
@@ -585,7 +599,9 @@ class ModelWorkbenchService:
             run.resolved_profile = record.resolved_profile
             run.events.append(RunEvent(type="completed", message="Run completed."))
 
-    def _execute_bounded_run(self, run_id: uuid.UUID) -> tuple[DungeonIntentV1, ModelRunRecord]:
+    def _execute_bounded_run(
+        self, run_id: uuid.UUID
+    ) -> tuple[DungeonIntentV1, ModelRunRecord]:
         with self._lock:
             run = self._runs[run_id]
             prompt = run.prompt
@@ -604,6 +620,7 @@ class ModelWorkbenchService:
         client = _SyntheticGatewayClient(prompt=prompt)
         tool = ServerTool(
             name="set_brief",
+            description="Validate a synthetic dungeon brief.",
             input_schema=_BriefInput,
             handler=lambda _: build_dungeon_intent_tool_result(
                 tool_name="set_brief",
@@ -621,7 +638,9 @@ class ModelWorkbenchService:
             tools={tool.name: tool},
         )
 
-    def _ask_run_worker(self, run_id: uuid.UUID, attachments: tuple[AskAttachmentRecord, ...]) -> None:
+    def _ask_run_worker(
+        self, run_id: uuid.UUID, attachments: tuple[AskAttachmentRecord, ...]
+    ) -> None:
         time.sleep(0.2)
         with self._lock:
             run = self._ask_runs.get(run_id)
@@ -718,13 +737,17 @@ class ModelWorkbenchService:
                 f"{response.answer} / {baseline_answer.answer}"
             ),
         )
-        response = response.model_copy(update={"comparison_summary": comparison.summary})
+        response = response.model_copy(
+            update={"comparison_summary": comparison.summary}
+        )
         runner = ModelTaskRunner(_SingleTurnGatewayClient(response))
         primary_run, record = runner.run(
             profile=primary_profile,
             run_input=ModelRunInput(
                 messages=(PromptMessage(role="user", content=prompt),),
-                authorized_citation_ids=tuple(str(item.attachment_id) for item in attachments),
+                authorized_citation_ids=tuple(
+                    str(item.attachment_id) for item in attachments
+                ),
             ),
             output_schema=AskResponseV1,
             tools={},
@@ -771,9 +794,7 @@ class ModelWorkbenchService:
         comparison_summary: str | None,
     ) -> AskResponseV1:
         attachment_labels = ", ".join(str(item) for item in attachment_ids) or "none"
-        answer = (
-            f"{model_id} answer for: {prompt}. Attachments: {attachment_labels}."
-        )
+        answer = f"{model_id} answer for: {prompt}. Attachments: {attachment_labels}."
         if comparison_summary is not None:
             answer = f"{answer} {comparison_summary}"
         return AskResponseV1(
@@ -804,8 +825,9 @@ class _SyntheticGatewayClient:
         profile: ResolvedModelRunProfile,
         messages: tuple[PromptMessage, ...],
         allowed_tools: tuple[str, ...],
+        tool_schemas: tuple[GatewayToolSchema, ...],
     ) -> GatewayCompletion:
-        del profile, allowed_tools
+        del profile, allowed_tools, tool_schemas
         self._calls += 1
         if self._calls == 1:
             return GatewayCompletion(
@@ -843,8 +865,9 @@ class _SingleTurnGatewayClient:
         profile: ResolvedModelRunProfile,
         messages: tuple[PromptMessage, ...],
         allowed_tools: tuple[str, ...],
+        tool_schemas: tuple[GatewayToolSchema, ...],
     ) -> GatewayCompletion:
-        del profile, messages, allowed_tools
+        del profile, messages, allowed_tools, tool_schemas
         self._calls += 1
         if self._calls > 1:
             return GatewayCompletion(

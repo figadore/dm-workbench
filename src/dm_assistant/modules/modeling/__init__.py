@@ -1,16 +1,18 @@
 """Model/task profile contracts for bounded gateway runs."""
 
 from dm_assistant.modules.modeling.contracts import (
-    DungeonIntentV1,
     AskResponseV1,
+    DungeonGenerationIntentV1,
+    DungeonIntentV1,
     GatewayModelCatalogEntry,
     GatewayModelKey,
     ModelEndpointProfile,
     ModelRunInput,
     ModelRunRecord,
     PromptMessage,
-    ReasoningLevel,
+    PromptText,
     ReasoningEffort,
+    ReasoningLevel,
     ResolvedModelRunProfile,
     TaskProfile,
     ToolCall,
@@ -31,14 +33,16 @@ from dm_assistant.modules.modeling.workbench import (
 )
 
 __all__ = [
-    "DungeonIntentV1",
     "AskResponseV1",
+    "DungeonGenerationIntentV1",
+    "DungeonIntentV1",
     "GatewayModelCatalogEntry",
     "GatewayModelKey",
     "ModelEndpointProfile",
     "ModelRunInput",
     "ModelRunRecord",
     "PromptMessage",
+    "PromptText",
     "ReasoningLevel",
     "ReasoningEffort",
     "ResolvedModelRunProfile",

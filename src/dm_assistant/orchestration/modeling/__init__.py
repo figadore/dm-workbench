@@ -3,6 +3,7 @@
 from dm_assistant.orchestration.modeling.service import (
     GatewayClient,
     GatewayCompletion,
+    GatewayToolSchema,
     ModelRunAbstained,
     ModelTaskRunner,
     ServerTool,
@@ -12,6 +13,7 @@ from dm_assistant.orchestration.modeling.service import (
 __all__ = [
     "GatewayClient",
     "GatewayCompletion",
+    "GatewayToolSchema",
     "ModelRunAbstained",
     "ModelTaskRunner",
     "ServerTool",

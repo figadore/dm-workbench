@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
+import json
+import time
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
-import json
 from typing import Literal, Protocol, TypeVar, cast
 
 from pydantic import BaseModel, ConfigDict, JsonValue, ValidationError
 
 from dm_assistant.modules.modeling import (
-    DungeonIntentV1,
     ModelRunInput,
     ModelRunRecord,
     PromptMessage,
@@ -22,7 +22,6 @@ from dm_assistant.modules.modeling import (
 )
 
 OutputModel = TypeVar("OutputModel", bound=BaseModel)
-ToolInputModel = TypeVar("ToolInputModel", bound=BaseModel)
 
 
 class GatewayCompletion(BaseModel):
@@ -36,6 +35,16 @@ class GatewayCompletion(BaseModel):
     output_tokens: int = 0
 
 
+class GatewayToolSchema(BaseModel):
+    """One model-visible schema generated from a server-owned tool contract."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    name: str
+    description: str
+    parameters: dict[str, JsonValue]
+
+
 class GatewayClient(Protocol):
     """Minimal gateway client used by the bounded prompt loop."""
 
@@ -45,6 +54,7 @@ class GatewayClient(Protocol):
         profile: ResolvedModelRunProfile,
         messages: tuple[PromptMessage, ...],
         allowed_tools: tuple[str, ...],
+        tool_schemas: tuple[GatewayToolSchema, ...],
     ) -> GatewayCompletion: ...
 
 
@@ -53,8 +63,21 @@ class ServerTool:
     """Server-owned tool schema plus deterministic application handler."""
 
     name: str
-    input_schema: type[ToolInputModel]
-    handler: Callable[[ToolInputModel], ToolResult]
+    description: str
+    input_schema: type[BaseModel]
+    handler: Callable[[BaseModel], ToolResult]
+
+    def gateway_schema(self) -> GatewayToolSchema:
+        """Expose only the versioned input JSON Schema to the gateway."""
+
+        document = json.loads(json.dumps(self.input_schema.model_json_schema()))
+        return GatewayToolSchema.model_validate(
+            {
+                "name": self.name,
+                "description": self.description,
+                "parameters": document,
+            }
+        )
 
 
 class ModelRunAbstained(RuntimeError):
@@ -81,26 +104,47 @@ class ModelTaskRunner:
         total_input_tokens = 0
         total_output_tokens = 0
         turns = 0
+        deadline = time.monotonic() + profile.time_budget_seconds
 
         while True:
+            if time.monotonic() >= deadline:
+                raise ModelRunAbstained("time budget exhausted before a final answer")
             if turns >= profile.turn_budget:
                 raise ModelRunAbstained("turn budget exhausted before a final answer")
+            unknown_tools = set(profile.allowed_tools) - set(tools)
+            if unknown_tools:
+                raise ValueError(
+                    "task profile allows unregistered tools: "
+                    + ", ".join(sorted(unknown_tools))
+                )
             completion = self._client.complete(
                 profile=profile,
                 messages=messages,
                 allowed_tools=profile.allowed_tools,
+                tool_schemas=tuple(
+                    tools[name].gateway_schema() for name in profile.allowed_tools
+                ),
             )
             turns += 1
             total_input_tokens += completion.input_tokens
             total_output_tokens += completion.output_tokens
-            _check_token_budget(profile.token_budget, total_input_tokens, total_output_tokens)
+            _check_token_budget(
+                profile.token_budget, total_input_tokens, total_output_tokens
+            )
+            if time.monotonic() >= deadline:
+                raise ModelRunAbstained("time budget exhausted before a final answer")
 
             if completion.tool_calls:
-                if len(tool_invocations) + len(completion.tool_calls) > profile.tool_budget:
+                if (
+                    len(tool_invocations) + len(completion.tool_calls)
+                    > profile.tool_budget
+                ):
                     raise ModelRunAbstained("tool budget exhausted before completion")
                 for call in completion.tool_calls:
                     if call.tool_name not in profile.allowed_tools:
-                        raise ValueError(f"tool {call.tool_name} is not allowed for this task")
+                        raise ValueError(
+                            f"tool {call.tool_name} is not allowed for this task"
+                        )
                     tool = tools.get(call.tool_name)
                     if tool is None:
                         raise ValueError(f"tool {call.tool_name} is not registered")
@@ -120,9 +164,10 @@ class ModelTaskRunner:
                     )
                     messages = messages + (
                         PromptMessage(
-                            role="assistant",
+                            role="user",
                             content=json.dumps(
                                 {
+                                    "kind": "server_tool_result",
                                     "tool_call_id": call.call_id,
                                     "tool_name": call.tool_name,
                                     "result": result.model_dump(mode="json"),
@@ -138,8 +183,12 @@ class ModelTaskRunner:
                 raise ModelRunAbstained("the model returned no answer content")
 
             final = output_schema.model_validate_json(completion.content)
-            if hasattr(final, "citation_ids"):
-                citation_ids = tuple(getattr(final, "citation_ids"))
+            output_payload = final.model_dump(mode="json")
+            citation_value = output_payload.get("citation_ids")
+            if isinstance(citation_value, list) and all(
+                isinstance(item, str) for item in citation_value
+            ):
+                citation_ids = tuple(citation_value)
                 if profile.require_citation_ids and not citation_ids:
                     raise ModelRunAbstained("the task requires citation-backed answers")
                 if profile.require_authorized_citations:
@@ -150,16 +199,21 @@ class ModelTaskRunner:
                         run_input.authorized_citation_ids,
                         require_authorized=True,
                     )
-                if getattr(final, "abstain_reason", None):
+                abstain_value = output_payload.get("abstain_reason")
+                abstain_reason = (
+                    abstain_value if isinstance(abstain_value, str) else None
+                )
+                if abstain_reason:
                     return self._finish_run(
                         started_at=started_at,
                         profile=profile,
                         run_input=run_input,
                         output=final,
                         status="abstained",
-                        abstain_reason=getattr(final, "abstain_reason"),
+                        abstain_reason=abstain_reason,
                         input_tokens=total_input_tokens,
                         output_tokens=total_output_tokens,
+                        turn_count=turns,
                         tool_invocations=tuple(tool_invocations),
                     )
                 if profile.require_citation_ids and not citation_ids:
@@ -181,6 +235,7 @@ class ModelTaskRunner:
                 abstain_reason=None,
                 input_tokens=total_input_tokens,
                 output_tokens=total_output_tokens,
+                turn_count=turns,
                 tool_invocations=tuple(tool_invocations),
             )
 
@@ -214,6 +269,7 @@ class ModelTaskRunner:
         abstain_reason: str | None,
         input_tokens: int,
         output_tokens: int,
+        turn_count: int,
         tool_invocations: tuple[ToolInvocationRecord, ...],
     ) -> tuple[OutputModel, ModelRunRecord]:
         completed_at = datetime.now(UTC)
@@ -224,6 +280,7 @@ class ModelTaskRunner:
                 0,
                 int((completed_at - started_at).total_seconds() * 1000),
             ),
+            turn_count=turn_count,
             resolved_profile=profile,
             run_input=run_input,
             output_payload=output.model_dump(mode="json"),

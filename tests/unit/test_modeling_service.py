@@ -12,13 +12,12 @@ from dm_assistant.modules.modeling import (
     GatewayModelKey,
     ModelEndpointProfile,
     ModelRunInput,
-    ResolvedModelRunProfile,
     PromptMessage,
     ReasoningEffort,
     ReasoningLevel,
+    ResolvedModelRunProfile,
     TaskProfile,
     ToolCall,
-    ToolResult,
     resolve_run_profile,
 )
 from dm_assistant.orchestration.modeling import (
@@ -46,8 +45,9 @@ class FakeClient:
         profile: object,
         messages: tuple[PromptMessage, ...],
         allowed_tools: tuple[str, ...],
+        tool_schemas: tuple[object, ...],
     ) -> GatewayCompletion:
-        del profile, messages, allowed_tools
+        del profile, messages, allowed_tools, tool_schemas
         if not self._completions:
             raise AssertionError("unexpected extra gateway call")
         return self._completions.pop(0)
@@ -102,6 +102,7 @@ def _resolved_profile() -> tuple[
     )
     tool = ServerTool(
         name="set_brief",
+        description="Validate a synthetic dungeon brief.",
         input_schema=BriefToolInput,
         handler=lambda _: build_dungeon_intent_tool_result(
             tool_name="set_brief",
@@ -115,7 +116,9 @@ def _resolved_profile() -> tuple[
         (
             GatewayCompletion(
                 tool_calls=(
-                    ToolCall(tool_name="set_brief", call_id="call-1", arguments={"rooms": 3}),
+                    ToolCall(
+                        tool_name="set_brief", call_id="call-1", arguments={"rooms": 3}
+                    ),
                 ),
                 input_tokens=10,
                 output_tokens=4,
@@ -140,7 +143,9 @@ def _resolved_profile() -> tuple[
 def test_bounded_loop_executes_server_tool_and_records_run_lineage() -> None:
     task_profile, resolved, runner, tool = _resolved_profile()
     run_input = ModelRunInput(
-        messages=(PromptMessage(role="user", content="Create a synthetic dungeon intent."),),
+        messages=(
+            PromptMessage(role="user", content="Create a synthetic dungeon intent."),
+        ),
         authorized_citation_ids=("cite-1", "rules-1"),
     )
 
@@ -154,7 +159,10 @@ def test_bounded_loop_executes_server_tool_and_records_run_lineage() -> None:
     assert output.intent == "Build a three-room dungeon."
     assert record.status == "succeeded"
     assert record.resolved_profile.requested_effort is ReasoningEffort.STANDARD
-    assert record.resolved_profile.output_schema_version == task_profile.output_schema_version
+    assert (
+        record.resolved_profile.output_schema_version
+        == task_profile.output_schema_version
+    )
     assert record.tool_invocations[0].result.citation_ids == ("cite-1", "rules-1")
     assert record.usage_input_tokens == 16
     assert record.usage_output_tokens == 16
@@ -225,7 +233,9 @@ def test_bounded_loop_abstains_when_citations_are_unauthorized() -> None:
         runner.run(
             profile=resolved,
             run_input=ModelRunInput(
-                messages=(PromptMessage(role="user", content="Ask for a dungeon intent."),),
+                messages=(
+                    PromptMessage(role="user", content="Ask for a dungeon intent."),
+                ),
                 authorized_citation_ids=("cite-1",),
             ),
             output_schema=DungeonIntentV1,

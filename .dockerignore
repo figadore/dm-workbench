@@ -1,0 +1,15 @@
+.env
+.env.*
+.git
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.venv
+__pycache__
+*.py[cod]
+data
+node_modules
+model-gateway/node_modules
+model-gateway/dist
+packages/*/node_modules
+packages/*/.venv

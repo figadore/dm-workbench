@@ -24,6 +24,11 @@ requires the private Python caller's `Authorization: Bearer` internal token.
 The browser must reach it through a future authenticated Python route and never
 receives a provider token.
 
+When the Workbench enables the gateway, set the same value as
+`DM_MODEL_GATEWAY_INTERNAL_TOKEN` in the ignored root `.env`, together with
+`DM_MODEL_GATEWAY_POLICY=optional` (or `required`) and the private
+`DM_MODEL_GATEWAY_URL`. This is a transport secret, not a provider credential.
+
 OAuth login is started through `/v1/auth/login`; its status response conveys
 only device-code, URL, progress, and non-secret prompt events. The gateway does
 not expose a credential read endpoint. Provider OAuth data is stored only in

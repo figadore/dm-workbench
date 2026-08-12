@@ -4,11 +4,21 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from enum import StrEnum
 from typing import Annotated, Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    StringConstraints,
+    model_validator,
+)
+
+from dm_dungeon import DungeonBrief, DungeonTopology
 
 Slug = Annotated[
     str,
@@ -25,6 +35,9 @@ ShortText = Annotated[
 ]
 SummaryText = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)
+]
+PromptText = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=16_000)
 ]
 
 
@@ -66,7 +79,9 @@ class GatewayModelCatalogEntry(ContractModel):
     def dedupe_capabilities(self) -> Self:
         if len(set(self.observed_capabilities)) != len(self.observed_capabilities):
             raise ValueError("observed capabilities must be unique")
-        if len(set(self.supported_reasoning_levels)) != len(self.supported_reasoning_levels):
+        if len(set(self.supported_reasoning_levels)) != len(
+            self.supported_reasoning_levels
+        ):
             raise ValueError("supported reasoning levels must be unique")
         return self
 
@@ -165,7 +180,7 @@ class ResolvedModelRunProfile(ContractModel):
 
 class PromptMessage(ContractModel):
     role: Literal["system", "user", "assistant"]
-    content: SummaryText
+    content: PromptText
 
 
 class ModelRunInput(ContractModel):
@@ -200,6 +215,7 @@ class ModelRunRecord(ContractModel):
     started_at: str
     completed_at: str
     duration_ms: int = Field(ge=0)
+    turn_count: int = Field(ge=1)
     resolved_profile: ResolvedModelRunProfile
     run_input: ModelRunInput
     output_payload: dict[str, JsonValue] | None = None
@@ -224,7 +240,72 @@ class DungeonIntentV1(ContractModel):
 
     @model_validator(mode="after")
     def normalize_constraints(self) -> Self:
-        object.__setattr__(self, "requested_constraints", tuple(self.requested_constraints))
+        object.__setattr__(
+            self, "requested_constraints", tuple(self.requested_constraints)
+        )
+        return self
+
+
+class DungeonGenerationIntentV1(ContractModel):
+    """Model-authored dungeon brief and topology, before deterministic layout."""
+
+    schema_version: Literal["1.0.0"]
+    intent: SummaryText
+    brief: DungeonBrief | None = None
+    topology: DungeonTopology | None = None
+    requested_constraints: tuple[ShortText, ...] = ()
+    citation_ids: tuple[str, ...] = ()
+    official_rules: tuple[ShortText, ...] = ()
+    house_rule_overrides: tuple[ShortText, ...] = ()
+    unknowns: tuple[ShortText, ...] = ()
+    conflicts: tuple[ShortText, ...] = ()
+    abstain_reason: ShortText | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def decode_kernel_contracts_from_json(cls, value: object) -> object:
+        """Restore strict pure-kernel types from the model's JSON payload."""
+
+        if isinstance(value, cls) or not isinstance(value, Mapping):
+            return value
+        document = dict(value)
+        for field_name, contract_type in (
+            ("brief", DungeonBrief),
+            ("topology", DungeonTopology),
+        ):
+            nested = document.get(field_name)
+            if isinstance(nested, Mapping):
+                document[field_name] = contract_type.model_validate_json(
+                    json.dumps(nested)
+                )
+        for field_name in (
+            "requested_constraints",
+            "citation_ids",
+            "official_rules",
+            "house_rule_overrides",
+            "unknowns",
+            "conflicts",
+        ):
+            nested = document.get(field_name)
+            if isinstance(nested, list):
+                document[field_name] = tuple(nested)
+        return document
+
+    @model_validator(mode="after")
+    def require_brief_topology_consistency(self) -> Self:
+        if self.abstain_reason is not None:
+            if self.brief is not None or self.topology is not None:
+                raise ValueError("abstained intent cannot include a dungeon design")
+            return self
+        if self.brief is None or self.topology is None:
+            raise ValueError("non-abstained intent requires brief and topology")
+        if self.brief.floor_count != len(self.topology.floors):
+            raise ValueError("brief floor_count must match topology floors")
+        if self.brief.target_room_count != len(self.topology.rooms):
+            raise ValueError("brief target_room_count must match topology rooms")
+        object.__setattr__(
+            self, "requested_constraints", tuple(self.requested_constraints)
+        )
         return self
 
 

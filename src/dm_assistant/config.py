@@ -101,6 +101,7 @@ class Settings(DatabaseSettings):
     api_token: SecretStr
     session_secret: SecretStr
     model_gateway_url: AnyHttpUrl | None = None
+    model_gateway_internal_token: SecretStr | None = None
     model_gateway_policy: ModelGatewayPolicy = ModelGatewayPolicy.DISABLED
     embedding_runtime: EmbeddingRuntime = EmbeddingRuntime.DISABLED
     embedding_provider_policy: EmbeddingProviderPolicy = (
@@ -109,9 +110,13 @@ class Settings(DatabaseSettings):
     embedding_api_key: SecretStr | None = None
     embedding_hosted_retention_approved: bool = False
 
-    @field_validator("api_token", "session_secret")
+    @field_validator("api_token", "session_secret", "model_gateway_internal_token")
     @classmethod
-    def validate_authentication_secret(cls, value: SecretStr) -> SecretStr:
+    def validate_authentication_secret(
+        cls, value: SecretStr | None
+    ) -> SecretStr | None:
+        if value is None:
+            return None
         if _TOKEN_PATTERN.fullmatch(value.get_secret_value()) is None:
             raise ValueError(
                 "authentication secrets must be 32-256 URL-safe ASCII characters"
@@ -155,6 +160,18 @@ class Settings(DatabaseSettings):
             and self.model_gateway_url is None
         ):
             raise ValueError("enabled model gateway policy requires its private URL")
+        if (
+            self.model_gateway_policy is not ModelGatewayPolicy.DISABLED
+            and self.model_gateway_internal_token is None
+        ):
+            raise ValueError("enabled model gateway policy requires its internal token")
+        if (
+            self.model_gateway_policy is ModelGatewayPolicy.DISABLED
+            and self.model_gateway_internal_token is not None
+        ):
+            raise ValueError(
+                "disabled model gateway policy cannot use an internal token"
+            )
         if self.model_gateway_url is not None:
             parsed = urlsplit(str(self.model_gateway_url))
             if parsed.username is not None or parsed.password is not None:
@@ -204,6 +221,8 @@ class Settings(DatabaseSettings):
             self.api_token.get_secret_value(),
             self.session_secret.get_secret_value(),
         ]
+        if self.model_gateway_internal_token is not None:
+            values.append(self.model_gateway_internal_token.get_secret_value())
         if self.embedding_api_key is not None:
             values.append(self.embedding_api_key.get_secret_value())
         if parsed.password:

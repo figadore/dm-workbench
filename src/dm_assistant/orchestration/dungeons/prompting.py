@@ -1,0 +1,566 @@
+"""Bounded standalone prompt-to-dungeon compilation over the pure kernel."""
+
+from __future__ import annotations
+
+import json
+import uuid
+from typing import Protocol, cast
+
+from pydantic import BaseModel, ConfigDict, JsonValue
+
+from dm_assistant.modules.modeling import (
+    DungeonGenerationIntentV1,
+    ModelRunInput,
+    ModelRunRecord,
+    PromptMessage,
+    ResolvedModelRunProfile,
+    ToolResult,
+)
+from dm_assistant.modules.preparation import (
+    DungeonGenerationContext,
+    GenerationContextEnvelope,
+    GenerationContextPin,
+    ToolRunPin,
+    canonical_json_sha256,
+)
+from dm_assistant.orchestration.dungeons.contracts import (
+    CreatePromptedDungeonWorkflow,
+    DungeonWorkflowResult,
+    PromptDungeonWorkflow,
+    PromptedDungeonModelLineage,
+)
+from dm_assistant.orchestration.modeling import (
+    GatewayClient,
+    ModelRunAbstained,
+    ModelTaskRunner,
+    ServerTool,
+)
+from dm_dungeon import (
+    DungeonPackage,
+    LayoutRequest,
+    LockedLayoutComponents,
+    generate_layout,
+    validate_geometry,
+    validate_topology,
+)
+
+_DUNGEON_CONTEXT_KIND = "dungeon_generation"
+_DUNGEON_INTENT_SCHEMA_NAME = "dungeon_generation_intent_v1"
+_DUNGEON_INTENT_SCHEMA_VERSION = "1.0.0"
+_REVIEW_BRIEF_TOOL = "review_dungeon_brief"
+_REVIEW_TOPOLOGY_TOOL = "review_dungeon_topology"
+_GENERATE_LAYOUT_TOOL = "generate_dungeon_layout"
+_VALIDATE_INTENT_TOOL = "validate_dungeon_intent"
+_REGENERATE_LAYOUT_TOOL = "regenerate_dungeon_layout"
+_DUNGEON_TOOL_NAMES = (
+    _REVIEW_BRIEF_TOOL,
+    _REVIEW_TOPOLOGY_TOOL,
+    _GENERATE_LAYOUT_TOOL,
+    _VALIDATE_INTENT_TOOL,
+    _REGENERATE_LAYOUT_TOOL,
+)
+_MAX_REPAIR_DIAGNOSTICS = 16
+
+
+class _ValidateDungeonIntentInput(BaseModel):
+    """Model-facing input accepted by the deterministic validation tool."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    intent: DungeonGenerationIntentV1
+    seed: int
+
+
+class _TargetedRegenerationInput(_ValidateDungeonIntentInput):
+    """Model request for a code-owned, non-persistent targeted layout preview."""
+
+    baseline_seed: int
+    locked_component_ids: list[str] = []
+
+
+class PromptedDungeonCreator(Protocol):
+    """Dungeon persistence boundary used by prompt orchestration."""
+
+    def create_prompted(
+        self,
+        command: CreatePromptedDungeonWorkflow,
+    ) -> DungeonWorkflowResult: ...
+
+
+class DungeonPromptService:
+    """Compile standalone model intent and preserve replayable generation lineage."""
+
+    def __init__(
+        self,
+        dungeon_studio: PromptedDungeonCreator,
+        gateway_client: GatewayClient,
+    ) -> None:
+        self._dungeon_studio = dungeon_studio
+        self._gateway_client = gateway_client
+
+    def create(
+        self,
+        command: PromptDungeonWorkflow,
+        profile: ResolvedModelRunProfile,
+    ) -> DungeonWorkflowResult:
+        """Generate a draft from a standalone DM prompt with at most one repair."""
+
+        _validate_profile(profile)
+        context = _build_standalone_context(command)
+        runner = ModelTaskRunner(self._gateway_client)
+        tools = _dungeon_tools()
+        intent, record = runner.run(
+            profile=profile,
+            run_input=_initial_model_input(command, context),
+            output_schema=DungeonGenerationIntentV1,
+            tools=tools,
+        )
+        _require_non_abstained_intent(intent, record)
+
+        lineage = [_lineage(intent, record)]
+        request, diagnostics, valid = _preflight(intent, command.seed)
+        if not valid:
+            repaired_profile = _remaining_profile(profile, record)
+            repaired_intent, repaired_record = runner.run(
+                profile=repaired_profile,
+                run_input=_repair_model_input(command, context, intent, diagnostics),
+                output_schema=DungeonGenerationIntentV1,
+                tools=tools,
+            )
+            _require_non_abstained_intent(repaired_intent, repaired_record)
+            lineage.append(_lineage(repaired_intent, repaired_record))
+            intent = repaired_intent
+            request, _, _ = _preflight(intent, command.seed)
+
+        model_lineage = tuple(lineage)
+        return self._dungeon_studio.create_prompted(
+            CreatePromptedDungeonWorkflow(
+                campaign_id=command.campaign_id,
+                title=command.title,
+                layout_request=request,
+                created_by=command.created_by,
+                context=context,
+                model_task_profile_id=profile.task_profile_id,
+                model_lineage=model_lineage,
+                tool_runs=_tool_run_pins(model_lineage),
+            )
+        )
+
+
+def compile_layout_request(
+    intent: DungeonGenerationIntentV1,
+    seed: int,
+) -> LayoutRequest:
+    """Derive a stable package identity and exact layout request from typed intent."""
+
+    _require_non_abstained_intent(intent, None)
+    assert intent.brief is not None
+    assert intent.topology is not None
+    intent_document = cast(dict[str, JsonValue], intent.model_dump(mode="json"))
+    source: dict[str, JsonValue] = {
+        "intent": intent_document,
+        "seed": seed,
+        "generator_version": "orthogonal-v1",
+    }
+    package_id = f"dungeon_{canonical_json_sha256(source)[:32]}"
+    return LayoutRequest(
+        schema_version="1.0.0",
+        package_id=package_id,
+        brief=intent.brief,
+        topology=intent.topology,
+        seed=seed,
+        generator_version="orthogonal-v1",
+    )
+
+
+def _build_standalone_context(
+    command: PromptDungeonWorkflow,
+) -> GenerationContextPin:
+    payload = DungeonGenerationContext(
+        context_version="1.0.0",
+        prompt_input_sha256=canonical_json_sha256({"prompt": command.prompt}),
+        requested_constraints=command.requested_constraints,
+        preparation_owner_id=str(command.campaign_id),
+        standalone_provenance="dm_prompt",
+    )
+    payload_document = payload.model_dump(mode="json")
+    envelope = GenerationContextEnvelope(
+        context_kind=_DUNGEON_CONTEXT_KIND,
+        payload_version=payload.context_version,
+        visibility_policy=command.scope.visibility,
+        payload=payload_document,
+        payload_sha256=canonical_json_sha256(payload_document),
+    )
+    return GenerationContextPin(
+        envelope_kind=envelope.context_kind,
+        payload_version=envelope.payload_version,
+        envelope=envelope.model_dump(mode="json"),
+        payload_sha256=envelope.payload_sha256,
+    )
+
+
+def _initial_model_input(
+    command: PromptDungeonWorkflow,
+    context: GenerationContextPin,
+) -> ModelRunInput:
+    return ModelRunInput(
+        messages=(
+            PromptMessage(
+                role="user",
+                content=_canonical_message(
+                    {
+                        "task": _DUNGEON_INTENT_SCHEMA_NAME,
+                        "prompt": command.prompt,
+                        "context": context.envelope,
+                    }
+                ),
+            ),
+        )
+    )
+
+
+def _repair_model_input(
+    command: PromptDungeonWorkflow,
+    context: GenerationContextPin,
+    intent: DungeonGenerationIntentV1,
+    diagnostics: tuple[dict[str, JsonValue], ...],
+) -> ModelRunInput:
+    return ModelRunInput(
+        messages=(
+            PromptMessage(
+                role="user",
+                content=_canonical_message(
+                    {
+                        "task": _DUNGEON_INTENT_SCHEMA_NAME,
+                        "prompt": command.prompt,
+                        "context": context.envelope,
+                        "previous_intent": intent.model_dump(mode="json"),
+                        "diagnostics": list(diagnostics[:_MAX_REPAIR_DIAGNOSTICS]),
+                    }
+                ),
+            ),
+        )
+    )
+
+
+def _preflight(
+    intent: DungeonGenerationIntentV1,
+    seed: int,
+) -> tuple[LayoutRequest, tuple[dict[str, JsonValue], ...], bool]:
+    request = compile_layout_request(intent, seed)
+    topology = validate_topology(request.topology)
+    if not topology.valid:
+        diagnostics = _diagnostics(topology.diagnostics)
+        return request, diagnostics, False
+
+    layout = generate_layout(request)
+    if not layout.success or layout.package is None:
+        diagnostics = _diagnostics(layout.diagnostics)
+        return request, diagnostics, False
+
+    geometry = validate_geometry(layout.package)
+    diagnostics = _diagnostics((*topology.diagnostics, *geometry.diagnostics))
+    return request, diagnostics, geometry.valid
+
+
+def _validate_intent_tool(value: _ValidateDungeonIntentInput) -> ToolResult:
+    """Return only structured deterministic validation diagnostics to the model."""
+
+    _, diagnostics, valid = _preflight(value.intent, value.seed)
+    return ToolResult(
+        tool_name=_VALIDATE_INTENT_TOOL,
+        call_id="server_validation",
+        payload={"valid": valid, "diagnostics": list(diagnostics)},
+    )
+
+
+def _dungeon_tools() -> dict[str, ServerTool]:
+    return {
+        _REVIEW_BRIEF_TOOL: ServerTool(
+            name=_REVIEW_BRIEF_TOOL,
+            description=(
+                "Review the typed dungeon brief. The server retains all IDs, "
+                "geometry, rendering, and persistence authority."
+            ),
+            input_schema=_ValidateDungeonIntentInput,
+            handler=lambda value: _review_brief_tool(
+                cast(_ValidateDungeonIntentInput, value)
+            ),
+        ),
+        _REVIEW_TOPOLOGY_TOOL: ServerTool(
+            name=_REVIEW_TOPOLOGY_TOOL,
+            description=(
+                "Validate typed room, connection, gate, clue, and secret-route "
+                "topology without generating geometry."
+            ),
+            input_schema=_ValidateDungeonIntentInput,
+            handler=lambda value: _review_topology_tool(
+                cast(_ValidateDungeonIntentInput, value)
+            ),
+        ),
+        _GENERATE_LAYOUT_TOOL: ServerTool(
+            name=_GENERATE_LAYOUT_TOOL,
+            description=(
+                "Generate and validate a deterministic layout preview from typed "
+                "intent. Returns only structured diagnostics and package identity."
+            ),
+            input_schema=_ValidateDungeonIntentInput,
+            handler=lambda value: _generate_layout_tool(
+                cast(_ValidateDungeonIntentInput, value)
+            ),
+        ),
+        _VALIDATE_INTENT_TOOL: ServerTool(
+            name=_VALIDATE_INTENT_TOOL,
+            description=(
+                "Validate typed dungeon brief/topology intent with deterministic "
+                "topology, layout, and geometry checks."
+            ),
+            input_schema=_ValidateDungeonIntentInput,
+            handler=lambda value: _validate_intent_tool(
+                cast(_ValidateDungeonIntentInput, value)
+            ),
+        ),
+        _REGENERATE_LAYOUT_TOOL: ServerTool(
+            name=_REGENERATE_LAYOUT_TOOL,
+            description=(
+                "Preview targeted deterministic regeneration while retaining only "
+                "server-generated locked component geometry."
+            ),
+            input_schema=_TargetedRegenerationInput,
+            handler=lambda value: _regenerate_layout_tool(
+                cast(_TargetedRegenerationInput, value)
+            ),
+        ),
+    }
+
+
+def _review_brief_tool(value: _ValidateDungeonIntentInput) -> ToolResult:
+    _require_non_abstained_intent(value.intent, None)
+    assert value.intent.brief is not None
+    brief = value.intent.brief
+    return ToolResult(
+        tool_name=_REVIEW_BRIEF_TOOL,
+        call_id="server_brief_review",
+        payload={
+            "brief_id": brief.id,
+            "floor_count": brief.floor_count,
+            "target_room_count": brief.target_room_count,
+        },
+    )
+
+
+def _review_topology_tool(value: _ValidateDungeonIntentInput) -> ToolResult:
+    _require_non_abstained_intent(value.intent, None)
+    assert value.intent.topology is not None
+    report = validate_topology(value.intent.topology)
+    return ToolResult(
+        tool_name=_REVIEW_TOPOLOGY_TOOL,
+        call_id="server_topology_review",
+        payload={
+            "valid": report.valid,
+            "diagnostics": list(_diagnostics(report.diagnostics)),
+        },
+    )
+
+
+def _generate_layout_tool(value: _ValidateDungeonIntentInput) -> ToolResult:
+    request, diagnostics, valid = _preflight(value.intent, value.seed)
+    return ToolResult(
+        tool_name=_GENERATE_LAYOUT_TOOL,
+        call_id="server_layout_generation",
+        payload={
+            "valid": valid,
+            "package_id": request.package_id,
+            "diagnostics": list(diagnostics),
+        },
+    )
+
+
+def _regenerate_layout_tool(value: _TargetedRegenerationInput) -> ToolResult:
+    request, diagnostics, valid = _preflight(value.intent, value.baseline_seed)
+    if not valid:
+        return ToolResult(
+            tool_name=_REGENERATE_LAYOUT_TOOL,
+            call_id="server_targeted_regeneration",
+            payload={
+                "valid": False,
+                "diagnostics": list(diagnostics),
+                "locked_component_ids": [],
+            },
+        )
+
+    baseline = generate_layout(request)
+    assert baseline.package is not None
+    locks = _select_locked_components(baseline.package, value.locked_component_ids)
+    regenerated_request = request.model_copy(
+        update={"seed": value.seed, "locked": locks}
+    )
+    regenerated = generate_layout(regenerated_request)
+    if not regenerated.success or regenerated.package is None:
+        return ToolResult(
+            tool_name=_REGENERATE_LAYOUT_TOOL,
+            call_id="server_targeted_regeneration",
+            payload={
+                "valid": False,
+                "diagnostics": list(_diagnostics(regenerated.diagnostics)),
+                "locked_component_ids": list(locks.component_ids()),
+            },
+        )
+
+    topology = validate_topology(regenerated.package.topology)
+    geometry = validate_geometry(regenerated.package)
+    return ToolResult(
+        tool_name=_REGENERATE_LAYOUT_TOOL,
+        call_id="server_targeted_regeneration",
+        payload={
+            "valid": topology.valid and geometry.valid,
+            "diagnostics": list(
+                _diagnostics((*topology.diagnostics, *geometry.diagnostics))
+            ),
+            "locked_component_ids": list(locks.component_ids()),
+        },
+    )
+
+
+def _select_locked_components(
+    package: DungeonPackage,
+    component_ids: list[str],
+) -> LockedLayoutComponents:
+    selected = set(component_ids)
+    known = {
+        component.id
+        for components in (
+            package.floors,
+            package.rooms,
+            package.corridors,
+            package.doors,
+            package.stairs,
+            package.vertical_links,
+        )
+        for component in components
+    }
+    if not selected <= known:
+        raise ValueError("targeted regeneration requested an unknown component")
+    return LockedLayoutComponents(
+        floors=tuple(item for item in package.floors if item.id in selected),
+        rooms=tuple(item for item in package.rooms if item.id in selected),
+        corridors=tuple(item for item in package.corridors if item.id in selected),
+        doors=tuple(item for item in package.doors if item.id in selected),
+        stairs=tuple(item for item in package.stairs if item.id in selected),
+        vertical_links=tuple(
+            item for item in package.vertical_links if item.id in selected
+        ),
+    )
+
+
+def _diagnostics(values: tuple[BaseModel, ...]) -> tuple[dict[str, JsonValue], ...]:
+    documents: list[dict[str, JsonValue]] = []
+    for value in values:
+        dump = value.model_dump(mode="json")
+        document = cast(dict[str, JsonValue], dump)
+        allowed = {
+            key: document[key]
+            for key in ("code", "severity", "message", "affected_ids", "repair_hint")
+            if key in document
+        }
+        documents.append(allowed)
+    return tuple(documents)
+
+
+def _lineage(
+    intent: DungeonGenerationIntentV1,
+    record: ModelRunRecord,
+) -> PromptedDungeonModelLineage:
+    return PromptedDungeonModelLineage(
+        model_run_id=uuid.uuid4(),
+        model_run=record,
+        intent=intent,
+    )
+
+
+def _tool_run_pins(
+    model_lineage: tuple[PromptedDungeonModelLineage, ...],
+) -> tuple[ToolRunPin, ...]:
+    return tuple(
+        ToolRunPin(
+            tool_name=invocation.tool_name,
+            schema_version=_DUNGEON_INTENT_SCHEMA_VERSION,
+            input_sha256=canonical_json_sha256(invocation.arguments),
+            output_sha256=canonical_json_sha256(
+                invocation.result.model_dump(mode="json")
+            ),
+            status="succeeded",
+        )
+        for lineage in model_lineage
+        for invocation in lineage.model_run.tool_invocations
+    )
+
+
+def _remaining_profile(
+    profile: ResolvedModelRunProfile,
+    record: ModelRunRecord,
+) -> ResolvedModelRunProfile:
+    remaining_turns = profile.turn_budget - record.turn_count
+    remaining_tools = profile.tool_budget - len(record.tool_invocations)
+    remaining_tokens = (
+        profile.token_budget - record.usage_input_tokens - record.usage_output_tokens
+    )
+    remaining_seconds = profile.time_budget_seconds - (
+        (record.duration_ms + 999) // 1000
+    )
+    if (
+        remaining_turns < 1
+        or remaining_tools < 0
+        or remaining_tokens < 1
+        or remaining_seconds < 1
+    ):
+        raise ModelRunAbstained("no budget remains for deterministic diagnostic repair")
+    return profile.model_copy(
+        update={
+            "turn_budget": remaining_turns,
+            "tool_budget": remaining_tools,
+            "token_budget": remaining_tokens,
+            "time_budget_seconds": remaining_seconds,
+        }
+    )
+
+
+def _require_non_abstained_intent(
+    intent: DungeonGenerationIntentV1,
+    record: ModelRunRecord | None,
+) -> None:
+    if intent.abstain_reason is not None:
+        raise ModelRunAbstained(intent.abstain_reason)
+    if intent.brief is None or intent.topology is None:
+        raise ModelRunAbstained("dungeon intent did not include a brief and topology")
+    if record is not None and record.status != "succeeded":
+        raise ModelRunAbstained("dungeon intent run did not succeed")
+
+
+def _validate_profile(profile: ResolvedModelRunProfile) -> None:
+    if profile.output_schema_name != _DUNGEON_INTENT_SCHEMA_NAME:
+        raise ValueError("prompted dungeon workflow requires the dungeon intent schema")
+    if profile.output_schema_version != _DUNGEON_INTENT_SCHEMA_VERSION:
+        raise ValueError(
+            "prompted dungeon workflow requires intent schema version 1.0.0"
+        )
+    if profile.require_citation_ids or profile.require_authorized_citations:
+        raise ValueError(
+            "standalone prompted dungeon workflow cannot require citations"
+        )
+    if profile.allow_source_retrieval_tools:
+        raise ValueError("standalone prompted dungeon workflow cannot retrieve sources")
+    if tuple(profile.allowed_tools) != _DUNGEON_TOOL_NAMES:
+        raise ValueError(
+            "prompted dungeon workflow requires the pinned deterministic tool set"
+        )
+
+
+def _canonical_message(value: dict[str, object]) -> str:
+    return json.dumps(
+        value,
+        allow_nan=False,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )

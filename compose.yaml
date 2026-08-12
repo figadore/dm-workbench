@@ -1,12 +1,25 @@
-name: dm-assistant
-
 services:
+  storage-init:
+    image: docker.io/library/busybox:1.37.0
+    command:
+      [
+        "sh",
+        "-ec",
+        "chown 10001:10001 /assets /scratch /credentials && chmod 0750 /assets /scratch && chmod 0700 /credentials",
+      ]
+    volumes:
+      - dm-assistant-gateway-credentials:/credentials
+      - dm-assistant-assets-data:/assets
+      - dm-assistant-scratch-data:/scratch
+    networks:
+      - private
+
   postgres:
     image: docker.io/pgvector/pgvector:0.8.1-pg16-bookworm
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-dm_assistant}
       POSTGRES_USER: ${POSTGRES_USER:-dm_assistant}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -14,11 +27,102 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 2s
-      timeout: 5s
+      timeout: 2s
       retries: 15
-      start_period: 5s
-    stop_grace_period: 30s
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "${DM_POSTGRES_CPU_LIMIT:-0.75}"
+          memory: "${DM_POSTGRES_MEMORY_LIMIT:-1024M}"
+    networks:
+      - private
+
+  model-gateway:
+    image: ${DM_MODEL_GATEWAY_IMAGE:-dm-model-gateway:local}
+    build:
+      context: ./model-gateway
+    environment:
+      DM_MODEL_GATEWAY_INTERNAL_TOKEN: ${DM_MODEL_GATEWAY_INTERNAL_TOKEN:?Set DM_MODEL_GATEWAY_INTERNAL_TOKEN in .env}
+      MODEL_GATEWAY_CREDENTIAL_PATH: /var/lib/dm-model-gateway/credentials.json
+    volumes:
+      - dm-assistant-gateway-credentials:/var/lib/dm-model-gateway
+    depends_on:
+      storage-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3000/health',{headers:{Authorization:'Bearer '+process.env.DM_MODEL_GATEWAY_INTERNAL_TOKEN}}).then(response=>process.exit(response.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "${DM_GATEWAY_CPU_LIMIT:-0.50}"
+          memory: "${DM_GATEWAY_MEMORY_LIMIT:-512M}"
+    networks:
+      - private
+
+  workbench:
+    image: ${DM_WORKBENCH_IMAGE:-dm-workbench:local}
+    build:
+      context: .
+    environment:
+      DM_ENVIRONMENT: production
+      DM_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-dm_assistant}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-dm_assistant}
+      DM_SOURCE_ROOTS: '["/data/campaign","/data/rules"]'
+      DM_ASSET_ROOT: /data/assets
+      DM_SCRATCH_ROOT: /data/scratch
+      DM_API_TOKEN: ${DM_API_TOKEN:?Set DM_API_TOKEN in .env}
+      DM_SESSION_SECRET: ${DM_SESSION_SECRET:?Set DM_SESSION_SECRET in .env}
+      DM_MODEL_GATEWAY_POLICY: optional
+      DM_MODEL_GATEWAY_URL: http://model-gateway:3000
+      DM_MODEL_GATEWAY_INTERNAL_TOKEN: ${DM_MODEL_GATEWAY_INTERNAL_TOKEN:?Set DM_MODEL_GATEWAY_INTERNAL_TOKEN in .env}
+    ports:
+      - "127.0.0.1:${DM_WORKBENCH_PORT:-8000}:8000"
+    volumes:
+      - ${DM_CAMPAIGN_SOURCE_DIR:-./data/campaign}:/data/campaign:ro
+      - ${DM_RULES_SOURCE_DIR:-./data/rules}:/data/rules:ro
+      - dm-assistant-assets-data:/data/assets
+      - dm-assistant-scratch-data:/data/scratch
+    depends_on:
+      storage-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      model-gateway:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"from urllib.request import urlopen; response = urlopen('http://127.0.0.1:8000/health/ready', timeout=2); raise SystemExit(0 if response.status == 200 else 1)\"",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "${DM_WORKBENCH_CPU_LIMIT:-0.75}"
+          memory: "${DM_WORKBENCH_MEMORY_LIMIT:-768M}"
+    networks:
+      - private
 
 volumes:
   dm-assistant-postgres-data:
+  dm-assistant-gateway-credentials:
+  dm-assistant-assets-data:
+  dm-assistant-scratch-data:
+
+networks:
+  private:
+    internal: true

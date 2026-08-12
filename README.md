@@ -42,6 +42,84 @@ For an implementation session or return after a break, conserve context:
 
 Project dependencies are installed only in a container-managed project virtual environment. Copy `.env.example` to ignored `.env`, replace every placeholder—including different random 32+ character `DM_API_TOKEN` and `DM_SESSION_SECRET` values—and leave model/embedding policies disabled while those runtimes are absent.
 
+### Two supported workflows
+
+Use native processes for the rapid edit/test loop. Compose supplies only
+PostgreSQL in that mode, so Python and Node changes are immediately visible:
+
+```bash
+make dev-db
+make dev-api
+# In another terminal, after exporting the shared gateway token:
+make dev-gateway
+```
+
+`make dev-api` enables Uvicorn reload. Unit tests and most focused tests do not
+need Compose; `make check` runs the disposable containerized quality gate.
+Set `CONTAINER_ENGINE=docker` before a Make target when Docker Desktop rather
+than Podman is preferred.
+
+Use the same repository to test the complete deployable topology locally and
+to install it on a Proxmox VM:
+
+```bash
+cp .env.example .env
+mkdir -p data/campaign data/rules
+# Set real POSTGRES_PASSWORD, DM_API_TOKEN, DM_SESSION_SECRET, and
+# DM_MODEL_GATEWAY_INTERNAL_TOKEN values in .env.
+make stack-up
+make stack-smoke
+```
+
+This starts PostgreSQL, the private model gateway, and the Workbench image.
+Only the Workbench is published, on `127.0.0.1:8000`; the gateway has no host
+port and is reachable solely as `model-gateway:3000` on the private Compose
+network. The source directories are read-only mounts, while database,
+credential, asset, and scratch data use separate named volumes. The Workbench
+startup performs its Alembic upgrade before becoming ready; use one Workbench
+replica and take a database backup before deploying migrations.
+
+The default Compose limits reserve a modest two vCPU and 2.25 GB RAM ceiling
+across PostgreSQL, Workbench, and gateway. Override the documented
+`DM_*_CPU_LIMIT` and `DM_*_MEMORY_LIMIT` values in `.env` only after measuring
+the selected embedding/runtime workload on the Proxmox host.
+
+### macOS native workflow
+
+To run the Python Workbench and the loopback-only model gateway on one Mac, use
+native `uv`/Node processes and Podman only for PostgreSQL:
+
+```bash
+brew install uv node podman
+podman machine init
+podman machine start
+```
+
+Set `DM_DATABASE_URL` in `.env` to the host-published PostgreSQL address
+(`127.0.0.1`, not the Compose service hostname), and set
+`DM_SOURCE_ROOTS`, `DM_ASSET_ROOT`, and `DM_SCRATCH_ROOT` to real absolute
+macOS paths. Then start PostgreSQL, install the pinned Python dependencies,
+migrate, and launch the private-only API:
+
+```bash
+podman compose up -d postgres
+uv sync --all-packages --all-groups --frozen
+uv run --frozen alembic upgrade head
+uv run --frozen dm doctor
+uv run --frozen uvicorn dm_assistant.api.app:create_app \
+  --factory --host 127.0.0.1 --port 8000
+```
+
+The containerized API command below remains useful when model support is
+disabled. A gateway at host `127.0.0.1` is not reachable from that container;
+run the gateway in the same private network instead, or use the native workflow
+above.
+
+For the full Compose stack, do not use a host-loopback gateway URL. Compose
+injects `http://model-gateway:3000` into the Workbench and keeps the gateway
+unpublished. `make stack-down` stops the stack without deleting persistent
+volumes; use `CONTAINER_ENGINE=docker make stack-up` on Docker Desktop.
+
 Start the pinned PostgreSQL 16/pgvector service, migrate, and run the API on the private Compose network:
 
 ```bash
@@ -80,6 +158,50 @@ CONTAINER_ENGINE=docker ./scripts/check-container.sh
 ```
 
 Stop the development database with `podman compose down`; add `-v` only when intentionally deleting local development data.
+
+## Private Model Gateway
+
+The model gateway is a separate Node 22.19+ private process. Leave
+`DM_MODEL_GATEWAY_POLICY=disabled` to use the fully model-independent Studio.
+To enable the backend model client, set the following in the ignored root
+`.env`, using one newly generated shared token:
+
+```dotenv
+DM_MODEL_GATEWAY_POLICY=optional
+DM_MODEL_GATEWAY_URL=http://127.0.0.1:3000
+DM_MODEL_GATEWAY_INTERNAL_TOKEN=<32+-character-random-token>
+```
+
+Start the gateway with the same token; provider credentials remain only in its
+dedicated credential file:
+
+```bash
+cd model-gateway
+npm ci
+export DM_MODEL_GATEWAY_INTERNAL_TOKEN='<same token as .env>'
+export MODEL_GATEWAY_CREDENTIAL_PATH="$HOME/.local/share/dm-model-gateway/credentials.json"
+npm run build
+npm start
+```
+
+Verify the private boundary without a provider credential:
+
+```bash
+curl -H "Authorization: Bearer $DM_MODEL_GATEWAY_INTERNAL_TOKEN" \
+  http://127.0.0.1:3000/health
+```
+
+P7-09 provides the private Python client and constrained prompt-to-intent
+backend. The current CLI and Studio do **not** yet expose `dm dungeon prompt`;
+P7-10 adds that user-facing workflow. In the meantime, test the gateway and
+backend contracts with:
+
+```bash
+uv run pytest -q tests/unit/test_model_gateway_client.py \
+  tests/unit/test_prompted_dungeon_workflow.py
+npm --prefix model-gateway run check
+npm --prefix model-gateway test
+```
 
 ## Provider-Independent Dungeon Studio
 

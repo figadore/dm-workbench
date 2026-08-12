@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 
 from dm_assistant.config import (
     EmbeddingProviderPolicy,
@@ -20,6 +20,7 @@ from dm_assistant.errors import ConfigurationError
 _BASE_TOKEN = "config-test-token-00000000000000000"
 _OVERRIDE_TOKEN = "override-test-token-000000000000000"
 _SESSION_SECRET = "config-session-secret-00000000000000"
+_MODEL_GATEWAY_TOKEN = "config-gateway-token-00000000000000"
 
 
 def write_env(path: Path, source_root: Path) -> None:
@@ -36,6 +37,7 @@ def write_env(path: Path, source_root: Path) -> None:
                 f"DM_SESSION_SECRET={_SESSION_SECRET}",
                 "DM_MODEL_GATEWAY_POLICY=optional",
                 "DM_MODEL_GATEWAY_URL=http://model-gateway:3000",
+                f"DM_MODEL_GATEWAY_INTERNAL_TOKEN={_MODEL_GATEWAY_TOKEN}",
                 "DM_EMBEDDING_RUNTIME=local_cpu",
                 "DM_EMBEDDING_PROVIDER_POLICY=local_only",
             )
@@ -60,6 +62,7 @@ def test_environment_overrides_dotenv_and_values_are_typed(
         "DM_SCRATCH_ROOT",
         "DM_MODEL_GATEWAY_POLICY",
         "DM_MODEL_GATEWAY_URL",
+        "DM_MODEL_GATEWAY_INTERNAL_TOKEN",
         "DM_EMBEDDING_RUNTIME",
         "DM_EMBEDDING_PROVIDER_POLICY",
     ):
@@ -77,6 +80,11 @@ def test_environment_overrides_dotenv_and_values_are_typed(
     assert settings.api_token.get_secret_value() == _OVERRIDE_TOKEN
     assert settings.model_gateway_policy is ModelGatewayPolicy.OPTIONAL
     assert str(settings.model_gateway_url) == "http://model-gateway:3000/"
+    assert (
+        settings.model_gateway_internal_token is not None
+        and settings.model_gateway_internal_token.get_secret_value()
+        == _MODEL_GATEWAY_TOKEN
+    )
     assert settings.embedding_runtime is EmbeddingRuntime.LOCAL_CPU
     assert settings.embedding_provider_policy is EmbeddingProviderPolicy.LOCAL_ONLY
     representation = repr(settings)
@@ -288,6 +296,47 @@ def test_model_gateway_rejects_public_hosts_and_embedded_credentials(
             session_secret=_SESSION_SECRET,
             model_gateway_policy=ModelGatewayPolicy.OPTIONAL,
             model_gateway_url=url,
+            model_gateway_internal_token=_MODEL_GATEWAY_TOKEN,
+        )
+
+
+def test_enabled_model_gateway_requires_private_internal_token(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "dm_assistant.config._POSTGRES_DSN_ADAPTER.validate_python",
+        lambda _: None,
+    )
+    settings = Settings.model_construct(
+        database_url="postgresql+psycopg://unit:unit-password@db/app",
+        source_roots=(tmp_path,),
+        asset_root=tmp_path / "assets",
+        scratch_root=tmp_path / "scratch",
+        api_token=_BASE_TOKEN,
+        session_secret=_SESSION_SECRET,
+        model_gateway_policy=ModelGatewayPolicy.OPTIONAL,
+        model_gateway_url="http://model-gateway:3000",
+    )
+    object.__setattr__(settings, "api_token", SecretStr(_BASE_TOKEN))
+    object.__setattr__(settings, "session_secret", SecretStr(_SESSION_SECRET))
+    with pytest.raises(ValueError, match="requires its internal token"):
+        settings.validate_runtime_policies()
+
+
+def test_enabled_model_gateway_configuration_requires_internal_token(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ValidationError, match="requires its internal token"):
+        Settings(
+            database_url="postgresql+psycopg://unit:unit-password@db/app",
+            source_roots=(tmp_path,),
+            asset_root=tmp_path / "assets",
+            scratch_root=tmp_path / "scratch",
+            api_token=_BASE_TOKEN,
+            session_secret=_SESSION_SECRET,
+            model_gateway_policy=ModelGatewayPolicy.OPTIONAL,
+            model_gateway_url="http://model-gateway:3000",
         )
 
 

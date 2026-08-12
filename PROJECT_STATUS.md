@@ -5,10 +5,12 @@
 ## Snapshot
 
 - **Last updated:** 2026-08-12
-- **Lifecycle:** implementation underway; the provider-independent Dungeon Studio, deterministic dungeon kernel, PostgreSQL foundation, preparation lifecycle, immutable Library source registry, and P2's independent embeddings, hybrid retrieval, retrieval audit, and eval baseline are complete. The active priority is standalone prompt-to-dungeon-package generation.
-- **Current phase:** P5 — Structured Campaign Knowledge and Provenance.
-- **Current task:** P5-01 in progress; roadmap remains reprioritized from P3 canonical revisions to the standalone prompt-to-dungeon-package path.
-- **Next task:** **P5-02 — Predicate catalog**.
+- **Lifecycle:** P7-09 is complete. Standalone model-authored brief/topology intent now travels through the private token-authenticated Node gateway, uses only schema-bound deterministic review/layout/regeneration-preview tools, performs bounded diagnostic repair, and persists standalone context plus model/tool lineage. The P10-04 container/Compose baseline is also complete early: native development remains fast, while the same repository provides a complete local/Proxmox Compose stack.
+- **Current phase:** P7 — Dungeon and Map Generation.
+- **Current task:** P7-10 starting — grounded Dungeon Studio integration and final eval gate.
+- **Validated status:** P3-01 is unstarted: no P3 migration, implementation, or commit exists. P5-01 is complete in committed `eea08a4`; P5-02 is unstarted: no predicate schema, migration, operation, or commit exists.
+- **Fast-track note:** P3 is required only to promote generated dungeon facts to campaign canon. It does not block standalone prompt-to-package preparation work; P5-02 remains deferred until explicit campaign grounding needs it.
+- **Next task:** **P7-10 — add standalone prompt-to-dungeon CLI/API/web integration.**
 - **Schema head:** `0007_campaign_knowledge_entities`.
 - **Public baseline:** history begins with the final architecture/roadmap snapshot, uses the public GitHub author identity, and is licensed `AGPL-3.0-only`.
 
@@ -29,8 +31,10 @@ Always inspect `git status --short --branch` and the latest log before changing 
 - **P2-05:** immutable source-body-free retrieval audit records with scope/version/citation/score/timing pins, synthetic diffable golden retrieval cases, and deterministic source-recall/latency evaluation reporting.
 - **P4-02:** private Node 22.19+ `pi-ai` gateway package with a lockfile-pinned `0.84.1` provider/`Models` integration, allowlisted OpenAI Codex OAuth/OpenAI API-key/faux providers, restrictive serialized credential persistence, internal-token-protected HTTP/SSE contracts, display-safe login events, normalized streams, and cancellation.
 - **P4-03:** bounded task-scope contract in Python with explicit DM-only defaults, standalone-dungeon rejection of grounding fields, and a typed `TaskScope`/`TaskType` resolution helper that prevents prompt-level scope broadening.
+- **P5-01:** campaign-knowledge entity, alias, mention, merge, split, archive, and candidate-resolution persistence in committed `eea08a4`.
+- **P10-04 deployment baseline:** pinned non-root Workbench and model-gateway images, a full private Compose topology with PostgreSQL, a one-shot volume-permission initializer, migration-aware Workbench startup, readiness health checks, conservative resource/restart policy, separate database/gateway-credential/asset/scratch volumes, configurable read-only source mounts, and documented native versus full-stack workflows. P10's later security, backup, observability, and release gates remain unstarted.
 
-Migrations are `0001_foundation`, `0002_preparation`, `0003_library_sources`, `0004_library_embeddings`, `0005_library_embedding_runs`, and `0006_library_retrieval_runs`.
+Migrations are `0001_foundation`, `0002_preparation`, `0003_library_sources`, `0004_library_embeddings`, `0005_library_embedding_runs`, `0006_library_retrieval_runs`, and `0007_campaign_knowledge_entities`.
 
 The public history contains three reviewed snapshots: final architecture/roadmap, the first executable Python scaffold, and the aggregate implementation through P1-02. Earlier local planning history is intentionally outside public `main`.
 
@@ -48,13 +52,37 @@ The public history contains three reviewed snapshots: final architecture/roadmap
 - Player-facing exports fail closed and omit DM-only data and fingerprints.
 - Real campaign text, proprietary rules/bestiary content, character sheets, credentials, and provider responses are not fixtures.
 
-## Next Exact Task — P4-04
+## Next Exact Task — P7-10
 
-1. Define a strict versioned `GenerationContextEnvelope[T]` and first `DungeonGenerationContext` payload without growing a universal optional-field model.
-2. Keep scope/provenance fields narrow, hashed, and replayable while rejecting unknown envelope fields or payload versions.
-3. Add synthetic hash round-trip and scope-change tests before any dungeon-generation model/tool loop is introduced.
+1. Add `dm dungeon prompt` plus authenticated API/web controls that compose `DungeonPromptService` with `PiGatewayClient.from_settings`.
+2. Stream/cancel/reconnect durable prompt-run status through the existing shared model components while preserving gateway-unavailable manual Studio operations.
+3. Add context inspection, faux-provider integration cases, and first-pass/repair/preservation evaluation reporting.
 
 ## Last Verification
+
+P7-09 completion checks passed:
+
+- `uv run ruff check` across the changed Python client/config/model/dungeon modules and focused tests → passed.
+- `uv run mypy src/dm_assistant/config.py src/dm_assistant/adapters/model_gateway.py src/dm_assistant/orchestration/modeling/service.py src/dm_assistant/orchestration/dungeons/prompting.py` → passed.
+- `uv run pytest -q tests/unit/test_config.py tests/unit/test_model_gateway_client.py tests/unit/test_modeling_contracts.py tests/unit/test_modeling_service.py tests/unit/test_prompted_dungeon_workflow.py tests/unit/test_preparation_contracts.py tests/unit/test_task_scope_contracts.py` → `39 passed in 0.48s`.
+- `uv run pytest -q tests/unit/test_web_auth.py tests/unit/test_api.py tests/unit/test_doctor.py` → `18 passed in 1.72s`.
+- `npm --prefix model-gateway run check` and `npm --prefix model-gateway test` → passed (`4` Node tests).
+- The PostgreSQL prompted-lineage integration test remains unexecuted because `DM_TEST_DATABASE_URL` is unset.
+
+P10-04 deployment-baseline checks passed:
+
+- `podman compose config --quiet` with synthetic required environment values → passed.
+- Both production images built successfully with `podman compose build`; their configured runtime users are `workbench` and `gateway`, not root.
+- An isolated Podman Compose stack on alternate localhost ports started the volume initializer, PostgreSQL, private model gateway, and Workbench. All service health checks became healthy; `GET /health/ready` returned `{"status":"ready", ...}` after the Workbench migration.
+- `npm --prefix model-gateway run check` and `npm --prefix model-gateway test` → passed (`4` tests).
+- The temporary stack, network, and named volumes were removed; `git diff --check` → clean.
+
+P7-09 backend slice checks passed:
+
+- `uv run ruff check` across the changed prompt/model/dungeon modules and focused tests → passed.
+- `uv run mypy src/dm_assistant/modules/modeling/contracts.py src/dm_assistant/orchestration/modeling/service.py src/dm_assistant/orchestration/dungeons/contracts.py src/dm_assistant/orchestration/dungeons/prompting.py src/dm_assistant/orchestration/dungeons/service.py` → passed.
+- `uv run pytest -q tests/unit/test_prompted_dungeon_workflow.py tests/unit/test_modeling_contracts.py tests/unit/test_modeling_service.py tests/unit/test_preparation_contracts.py tests/unit/test_task_scope_contracts.py tests/unit/test_web_auth.py tests/unit/test_api.py tests/unit/test_doctor.py` → `36 passed in 1.75s`.
+- `tests/integration/test_dungeon_studio_workflow.py` has prompted-lineage coverage but could not run because `DM_TEST_DATABASE_URL` is unset.
 
 P5-01 focused checks passed:
 
@@ -125,10 +153,10 @@ The aggregate isolated gate from the prior public-history state also passed:
 
 ## Handoff
 
-- **Status:** P1-01 through P1-06, P2-01 through P2-05, and P4-02 through P4-07 are complete; P5-01 is now underway for structured campaign knowledge.
-- **Changed:** P4-02 adds the independent `model-gateway/` Node package (`@earendil-works/pi-ai` exactly pinned to `0.84.1` with an npm lockfile), private host validation, internal-token-protected health/catalog/auth/login/stream/cancellation endpoints, a `0600` atomic credential store, normalized SSE events, deterministic faux-provider tests, and the matching root ignore rules. P4-03 adds the bounded Python `TaskScope`/`TaskType` contract in [src/dm_assistant/modules/scope.py](src/dm_assistant/modules/scope.py) and focused synthetic tests in [tests/unit/test_task_scope_contracts.py](tests/unit/test_task_scope_contracts.py). P4-04 adds strict generation-context envelope and standalone dungeon context contracts in [src/dm_assistant/modules/preparation/contracts.py](src/dm_assistant/modules/preparation/contracts.py) plus focused round-trip coverage in [tests/unit/test_preparation_contracts.py](tests/unit/test_preparation_contracts.py). P4-05 adds versioned model/task profile contracts, catalog validation, strict dungeon intent output, and bounded tool-loop orchestration in [src/dm_assistant/modules/modeling/contracts.py](src/dm_assistant/modules/modeling/contracts.py) and [src/dm_assistant/orchestration/modeling/service.py](src/dm_assistant/orchestration/modeling/service.py), with focused tests in [tests/unit/test_modeling_contracts.py](tests/unit/test_modeling_contracts.py) and [tests/unit/test_modeling_service.py](tests/unit/test_modeling_service.py). P4-06 adds the shared model-workbench UI/state foundation, device-code login flow, provider/model/task/effort selection, and cancellable/reconnectable bounded-run streaming in [src/dm_assistant/modules/modeling/workbench.py](src/dm_assistant/modules/modeling/workbench.py), [src/dm_assistant/web/routes.py](src/dm_assistant/web/routes.py), [src/dm_assistant/web/templates/model_panel.html](src/dm_assistant/web/templates/model_panel.html), and [tests/unit/test_web_auth.py](tests/unit/test_web_auth.py). P4-07 adds the Ask page, attachment upload/download, ask-history/comparison baseline state, and SSE-backed ask run controls in [src/dm_assistant/web/routes.py](src/dm_assistant/web/routes.py), [src/dm_assistant/web/templates/ask.html](src/dm_assistant/web/templates/ask.html), [src/dm_assistant/web/templates/base.html](src/dm_assistant/web/templates/base.html), [src/dm_assistant/modules/modeling/workbench.py](src/dm_assistant/modules/modeling/workbench.py), and [tests/unit/test_web_auth.py](tests/unit/test_web_auth.py). P5-01 adds the campaign-knowledge entity, alias, mention, merge, split, archive, and candidate-resolution slice in [src/dm_assistant/modules/campaign_knowledge/](src/dm_assistant/modules/campaign_knowledge/) plus the corresponding Alembic migration [migrations/versions/0007_campaign_knowledge_entities.py](migrations/versions/0007_campaign_knowledge_entities.py) and integration coverage [tests/integration/test_campaign_knowledge.py](tests/integration/test_campaign_knowledge.py).
-- **Checks:** `uv run pytest -q tests/unit/test_web_auth.py tests/unit/test_modeling_contracts.py tests/unit/test_modeling_service.py tests/unit/test_preparation_contracts.py tests/unit/test_task_scope_contracts.py` passed (`18 passed`). `git diff --check` passed. The sandbox blocked npm's advisory endpoint during `npm audit`; rerun that command from a network-permitted dependency-review environment. Earlier P2 executable checks remain outstanding despite terminal recovery.
-- **Problems:** No P4-02 or P4-03 application-code failures remain. The P2 phase gate still needs executable retrieval-eval evidence, including a real local runtime/profile quality-resource comparison, before selecting an ONNX model.
-- **Working tree:** `PROJECT_STATUS.md`, `migrations/env.py`, `migrations/versions/0007_campaign_knowledge_entities.py`, `src/dm_assistant/modules/__init__.py`, `src/dm_assistant/modules/campaign_knowledge/__init__.py`, `src/dm_assistant/modules/campaign_knowledge/contracts.py`, `src/dm_assistant/modules/campaign_knowledge/models.py`, `src/dm_assistant/modules/campaign_knowledge/service.py`, `src/dm_assistant/readiness.py`, `tests/integration/conftest.py`, and `tests/integration/test_campaign_knowledge.py` are modified. No user changes were reverted.
-- **Next:** P5-02; add the predicate catalog.
-- **Suggested commit:** `P5-01 add campaign knowledge entities and merge history`.
+- **Status:** P3-01 and P5-02 are unstarted. P5-01 is committed. P7-09 is complete; the P10-04 deployment baseline is complete early; P7-10 remains next for user-facing Studio integration.
+- **Changed:** `PiGatewayClient` uses the configured private URL/shared internal token to send profile-bound user messages and server-generated tool schemas to `/v1/streams`, then strictly decodes normalized SSE text/tool/usage/completion events without provider-error leakage. Gateway usage events are normalized. The standalone prompt workflow now offers only typed brief/topology review, layout generation/validation, and code-owned targeted-regeneration preview tools; no model tool writes files, SVG, approved artifacts, or canonical state. Gateway configuration requires a private internal token whenever enabled. The deployment baseline adds non-root Workbench/gateway images, private full-stack Compose with volume initialization and health/resource controls, Make targets for native and full-stack loops, and macOS/Proxmox workflow documentation.
+- **Checks:** Ruff, strict mypy, 39 focused prompt/config/model tests, 18 web/API/doctor tests, Node TypeScript/faux-gateway tests, Compose static configuration, two image builds, and an isolated healthy full-stack Podman smoke test passed. The smoke database/network/volumes were removed. The PostgreSQL prompted-lineage integration test remains unexecuted because `DM_TEST_DATABASE_URL` is unset. Final `git diff --check` still needs its post-handoff run.
+- **Problems:** no known application-code failure. Live-provider verification remains a manual operator action: configure the shared gateway token locally without sharing credentials. P3 continues to block promotion of generated facts to canon, not generation or preparation approval. P10-01/02/03/05/06 release work remains unstarted; this baseline intentionally does not claim backup/restore, adversarial, metrics, or production acceptance coverage.
+- **Working tree:** P7-09 prompt/gateway changes remain modified or untracked. Deployment changes add `Dockerfile`, `model-gateway/Dockerfile`, Compose, non-root startup support, Docker ignore files, Make targets, and native/full-stack/Proxmox documentation in `README.md`, `.env.example`, and the technical architecture. No unrelated user changes were reverted.
+- **Next:** P7-10; add the standalone prompt CLI/API/web command and route as the first concrete action.
+- **Suggested commit:** `P7-09 add bounded private-gateway dungeon tools`.
