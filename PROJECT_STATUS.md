@@ -5,12 +5,12 @@
 ## Snapshot
 
 - **Last updated:** 2026-08-12
-- **Lifecycle:** P7-09 is complete. Standalone model-authored brief/topology intent now travels through the private token-authenticated Node gateway, uses only schema-bound deterministic review/layout/regeneration-preview tools, performs bounded diagnostic repair, and persists standalone context plus model/tool lineage. The P10-04 container/Compose baseline is also complete early: native development remains fast, while the same repository provides a complete local/Proxmox Compose stack.
+- **Lifecycle:** P7-10a is complete. The headless CLI now lists the real private-gateway catalog, coordinates gateway-owned provider login, resolves the pinned dungeon task profile against actual model capabilities, and executes standalone prompt → typed intent → deterministic package → persisted draft. P7-10 remains split into ordered `a` headless and `b` web/final-gate slices without changing its stable task ID. The P10-04 container/Compose baseline is also complete early.
 - **Current phase:** P7 — Dungeon and Map Generation.
-- **Current task:** P7-10 starting — grounded Dungeon Studio integration and final eval gate.
+- **Current task:** P7-10b starting — web streaming and final Dungeon Studio eval gate.
 - **Validated status:** P3-01 is unstarted: no P3 migration, implementation, or commit exists. P5-01 is complete in committed `eea08a4`; P5-02 is unstarted: no predicate schema, migration, operation, or commit exists.
 - **Fast-track note:** P3 is required only to promote generated dungeon facts to campaign canon. It does not block standalone prompt-to-package preparation work; P5-02 remains deferred until explicit campaign grounding needs it.
-- **Next task:** **P7-10 — add standalone prompt-to-dungeon CLI/API/web integration.**
+- **Next task:** **P7-10b — add the gateway-backed Dungeon Studio prompt web workflow.**
 - **Schema head:** `0007_campaign_knowledge_entities`.
 - **Public baseline:** history begins with the final architecture/roadmap snapshot, uses the public GitHub author identity, and is licensed `AGPL-3.0-only`.
 
@@ -22,6 +22,7 @@ Always inspect `git status --short --branch` and the latest log before changing 
 - **P7-01:** immutable preparation artifacts, versions, lifecycle audit, generation runs, assets, and transactional preparation services.
 - **P7-02 through P7-08:** independently packaged deterministic dungeon contracts, topology/layout/geometry validation, SVG/PNG/exact-scale PDF rendering, and Roll20-compatible export.
 - **P7-11:** shared provider-independent Dungeon Studio workflows across CLI, JSON API, and signed-session/CSRF web interfaces, including comparison, regeneration locks, exports, and preparation approval.
+- **P7-10a:** real private-gateway provider/model catalog and login coordination in Python, hyphen-safe transport model IDs, pinned live dungeon-profile resolution, shared runtime composition, `dm model` operations, synchronous `dm dungeon prompt`, Compose/live-provider documentation, and a scripted faux-gateway CLI-to-PostgreSQL package test.
 - **P1-01:** immutable source documents, path history, exact revisions/chunks, ingestion runs, corpus snapshots, authority/ruleset/visibility constraints, and lexical vectors.
 - **P1-02:** allowlisted source discovery, descriptor-relative no-symlink reads, and transactional unchanged/edit/reversion/move/duplicate/missing/restore/ambiguity reconciliation.
 - **P2-01:** provider-independent Python embedding contracts, separate hosted credential/retention configuration, immutable embedding-profile and exact chunk-embedding persistence, deterministic network-free fake provider, and a local-runtime benchmark probe.
@@ -52,13 +53,25 @@ The public history contains three reviewed snapshots: final architecture/roadmap
 - Player-facing exports fail closed and omit DM-only data and fingerprints.
 - Real campaign text, proprietary rules/bestiary content, character sheets, credentials, and provider responses are not fixtures.
 
-## Next Exact Task — P7-10
+## Next Exact Task — P7-10b
 
-1. Add `dm dungeon prompt` plus authenticated API/web controls that compose `DungeonPromptService` with `PiGatewayClient.from_settings`.
-2. Stream/cancel/reconnect durable prompt-run status through the existing shared model components while preserving gateway-unavailable manual Studio operations.
-3. Add context inspection, faux-provider integration cases, and first-pass/repair/preservation evaluation reporting.
+1. Replace the synthetic-only Dungeon Studio model panel path with the P7-10a gateway-backed application service and add the standalone prompt form.
+2. Stream/cancel/reconnect durable prompt-run status while preserving gateway-unavailable manual Studio operations.
+3. Add context inspection, faux-provider browser cases, and first-pass/repair/preservation evaluation reporting.
 
 ## Last Verification
+
+P7-10a focused checks passed:
+
+- Focused Ruff lint/format over all changed Python and test files → passed.
+- `uv run mypy` over the changed gateway/model/prompt/runtime/CLI modules → passed.
+- `uv run pytest -q tests/unit/test_cli.py tests/unit/test_model_gateway_client.py tests/unit/test_prompted_dungeon_workflow.py tests/unit/test_preparation_contracts.py tests/unit/test_task_scope_contracts.py` → `22 passed in 0.57s`.
+- `npm --prefix model-gateway run check` and `npm --prefix model-gateway test` → passed (`4` Node tests).
+- The disposable Podman gate built both wheels, migrated to head, and ran all `40` PostgreSQL integration tests; both Dungeon Studio CLI tests passed, including scripted faux gateway → persisted prompted package. The aggregate gate then stopped on three pre-existing unrelated Library/schema failures: metadata drift for P5-01 checks, duplicate vector result behavior, and an embedding-resume fixture missing required document path history.
+- The first gate attempt exposed stale Compose assumptions in `scripts/check-container.sh`; it now supplies required synthetic parse-time secrets and gives the temporary test runner an ephemeral outbound network plus a `postgres` alias. Cleanup removes the database stack, volumes, and runner network.
+- Full-tree Ruff and mypy still report pre-existing unrelated failures in Library/web/model-workbench files; focused changed-file checks pass.
+- `sh -n scripts/check-container.sh` and `git diff --check` → passed.
+- Live OAuth/model execution remains manual and was not run.
 
 P7-09 completion checks passed:
 
@@ -153,10 +166,10 @@ The aggregate isolated gate from the prior public-history state also passed:
 
 ## Handoff
 
-- **Status:** P3-01 and P5-02 are unstarted. P5-01 is committed. P7-09 is complete; the P10-04 deployment baseline is complete early; P7-10 remains next for user-facing Studio integration.
-- **Changed:** `PiGatewayClient` uses the configured private URL/shared internal token to send profile-bound user messages and server-generated tool schemas to `/v1/streams`, then strictly decodes normalized SSE text/tool/usage/completion events without provider-error leakage. Gateway usage events are normalized. The standalone prompt workflow now offers only typed brief/topology review, layout generation/validation, and code-owned targeted-regeneration preview tools; no model tool writes files, SVG, approved artifacts, or canonical state. Gateway configuration requires a private internal token whenever enabled. The deployment baseline adds non-root Workbench/gateway images, private full-stack Compose with volume initialization and health/resource controls, Make targets for native and full-stack loops, and macOS/Proxmox workflow documentation.
-- **Checks:** Ruff, strict mypy, 39 focused prompt/config/model tests, 18 web/API/doctor tests, Node TypeScript/faux-gateway tests, Compose static configuration, two image builds, and an isolated healthy full-stack Podman smoke test passed. The smoke database/network/volumes were removed. The PostgreSQL prompted-lineage integration test remains unexecuted because `DM_TEST_DATABASE_URL` is unset. Final `git diff --check` still needs its post-handoff run.
-- **Problems:** no known application-code failure. Live-provider verification remains a manual operator action: configure the shared gateway token locally without sharing credentials. P3 continues to block promotion of generated facts to canon, not generation or preparation approval. P10-01/02/03/05/06 release work remains unstarted; this baseline intentionally does not claim backup/restore, adversarial, metrics, or production acceptance coverage.
-- **Working tree:** P7-09 prompt/gateway changes remain modified or untracked. Deployment changes add `Dockerfile`, `model-gateway/Dockerfile`, Compose, non-root startup support, Docker ignore files, Make targets, and native/full-stack/Proxmox documentation in `README.md`, `.env.example`, and the technical architecture. No unrelated user changes were reverted.
-- **Next:** P7-10; add the standalone prompt CLI/API/web command and route as the first concrete action.
-- **Suggested commit:** `P7-09 add bounded private-gateway dungeon tools`.
+- **Status:** P7-10a is complete; P7-10b is next. P3-01 and P5-02 remain unstarted and do not block standalone preparation generation.
+- **Changed:** `PiGatewayClient` now reads display-safe provider/model catalogs and coordinates login/status/prompt response/logout as well as bounded streams. Gateway model identifiers accept real transport-safe hyphens. The shared runtime composes `DungeonPromptService` when enabled. New `dm model` commands expose provider setup without tokens, and `dm dungeon prompt` resolves a pinned profile from the selected live catalog entry before persisting a standalone draft package. The plan now explicitly splits P7-10a/P7-10b, README documents native/Compose live-provider use, and the disposable container gate works with the private Compose topology.
+- **Checks:** Focused Ruff/format, strict mypy, 22 focused unit tests, 4 Node tests, shell syntax, and diff checks passed. The Podman gate built distributions and passed the new prompted CLI persistence integration test, but the aggregate integration run remains red on three unrelated Library/schema tests described above. Live OAuth/model execution was not run.
+- **Problems:** the browser model workbench still uses synthetic in-process behavior; P7-10b must connect it to the P7-10a gateway-backed service. The gateway's default faux response is not a complete dungeon intent, so automated end-to-end coverage scripts the faux transport. Existing full-tree Ruff/mypy and three Library/schema integration failures remain outside this task.
+- **Working tree:** P7-10a code, tests, plan/README, container-gate repair, and this handoff are modified and uncommitted. No unrelated work was overwritten.
+- **Next:** P7-10b; first replace the synthetic Dungeon Studio model-panel start path with a call to the shared gateway-backed prompt application service.
+- **Suggested commit:** `P7-10a connect headless prompt-to-dungeon workflow`.

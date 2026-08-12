@@ -25,6 +25,21 @@ from dm_assistant.modules.modeling import (
 from dm_assistant.orchestration.modeling import GatewayToolSchema
 
 
+class FakeJsonResponse:
+    def __init__(self, status: int, document: object | None = None) -> None:
+        self.status = status
+        self._document = document
+
+    def __enter__(self) -> "FakeJsonResponse":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        del args
+
+    def read(self) -> bytes:
+        return json.dumps(self._document).encode("utf-8")
+
+
 class FakeSseResponse:
     status = 200
 
@@ -145,6 +160,77 @@ def test_private_gateway_client_sends_only_policy_bound_input_and_decodes_sse(
     payload = json.loads(request.data or b"{}")
     assert payload["provider"] == "faux"
     assert payload["tools"] == [schema.model_dump(mode="json")]
+
+
+def test_private_gateway_client_lists_live_catalog_and_coordinates_login(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests: list[Request] = []
+    responses = iter(
+        (
+            FakeJsonResponse(
+                200,
+                {
+                    "providers": [
+                        {
+                            "id": "openai-codex",
+                            "name": "OpenAI Codex",
+                            "authenticated": False,
+                            "authModes": ["oauth"],
+                            "models": [
+                                {
+                                    "id": "gpt-5.1-codex",
+                                    "name": "GPT Codex",
+                                    "input": ["text"],
+                                    "capabilities": ["text", "thinking", "tool_calls"],
+                                    "contextWindow": 128000,
+                                    "maxOutputTokens": 16384,
+                                }
+                            ],
+                        }
+                    ]
+                },
+            ),
+            FakeJsonResponse(
+                202,
+                {
+                    "login_id": "11111111-1111-1111-1111-111111111111",
+                    "provider": "openai-codex",
+                    "status": "pending",
+                    "events": [
+                        {
+                            "type": "device_code",
+                            "user_code": "ABCD-EFGH",
+                            "verification_uri": "https://example.invalid/device",
+                        }
+                    ],
+                },
+            ),
+        )
+    )
+
+    def fake_urlopen(request: Request, *, timeout: int) -> FakeJsonResponse:
+        assert timeout == 30
+        requests.append(request)
+        return next(responses)
+
+    monkeypatch.setattr("dm_assistant.adapters.model_gateway.urlopen", fake_urlopen)
+    client = PiGatewayClient(
+        base_url="http://model-gateway:3000",
+        internal_token="gateway-test-token-00000000000000",
+    )
+
+    providers = client.providers()
+    login = client.start_login("openai-codex")
+
+    assert providers[0].models[0].id == "gpt-5.1-codex"
+    assert providers[0].models[0].context_window == 128000
+    assert login.events[0].user_code == "ABCD-EFGH"
+    assert requests[0].full_url.endswith("/v1/providers")
+    assert json.loads(requests[1].data or b"{}") == {
+        "provider": "openai-codex",
+        "type": "oauth",
+    }
 
 
 def test_private_gateway_client_rejects_error_events_without_echoing_provider_text(

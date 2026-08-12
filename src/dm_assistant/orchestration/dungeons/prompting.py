@@ -10,11 +10,18 @@ from pydantic import BaseModel, ConfigDict, JsonValue
 
 from dm_assistant.modules.modeling import (
     DungeonGenerationIntentV1,
+    GatewayModelCatalogEntry,
+    ModelEndpointProfile,
     ModelRunInput,
     ModelRunRecord,
     PromptMessage,
+    ReasoningEffort,
+    ReasoningLevel,
     ResolvedModelRunProfile,
+    TaskProfile,
     ToolResult,
+    resolve_run_profile,
+    supported_from_reasoning,
 )
 from dm_assistant.modules.preparation import (
     DungeonGenerationContext,
@@ -85,6 +92,76 @@ class PromptedDungeonCreator(Protocol):
         self,
         command: CreatePromptedDungeonWorkflow,
     ) -> DungeonWorkflowResult: ...
+
+
+def resolve_dungeon_prompt_profile(
+    *,
+    provider_id: str,
+    model_id: str,
+    capabilities: tuple[str, ...],
+    context_window_tokens: int,
+    output_token_limit: int,
+    requested_effort: ReasoningEffort = ReasoningEffort.STANDARD,
+) -> ResolvedModelRunProfile:
+    """Resolve the pinned standalone dungeon profile against gateway metadata."""
+
+    reasoning_levels = (
+        (ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH)
+        if "thinking" in capabilities
+        else (ReasoningLevel.MEDIUM,)
+    )
+    supported_efforts = supported_from_reasoning(reasoning_levels)
+    endpoint = ModelEndpointProfile(
+        profile_id=uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            f"dm-assistant:model-endpoint:pi_ai:{provider_id}:{model_id}",
+        ),
+        profile_version="1.0.0",
+        runtime_adapter="pi_ai",
+        provider_id=provider_id,
+        model_id=model_id,
+        supported_efforts=supported_efforts,
+        default_effort=(
+            ReasoningEffort.STANDARD
+            if ReasoningEffort.STANDARD in supported_efforts
+            else supported_efforts[0]
+        ),
+        observed_capabilities=capabilities,
+        context_window_tokens=context_window_tokens,
+        output_token_limit=output_token_limit,
+    )
+    task = TaskProfile(
+        profile_id=uuid.UUID("77777777-7777-7777-7777-777777777710"),
+        profile_version="1.0.0",
+        task_name=_DUNGEON_INTENT_SCHEMA_NAME,
+        prompt_version="prompt-1",
+        instruction_version="instructions-1",
+        output_schema_name=_DUNGEON_INTENT_SCHEMA_NAME,
+        output_schema_version=_DUNGEON_INTENT_SCHEMA_VERSION,
+        allowed_tools=_DUNGEON_TOOL_NAMES,
+        turn_budget=2,
+        tool_budget=1,
+        time_budget_seconds=120,
+        token_budget=min(output_token_limit, 16_384),
+        require_citation_ids=False,
+        require_authorized_citations=False,
+        allow_source_retrieval_tools=False,
+    )
+    catalog = GatewayModelCatalogEntry(
+        provider_id=provider_id,
+        model_id=model_id,
+        runtime_adapter="pi_ai",
+        observed_capabilities=capabilities,
+        supported_reasoning_levels=reasoning_levels,
+        context_window_tokens=context_window_tokens,
+        output_token_limit=output_token_limit,
+    )
+    return resolve_run_profile(
+        endpoint_profile=endpoint,
+        task_profile=task,
+        catalog_entry=catalog,
+        requested_effort=requested_effort,
+    )
 
 
 class DungeonPromptService:
@@ -210,6 +287,13 @@ def _initial_model_input(
                 content=_canonical_message(
                     {
                         "task": _DUNGEON_INTENT_SCHEMA_NAME,
+                        "instructions": (
+                            "Return only one dungeon_generation_intent_v1 JSON object. "
+                            "Its exact schema is the intent field in the supplied tool "
+                            "schemas. Author high-level brief and topology intent only; "
+                            "do not author exact geometry, renderer syntax, files, "
+                            "approval, or canonical state. Use stable descriptive IDs."
+                        ),
                         "prompt": command.prompt,
                         "context": context.envelope,
                     }
@@ -232,6 +316,12 @@ def _repair_model_input(
                 content=_canonical_message(
                     {
                         "task": _DUNGEON_INTENT_SCHEMA_NAME,
+                        "instructions": (
+                            "Return only one corrected dungeon_generation_intent_v1 "
+                            "JSON object using the intent schema in the supplied tools. "
+                            "Repair the diagnostics without authoring exact geometry or "
+                            "renderer syntax."
+                        ),
                         "prompt": command.prompt,
                         "context": context.envelope,
                         "previous_intent": intent.model_dump(mode="json"),

@@ -10,6 +10,8 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
+
 from dm_assistant.config import ModelGatewayPolicy, Settings
 from dm_assistant.modules.modeling import (
     PromptMessage,
@@ -24,6 +26,61 @@ from dm_assistant.orchestration.modeling import (
 
 class ModelGatewayTransportError(RuntimeError):
     """Raised when the private gateway cannot return a valid bounded completion."""
+
+
+class GatewayCatalogModel(BaseModel):
+    """Display-safe model metadata returned by the private gateway."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=False)
+
+    id: str
+    name: str
+    input: tuple[str, ...] = ()
+    capabilities: tuple[str, ...] = ()
+    context_window: int = Field(alias="contextWindow", ge=1)
+    max_output_tokens: int = Field(alias="maxOutputTokens", ge=1)
+
+
+class GatewayProvider(BaseModel):
+    """Display-safe provider/authentication/catalog metadata."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=False)
+
+    id: str
+    name: str
+    authenticated: bool
+    auth_modes: tuple[str, ...] = Field(alias="authModes")
+    models: tuple[GatewayCatalogModel, ...]
+
+
+class GatewayLoginEvent(BaseModel):
+    """Non-secret provider-login event suitable for a CLI or browser."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=False)
+
+    type: str
+    message: str | None = None
+    url: str | None = None
+    instructions: str | None = None
+    user_code: str | None = None
+    verification_uri: str | None = None
+    interval_seconds: int | None = None
+    expires_in_seconds: int | None = None
+    prompt_id: str | None = None
+    prompt_type: str | None = None
+    placeholder: str | None = None
+    options: tuple[dict[str, JsonValue], ...] | None = None
+
+
+class GatewayLoginSession(BaseModel):
+    """Current non-secret state for one gateway-owned provider login."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=False)
+
+    login_id: str
+    provider: str
+    status: str
+    events: tuple[GatewayLoginEvent, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +103,61 @@ class PiGatewayClient:
         return cls(
             base_url=str(settings.model_gateway_url),
             internal_token=settings.model_gateway_internal_token.get_secret_value(),
+        )
+
+    def providers(self) -> tuple[GatewayProvider, ...]:
+        """Return the allowlisted provider/model catalog without credentials."""
+
+        document = self._json_request("/v1/providers")
+        values = document.get("providers")
+        if not isinstance(values, list):
+            raise ModelGatewayTransportError(
+                "model gateway returned an invalid catalog"
+            )
+        try:
+            return tuple(GatewayProvider.model_validate(value) for value in values)
+        except ValidationError as error:
+            raise ModelGatewayTransportError(
+                "model gateway returned an invalid catalog"
+            ) from error
+
+    def start_login(
+        self, provider: str, auth_type: str = "oauth"
+    ) -> GatewayLoginSession:
+        """Start a gateway-owned OAuth/API-key login without returning credentials."""
+
+        return self._login_session(
+            self._json_request(
+                "/v1/auth/login",
+                method="POST",
+                body={"provider": provider, "type": auth_type},
+                expected_status=202,
+            )
+        )
+
+    def login_status(self, login_id: str) -> GatewayLoginSession:
+        """Poll one gateway-owned login session."""
+
+        return self._login_session(self._json_request(f"/v1/auth/login/{login_id}"))
+
+    def respond_to_login(self, login_id: str, prompt_id: str, value: str) -> None:
+        """Answer a non-secret OAuth coordination prompt."""
+
+        self._json_request(
+            f"/v1/auth/login/{login_id}/prompts/{prompt_id}",
+            method="POST",
+            body={"value": value},
+            expected_status=204,
+        )
+
+    def logout(self, provider: str) -> None:
+        """Delete one provider credential in the gateway-owned store."""
+
+        self._json_request(
+            "/v1/auth/logout",
+            method="POST",
+            body={"provider": provider},
+            expected_status=204,
         )
 
     def complete(
@@ -108,6 +220,59 @@ class PiGatewayClient:
         except TimeoutError as error:
             raise ModelGatewayTransportError(
                 "model gateway request timed out"
+            ) from error
+
+    def _json_request(
+        self,
+        path: str,
+        *,
+        method: str = "GET",
+        body: dict[str, str] | None = None,
+        expected_status: int = 200,
+    ) -> dict[str, object]:
+        data = None
+        headers = {"Authorization": f"Bearer {self.internal_token}"}
+        if body is not None:
+            data = json.dumps(
+                body, allow_nan=False, separators=(",", ":"), sort_keys=True
+            ).encode("utf-8")
+            headers["Content-Type"] = "application/json"
+        request = Request(
+            f"{self.base_url.rstrip('/')}{path}",
+            data=data,
+            headers=headers,
+            method=method,
+        )
+        try:
+            with urlopen(request, timeout=30) as response:
+                if response.status != expected_status:
+                    raise ModelGatewayTransportError(
+                        f"model gateway returned HTTP {response.status}"
+                    )
+                if expected_status == 204:
+                    return {}
+                document = json.loads(response.read())
+        except HTTPError as error:
+            raise ModelGatewayTransportError(
+                f"model gateway returned HTTP {error.code}"
+            ) from error
+        except (URLError, TimeoutError) as error:
+            raise ModelGatewayTransportError("model gateway is unavailable") from error
+        except (json.JSONDecodeError, UnicodeDecodeError) as error:
+            raise ModelGatewayTransportError(
+                "model gateway returned invalid JSON"
+            ) from error
+        if not isinstance(document, dict):
+            raise ModelGatewayTransportError("model gateway returned invalid JSON")
+        return document
+
+    @staticmethod
+    def _login_session(document: dict[str, object]) -> GatewayLoginSession:
+        try:
+            return GatewayLoginSession.model_validate(document)
+        except ValidationError as error:
+            raise ModelGatewayTransportError(
+                "model gateway returned invalid login status"
             ) from error
 
 

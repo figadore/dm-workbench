@@ -191,10 +191,48 @@ curl -H "Authorization: Bearer $DM_MODEL_GATEWAY_INTERNAL_TOKEN" \
   http://127.0.0.1:3000/health
 ```
 
-P7-09 provides the private Python client and constrained prompt-to-intent
-backend. The current CLI and Studio do **not** yet expose `dm dungeon prompt`;
-P7-10 adds that user-facing workflow. In the meantime, test the gateway and
-backend contracts with:
+P7-10a exposes the headless private-gateway path. With the native workflow,
+run these commands directly; with the full Compose stack, prefix each command
+with `podman compose exec workbench` (or `docker compose exec workbench`). First
+inspect the allowlisted providers and models:
+
+```bash
+uv run --frozen dm model providers
+```
+
+The faux provider is intended for scripted automated contracts; its default
+response is not a complete dungeon design. For a manual live-model smoke test,
+start gateway-owned Codex OAuth and follow only the non-secret events it
+returns. Provider credentials remain in the gateway credential volume:
+
+```bash
+uv run --frozen dm model login openai-codex
+uv run --frozen dm model login-status <login-id>
+# Only when a returned non-secret prompt event requests a response:
+uv run --frozen dm model login-respond <login-id> <prompt-id>
+uv run --frozen dm model providers
+```
+
+Repeat `login-status` until it reports `completed`, then use an exact model ID
+from `model providers`. Create an empty ownership workspace if needed and run
+the standalone prompt; this selects no campaign revision, corpus, rules profile,
+or retrieval context:
+
+```bash
+uv run --frozen dm campaign create "Standalone Dungeons"
+uv run --frozen dm dungeon prompt \
+  "A flooded archive beneath a lighthouse" \
+  --campaign <workspace-id> \
+  --provider openai-codex \
+  --model <exact-model-id> \
+  --effort standard \
+  --seed 1842 \
+  --title "Flooded Archive"
+```
+
+Live OAuth/model checks are manual and opt-in. Verify the selected account and
+subscription permit the intended endpoint and workload. Automated checks use
+only synthetic responses:
 
 ```bash
 uv run pytest -q tests/unit/test_model_gateway_client.py \

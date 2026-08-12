@@ -16,6 +16,16 @@ def test_help_lists_foundation_commands() -> None:
     assert "doctor" in result.output
     assert "campaign" in result.output
     assert "dungeon" in result.output
+    assert "model" in result.output
+
+    dungeon_help = runner.invoke(app, ["dungeon", "--help"])
+    assert dungeon_help.exit_code == 0
+    assert "prompt" in dungeon_help.output
+
+    model_help = runner.invoke(app, ["model", "--help"])
+    assert model_help.exit_code == 0
+    assert "providers" in model_help.output
+    assert "login" in model_help.output
 
 
 def test_version_prints_package_version() -> None:

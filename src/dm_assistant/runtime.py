@@ -7,9 +7,10 @@ from dataclasses import dataclass
 from sqlalchemy import Engine
 
 from dm_assistant.adapters.assets import LocalAssetStore
+from dm_assistant.adapters.model_gateway import PiGatewayClient
 from dm_assistant.adapters.sources import LocalSourceReader
 from dm_assistant.campaigns import CampaignCatalog
-from dm_assistant.config import Settings, load_settings
+from dm_assistant.config import ModelGatewayPolicy, Settings, load_settings
 from dm_assistant.db import build_engine
 from dm_assistant.modules.library.catalog import LibraryDocumentCatalog
 from dm_assistant.modules.library.retrieval import LibraryLexicalSearchService
@@ -17,7 +18,10 @@ from dm_assistant.modules.library.service import LibraryIngestionService
 from dm_assistant.modules.library.snapshots import CorpusSnapshotService
 from dm_assistant.modules.library.workflows import LibrarySourceWorkflow
 from dm_assistant.modules.preparation import PreparationService
-from dm_assistant.orchestration.dungeons import DungeonStudioService
+from dm_assistant.orchestration.dungeons import (
+    DungeonPromptService,
+    DungeonStudioService,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +31,8 @@ class WorkbenchRuntime:
     campaigns: CampaignCatalog
     preparation: PreparationService
     dungeons: DungeonStudioService
+    model_gateway: PiGatewayClient | None
+    dungeon_prompts: DungeonPromptService | None
     library_catalog: LibraryDocumentCatalog
     library_ingestion: LibraryIngestionService
     library_search: LibraryLexicalSearchService
@@ -45,13 +51,24 @@ def workbench_runtime(settings: Settings | None = None) -> Iterator[WorkbenchRun
     )
     library_ingestion = LibraryIngestionService(engine, source_reader)
     library_snapshots = CorpusSnapshotService(engine)
+    dungeons = DungeonStudioService(preparation)
+    model_gateway = (
+        None
+        if resolved.model_gateway_policy is ModelGatewayPolicy.DISABLED
+        else PiGatewayClient.from_settings(resolved)
+    )
+    dungeon_prompts = (
+        None if model_gateway is None else DungeonPromptService(dungeons, model_gateway)
+    )
     try:
         yield WorkbenchRuntime(
             settings=resolved,
             engine=engine,
             campaigns=CampaignCatalog(engine),
             preparation=preparation,
-            dungeons=DungeonStudioService(preparation),
+            dungeons=dungeons,
+            model_gateway=model_gateway,
+            dungeon_prompts=dungeon_prompts,
             library_catalog=LibraryDocumentCatalog(engine),
             library_ingestion=library_ingestion,
             library_search=LibraryLexicalSearchService(engine),

@@ -1045,12 +1045,28 @@ Task IDs group work by domain rather than execution order; this task runs after 
 
 ### P7-10 — Grounded Dungeon Studio integration and final eval gate
 
-**Work**
+Keep the stable P7-10 task ID, but deliver it as two ordered, independently testable slices. P7-10a proves the real private-gateway path headlessly before P7-10b adds browser behavior.
 
-- Extend the P7-11 CLI/API/web workflow with standalone prompt-to-brief/topology creation, bounded diagnostic repair, streamed/cancellable run status, and comparison against hand-authored or prior versions. Campaign-grounded generation is an explicit later mode, not the default.
+#### P7-10a — Headless/CLI prompt-to-package integration
+
+- Extend the Python gateway adapter with display-safe provider/model catalog and gateway-owned login/status/prompt-response/logout operations; access/refresh tokens never enter Python, PostgreSQL, CLI output, or shell arguments, and short-lived coordination responses are read without shell-history exposure.
+- Resolve the pinned `dungeon_generation_intent_v1` task profile against actual gateway model IDs/capabilities, including provider/model IDs containing transport-safe hyphens.
+- Compose `DungeonPromptService` with `PiGatewayClient.from_settings` in the shared Workbench runtime and add `dm model ...` setup/inspection commands plus synchronous `dm dungeon prompt`.
+- Keep a campaign record only as the preparation ownership container; standalone runs have no campaign revision, corpus snapshot, rules profile, retrieval, citations, or canonical write.
+- Add a faux-gateway CLI-to-persisted-package integration case and document an explicit opt-in live-provider smoke flow over the Compose network.
+- Preserve safe failure: unavailable/unauthenticated gateways do not affect hand-authored inspect/validate/render/export/manual-regeneration operations.
+
+**P7-10a done when**
+
+- A running Workbench can list the private gateway catalog, coordinate provider login without exposing credentials, select a compatible model/effort, and create an inspectable draft artifact through `dm dungeon prompt`.
+- Automated tests prove the same CLI/application path with a scripted faux gateway and PostgreSQL, while live-provider checks remain manual and opt-in.
+
+#### P7-10b — Web streaming and final UX/eval gate
+
+- Add the authenticated Dungeon Studio prompt form over the P7-10a application service, with real provider/model/effort selection, OAuth/device-code progress, streamed/cancellable/reconnectable durable run status, and comparison against hand-authored or prior versions. Campaign-grounded generation is an explicit later mode, not the default.
 - Add a context inspector showing the resolved common envelope, `DungeonGenerationContext` payload version, selected citations/authority labels, and payload hash without exposing secret credentials or unrestricted source bodies.
 - Preserve the fully model-independent path and make gateway failure degrade to inspect/validate/render/export/manual-regeneration behavior.
-- Extend fixed-seed golden and property-based fixtures with faux-provider contract cases.
+- Extend fixed-seed golden and property-based fixtures with faux-provider browser/stream contract cases.
 - Measure first-pass validity, repair count, targeted-edit preservation, render/export correctness, context relevance, and DM edits.
 
 Example flow:

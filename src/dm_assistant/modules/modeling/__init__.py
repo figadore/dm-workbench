@@ -20,6 +20,7 @@ from dm_assistant.modules.modeling.contracts import (
     ToolResult,
     resolve_reasoning_level,
     resolve_run_profile,
+    supported_from_reasoning,
 )
 from dm_assistant.modules.modeling.workbench import (
     LoginEvent,
@@ -60,4 +61,5 @@ __all__ = [
     "WorkbenchProviderSummary",
     "resolve_reasoning_level",
     "resolve_run_profile",
+    "supported_from_reasoning",
 ]

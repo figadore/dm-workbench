@@ -24,6 +24,14 @@ Slug = Annotated[
     str,
     StringConstraints(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$"),
 ]
+GatewayIdentifier = Annotated[
+    str,
+    StringConstraints(
+        min_length=1,
+        max_length=160,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+    ),
+]
 VersionText = Annotated[
     str,
     StringConstraints(
@@ -60,15 +68,15 @@ class ReasoningLevel(StrEnum):
 
 
 class GatewayModelKey(ContractModel):
-    provider_id: Slug
-    model_id: Slug
+    provider_id: GatewayIdentifier
+    model_id: GatewayIdentifier
 
 
 class GatewayModelCatalogEntry(ContractModel):
     """Gateway-observed capabilities for one provider/model pair."""
 
-    provider_id: Slug
-    model_id: Slug
+    provider_id: GatewayIdentifier
+    model_id: GatewayIdentifier
     runtime_adapter: Slug
     observed_capabilities: tuple[Slug, ...] = ()
     supported_reasoning_levels: tuple[ReasoningLevel, ...] = Field(min_length=1)
@@ -92,8 +100,8 @@ class ModelEndpointProfile(ContractModel):
     profile_id: UUID
     profile_version: VersionText
     runtime_adapter: Slug
-    provider_id: Slug
-    model_id: Slug
+    provider_id: GatewayIdentifier
+    model_id: GatewayIdentifier
     supported_efforts: tuple[ReasoningEffort, ...] = Field(min_length=1)
     default_effort: ReasoningEffort = ReasoningEffort.STANDARD
     observed_capabilities: tuple[Slug, ...] = ()
@@ -155,8 +163,8 @@ class ResolvedModelRunProfile(ContractModel):
     endpoint_profile_version: VersionText
     task_profile_id: UUID
     task_profile_version: VersionText
-    provider_id: Slug
-    model_id: Slug
+    provider_id: GatewayIdentifier
+    model_id: GatewayIdentifier
     runtime_adapter: Slug
     requested_effort: ReasoningEffort
     resolved_reasoning_level: ReasoningLevel

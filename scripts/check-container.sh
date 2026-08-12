@@ -9,21 +9,30 @@ POSTGRES_DB=dm_assistant_test
 POSTGRES_USER=dm_test
 POSTGRES_PASSWORD=synthetic-test-password
 RUNNER_IMAGE=ghcr.io/astral-sh/uv:0.9.5-python3.12-bookworm
+RUNNER_NETWORK=${PROJECT_NAME}-runner
 
 compose() {
   POSTGRES_DB=$POSTGRES_DB \
   POSTGRES_USER=$POSTGRES_USER \
   POSTGRES_PASSWORD=$POSTGRES_PASSWORD \
   POSTGRES_PORT=$POSTGRES_PORT \
+  DM_API_TOKEN=aggregate-test-token-000000000000000 \
+  DM_SESSION_SECRET=aggregate-session-secret-000000000000 \
+  DM_MODEL_GATEWAY_INTERNAL_TOKEN=aggregate-gateway-token-000000000000 \
     "$CONTAINER_ENGINE" compose -p "$PROJECT_NAME" "$@"
 }
 
 cleanup() {
   compose down -v >/dev/null 2>&1 || true
+  "$CONTAINER_ENGINE" network rm "$RUNNER_NETWORK" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT HUP INT TERM
 
 compose up -d postgres
+"$CONTAINER_ENGINE" network create "$RUNNER_NETWORK" >/dev/null
+postgres_container=$(compose ps -q)
+"$CONTAINER_ENGINE" network connect --alias postgres \
+  "$RUNNER_NETWORK" "$postgres_container"
 attempt=0
 until compose exec -T postgres \
   pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; do
@@ -39,7 +48,7 @@ done
 workspace=$(pwd)
 database_url="postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
 "$CONTAINER_ENGINE" run --rm \
-  --network "${PROJECT_NAME}_default" \
+  --network "$RUNNER_NETWORK" \
   -e UV_LINK_MODE=copy \
   -e DM_ENVIRONMENT=test \
   -e "DM_DATABASE_URL=$database_url" \

@@ -11,6 +11,10 @@ import typer
 from pydantic import BaseModel
 
 from dm_assistant import __version__
+from dm_assistant.adapters.model_gateway import (
+    ModelGatewayTransportError,
+    PiGatewayClient,
+)
 from dm_assistant.doctor import (
     collect_doctor_report,
     render_doctor_human,
@@ -30,11 +34,16 @@ from dm_assistant.modules.library import (
     SourceVisibility,
     VisibilityLabel,
 )
+from dm_assistant.modules.modeling import ReasoningEffort
+from dm_assistant.modules.scope import TaskType, resolve_task_scope
 from dm_assistant.orchestration.dungeons import (
     CreateDungeonWorkflow,
     ExportDungeonWorkflow,
+    PromptDungeonWorkflow,
     RegenerateDungeonWorkflow,
+    resolve_dungeon_prompt_profile,
 )
+from dm_assistant.orchestration.modeling import ModelRunAbstained
 from dm_assistant.paths import resolve_allowlisted_file
 from dm_assistant.runtime import workbench_runtime
 from dm_dungeon import read_layout_request
@@ -60,9 +69,15 @@ library_app = typer.Typer(
     help="Immutable source documents and scoped lexical search.",
     no_args_is_help=True,
 )
+model_app = typer.Typer(
+    name="model",
+    help="Private model-gateway provider setup and inspection.",
+    no_args_is_help=True,
+)
 app.add_typer(campaign_app, name="campaign")
 app.add_typer(dungeon_app, name="dungeon")
 app.add_typer(library_app, name="library")
+app.add_typer(model_app, name="model")
 
 
 @app.callback()
@@ -264,6 +279,124 @@ def library_search(
             )
 
 
+@model_app.command("providers")
+def model_providers() -> None:
+    """List gateway providers, models, capabilities, and auth state."""
+    with _render_domain_errors():
+        with workbench_runtime() as runtime:
+            gateway = _require_model_gateway(runtime.model_gateway)
+            _emit_models(gateway.providers())
+
+
+@model_app.command("login")
+def model_login(
+    provider: str,
+    auth_type: Annotated[str, typer.Option("--type")] = "oauth",
+) -> None:
+    """Start provider login; use login-status/login-respond until complete."""
+    with _render_domain_errors():
+        with workbench_runtime() as runtime:
+            gateway = _require_model_gateway(runtime.model_gateway)
+            _emit_model(gateway.start_login(provider, auth_type))
+
+
+@model_app.command("login-status")
+def model_login_status(login_id: str) -> None:
+    """Poll non-secret progress for a gateway-owned provider login."""
+    with _render_domain_errors():
+        with workbench_runtime() as runtime:
+            gateway = _require_model_gateway(runtime.model_gateway)
+            _emit_model(gateway.login_status(login_id))
+
+
+@model_app.command("login-respond")
+def model_login_respond(login_id: str, prompt_id: str) -> None:
+    """Answer an OAuth coordination prompt without placing it in shell history."""
+    value = typer.prompt("Response", hide_input=True)
+    with _render_domain_errors():
+        with workbench_runtime() as runtime:
+            gateway = _require_model_gateway(runtime.model_gateway)
+            gateway.respond_to_login(login_id, prompt_id, value)
+            typer.echo('{"accepted":true}')
+
+
+@model_app.command("logout")
+def model_logout(provider: str) -> None:
+    """Remove one provider credential from the private gateway store."""
+    with _render_domain_errors():
+        with workbench_runtime() as runtime:
+            gateway = _require_model_gateway(runtime.model_gateway)
+            gateway.logout(provider)
+            typer.echo('{"logged_out":true}')
+
+
+@dungeon_app.command("prompt")
+def dungeon_prompt(
+    prompt: Annotated[str, typer.Argument(help="Standalone dungeon request.")],
+    campaign_id: Annotated[UUID, typer.Option("--campaign")],
+    provider: Annotated[str, typer.Option("--provider")],
+    model: Annotated[str, typer.Option("--model")],
+    seed: Annotated[int, typer.Option("--seed")],
+    title: Annotated[str, typer.Option("--title")] = "Prompted dungeon",
+    effort: Annotated[ReasoningEffort, typer.Option("--effort")] = (
+        ReasoningEffort.STANDARD
+    ),
+    constraint: Annotated[list[str] | None, typer.Option("--constraint")] = None,
+    created_by: Annotated[str, typer.Option("--created-by")] = "dm",
+) -> None:
+    """Generate a standalone draft through the private model gateway."""
+    with _render_domain_errors():
+        with workbench_runtime() as runtime:
+            gateway = _require_model_gateway(runtime.model_gateway)
+            prompted = runtime.dungeon_prompts
+            if prompted is None:
+                raise InvalidInputError("The model gateway is not enabled.")
+            selected_provider = next(
+                (item for item in gateway.providers() if item.id == provider), None
+            )
+            if selected_provider is None:
+                raise InvalidInputError("The selected model provider is unavailable.")
+            if not selected_provider.authenticated:
+                raise InvalidInputError("The selected model provider requires login.")
+            selected_model = next(
+                (item for item in selected_provider.models if item.id == model), None
+            )
+            if selected_model is None:
+                raise InvalidInputError("The selected model is unavailable.")
+            try:
+                profile = resolve_dungeon_prompt_profile(
+                    provider_id=selected_provider.id,
+                    model_id=selected_model.id,
+                    capabilities=selected_model.capabilities,
+                    context_window_tokens=selected_model.context_window,
+                    output_token_limit=selected_model.max_output_tokens,
+                    requested_effort=effort,
+                )
+                result = prompted.create(
+                    PromptDungeonWorkflow(
+                        campaign_id=campaign_id,
+                        title=title,
+                        prompt=prompt,
+                        seed=seed,
+                        created_by=created_by,
+                        scope=resolve_task_scope(
+                            dm_principal_id=created_by,
+                            campaign_owner_id=created_by,
+                            task_type=TaskType.STANDALONE_DUNGEON,
+                        ),
+                        requested_constraints=tuple(constraint or ()),
+                    ),
+                    profile,
+                )
+            except (ModelGatewayTransportError, ModelRunAbstained, ValueError):
+                raise InvalidInputError(
+                    "The prompted dungeon run could not be completed."
+                ) from None
+            _emit_model(result)
+            if not result.success:
+                raise typer.Exit(code=1)
+
+
 @dungeon_app.command("generate")
 def dungeon_generate(
     input_path: Annotated[Path, typer.Argument(help="Allowlisted LayoutRequest JSON.")],
@@ -416,12 +549,34 @@ def _emit_model(model: BaseModel) -> None:
     )
 
 
+def _emit_models(models: tuple[BaseModel, ...]) -> None:
+    typer.echo(
+        json.dumps(
+            [model.model_dump(mode="json", by_alias=True) for model in models],
+            allow_nan=False,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    )
+
+
+def _require_model_gateway(gateway: PiGatewayClient | None) -> PiGatewayClient:
+    if gateway is None:
+        raise InvalidInputError("The model gateway is not enabled.")
+    return gateway
+
+
 @contextmanager
 def _render_domain_errors() -> Iterator[None]:
     try:
         yield
     except DomainError as error:
         typer.echo(format_cli_error(error), err=True)
+        raise typer.Exit(code=1) from None
+    except ModelGatewayTransportError:
+        gateway_error = InvalidInputError("The model gateway is unavailable.")
+        typer.echo(format_cli_error(gateway_error), err=True)
         raise typer.Exit(code=1) from None
 
 

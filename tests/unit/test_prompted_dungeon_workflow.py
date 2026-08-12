@@ -23,7 +23,10 @@ from dm_assistant.orchestration.dungeons import (
     DungeonWorkflowResult,
     PromptDungeonWorkflow,
 )
-from dm_assistant.orchestration.dungeons.prompting import compile_layout_request
+from dm_assistant.orchestration.dungeons.prompting import (
+    compile_layout_request,
+    resolve_dungeon_prompt_profile,
+)
 from dm_assistant.orchestration.modeling import GatewayCompletion
 from dm_dungeon import read_dungeon_package, to_canonical_json
 
@@ -148,6 +151,24 @@ def _command() -> PromptDungeonWorkflow:
         ),
         requested_constraints=("flooded", "single entrance"),
     )
+
+
+def test_live_gateway_catalog_resolves_hyphenated_dungeon_profile() -> None:
+    profile = resolve_dungeon_prompt_profile(
+        provider_id="openai-codex",
+        model_id="gpt-5.1-codex",
+        capabilities=("text", "thinking", "tool_calls"),
+        context_window_tokens=128_000,
+        output_token_limit=16_384,
+        requested_effort=ReasoningEffort.DEEP,
+    )
+
+    assert profile.provider_id == "openai-codex"
+    assert profile.model_id == "gpt-5.1-codex"
+    assert profile.requested_effort is ReasoningEffort.DEEP
+    assert profile.output_schema_name == "dungeon_generation_intent_v1"
+    assert profile.require_citation_ids is False
+    assert "generate_dungeon_layout" in profile.allowed_tools
 
 
 def test_compiler_derives_stable_layout_request_from_typed_intent() -> None:
