@@ -78,6 +78,18 @@ def _truncate_campaign_if_present(engine: Engine) -> None:
         ingestion_run_exists = connection.scalar(
             text("SELECT to_regclass('public.ingestion_run')")
         )
+        campaign_entity_exists = connection.scalar(
+            text("SELECT to_regclass('public.campaign_entity')")
+        )
+        campaign_entity_alias_exists = connection.scalar(
+            text("SELECT to_regclass('public.campaign_entity_alias')")
+        )
+        campaign_entity_mention_exists = connection.scalar(
+            text("SELECT to_regclass('public.campaign_entity_mention')")
+        )
+        campaign_entity_merge_history_exists = connection.scalar(
+            text("SELECT to_regclass('public.campaign_entity_merge_history')")
+        )
         tables = []
         if campaign_exists is not None:
             tables.append("campaign")
@@ -87,5 +99,13 @@ def _truncate_campaign_if_present(engine: Engine) -> None:
             tables.append("document")
         if ingestion_run_exists is not None:
             tables.append("ingestion_run")
+        if campaign_entity_exists is not None:
+            tables.append("campaign_entity")
+        if campaign_entity_alias_exists is not None:
+            tables.append("campaign_entity_alias")
+        if campaign_entity_mention_exists is not None:
+            tables.append("campaign_entity_mention")
+        if campaign_entity_merge_history_exists is not None:
+            tables.append("campaign_entity_merge_history")
         if tables:
             connection.execute(text(f"TRUNCATE TABLE {', '.join(tables)} CASCADE"))

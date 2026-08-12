@@ -1,5 +1,24 @@
 """Feature-owned Workbench modules."""
 
+from dm_assistant.modules.campaign_knowledge import (
+    AddEntityAlias,
+    AddEntityMention,
+    ArchiveEntity,
+    CampaignKnowledgeService,
+    CreateEntity,
+    EntityAliasRecord,
+    EntityKind,
+    EntityMatchKind,
+    EntityMentionRecord,
+    EntityMergeRecord,
+    EntityRecord,
+    EntityResolutionResult,
+    EntityResolutionState,
+    EntityStatus,
+    MergeEntities,
+    ResolvedEntityCandidate,
+    SplitEntity,
+)
 from dm_assistant.modules.modeling import (
     DungeonIntentV1,
     GatewayModelCatalogEntry,
@@ -21,6 +40,20 @@ from dm_assistant.modules.modeling import (
 from dm_assistant.modules.scope import TaskScope, TaskType, resolve_task_scope
 
 __all__ = [
+    "AddEntityAlias",
+    "AddEntityMention",
+    "ArchiveEntity",
+    "CampaignKnowledgeService",
+    "CreateEntity",
+    "EntityAliasRecord",
+    "EntityKind",
+    "EntityMatchKind",
+    "EntityMergeRecord",
+    "EntityMentionRecord",
+    "EntityRecord",
+    "EntityResolutionResult",
+    "EntityResolutionState",
+    "EntityStatus",
     "DungeonIntentV1",
     "GatewayModelCatalogEntry",
     "GatewayModelKey",
@@ -31,6 +64,9 @@ __all__ = [
     "ReasoningEffort",
     "ReasoningLevel",
     "ResolvedModelRunProfile",
+    "ResolvedEntityCandidate",
+    "MergeEntities",
+    "SplitEntity",
     "TaskProfile",
     "ToolCall",
     "ToolInvocationRecord",

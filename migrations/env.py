@@ -7,9 +7,11 @@ from sqlalchemy import engine_from_config, pool
 
 from dm_assistant.config import load_database_settings
 from dm_assistant.db import Base
+from dm_assistant.modules.campaign_knowledge import models as campaign_knowledge_models
 from dm_assistant.modules.library import models as library_models
 from dm_assistant.modules.preparation import models as preparation_models
 
+assert campaign_knowledge_models.CampaignEntity.__tablename__ == "campaign_entity"
 assert library_models.Document.__tablename__ == "document"
 assert preparation_models.PreparationArtifact.__tablename__ == "prep_artifact"
 
