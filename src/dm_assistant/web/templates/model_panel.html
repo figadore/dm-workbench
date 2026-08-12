@@ -1,0 +1,119 @@
+<section>
+  <h2>Model settings</h2>
+  <p>Shared model status, device-code login, and bounded run controls stay inside the Dungeon Studio shell.</p>
+  <div class="panel-grid">
+    <article>
+      <h3>Providers</h3>
+      {% for provider in model_providers %}
+      <section>
+        <strong>{{ provider.name }}</strong>
+        <p>Status: <span class="status">{{ "authenticated" if provider.authenticated else "signed out" }}</span></p>
+        <p>Auth modes: {{ provider.auth_modes|join(", ") if provider.auth_modes else "none" }}</p>
+        <ul>
+          {% for model in provider.models %}
+          <li><code>{{ model.model_id }}</code> — {{ model.name }}</li>
+          {% endfor %}
+        </ul>
+        <form method="post" action="/modeling/logins">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="campaign_id" value="{{ selected_campaign_id or '' }}">
+          <input type="hidden" name="provider_id" value="{{ provider.provider_id }}">
+          <button type="submit">Begin device-code login</button>
+        </form>
+        <form method="post" action="/modeling/logout">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="campaign_id" value="{{ selected_campaign_id or '' }}">
+          <input type="hidden" name="provider_id" value="{{ provider.provider_id }}">
+          <button type="submit">Log out provider</button>
+        </form>
+      </section>
+      {% endfor %}
+    </article>
+    <article>
+      <h3>Resolved profile</h3>
+      <p>Provider <code>{{ model_selection.provider_id }}</code> · model <code>{{ model_selection.model_id }}</code></p>
+      <p>Task profile <code>{{ model_selection.task_profile_id }}</code></p>
+      <p>Effort <span class="status">{{ model_selection.effort.value }}</span></p>
+      <form method="post" action="/modeling/selection">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="campaign_id" value="{{ selected_campaign_id or '' }}">
+        <label for="provider_id">Provider</label>
+        <select id="provider_id" name="provider_id">
+          {% for provider in model_providers %}
+          <option value="{{ provider.provider_id }}" {% if provider.provider_id == model_selection.provider_id %}selected{% endif %}>{{ provider.name }}</option>
+          {% endfor %}
+        </select>
+        <label for="model_id">Model</label>
+        <select id="model_id" name="model_id">
+          {% for provider in model_providers %}
+            {% for model in provider.models %}
+            <option value="{{ model.model_id }}" {% if model.model_id == model_selection.model_id %}selected{% endif %}>{{ model.name }}</option>
+            {% endfor %}
+          {% endfor %}
+        </select>
+        <label for="task_profile_id">Task profile</label>
+        <select id="task_profile_id" name="task_profile_id">
+          {% for profile in model_task_profiles %}
+          <option value="{{ profile.profile_id }}" {% if profile.profile_id == model_selection.task_profile_id %}selected{% endif %}>{{ profile.task_name }} / {{ profile.profile_version }}</option>
+          {% endfor %}
+        </select>
+        <label for="effort">Effort</label>
+        <select id="effort" name="effort">
+          <option value="fast" {% if model_selection.effort.value == "fast" %}selected{% endif %}>fast</option>
+          <option value="standard" {% if model_selection.effort.value == "standard" %}selected{% endif %}>standard</option>
+          <option value="deep" {% if model_selection.effort.value == "deep" %}selected{% endif %}>deep</option>
+        </select>
+        <button type="submit">Save model selection</button>
+      </form>
+    </article>
+    <article>
+      <h3>Run a synthetic bounded prompt</h3>
+      <form method="post" action="/modeling/runs">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="campaign_id" value="{{ selected_campaign_id or '' }}">
+        <label for="prompt">Prompt</label>
+        <textarea id="prompt" name="prompt" required>Create a synthetic dungeon intent with official rules and citations.</textarea>
+        <button type="submit">Start bounded run</button>
+      </form>
+      {% if model_active_run %}
+      <div id="active-run">
+        <h4>Active run <code>{{ model_active_run.run_id }}</code></h4>
+        <p>Status: <span class="status">{{ model_active_run.status }}</span></p>
+        <p><a href="/modeling/runs/{{ model_active_run.run_id }}/events">Reconnect stream</a></p>
+        <form method="post" action="/modeling/runs/{{ model_active_run.run_id }}/cancel">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="campaign_id" value="{{ selected_campaign_id or '' }}">
+          <button type="submit">Cancel run</button>
+        </form>
+        <details><summary>Events</summary>
+          <div data-sse-url="/modeling/runs/{{ model_active_run.run_id }}/events" data-sse-target="run-events"></div>
+          <pre id="run-events">{{ model_active_run.events|tojson(indent=2) }}</pre>
+          {% if model_active_run.output %}
+          <pre>{{ model_active_run.output|tojson(indent=2) }}</pre>
+          {% endif %}
+        </details>
+      </div>
+      {% endif %}
+    </article>
+  </div>
+  {% if model_login %}
+  <article>
+    <h3>Device-code login</h3>
+    <p>Status: <span class="status">{{ model_login.status }}</span></p>
+    {% for event in model_login.events %}
+      {% if event.type == "device_code" %}
+      <p>Verification URI: <code>{{ event.verification_uri }}</code></p>
+      <p>User code: <code>{{ event.user_code }}</code></p>
+      {% elif event.type == "prompt" %}
+      <form method="post" action="/modeling/logins/{{ model_login.login_id }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="campaign_id" value="{{ selected_campaign_id or '' }}">
+        <label for="code">Confirm device code</label>
+        <input id="code" name="code" value="ABCD-1234" required>
+        <button type="submit">Complete login</button>
+      </form>
+      {% endif %}
+    {% endfor %}
+  </article>
+  {% endif %}
+</section>

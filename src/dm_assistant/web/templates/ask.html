@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Ask{% endblock %}
+{% block content %}
+<h1>Ask</h1>
+<p>General prompts, attachment-backed citations, streamed answers, and a visible comparison baseline.</p>
+{% include "model_panel.html" %}
+
+<section>
+  <h2>Attachments</h2>
+  <form method="post" action="/ask/attachments" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="campaign_id" value="{{ campaign_id or '' }}">
+    <label for="file">Upload an attachment</label>
+    <input id="file" name="file" type="file" required>
+    <button type="submit">Upload</button>
+  </form>
+  {% if attachments %}
+  <ul>
+    {% for attachment in attachments %}
+    <li>
+      <label><input type="checkbox" name="attachment_ids" form="ask-form" value="{{ attachment.attachment_id }}"> <a href="/ask/attachments/{{ attachment.attachment_id }}">{{ attachment.filename }}</a> ({{ attachment.media_type }}, {{ attachment.byte_size }} bytes)</label>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>No attachments uploaded yet.</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>Conversation</h2>
+  <form id="ask-form" method="post" action="/ask/runs">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="campaign_id" value="{{ campaign_id or '' }}">
+    <label for="prompt">Prompt</label>
+    <textarea id="prompt" name="prompt" required>Ask for a synthetic narrative or rules answer.</textarea>
+    <button type="submit">Ask</button>
+  </form>
+  {% if ask_active_run %}
+  <article>
+    <h3>Active run <code>{{ ask_active_run.run_id }}</code></h3>
+    <p>Status: <span class="status">{{ ask_active_run.status }}</span></p>
+    <p><a href="/ask/runs/{{ ask_active_run.run_id }}/events">Reconnect stream</a></p>
+    <form method="post" action="/ask/runs/{{ ask_active_run.run_id }}/cancel">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="campaign_id" value="{{ campaign_id or '' }}">
+      <button type="submit">Cancel ask</button>
+    </form>
+    <details open>
+      <summary>Events</summary>
+      <div data-sse-url="/ask/runs/{{ ask_active_run.run_id }}/events" data-sse-target="ask-run-events"></div>
+      <pre id="ask-run-events">{{ ask_active_run.events|tojson(indent=2) }}</pre>
+      {% if ask_active_run.response %}
+      <pre>{{ ask_active_run.response|tojson(indent=2) }}</pre>
+      {% endif %}
+      {% if ask_active_run.comparison %}
+      <pre>{{ ask_active_run.comparison|tojson(indent=2) }}</pre>
+      {% endif %}
+    </details>
+  </article>
+  {% endif %}
+</section>
+
+<section>
+  <h2>History</h2>
+  {% if ask_history %}
+  {% for run in ask_history|reverse %}
+  <article>
+    <h3><code>{{ run.run_id }}</code> — {{ run.status }}</h3>
+    <p>{{ run.prompt }}</p>
+    {% if run.response %}<pre>{{ run.response|tojson(indent=2) }}</pre>{% endif %}
+    {% if run.comparison %}<pre>{{ run.comparison|tojson(indent=2) }}</pre>{% endif %}
+  </article>
+  {% endfor %}
+  {% else %}
+  <p>No ask history yet.</p>
+  {% endif %}
+</section>
+{% endblock %}
