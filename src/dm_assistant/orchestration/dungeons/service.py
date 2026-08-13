@@ -30,6 +30,7 @@ from dm_assistant.modules.preparation import (
 from dm_assistant.orchestration.dungeons.contracts import (
     CreateDungeonWorkflow,
     CreatePromptedDungeonWorkflow,
+    DungeonGenerationRegressionCase,
     DungeonStudioDetail,
     DungeonStudioSpecification,
     DungeonVersionComparison,
@@ -337,6 +338,11 @@ class DungeonStudioService:
                 artifact_version_id=None,
                 generation_run_id=run.id,
                 diagnostics=diagnostics,
+                regression_case=_regression_case(
+                    request=request,
+                    stage="layout",
+                    diagnostics=diagnostics,
+                ),
             )
 
         package = layout.package
@@ -368,6 +374,11 @@ class DungeonStudioService:
                 artifact_version_id=None,
                 generation_run_id=run.id,
                 diagnostics=diagnostics,
+                regression_case=_regression_case(
+                    request=request,
+                    stage="validation",
+                    diagnostics=diagnostics,
+                ),
             )
 
         try:
@@ -398,6 +409,11 @@ class DungeonStudioService:
                 artifact_version_id=None,
                 generation_run_id=run.id,
                 diagnostics=(render_diagnostic,),
+                regression_case=_regression_case(
+                    request=request,
+                    stage="preview",
+                    diagnostics=(render_diagnostic,),
+                ),
             )
         specification = DungeonStudioSpecification(
             schema_version=_STUDIO_SCHEMA_VERSION,
@@ -623,6 +639,21 @@ def _append_roll20_assets(
                 to_canonical_json(roll20.result.manifest).encode(),
             ),
         )
+    )
+
+
+def _regression_case(
+    *,
+    request: LayoutRequest,
+    stage: str,
+    diagnostics: tuple[dict[str, JsonValue], ...],
+) -> DungeonGenerationRegressionCase:
+    """Build fixture-ready input without persisting an invalid artifact version."""
+
+    return DungeonGenerationRegressionCase(
+        stage=stage,
+        layout_request=request,
+        expected_diagnostics=diagnostics,
     )
 
 

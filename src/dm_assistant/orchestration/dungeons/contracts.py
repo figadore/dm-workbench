@@ -99,12 +99,22 @@ class ApproveDungeonWorkflow(WorkflowModel):
     reason: str = Field(min_length=1, max_length=2000)
 
 
+class DungeonGenerationRegressionCase(WorkflowModel):
+    """Self-contained deterministic failure input retained for regression replay."""
+
+    schema_version: Literal["1.0.0"] = "1.0.0"
+    stage: str = Field(min_length=1)
+    layout_request: LayoutRequest
+    expected_diagnostics: tuple[dict[str, JsonValue], ...] = Field(min_length=1)
+
+
 class DungeonWorkflowResult(WorkflowModel):
     success: bool
     artifact_id: UUID
     artifact_version_id: UUID | None
     generation_run_id: UUID
     diagnostics: tuple[dict[str, JsonValue], ...]
+    regression_case: DungeonGenerationRegressionCase | None = None
 
 
 class DungeonVersionComparison(WorkflowModel):

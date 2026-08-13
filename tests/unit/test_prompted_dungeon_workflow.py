@@ -19,6 +19,7 @@ from dm_assistant.modules.modeling import (
 from dm_assistant.modules.scope import TaskType, resolve_task_scope
 from dm_assistant.orchestration.dungeons import (
     CreatePromptedDungeonWorkflow,
+    DungeonGenerationRegressionCase,
     DungeonPromptService,
     DungeonWorkflowResult,
     PromptDungeonWorkflow,
@@ -28,7 +29,7 @@ from dm_assistant.orchestration.dungeons.prompting import (
     resolve_dungeon_prompt_profile,
 )
 from dm_assistant.orchestration.modeling import GatewayCompletion
-from dm_dungeon import read_dungeon_package, to_canonical_json
+from dm_dungeon import generate_layout, read_dungeon_package, to_canonical_json
 
 FIXTURE_PATH = (
     Path(__file__).parents[2]
@@ -171,6 +172,27 @@ def test_live_gateway_catalog_resolves_hyphenated_dungeon_profile() -> None:
     assert profile.turn_budget == 3
     assert profile.token_budget == 128_000
     assert "generate_dungeon_layout" in profile.allowed_tools
+
+
+def test_failed_generation_regression_case_is_self_contained_and_replayable() -> None:
+    request = compile_layout_request(_intent(topology_connections=False), 1842)
+    failed = generate_layout(request)
+
+    assert failed.success is False
+    case = DungeonGenerationRegressionCase(
+        stage="layout",
+        layout_request=request,
+        expected_diagnostics=tuple(
+            item.model_dump(mode="json") for item in failed.diagnostics
+        ),
+    )
+
+    replay = generate_layout(case.layout_request)
+    assert replay.success is False
+    assert [item.model_dump(mode="json") for item in replay.diagnostics] == list(
+        case.expected_diagnostics
+    )
+    assert "layout_request" in case.model_dump(mode="json")
 
 
 def test_compiler_derives_stable_layout_request_from_typed_intent() -> None:
