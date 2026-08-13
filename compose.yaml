@@ -5,12 +5,11 @@ services:
       [
         "sh",
         "-ec",
-        "mkdir -p /campaign-sources/current /rules-sources/current && chown 10001:10001 /assets /scratch /credentials && chmod 0750 /assets /scratch && chmod 0700 /credentials && chmod 0755 /campaign-sources /campaign-sources/current /rules-sources /rules-sources/current",
+        "mkdir -p /campaign-sources/current /rules-sources/current /assets/assets /assets/scratch && chown 10001:10001 /assets /assets/assets /assets/scratch /credentials && chmod 0750 /assets /assets/assets /assets/scratch && chmod 0700 /credentials && chmod 0755 /campaign-sources /campaign-sources/current /rules-sources /rules-sources/current",
       ]
     volumes:
       - dm-assistant-gateway-credentials:/credentials
       - dm-assistant-assets-data:/assets
-      - dm-assistant-scratch-data:/scratch
       - dm-assistant-campaign-sources:/campaign-sources
       - dm-assistant-rules-sources:/rules-sources
     networks:
@@ -45,6 +44,10 @@ services:
     build:
       context: ./model-gateway
     environment:
+      # This wildcard bind is safe only because no gateway port is published;
+      # Workbench reaches it on the internal transport network. Native stays loopback.
+      MODEL_GATEWAY_HOST: 0.0.0.0
+      MODEL_GATEWAY_ALLOW_PRIVATE_WILDCARD_BIND: "true"
       DM_MODEL_GATEWAY_INTERNAL_TOKEN: ${DM_MODEL_GATEWAY_INTERNAL_TOKEN:?Set DM_MODEL_GATEWAY_INTERNAL_TOKEN in .env}
       MODEL_GATEWAY_CREDENTIAL_PATH: /var/lib/dm-model-gateway/credentials.json
     volumes:
@@ -70,6 +73,9 @@ services:
           memory: "${DM_GATEWAY_MEMORY_LIMIT:-512M}"
     networks:
       - private
+      # Provider transport needs outbound internet, but this network publishes
+      # no gateway port and is attached only to the credential-owning gateway.
+      - model-egress
 
   workbench:
     image: ${DM_WORKBENCH_IMAGE:-dm-workbench:local}
@@ -79,8 +85,10 @@ services:
       DM_ENVIRONMENT: production
       DM_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-dm_assistant}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-dm_assistant}
       DM_SOURCE_ROOTS: '["/data/campaign/current","/data/rules/current"]'
-      DM_ASSET_ROOT: /data/assets
-      DM_SCRATCH_ROOT: /data/scratch
+      # Both paths are subdirectories of one volume: no-overwrite hard-link
+      # publication cannot cross a container mount boundary.
+      DM_ASSET_ROOT: /data/storage/assets
+      DM_SCRATCH_ROOT: /data/storage/scratch
       DM_API_TOKEN: ${DM_API_TOKEN:?Set DM_API_TOKEN in .env}
       DM_SESSION_SECRET: ${DM_SESSION_SECRET:?Set DM_SESSION_SECRET in .env}
       DM_MODEL_GATEWAY_POLICY: optional
@@ -91,8 +99,7 @@ services:
     volumes:
       - dm-assistant-campaign-sources:/data/campaign:ro
       - dm-assistant-rules-sources:/data/rules:ro
-      - dm-assistant-assets-data:/data/assets
-      - dm-assistant-scratch-data:/data/scratch
+      - dm-assistant-assets-data:/data/storage
     depends_on:
       storage-init:
         condition: service_completed_successfully
@@ -123,7 +130,6 @@ volumes:
   dm-assistant-postgres-data:
   dm-assistant-gateway-credentials:
   dm-assistant-assets-data:
-  dm-assistant-scratch-data:
   dm-assistant-campaign-sources:
     name: ${DM_CAMPAIGN_SOURCE_VOLUME:-dm-assistant-campaign-sources}
   dm-assistant-rules-sources:
@@ -132,3 +138,4 @@ volumes:
 networks:
   private:
     internal: true
+  model-egress:

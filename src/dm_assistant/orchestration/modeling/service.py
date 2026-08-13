@@ -182,7 +182,41 @@ class ModelTaskRunner:
             if completion.content is None:
                 raise ModelRunAbstained("the model returned no answer content")
 
-            final = output_schema.model_validate_json(completion.content)
+            try:
+                final = output_schema.model_validate_json(completion.content)
+            except ValidationError as error:
+                if turns >= profile.turn_budget:
+                    raise ModelRunAbstained(
+                        "model output failed schema validation within the repair budget"
+                    ) from None
+                messages = messages + (
+                    PromptMessage(
+                        role="user",
+                        content=json.dumps(
+                            {
+                                "kind": "output_schema_repair",
+                                "instruction": (
+                                    "Return a complete replacement JSON response that "
+                                    "matches the required output schema exactly."
+                                ),
+                                "validation_errors": [
+                                    {
+                                        "location": [str(part) for part in item["loc"]],
+                                        "type": item["type"],
+                                        "message": item["msg"],
+                                    }
+                                    for item in error.errors(
+                                        include_url=False,
+                                        include_input=False,
+                                    )[:16]
+                                ],
+                            },
+                            separators=(",", ":"),
+                            sort_keys=True,
+                        ),
+                    ),
+                )
+                continue
             output_payload = final.model_dump(mode="json")
             citation_value = output_payload.get("citation_ids")
             if isinstance(citation_value, list) and all(

@@ -119,6 +119,11 @@ async function route(
       });
       response.flushHeaders();
       response.on("close", () => controller.abort());
+      let timedOut = false;
+      const timeout = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, streamRequest.timeLimitSeconds * 1_000);
       try {
         for await (const event of options.runtime.stream(streamRequest, controller.signal)) {
           if (controller.signal.aborted) {
@@ -126,12 +131,19 @@ async function route(
           }
           writePiEvent(response, event);
         }
-        if (controller.signal.aborted) {
+        if (timedOut) {
+          writeEvent(response, "error", { code: "timeout", message: "stream time limit reached" });
+        } else if (controller.signal.aborted) {
           writeEvent(response, "error", { code: "cancelled", message: "stream cancelled" });
         }
       } catch (error: unknown) {
-        writeSafeError(response, error);
+        if (timedOut) {
+          writeEvent(response, "error", { code: "timeout", message: "stream time limit reached" });
+        } else {
+          writeSafeError(response, error);
+        }
       } finally {
+        clearTimeout(timeout);
         activeStreams.delete(streamId);
         writeEvent(response, "done", {});
         response.end();
@@ -175,8 +187,27 @@ function writePiEvent(response: ServerResponse, event: { readonly type: string; 
       return;
     }
     case "error":
-      writeEvent(response, "error", { code: "provider_error", message: "model stream failed" });
+      writeEvent(response, "error", safeProviderError(event.error));
   }
+}
+
+function safeProviderError(value: unknown): { code: string; message: string } {
+  const errorMessage =
+    value !== null && typeof value === "object" && "errorMessage" in value
+      ? (value as { errorMessage?: unknown }).errorMessage
+      : undefined;
+  if (typeof errorMessage === "string") {
+    if (/usage limit|insufficient_quota|quota[^.]*reached|quota[^.]*exceeded/i.test(errorMessage)) {
+      return { code: "usage_limit", message: "model provider usage limit reached" };
+    }
+    if (/rate limit|too many requests/i.test(errorMessage)) {
+      return { code: "rate_limited", message: "model provider rate limit reached" };
+    }
+    if (/unauthorized|authentication|credential/i.test(errorMessage)) {
+      return { code: "authentication_required", message: "provider authentication is required" };
+    }
+  }
+  return { code: "provider_error", message: "model stream failed" };
 }
 
 function normalizeUsage(value: unknown): { input_tokens: number; output_tokens: number } {

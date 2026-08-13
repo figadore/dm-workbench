@@ -48,7 +48,11 @@ from dm_dungeon.layout.placement import (
 )
 from dm_dungeon.layout.random_source import DeterministicRandom
 from dm_dungeon.layout.routing import door_segment_at_anchor, route_between_rooms
-from dm_dungeon.validation import DiagnosticSeverity, validate_topology
+from dm_dungeon.validation import (
+    DiagnosticSeverity,
+    validate_geometry,
+    validate_topology,
+)
 
 
 def generate_layout(request: LayoutRequest) -> LayoutResult:
@@ -233,6 +237,21 @@ def generate_layout(request: LayoutRequest) -> LayoutResult:
                 "Review locked components and report this deterministic generator "
                 "failure.",
             )
+        )
+        return _failed_result(request, random_source, diagnostics)
+
+    geometry_report = validate_geometry(package)
+    if not geometry_report.valid:
+        diagnostics.extend(
+            _diagnostic(
+                LayoutDiagnosticCode.INTERNAL_CONTRACT_FAILURE,
+                finding.affected_ids,
+                finding.message,
+                finding.repair_hint,
+                source_code=finding.code.value,
+            )
+            for finding in geometry_report.diagnostics
+            if finding.severity is DiagnosticSeverity.ERROR
         )
         return _failed_result(request, random_source, diagnostics)
 
@@ -539,6 +558,11 @@ def _generate_same_floor_connections(
             room_rects[connection.to_room_id],
             floor_rectangles,
             floor_bounds[floor_id],
+            (
+                connection.minimum_width_cells
+                if isinstance(connection, CorridorConnection)
+                else 1
+            ),
             random_source,
         )
         if route is None:
@@ -631,8 +655,17 @@ def _generate_floor_transitions(
     for connection in request.topology.connections:
         if isinstance(connection, StairConnection):
             from_stair_id, to_stair_id = _stair_ids(request, connection.id)
-            from_position = _center_point(room_rects[connection.from_room_id])
-            to_position = _center_point(room_rects[connection.to_room_id])
+            locked_link = locked_links.get(connection.id)
+            from_position = _locked_stair_position(
+                locked_link,
+                connection.from_floor_id,
+                from_stair_id,
+            ) or _center_point(room_rects[connection.from_room_id])
+            to_position = _locked_stair_position(
+                locked_link,
+                connection.to_floor_id,
+                to_stair_id,
+            ) or _center_point(room_rects[connection.to_room_id])
             from_stair = locked_stairs.get(from_stair_id) or StairLayout(
                 id=from_stair_id,
                 layer_id=layer_by_visibility[connection.visibility],
@@ -653,7 +686,7 @@ def _generate_floor_transitions(
             )
             stairs.extend((from_stair, to_stair))
             links.append(
-                locked_links.get(connection.id)
+                locked_link
                 or VerticalLinkLayout(
                     id=connection.id,
                     link_type=VerticalLinkKind.STAIRS,
@@ -710,6 +743,26 @@ def _generate_floor_transitions(
             )
         )
     return stairs, links
+
+
+def _locked_stair_position(
+    link: VerticalLinkLayout | None,
+    floor_id: str,
+    stair_id: str,
+) -> GridPoint | None:
+    """Keep regenerated stair layouts aligned with a preserved vertical-link lock."""
+
+    if link is None:
+        return None
+    endpoint = next(
+        (
+            item
+            for item in link.endpoints
+            if item.floor_id == floor_id and item.stair_id == stair_id
+        ),
+        None,
+    )
+    return endpoint.position if endpoint is not None else None
 
 
 def _opposite_direction(direction: StairDirection) -> StairDirection:

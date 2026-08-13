@@ -77,7 +77,7 @@ def test_targeted_regeneration_preserves_every_locked_component(
     original = original_result.package
     locks = LockedLayoutComponents(
         floors=(original.floors[0],),
-        rooms=(original.rooms[0], original.rooms[1]),
+        rooms=(original.rooms[0], original.rooms[1], original.rooms[3]),
         corridors=(original.corridors[0], original.corridors[1]),
         doors=(original.doors[0],),
         stairs=(original.stairs[0],),

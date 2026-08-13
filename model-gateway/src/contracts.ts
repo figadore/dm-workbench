@@ -14,6 +14,7 @@ export interface GatewayStreamRequest {
   readonly messages: readonly { readonly role: "user"; readonly content: string }[];
   readonly tools: readonly GatewayToolSchema[];
   readonly outputTokenLimit: number;
+  readonly timeLimitSeconds: number;
   readonly runId: string;
   readonly sessionId?: string;
 }
@@ -45,6 +46,7 @@ export function parseStreamRequest(value: unknown): GatewayStreamRequest {
       "messages",
       "tools",
       "output_token_limit",
+      "time_limit_seconds",
       "run_id",
       "session_id",
       "attachment_references",
@@ -106,6 +108,17 @@ export function parseStreamRequest(value: unknown): GatewayStreamRequest {
     );
   }
 
+  const timeLimitSeconds = expectInteger(
+    object.time_limit_seconds,
+    "time_limit_seconds must be an integer",
+  );
+  if (timeLimitSeconds < 1 || timeLimitSeconds > 300) {
+    throw new GatewayRequestError(
+      "time_limit_seconds",
+      "time_limit_seconds is outside the allowed range",
+    );
+  }
+
   const effort = expectString(object.effort, "effort must be a string");
   if (effort !== "fast" && effort !== "standard" && effort !== "deep") {
     throw new GatewayRequestError("effort", "unsupported effort level");
@@ -119,6 +132,7 @@ export function parseStreamRequest(value: unknown): GatewayStreamRequest {
     messages: normalizedMessages,
     tools,
     outputTokenLimit,
+    timeLimitSeconds,
     runId: expectIdentifier(object.run_id, "run_id"),
     ...(object.session_id === undefined
       ? {}

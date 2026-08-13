@@ -223,7 +223,7 @@ The initial blob store can be a local mounted directory addressed by SHA-256 con
 
 The canonical dungeon/map specification is the source for rebuildable outputs. SVG/PNG/PDF exports can be regenerated when renderer versions remain available, but approved exports should still be retained/backed up when exact visual reproducibility matters. An S3-compatible object store can replace the directory later through a narrow interface without changing artifact identity.
 
-The P7-01 local adapter streams to a configurable scratch root on the same filesystem, hashes and `fsync`s the complete temporary file, then publishes through an atomic no-overwrite hard link at `sha256/<prefix>/<hash>`. An existing destination is byte-size/hash verified rather than replaced. Reads accept only a validated hash-derived locator and reverify regular-file type, size, and hash. PostgreSQL blob metadata is globally deduplicated by SHA-256 while ownership/presentation remains in separate artifact-version role rows.
+The P7-01 local adapter streams to a configurable scratch root on the same filesystem (the Compose deployment uses sibling asset/scratch directories inside its one asset volume, not separate mounts), hashes and `fsync`s the complete temporary file, then publishes through an atomic no-overwrite hard link at `sha256/<prefix>/<hash>`. An existing destination is byte-size/hash verified rather than replaced. Reads accept only a validated hash-derived locator and reverify regular-file type, size, and hash. PostgreSQL blob metadata is globally deduplicated by SHA-256 while ownership/presentation remains in separate artifact-version role rows.
 
 ### Vector Retrieval and Embedding Runtime
 
@@ -269,12 +269,13 @@ browser (prompt/image/review UI)       Typer CLI
         request   v   |
        private Node model gateway (@earendil-works/pi-ai)
                   |
+                  +--> GitHub Copilot subscription OAuth
                   +--> ChatGPT Codex OAuth endpoint
                   +--> direct API-key providers
                   +--> optional local OpenAI-compatible model later
 ```
 
-The linked Mintlify examples describe an older `@mariozechner/pi-ai` global OAuth API. The evaluated local package is the newer `@earendil-works/pi-ai` provider/`Models` API (0.84.1 at this decision); implementation must pin and lock the exact selected version and use provider-owned `Models.login()`/`stream*()` semantics rather than copying old `getOAuthApiKey()` examples. Upgrades are deliberate and run provider contract/eval tests. The package is MIT, but provider subscription terms and endpoint availability remain separate operational constraints and must be verified before relying on unattended use.
+The initial subscription allowlist includes GitHub Copilot OAuth and OpenAI Codex OAuth; first-use setup presents compatible unauthenticated subscription providers rather than silently privileging one brand, then persists the task-specific selection. The linked Mintlify examples describe an older `@mariozechner/pi-ai` global OAuth API. The evaluated local package is the newer `@earendil-works/pi-ai` provider/`Models` API (0.84.1 at this decision); implementation must pin and lock the exact selected version and use provider-owned `Models.login()`/`stream*()` semantics rather than copying old `getOAuthApiKey()` examples. Upgrades are deliberate and run provider contract/eval tests. The package is MIT, but provider subscription terms and endpoint availability remain separate operational constraints and must be verified before relying on unattended use.
 
 The gateway responsibilities are deliberately narrow:
 
@@ -285,7 +286,7 @@ The gateway responsibilities are deliberately narrow:
 - provider-specific reasoning, context, transport, cancellation, and usage behavior;
 - health/auth-status/model-list endpoints and a streaming request endpoint.
 
-It owns no campaign documents, retrieval policy, canonical/preparation state, approval operation, or arbitrary filesystem access. It binds to loopback or a private container network. Python may reference content-addressed image attachments through a tightly scoped internal loader; the gateway never accepts arbitrary user/model paths.
+It owns no campaign documents, retrieval policy, canonical/preparation state, approval operation, or arbitrary filesystem access. Native operation binds to loopback. In Compose it has no published host port, accepts authenticated Workbench traffic on an internal transport network, and alone also joins an un-published egress bridge so provider OAuth/model HTTPS can reach the internet; PostgreSQL and Workbench remain on the internal network only. Python may reference content-addressed image attachments through a tightly scoped internal loader; the gateway never accepts arbitrary user/model paths.
 
 OAuth credentials live in a dedicated gateway secret file/volume, separate from Pi's normal auth file and from PostgreSQL. The first web setup should prefer OpenAI's device-code flow for a headless Proxmox gateway; the UI displays verification events but never receives access/refresh tokens. Re-login is an operational recovery path, so ordinary campaign backup/restore does not depend on copying OAuth credentials. For local/full-stack setup, an idempotent host bootstrap creates an ignored mode-`0600` environment file and generates distinct missing database, API, session-signing, and Workbench-to-gateway secrets; it preserves existing values and never generates provider credentials. The internal gateway token is the shared bearer credential only for Python-to-gateway calls and is injected into both services by Compose.
 

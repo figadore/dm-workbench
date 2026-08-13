@@ -13,9 +13,10 @@ def route_between_rooms(
     target: Rect,
     all_rooms: tuple[Rect, ...],
     bounds: FloorLayoutBounds,
+    width_cells: int,
     random_source: DeterministicRandom,
 ) -> PolylineGeometry | None:
-    """Route an orthogonal centerline between room-boundary anchors."""
+    """Route an orthogonal corridor footprint between room-boundary anchors."""
     anchor_pairs = [
         (source_anchor, target_anchor)
         for source_anchor in _boundary_anchors(source)
@@ -25,7 +26,7 @@ def route_between_rooms(
     random_source.shuffle(anchor_pairs)
     anchor_pairs.sort(key=lambda pair: _manhattan(*pair))
 
-    blocked = _blocked_room_points(all_rooms, source, target)
+    blocked = _blocked_room_points(all_rooms, source, target, width_cells)
     directions = [(1, 0), (-1, 0), (0, 1), (0, -1)]
     random_source.shuffle(directions)
     for start, end in anchor_pairs:
@@ -79,21 +80,35 @@ def _blocked_room_points(
     rectangles: tuple[Rect, ...],
     source: Rect,
     target: Rect,
+    width_cells: int,
 ) -> set[tuple[int, int]]:
+    """Reserve every centerline point whose corridor footprint hits another room."""
+
+    negative_offset = (width_cells - 1) // 2
+    positive_offset = width_cells // 2
     blocked: set[tuple[int, int]] = set()
     for rect in rectangles:
         if rect in {source, target}:
+            # An endpoint must be allowed to meet either connected room.
             blocked.update(
                 (x, y)
                 for x in range(rect.x + 1, rect.right)
                 for y in range(rect.y + 1, rect.bottom)
             )
-        else:
-            blocked.update(
-                (x, y)
-                for x in range(rect.x, rect.right)
-                for y in range(rect.y, rect.bottom)
-            )
+            continue
+        for x in range(rect.x, rect.right):
+            for y in range(rect.y, rect.bottom):
+                # Horizontal corridors expand over y offsets; vertical corridors over
+                # x offsets. Reserving both directions is conservative but guarantees
+                # a later turn cannot sweep through unrelated room cells.
+                blocked.update(
+                    (x - offset, y)
+                    for offset in range(-negative_offset, positive_offset + 1)
+                )
+                blocked.update(
+                    (x, y - offset)
+                    for offset in range(-negative_offset, positive_offset + 1)
+                )
     return blocked
 
 

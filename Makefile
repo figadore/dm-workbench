@@ -18,6 +18,9 @@ dev-gateway:
 
 stack-up: bootstrap
 	$(COMPOSE) up --build -d
+	# Compose providers may retain a running container after rebuilding its image.
+	# Recreate only code-bearing services; PostgreSQL and persistent volumes stay up.
+	$(COMPOSE) up -d --force-recreate workbench model-gateway
 	@port=$$(awk -F= '$$1 == "DM_WORKBENCH_PORT" {print $$2}' .env); \
 		echo "Workbench: http://127.0.0.1:$${port:-8000}"
 	@echo "Run 'make stack-smoke' to verify readiness."

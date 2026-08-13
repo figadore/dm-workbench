@@ -8,8 +8,10 @@ const host = process.env.MODEL_GATEWAY_HOST ?? "127.0.0.1";
 const port = parsePort(process.env.MODEL_GATEWAY_PORT ?? "3000");
 const credentialPath = process.env.MODEL_GATEWAY_CREDENTIAL_PATH ?? "/var/lib/dm-model-gateway/credentials.json";
 const internalToken = requiredEnvironment("DM_MODEL_GATEWAY_INTERNAL_TOKEN");
+const allowPrivateWildcardBind =
+  process.env.MODEL_GATEWAY_ALLOW_PRIVATE_WILDCARD_BIND === "true";
 
-if (!isPrivateBindHost(host)) {
+if (!isPrivateBindHost(host, allowPrivateWildcardBind)) {
   throw new Error("MODEL_GATEWAY_HOST must be a loopback or private address");
 }
 
@@ -38,8 +40,11 @@ function parsePort(value: string): number {
   return port;
 }
 
-function isPrivateBindHost(value: string): boolean {
+function isPrivateBindHost(value: string, allowPrivateWildcardBind: boolean): boolean {
   const normalized = value.toLowerCase();
+  if (normalized === "0.0.0.0") {
+    return allowPrivateWildcardBind;
+  }
   if (normalized === "localhost" || normalized === "::1") {
     return true;
   }

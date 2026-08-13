@@ -618,7 +618,7 @@ Real copyrighted rule/bestiary text stays outside Git; use synthetic mechanics a
 
 - Add `model-gateway/` as a small TypeScript/Node 22.19+ package with an npm lockfile and an exactly pinned `@earendil-works/pi-ai` version (0.84.1 was the evaluated baseline; deliberately re-verify if newer at implementation).
 - Use the current provider/`Models` API. Do not copy older `@mariozechner/pi-ai` `getOAuthApiKey()` examples or read Pi's normal auth file.
-- Register only configured/allowlisted providers: OpenAI Codex OAuth, the deterministic faux provider, and one selected API-key fallback before release; add others through the same provider-factory boundary without changing Python workflows.
+- Register only configured/allowlisted providers: GitHub Copilot subscription OAuth, OpenAI Codex OAuth, the deterministic faux provider, and one selected API-key fallback before release; add others through the same provider-factory boundary without changing Python workflows.
 - Implement a dedicated persistent `CredentialStore` with per-provider serialized modify/refresh, atomic restrictive-permission writes, and no token-returning endpoint.
 - Expose internal health, non-secret auth status, provider/model/capability listing, login-event/prompt coordination, logout, normalized stream, and cancellation contracts.
 - Prefer device-code ChatGPT login for headless Proxmox; browser/manual-code login may remain an explicitly tested alternative.
@@ -1366,7 +1366,7 @@ Make the Python domain service, private Node model gateway, PostgreSQL store, an
 **Work**
 
 - Add pinned non-root Python Workbench and Node model-gateway images; the Workbench image installs the locked in-process `dm_dungeon` workspace package and does not expose a separate dungeon service.
-- Add production Compose/environment examples without fixed secrets; expose only the authenticated Python application and keep the gateway on a private network. Provide an idempotent local bootstrap that generates and persists distinct missing database/API/session/internal-gateway secrets without generating provider credentials.
+- Add production Compose/environment examples without fixed secrets; expose only the authenticated Python application, keep gateway ingress on a private internal network with no published port, and give only the gateway a separate un-published egress network for provider OAuth/model HTTPS. Provide an idempotent local bootstrap that generates and persists distinct missing database/API/session/internal-gateway secrets without generating provider credentials.
 - Add migration/startup procedure, health checks, resource limits, and separate database/source/content-addressed-asset/scratch-volume guidance. Default source storage to empty managed volumes with no host-path prerequisite, plus an explicit symlink-rejecting atomic source import command; copying source files remains separate from immutable Library ingestion.
 - Prefer a VM for Docker Compose unless the chosen LXC deployment explicitly accepts nesting/security tradeoffs.
 

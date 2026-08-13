@@ -12,7 +12,10 @@ class ErrorCode(StrEnum):
     CONFLICT = "conflict"
     DATABASE_UNAVAILABLE = "database_unavailable"
     FORBIDDEN = "forbidden"
+    ASSET_STORAGE_UNAVAILABLE = "asset_storage_unavailable"
+    DUNGEON_EXECUTION_FAILED = "dungeon_execution_failed"
     INVALID_INPUT = "invalid_input"
+    MODEL_RUN_REJECTED = "model_run_rejected"
     NOT_FOUND = "not_found"
 
 
@@ -73,6 +76,27 @@ class InvalidInputError(DomainError):
 
     def __init__(self, message: str = "The request is invalid.") -> None:
         super().__init__(ErrorCode.INVALID_INPUT, message, status_code=422)
+
+
+class AssetStorageUnavailableError(DomainError):
+    """Asset persistence cannot safely publish or verify a generated artifact."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(ErrorCode.ASSET_STORAGE_UNAVAILABLE, message, status_code=503)
+
+
+class DungeonExecutionFailedError(DomainError):
+    """An unexpected deterministic/persistence execution failure was contained."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(ErrorCode.DUNGEON_EXECUTION_FAILED, message, status_code=500)
+
+
+class ModelRunRejectedError(DomainError):
+    """A bounded model run failed safely before it could produce a draft."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(ErrorCode.MODEL_RUN_REJECTED, message, status_code=422)
 
 
 class ResourceNotFoundError(DomainError):

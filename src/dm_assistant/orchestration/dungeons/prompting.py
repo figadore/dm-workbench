@@ -139,10 +139,14 @@ def resolve_dungeon_prompt_profile(
         output_schema_name=_DUNGEON_INTENT_SCHEMA_NAME,
         output_schema_version=_DUNGEON_INTENT_SCHEMA_VERSION,
         allowed_tools=_DUNGEON_TOOL_NAMES,
-        turn_budget=2,
+        # One optional deterministic tool turn, one response turn, and one
+        # schema-repair turn. A failed schema response is never accepted.
+        turn_budget=3,
         tool_budget=1,
-        time_budget_seconds=120,
-        token_budget=min(output_token_limit, 16_384),
+        time_budget_seconds=180,
+        # This cumulative budget covers all bounded prompt + typed-tool-schema
+        # turns and output, not only generated tokens. Gateway output stays 16K.
+        token_budget=min(context_window_tokens, 150_000),
         require_citation_ids=False,
         require_authorized_citations=False,
         allow_source_retrieval_tools=False,
@@ -292,7 +296,10 @@ def _initial_model_input(
                             "Its exact schema is the intent field in the supplied tool "
                             "schemas. Author high-level brief and topology intent only; "
                             "do not author exact geometry, renderer syntax, files, "
-                            "approval, or canonical state. Use stable descriptive IDs."
+                            "approval, or canonical state. Use stable descriptive IDs. "
+                            "DungeonBrief.purpose is exactly one enum string. Brief "
+                            "inhabitants, constraints, and campaign_hooks contain typed "
+                            "objects with id, text, and visibility, never bare strings."
                         ),
                         "prompt": command.prompt,
                         "context": context.envelope,

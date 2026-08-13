@@ -10,9 +10,10 @@ from typing import Annotated
 from uuid import UUID
 
 import typer
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 
 from dm_assistant import __version__
+from dm_assistant.adapters.assets import AssetCorruptionError, AssetStorageError
 from dm_assistant.adapters.model_gateway import (
     GatewayCatalogModel,
     GatewayLoginEvent,
@@ -27,7 +28,14 @@ from dm_assistant.doctor import (
     render_doctor_human,
     render_doctor_json,
 )
-from dm_assistant.errors import DomainError, InvalidInputError, format_cli_error
+from dm_assistant.errors import (
+    AssetStorageUnavailableError,
+    DomainError,
+    DungeonExecutionFailedError,
+    InvalidInputError,
+    ModelRunRejectedError,
+    format_cli_error,
+)
 from dm_assistant.modules.library import (
     AuthorityClass,
     CorpusKind,
@@ -407,12 +415,17 @@ def dungeon_prompt(
                     ),
                 )
             )
+            typer.echo(
+                f"Using {selected_model.name} via {selected_provider.name} "
+                f"at {selected_effort.value} effort.",
+                err=True,
+            )
             runtime.model_selections.save(
                 task_name="dungeon_generation_intent_v1",
                 provider_id=selected_provider.id,
                 model_id=selected_model.id,
                 effort=selected_effort,
-                selection_policy="compatible-capacity-v1",
+                selection_policy="dungeon-task-baseline-v2",
             )
             resolved_seed = seed if seed is not None else secrets.randbits(63)
             try:
@@ -440,10 +453,18 @@ def dungeon_prompt(
                     ),
                     profile,
                 )
-            except (ModelGatewayTransportError, ModelRunAbstained, ValueError):
-                raise InvalidInputError(
-                    "The prompted dungeon run could not be completed."
-                ) from None
+            except ModelGatewayTransportError as error:
+                raise InvalidInputError(str(error)) from None
+            except ModelRunAbstained as error:
+                raise _model_run_rejected_error(error) from None
+            except AssetCorruptionError as error:
+                raise _prompt_execution_error(error) from None
+            except AssetStorageError as error:
+                raise _prompt_execution_error(error) from None
+            except ValueError as error:
+                raise _prompt_execution_error(error) from None
+            except Exception as error:
+                raise _prompt_execution_error(error) from None
             resolved_title = title
             if result.success:
                 resolved_title = runtime.dungeons.inspect(
@@ -464,6 +485,7 @@ def dungeon_prompt(
                 }
             )
             if not result.success:
+                _emit_dungeon_failure_summary(result.diagnostics)
                 raise typer.Exit(code=1)
 
 
@@ -624,6 +646,8 @@ def _resolve_dungeon_model_selection(
     allow_faux: bool,
 ) -> tuple[GatewayProvider, GatewayCatalogModel, ReasoningEffort]:
     providers = gateway.providers()
+    if saved is not None and saved.selection_policy != "dungeon-task-baseline-v2":
+        saved = None
     requested_provider = provider_override or (
         saved.provider_id if saved is not None else None
     )
@@ -676,7 +700,10 @@ def _resolve_dungeon_model_selection(
     if model_override is not None and selected_model is None:
         raise InvalidInputError("The selected model is unavailable.")
     if selected_model is None:
-        selected_model = _default_model(selected_provider.models)
+        selected_model = _default_model(
+            selected_provider.models,
+            selected_provider.id,
+        )
     if selected_model is None:
         raise InvalidInputError("No compatible tool-capable model is available.")
 
@@ -698,51 +725,67 @@ def _default_provider(
         for provider in providers
         if provider.authenticated
         and (allow_faux or provider.id != "faux")
-        and _default_model(provider.models) is not None
+        and _default_model(provider.models, provider.id) is not None
     )
     if not candidates:
         return None
-    return sorted(
-        candidates,
-        key=lambda item: (item.id != "openai-codex", item.id),
-    )[0]
+    return sorted(candidates, key=lambda item: item.id)[0]
 
 
 def _default_login_provider(
     providers: tuple[GatewayProvider, ...],
 ) -> GatewayProvider | None:
     candidates = tuple(
-        provider
-        for provider in providers
-        if provider.id != "faux"
-        and "oauth" in provider.auth_modes
-        and _default_model(provider.models) is not None
+        sorted(
+            (
+                provider
+                for provider in providers
+                if provider.id != "faux"
+                and "oauth" in provider.auth_modes
+                and _default_model(provider.models, provider.id) is not None
+            ),
+            key=lambda item: item.id,
+        )
     )
     if not candidates:
         return None
-    return sorted(
-        candidates,
-        key=lambda item: (item.id != "openai-codex", item.id),
-    )[0]
+    if len(candidates) == 1:
+        return candidates[0]
+    typer.echo("Available subscription model providers:", err=True)
+    for candidate in candidates:
+        typer.echo(f"  {candidate.id}: {candidate.name}", err=True)
+    selected_id = typer.prompt(
+        "Select model provider",
+        default=candidates[0].id,
+        show_default=True,
+        err=True,
+    )
+    selected = next((item for item in candidates if item.id == selected_id), None)
+    if selected is None:
+        raise InvalidInputError("The selected model provider is unavailable.")
+    return selected
 
 
 def _default_model(
     models: tuple[GatewayCatalogModel, ...],
+    provider_id: str,
 ) -> GatewayCatalogModel | None:
     compatible = tuple(
         model for model in models if {"text", "tool_calls"}.issubset(model.capabilities)
     )
     if not compatible:
         return None
-    return sorted(
-        compatible,
-        key=lambda item: (
-            "thinking" not in item.capabilities,
-            -item.max_output_tokens,
-            -item.context_window,
-            item.id,
-        ),
-    )[0]
+    # Pinned task baselines avoid choosing a model merely because it advertises
+    # the largest context/output limits. Revisit through the P7 eval gate.
+    preferred_ids = {
+        "github-copilot": ("gpt-4.1", "gpt-5-mini"),
+        "openai-codex": ("gpt-5.4-mini", "gpt-5.4"),
+    }.get(provider_id, ())
+    by_id = {model.id: model for model in compatible}
+    for preferred_id in preferred_ids:
+        if preferred_id in by_id:
+            return by_id[preferred_id]
+    return sorted(compatible, key=lambda item: item.id)[0]
 
 
 def _complete_provider_login(
@@ -781,12 +824,68 @@ def _render_login_event(
     elif event.type == "auth_url":
         typer.echo(f"Open {event.url} to continue login.", err=True)
     elif event.type == "prompt" and event.prompt_id is not None:
-        value = typer.prompt(
-            event.message or "Login response", hide_input=True, err=True
-        )
+        option_values: dict[str, str] = {}
+        if event.options:
+            typer.echo("Available login methods:", err=True)
+            for option in event.options:
+                option_id = option.get("id")
+                option_label = option.get("label")
+                if isinstance(option_id, str) and isinstance(option_label, str):
+                    option_values[option_id] = option_label
+                    typer.echo(f"  {option_id}: {option_label}", err=True)
+        if "device_code" in option_values:
+            value = "device_code"
+            typer.echo(
+                "Using device-code login for the containerized gateway.",
+                err=True,
+            )
+        elif (
+            event.prompt_type == "text"
+            and event.message is not None
+            and "blank for github.com" in event.message.lower()
+        ):
+            value = ""
+            typer.echo("Using github.com for GitHub Copilot login.", err=True)
+        elif event.prompt_type == "text":
+            value = typer.prompt(
+                event.message or "Login response",
+                default="",
+                show_default=False,
+                err=True,
+            )
+        else:
+            value = typer.prompt(
+                event.message or "Login response",
+                hide_input=event.prompt_type == "manual_code",
+                err=True,
+            )
         gateway.respond_to_login(login_id, event.prompt_id, value)
     elif event.message:
         typer.echo(event.message, err=True)
+
+
+def _emit_dungeon_failure_summary(
+    diagnostics: tuple[dict[str, JsonValue], ...],
+) -> None:
+    """Render persisted deterministic diagnostics for humans as well as JSON clients."""
+
+    typer.echo(
+        "Dungeon generation failed deterministic validation; no draft was created.",
+        err=True,
+    )
+    for diagnostic in diagnostics:
+        code = diagnostic.get("code")
+        message = diagnostic.get("message")
+        affected_ids = diagnostic.get("affected_ids")
+        repair_hint = diagnostic.get("repair_hint")
+        if isinstance(code, str) and isinstance(message, str):
+            typer.echo(f"- [{code}] {message}", err=True)
+        if isinstance(affected_ids, list):
+            identifiers = [item for item in affected_ids if isinstance(item, str)]
+            if identifiers and len(identifiers) == len(affected_ids):
+                typer.echo(f"  Affected: {', '.join(identifiers)}", err=True)
+        if isinstance(repair_hint, str):
+            typer.echo(f"  Next step: {repair_hint}", err=True)
 
 
 def _emit_model(model: BaseModel) -> None:
@@ -815,6 +914,86 @@ def _emit_models(models: tuple[BaseModel, ...]) -> None:
             sort_keys=True,
         )
     )
+
+
+def _prompt_execution_error(error: Exception) -> DomainError:
+    """Contain non-model prompt failures behind stable, actionable public errors."""
+
+    if isinstance(error, AssetCorruptionError):
+        return AssetStorageUnavailableError(
+            "Generated assets could not be verified in the asset store. The draft was "
+            "not reported as created; inspect and repair the asset volume before retrying."
+        )
+    if isinstance(error, AssetStorageError):
+        return AssetStorageUnavailableError(
+            "Generated assets could not be persisted safely. The draft was not reported "
+            "as created; verify the asset volume is writable and retry."
+        )
+    if isinstance(error, ValueError):
+        return DungeonExecutionFailedError(
+            "The deterministic dungeon workflow rejected an internal typed input. No "
+            "draft was reported as created; retry or use the hand-authored Dungeon "
+            "Studio workflow."
+        )
+    return DungeonExecutionFailedError(
+        "The dungeon workflow stopped during deterministic generation or persistence. "
+        "No draft was reported as created; inspect Workbench logs and retry."
+    )
+
+
+def _model_run_rejected_error(error: ModelRunAbstained) -> ModelRunRejectedError:
+    """Convert bounded-run internals into an actionable, response-safe CLI error."""
+
+    reasons = {
+        "model output failed schema validation within the repair budget": (
+            "The selected model returned dungeon JSON that did not match the required "
+            "schema after a repair attempt. No draft was saved; try again or select "
+            "another model."
+        ),
+        "time budget exhausted before a final answer": (
+            "The selected model did not finish within the dungeon run time limit. "
+            "No draft was saved; try again or select another model."
+        ),
+        "token budget exhausted before completion": (
+            "The selected model exceeded the dungeon run token budget. No draft was "
+            "saved; simplify the request or select another model."
+        ),
+        "turn budget exhausted before a final answer": (
+            "The selected model used the available dungeon response turns without a "
+            "usable result. No draft was saved; try again or select another model."
+        ),
+        "no budget remains for deterministic diagnostic repair": (
+            "The generated dungeon did not pass deterministic validation within the "
+            "repair budget. No draft was saved; try again or use the hand-authored "
+            "Dungeon Studio workflow."
+        ),
+        "dungeon intent did not include a brief and topology": (
+            "The selected model did not return a complete dungeon brief and topology. "
+            "No draft was saved; try again or select another model."
+        ),
+        "dungeon intent run did not succeed": (
+            "The selected model did not produce a usable dungeon intent. No draft was "
+            "saved; try again or select another model."
+        ),
+        "the model returned no answer content": (
+            "The selected model returned no dungeon content. No draft was saved; try "
+            "again or select another model."
+        ),
+        "tool budget exhausted before completion": (
+            "The selected model requested more deterministic dungeon tool work than "
+            "this run permits. No draft was saved; try again or select another model."
+        ),
+    }
+    message = reasons.get(str(error))
+    if message is None:
+        # An intent may contain a model-authored abstain reason. Do not echo it:
+        # it is untrusted response text, but the resulting category is actionable.
+        message = (
+            "The selected model explicitly abstained instead of providing a usable "
+            "dungeon intent. No draft was saved; try again, simplify the request, or "
+            "select another model."
+        )
+    return ModelRunRejectedError(message)
 
 
 def _require_model_gateway(gateway: PiGatewayClient | None) -> PiGatewayClient:

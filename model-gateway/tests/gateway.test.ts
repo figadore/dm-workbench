@@ -52,6 +52,8 @@ test("health, catalog, and streams require the internal caller token", async (t)
   assert.equal(catalog.status, 200);
   const catalogText = await catalog.text();
   assert.match(catalogText, /faux-deterministic-v1/);
+  assert.match(catalogText, /github-copilot/);
+  assert.match(catalogText, /openai-codex/);
   assert.doesNotMatch(catalogText, /access|refresh|credential/i);
 
   const stream = await fetch(`${baseUrl}/v1/streams`, {
@@ -151,6 +153,64 @@ test("login coordination exposes device and manual-code events without credentia
   assert.equal((await completed.json() as { status: string }).status, "completed");
 });
 
+test("provider usage errors are classified without exposing provider text", async (t) => {
+  const runtime: GatewayRuntime = {
+    async listProviders() {
+      return [];
+    },
+    async login() {},
+    async logout() {},
+    async *stream(): AsyncIterable<AssistantMessageEvent> {
+      yield {
+        type: "error",
+        reason: "error",
+        error: fauxAssistantMessage("", {
+          stopReason: "error",
+          errorMessage: "Codex error: The usage limit has been reached; secret detail",
+        }),
+      };
+    },
+  };
+  const server = createGatewayServer({ runtime, internalToken: INTERNAL_TOKEN });
+  const baseUrl = await listen(server);
+  t.after(() => close(server));
+
+  const stream = await fetch(`${baseUrl}/v1/streams`, {
+    method: "POST",
+    headers: { ...authorization(), "content-type": "application/json" },
+    body: JSON.stringify(fauxStreamRequest()),
+  });
+  const events = await stream.text();
+  assert.match(events, /"code":"usage_limit"/);
+  assert.doesNotMatch(events, /secret detail|Codex error/);
+});
+
+test("the gateway aborts a stalled stream at the caller's bounded time limit", async (t) => {
+  const runtime: GatewayRuntime = {
+    async listProviders() {
+      return [];
+    },
+    async login() {},
+    async logout() {},
+    async *stream(_request: GatewayStreamRequest, signal: AbortSignal): AsyncIterable<AssistantMessageEvent> {
+      await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }));
+    },
+  };
+  const server = createGatewayServer({ runtime, internalToken: INTERNAL_TOKEN });
+  const baseUrl = await listen(server);
+  t.after(() => close(server));
+
+  const stream = await fetch(`${baseUrl}/v1/streams`, {
+    method: "POST",
+    headers: { ...authorization(), "content-type": "application/json" },
+    body: JSON.stringify(fauxStreamRequest({ time_limit_seconds: 1 })),
+  });
+  const events = await stream.text();
+
+  assert.match(events, /"code":"timeout"/);
+  assert.match(events, /event: done/);
+});
+
 test("an internal caller can cancel an active normalized stream", async (t) => {
   const runtime: GatewayRuntime = {
     async listProviders() {
@@ -185,7 +245,7 @@ function authorization(): Record<string, string> {
   return { authorization: `Bearer ${INTERNAL_TOKEN}` };
 }
 
-function fauxStreamRequest(): object {
+function fauxStreamRequest(overrides: Record<string, unknown> = {}): object {
   return {
     provider: "faux",
     model: "faux-deterministic-v1",
@@ -199,7 +259,9 @@ function fauxStreamRequest(): object {
       },
     ],
     output_token_limit: 512,
+    time_limit_seconds: 30,
     run_id: "run_synthetic",
+    ...overrides,
   };
 }
 

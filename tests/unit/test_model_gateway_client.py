@@ -159,6 +159,7 @@ def test_private_gateway_client_sends_only_policy_bound_input_and_decodes_sse(
     )
     payload = json.loads(request.data or b"{}")
     assert payload["provider"] == "faux"
+    assert payload["time_limit_seconds"] == 30
     assert payload["tools"] == [schema.model_dump(mode="json")]
 
 
@@ -239,7 +240,7 @@ def test_private_gateway_client_rejects_error_events_without_echoing_provider_te
     response = FakeSseResponse(
         (
             b"event: error\n",
-            b'data: {"message":"provider secret must not appear"}\n',
+            b'data: {"code":"usage_limit","message":"provider secret must not appear"}\n',
             b"\n",
         )
     )
@@ -265,6 +266,7 @@ def test_private_gateway_client_rejects_error_events_without_echoing_provider_te
         )
 
     assert "provider secret" not in str(captured.value)
+    assert "usage limit has been reached" in str(captured.value)
 
 
 def test_private_gateway_client_requires_enabled_private_settings(

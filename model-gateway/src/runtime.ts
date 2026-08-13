@@ -11,6 +11,7 @@ import {
   type MutableModels,
   type Tool,
 } from "@earendil-works/pi-ai";
+import { githubCopilotProvider } from "@earendil-works/pi-ai/providers/github-copilot";
 import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-codex";
 import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
 
@@ -69,6 +70,7 @@ function createAllowlistedModels(
   fauxResponses: readonly FauxResponseStep[] | undefined,
 ): MutableModels {
   const models = createModels({ credentials });
+  models.setProvider(githubCopilotProvider());
   models.setProvider(openaiCodexProvider());
   models.setProvider(openaiProvider());
 

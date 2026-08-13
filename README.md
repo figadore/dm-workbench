@@ -67,7 +67,7 @@ make stack-smoke
 
 `make stack-up` runs an idempotent bootstrap before Compose. It creates `.env` with mode `0600`, generates only missing/placeholder local secrets, preserves them across restarts, builds the images, and starts PostgreSQL, the private model gateway, and Workbench. Use `make stack-token` when the browser/API login token is needed. Direct `docker compose up` remains a lower-level command and expects bootstrap to have run first (`make bootstrap`).
 
-Only the Workbench is published, on `127.0.0.1:8000`; the gateway has no host port and is reachable solely as `model-gateway:3000` on the private Compose network. Empty campaign/rules source volumes, database data, gateway credentials, generated assets, and scratch data are all managed named volumes, so no host directories are required. The source volumes are mounted read-only in Workbench. The Workbench startup performs its Alembic upgrade before becoming ready; use one Workbench replica and take a database backup before deploying migrations.
+Only the Workbench is published, on `127.0.0.1:8000`; the gateway has no host port and is reachable solely as `model-gateway:3000` on the private Compose network. Empty campaign/rules source volumes, database data, gateway credentials, and generated assets are all managed named volumes, so no host directories are required. The asset volume contains separate asset and scratch subdirectories so atomic no-overwrite hard-link publication never crosses a container mount boundary. The source volumes are mounted read-only in Workbench. The Workbench startup performs its Alembic upgrade before becoming ready; use one Workbench replica and take a database backup before deploying migrations.
 
 To copy an existing source tree into a managed volume deliberately, use an explicit import target. Imports reject symlinks and atomically replace that source volume's current tree:
 
@@ -204,11 +204,15 @@ uv run --frozen dm model providers
 ```
 
 The faux provider is intended for scripted automated contracts; its default
-response is not a complete dungeon design. For a manual live-model smoke test,
-start gateway-owned Codex OAuth and follow only the non-secret events it
-returns. Provider credentials remain in the gateway credential volume:
+response is not a complete dungeon design. GitHub Copilot and OpenAI Codex are
+available as subscription OAuth providers. On first model-required use, the CLI
+asks once when multiple unauthenticated subscription providers are available;
+the successful selection is saved per task. Provider credentials remain in the
+gateway credential volume. A provider can also be selected explicitly:
 
 ```bash
+uv run --frozen dm model login github-copilot
+# or
 uv run --frozen dm model login openai-codex
 uv run --frozen dm model login-status <login-id>
 # Only when a returned non-secret prompt event requests a response:

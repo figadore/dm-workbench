@@ -168,6 +168,43 @@ def test_bounded_loop_executes_server_tool_and_records_run_lineage() -> None:
     assert record.usage_output_tokens == 16
 
 
+def test_bounded_loop_repairs_schema_invalid_output_with_safe_diagnostics() -> None:
+    _, resolved, _, tool = _resolved_profile()
+    valid = DungeonIntentV1(
+        intent="Build a repaired three-room dungeon.",
+        citation_ids=("cite-1",),
+    )
+    client = FakeClient(
+        (
+            GatewayCompletion(
+                content=json.dumps({"intent": ""}),
+                input_tokens=5,
+                output_tokens=2,
+            ),
+            GatewayCompletion(
+                content=valid.model_dump_json(),
+                input_tokens=7,
+                output_tokens=9,
+            ),
+        )
+    )
+
+    output, record = ModelTaskRunner(client).run(
+        profile=resolved,
+        run_input=ModelRunInput(
+            messages=(PromptMessage(role="user", content="Create a dungeon."),),
+            authorized_citation_ids=("cite-1",),
+        ),
+        output_schema=DungeonIntentV1,
+        tools={tool.name: tool},
+    )
+
+    assert output == valid
+    assert record.turn_count == 2
+    assert record.usage_input_tokens == 12
+    assert record.usage_output_tokens == 11
+
+
 def test_bounded_loop_abstains_when_citations_are_unauthorized() -> None:
     catalog_entry = GatewayModelCatalogEntry(
         provider_id="faux",

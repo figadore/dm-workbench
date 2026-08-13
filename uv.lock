@@ -124,7 +124,9 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "httpx" },
+    { name = "hypothesis" },
     { name = "mypy" },
+    { name = "pypdf" },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -146,7 +148,9 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "httpx", specifier = ">=0.28,<1" },
+    { name = "hypothesis", specifier = ">=6.130,<7" },
     { name = "mypy", specifier = ">=1.15,<2" },
+    { name = "pypdf", specifier = ">=5.9,<7" },
     { name = "pytest", specifier = ">=8.3,<10" },
     { name = "ruff", specifier = ">=0.11,<1" },
 ]

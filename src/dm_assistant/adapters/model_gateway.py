@@ -188,6 +188,7 @@ class PiGatewayClient:
                 ],
                 "tools": [schema.model_dump(mode="json") for schema in tool_schemas],
                 "output_token_limit": min(profile.token_budget, 16_384),
+                "time_limit_seconds": profile.time_budget_seconds,
                 "run_id": str(uuid4()),
             },
             allow_nan=False,
@@ -306,7 +307,21 @@ def _decode_sse(response: Any, deadline: float) -> GatewayCompletion:
                 elif event_name == "completion":
                     completed = True
                 elif event_name == "error":
-                    raise ModelGatewayTransportError("model gateway reported an error")
+                    code = payload.get("code")
+                    safe_messages = {
+                        "usage_limit": "The selected model provider usage limit has been reached.",
+                        "rate_limited": "The selected model provider is temporarily rate limited.",
+                        "authentication_required": "The selected model provider requires login.",
+                        "cancelled": "The model gateway cancelled the dungeon stream.",
+                        "provider_error": "The selected model provider ended the dungeon stream without a usable response.",
+                        "timeout": "The selected model did not finish within the dungeon run time limit.",
+                    }
+                    raise ModelGatewayTransportError(
+                        safe_messages.get(
+                            code if isinstance(code, str) else "",
+                            "The model gateway reported an error.",
+                        )
+                    )
                 elif event_name == "done":
                     break
             event_name = None

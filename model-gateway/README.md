@@ -5,8 +5,9 @@ for the DM Assistant. It owns no campaign, retrieval, canonical, preparation, or
 arbitrary filesystem state.
 
 `@earendil-works/pi-ai` is pinned and lockfile-resolved at `0.84.1`. The only
-registered providers are OpenAI Codex OAuth, OpenAI API-key fallback, and Pi's
-deterministic faux provider. Automated tests use faux only. OAuth and live-model
+registered providers are GitHub Copilot subscription OAuth, OpenAI Codex OAuth,
+OpenAI API-key fallback, and Pi's deterministic faux provider. Automated tests
+use faux only. OAuth and live-model
 checks are deliberate manual operations and are not CI tests.
 
 ## Run locally

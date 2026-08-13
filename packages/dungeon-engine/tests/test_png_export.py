@@ -124,7 +124,15 @@ def test_png_matches_golden_grid_variants(synthetic_package: DungeonPackage) -> 
         golden = (
             GOLDEN_ROOT / f"sunken_archive.upper.player.{suffix}.png"
         ).read_bytes()
-        assert artifact.data == golden
+        # PNG compression bytes vary across supported Pillow/zlib builds; the
+        # golden is a rendering fixture, so compare decoded pixels instead.
+        with (
+            Image.open(io.BytesIO(artifact.data)) as actual,
+            Image.open(io.BytesIO(golden)) as expected,
+        ):
+            assert actual.mode == expected.mode
+            assert actual.size == expected.size
+            assert actual.tobytes() == expected.tobytes()
 
 
 def test_png_ink_budget_fails_without_partial_asset(

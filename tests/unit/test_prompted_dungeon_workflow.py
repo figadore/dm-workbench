@@ -168,6 +168,8 @@ def test_live_gateway_catalog_resolves_hyphenated_dungeon_profile() -> None:
     assert profile.requested_effort is ReasoningEffort.DEEP
     assert profile.output_schema_name == "dungeon_generation_intent_v1"
     assert profile.require_citation_ids is False
+    assert profile.turn_budget == 3
+    assert profile.token_budget == 128_000
     assert "generate_dungeon_layout" in profile.allowed_tools
 
 
