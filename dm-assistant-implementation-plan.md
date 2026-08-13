@@ -1366,8 +1366,8 @@ Make the Python domain service, private Node model gateway, PostgreSQL store, an
 **Work**
 
 - Add pinned non-root Python Workbench and Node model-gateway images; the Workbench image installs the locked in-process `dm_dungeon` workspace package and does not expose a separate dungeon service.
-- Add production Compose/environment examples without secrets; expose only the authenticated Python application and keep the gateway on a private network.
-- Add migration/startup procedure, health checks, resource limits, and separate database/source/content-addressed-asset/scratch-volume guidance.
+- Add production Compose/environment examples without fixed secrets; expose only the authenticated Python application and keep the gateway on a private network. Provide an idempotent local bootstrap that generates and persists distinct missing database/API/session/internal-gateway secrets without generating provider credentials.
+- Add migration/startup procedure, health checks, resource limits, and separate database/source/content-addressed-asset/scratch-volume guidance. Default source storage to empty managed volumes with no host-path prerequisite, plus an explicit symlink-rejecting atomic source import command; copying source files remains separate from immutable Library ingestion.
 - Prefer a VM for Docker Compose unless the chosen LXC deployment explicitly accepts nesting/security tradeoffs.
 
 ### P10-05 — Durable jobs and observability

@@ -194,10 +194,16 @@ def library_ingest(
     """Ingest one allowlisted Markdown/text source as an immutable revision."""
     with _render_domain_errors():
         with workbench_runtime() as runtime:
+            resolved_campaign_id = campaign_id
+            if corpus is CorpusKind.CAMPAIGN and resolved_campaign_id is None:
+                resolved_campaign_id = runtime.campaigns.ensure_active_campaign().id
             _emit_model(
                 runtime.library_sources.ingest(
                     IngestSource(
-                        scope=SourceScope(campaign_id=campaign_id, corpus=corpus),
+                        scope=SourceScope(
+                            campaign_id=resolved_campaign_id,
+                            corpus=corpus,
+                        ),
                         locator=SourceLocator(
                             root_label=root,
                             relative_path=relative_path,

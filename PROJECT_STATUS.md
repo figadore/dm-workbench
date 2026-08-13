@@ -34,7 +34,7 @@ Always inspect `git status --short --branch` and the latest log before changing 
 - **P4-02:** private Node 22.19+ `pi-ai` gateway package with a lockfile-pinned `0.84.1` provider/`Models` integration, allowlisted OpenAI Codex OAuth/OpenAI API-key/faux providers, restrictive serialized credential persistence, internal-token-protected HTTP/SSE contracts, display-safe login events, normalized streams, and cancellation.
 - **P4-03:** bounded task-scope contract in Python with explicit DM-only defaults, standalone-dungeon rejection of grounding fields, and a typed `TaskScope`/`TaskType` resolution helper that prevents prompt-level scope broadening.
 - **P5-01:** campaign-knowledge entity, alias, mention, merge, split, archive, and candidate-resolution persistence in committed `eea08a4`.
-- **P10-04 deployment baseline:** pinned non-root Workbench and model-gateway images, a full private Compose topology with PostgreSQL, a one-shot volume-permission initializer, migration-aware Workbench startup, readiness health checks, conservative resource/restart policy, separate database/gateway-credential/asset/scratch volumes, configurable read-only source mounts, and documented native versus full-stack workflows. P10's later security, backup, observability, and release gates remain unstarted.
+- **P10-04 deployment baseline:** pinned non-root Workbench and model-gateway images, a full private Compose topology with PostgreSQL, a one-shot volume-permission initializer, migration-aware Workbench startup, readiness health checks, conservative resource/restart policy, separate database/gateway-credential/asset/scratch/source volumes, idempotent local secret bootstrap, explicit atomic managed-source import, and documented native versus full-stack workflows. P10's later security, backup, observability, and release gates remain unstarted.
 
 Migrations are `0001_foundation`, `0002_preparation`, `0003_library_sources`, `0004_library_embeddings`, `0005_library_embedding_runs`, `0006_library_retrieval_runs`, `0007_campaign_knowledge_entities`, and `0008_workbench_defaults`.
 
@@ -61,6 +61,14 @@ The public history contains three reviewed snapshots: final architecture/roadmap
 3. Add context inspection, faux-provider browser cases, and first-pass/repair/preservation evaluation reporting.
 
 ## Last Verification
+
+P7-10a.1 onboarding follow-up checks:
+
+- Full root unit suite → `141 passed in 2.18s`.
+- Bootstrap tests prove distinct mode-`0600` secrets, idempotent persistence, placeholder replacement, and no token echo on later runs.
+- Managed-source import rejects symlinks before container access; an isolated Podman smoke imported a synthetic file into a temporary managed volume and verified `current/note.md`, then removed the volume.
+- Focused Ruff/format and strict mypy → passed; shell syntax and `git diff --check` → passed.
+- `podman compose config --quiet` with synthetic secrets → passed. Docker was unavailable in this environment; Make auto-detection selected Podman.
 
 P7-10a.1 checks:
 
@@ -177,9 +185,9 @@ The aggregate isolated gate from the prior public-history state also passed:
 ## Handoff
 
 - **Status:** P7-10a and P7-10a.1 are complete; P7-10b is next. P3-01 and P5-02 remain unstarted and do not block standalone preparation generation.
-- **Changed:** Migration `0008_workbench_defaults` adds a single inspectable active-campaign marker and non-secret task model defaults. The first campaign becomes active; an empty first prompt/list bootstraps `My Campaign`; `dm campaign use` switches it; Dungeon Studio campaign flags are optional overrides. `dm dungeon prompt "..."` now reuses or selects a compatible model, performs inline gateway OAuth when required, generates a seed, uses the typed brief title, saves the task default, and returns the resolved campaign/model/effort/seed/title. README, architecture, and plan document the behavior and preserve standalone no-retrieval semantics.
-- **Checks:** Full root unit suite (`138 passed`), focused Ruff/format, focused strict mypy, 4 Node tests, migration/build execution, shell syntax, and diff checks passed. The Podman run passed all new/default-resolution Dungeon Studio integration coverage and remains red on the same three unrelated Library/schema tests (`37 passed, 3 failed`). Live OAuth/model execution was not run.
+- **Changed:** In addition to `0008` and streamlined prompt defaults, full Compose no longer requires host source directories. Campaign/rules sources use empty managed volumes mounted read-only in Workbench; explicit `make import-campaign-sources SOURCE=...` / `make import-rules-sources SOURCE=...` operations reject symlinks and atomically replace the current source tree, while immutable Library ingestion remains separate. `make stack-up` now auto-detects Docker/Podman and idempotently creates an ignored mode-`0600` `.env` with distinct missing database/API/session/internal-gateway secrets; provider credentials remain gateway-owned OAuth data. Campaign Library ingestion resolves the active campaign when omitted.
+- **Checks:** Full root unit suite (`141 passed`), focused Ruff/format, focused strict mypy, 4 Node tests, migration/build execution, bootstrap/import unit and Podman smoke tests, Compose static config, shell syntax, and diff checks passed. The earlier Podman aggregate run passed all new/default-resolution Dungeon Studio integration coverage and remains red on the same three unrelated Library/schema tests (`37 passed, 3 failed`). Live OAuth/model execution was not run.
 - **Problems:** the browser model workbench still uses synthetic in-process behavior; P7-10b must connect it to this gateway-backed default resolver. Automatic active-campaign grounding is intentionally not enabled by these convenience defaults. The gateway's default faux response is not a complete dungeon intent, so automated end-to-end coverage scripts the faux transport. Existing full-tree Ruff/mypy and three Library/schema integration failures remain outside this task.
-- **Working tree:** P7-10a/P7-10a.1 code, migration, tests, plan/architecture/README, container-gate repair, and this handoff are modified and uncommitted. No unrelated work was overwritten.
+- **Working tree:** P7-10a.1 onboarding follow-up changes to Compose, Make/bootstrap/import scripts, docs, active-campaign Library defaulting, tests, and this handoff are modified and uncommitted. No unrelated work was overwritten.
 - **Next:** P7-10b; first replace the synthetic Dungeon Studio model-panel start path with a call to the shared gateway-backed prompt/default-resolution application service.
-- **Suggested commit:** `P7-10a.1 streamline prompt defaults and onboarding`.
+- **Suggested commit:** `P7-10a.1 automate stack bootstrap and source import`.

@@ -40,7 +40,7 @@ For an implementation session or return after a break, conserve context:
 
 ## Isolated Development
 
-Project dependencies are installed only in a container-managed project virtual environment. Copy `.env.example` to ignored `.env`, replace every placeholder—including different random 32+ character `DM_API_TOKEN` and `DM_SESSION_SECRET` values—and leave model/embedding policies disabled while those runtimes are absent.
+Project dependencies are installed only in a container-managed project virtual environment. The full-stack Make workflow creates the ignored `.env` automatically and generates distinct persistent database, API, session-signing, and Workbench-to-gateway secrets with `openssl` (or Python's `secrets` fallback). No provider credential is generated or stored there; provider OAuth remains in the dedicated gateway volume.
 
 ### Two supported workflows
 
@@ -56,28 +56,35 @@ make dev-gateway
 
 `make dev-api` enables Uvicorn reload. Unit tests and most focused tests do not
 need Compose; `make check` runs the disposable containerized quality gate.
-Set `CONTAINER_ENGINE=docker` before a Make target when Docker Desktop rather
-than Podman is preferred.
+The Makefile auto-selects Docker when `docker` is installed and otherwise uses Podman; `CONTAINER_ENGINE=...` remains an explicit override.
 
-Use the same repository to test the complete deployable topology locally and
-to install it on a Proxmox VM:
+Use the same repository to test the complete deployable topology locally and to install it on a Proxmox VM. On a Mac with Docker Desktop, first run is:
 
 ```bash
-cp .env.example .env
-mkdir -p data/campaign data/rules
-# Set real POSTGRES_PASSWORD, DM_API_TOKEN, DM_SESSION_SECRET, and
-# DM_MODEL_GATEWAY_INTERNAL_TOKEN values in .env.
 make stack-up
 make stack-smoke
 ```
 
-This starts PostgreSQL, the private model gateway, and the Workbench image.
-Only the Workbench is published, on `127.0.0.1:8000`; the gateway has no host
-port and is reachable solely as `model-gateway:3000` on the private Compose
-network. The source directories are read-only mounts, while database,
-credential, asset, and scratch data use separate named volumes. The Workbench
-startup performs its Alembic upgrade before becoming ready; use one Workbench
-replica and take a database backup before deploying migrations.
+`make stack-up` runs an idempotent bootstrap before Compose. It creates `.env` with mode `0600`, generates only missing/placeholder local secrets, preserves them across restarts, builds the images, and starts PostgreSQL, the private model gateway, and Workbench. Use `make stack-token` when the browser/API login token is needed. Direct `docker compose up` remains a lower-level command and expects bootstrap to have run first (`make bootstrap`).
+
+Only the Workbench is published, on `127.0.0.1:8000`; the gateway has no host port and is reachable solely as `model-gateway:3000` on the private Compose network. Empty campaign/rules source volumes, database data, gateway credentials, generated assets, and scratch data are all managed named volumes, so no host directories are required. The source volumes are mounted read-only in Workbench. The Workbench startup performs its Alembic upgrade before becoming ready; use one Workbench replica and take a database backup before deploying migrations.
+
+To copy an existing source tree into a managed volume deliberately, use an explicit import target. Imports reject symlinks and atomically replace that source volume's current tree:
+
+```bash
+make import-campaign-sources SOURCE="$HOME/Documents/my-campaign"
+make import-rules-sources SOURCE="$HOME/Documents/my-authorized-rules"
+```
+
+Copying files does not silently make them canonical or indexed. Create immutable Library revisions explicitly, for example:
+
+```bash
+docker compose exec workbench dm library ingest notes/session-01.md --root root-0
+docker compose exec workbench dm library ingest rules/hiding.md \
+  --root root-1 --corpus global_rules --ruleset 5e2024
+```
+
+Campaign Library ingestion uses the active campaign when `--campaign` is omitted. Re-importing a source volume never rewrites existing immutable revisions; a subsequent Library ingestion records/reconciles new source state through the normal service boundary.
 
 The default Compose limits reserve a modest two vCPU and 2.25 GB RAM ceiling
 across PostgreSQL, Workbench, and gateway. Override the documented
@@ -115,10 +122,7 @@ disabled. A gateway at host `127.0.0.1` is not reachable from that container;
 run the gateway in the same private network instead, or use the native workflow
 above.
 
-For the full Compose stack, do not use a host-loopback gateway URL. Compose
-injects `http://model-gateway:3000` into the Workbench and keeps the gateway
-unpublished. `make stack-down` stops the stack without deleting persistent
-volumes; use `CONTAINER_ENGINE=docker make stack-up` on Docker Desktop.
+For the full Compose stack, do not use a host-loopback gateway URL. Compose injects `http://model-gateway:3000` into the Workbench and keeps the gateway unpublished. `make stack-down` stops the stack without deleting persistent volumes. `make stack-up` normally auto-selects Docker Desktop; use `CONTAINER_ENGINE=docker make stack-up` only to override detection explicitly.
 
 Start the pinned PostgreSQL 16/pgvector service, migrate, and run the API on the private Compose network:
 
@@ -161,10 +165,9 @@ Stop the development database with `podman compose down`; add `-v` only when int
 
 ## Private Model Gateway
 
-The model gateway is a separate Node 22.19+ private process. Leave
-`DM_MODEL_GATEWAY_POLICY=disabled` to use the fully model-independent Studio.
-To enable the backend model client, set the following in the ignored root
-`.env`, using one newly generated shared token:
+For full Compose, `make bootstrap` generates `DM_MODEL_GATEWAY_INTERNAL_TOKEN` once and stores it in the ignored mode-`0600` `.env`. Compose injects the same bearer secret into Workbench (caller) and the private gateway (verifier); it is defense-in-depth authentication for Python-to-gateway HTTP, not an OpenAI credential. OpenAI OAuth access/refresh credentials are created only by provider login and remain in the separate gateway credential volume. The bootstrap also generates distinct PostgreSQL, browser/API, and session-signing secrets because those protect different boundaries; users do not need to choose or synchronize any of them manually.
+
+The model gateway is a separate Node 22.19+ private process. The commented gateway values in `.env.example` describe advanced native/model-disabled operation; Compose explicitly enables its private gateway and consumes the generated internal token. Leave `DM_MODEL_GATEWAY_POLICY=disabled` in a native setup to use the fully model-independent Studio. To enable the native backend model client without Compose, set the following in the ignored root `.env`, using one shared token:
 
 ```dotenv
 DM_MODEL_GATEWAY_POLICY=optional

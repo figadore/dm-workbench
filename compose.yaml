@@ -5,12 +5,14 @@ services:
       [
         "sh",
         "-ec",
-        "chown 10001:10001 /assets /scratch /credentials && chmod 0750 /assets /scratch && chmod 0700 /credentials",
+        "mkdir -p /campaign-sources/current /rules-sources/current && chown 10001:10001 /assets /scratch /credentials && chmod 0750 /assets /scratch && chmod 0700 /credentials && chmod 0755 /campaign-sources /campaign-sources/current /rules-sources /rules-sources/current",
       ]
     volumes:
       - dm-assistant-gateway-credentials:/credentials
       - dm-assistant-assets-data:/assets
       - dm-assistant-scratch-data:/scratch
+      - dm-assistant-campaign-sources:/campaign-sources
+      - dm-assistant-rules-sources:/rules-sources
     networks:
       - private
 
@@ -76,7 +78,7 @@ services:
     environment:
       DM_ENVIRONMENT: production
       DM_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-dm_assistant}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-dm_assistant}
-      DM_SOURCE_ROOTS: '["/data/campaign","/data/rules"]'
+      DM_SOURCE_ROOTS: '["/data/campaign/current","/data/rules/current"]'
       DM_ASSET_ROOT: /data/assets
       DM_SCRATCH_ROOT: /data/scratch
       DM_API_TOKEN: ${DM_API_TOKEN:?Set DM_API_TOKEN in .env}
@@ -87,8 +89,8 @@ services:
     ports:
       - "127.0.0.1:${DM_WORKBENCH_PORT:-8000}:8000"
     volumes:
-      - ${DM_CAMPAIGN_SOURCE_DIR:-./data/campaign}:/data/campaign:ro
-      - ${DM_RULES_SOURCE_DIR:-./data/rules}:/data/rules:ro
+      - dm-assistant-campaign-sources:/data/campaign:ro
+      - dm-assistant-rules-sources:/data/rules:ro
       - dm-assistant-assets-data:/data/assets
       - dm-assistant-scratch-data:/data/scratch
     depends_on:
@@ -122,6 +124,10 @@ volumes:
   dm-assistant-gateway-credentials:
   dm-assistant-assets-data:
   dm-assistant-scratch-data:
+  dm-assistant-campaign-sources:
+    name: ${DM_CAMPAIGN_SOURCE_VOLUME:-dm-assistant-campaign-sources}
+  dm-assistant-rules-sources:
+    name: ${DM_RULES_SOURCE_VOLUME:-dm-assistant-rules-sources}
 
 networks:
   private:
