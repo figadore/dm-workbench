@@ -4,10 +4,10 @@
 
 ## Snapshot
 
-- **Last updated:** 2026-08-13 (fixture-ready dungeon failure regression cases)
+- **Last updated:** 2026-08-13 (floor publication regression repair)
 - **Lifecycle:** P7-10a.1 is complete. A normal headless request is now just `dm dungeon prompt "..."`: the Workbench bootstraps/uses an inspectable active campaign, resolves and saves a compatible task-specific model default, runs gateway-owned OAuth inline when needed, generates and pins a seed, uses the validated model-authored brief title, and returns all resolved defaults. P7-10b remains next for the equivalent real web experience.
 - **Current phase:** P7 — Dungeon and Map Generation.
-- **Current task:** P7-10b starting — web streaming and final Dungeon Studio eval gate.
+- **Current task:** P7-10b starting — web streaming and final Dungeon Studio eval gate; a floor-publication regression repair is complete and uncommitted.
 - **Validated status:** P3-01 is unstarted: no P3 migration, implementation, or commit exists. P5-01 is complete in committed `eea08a4`; P5-02 is unstarted: no predicate schema, migration, operation, or commit exists.
 - **Fast-track note:** P3 is required only to promote generated dungeon facts to campaign canon. It does not block standalone prompt-to-package preparation work; P5-02 remains deferred until explicit campaign grounding needs it.
 - **Next task:** **P7-10b — add the gateway-backed Dungeon Studio prompt web workflow.**
@@ -16,6 +16,14 @@
 - **Public baseline:** history begins with the final architecture/roadmap snapshot, uses the public GitHub author identity, and is licensed `AGPL-3.0-only`.
 
 Always inspect `git status --short --branch` and the latest log before changing files.
+
+## Current Repair Handoff
+
+- **Completed:** Floors are always `player_safe`: a secret door, passage, or stair controls access to a floor and individual secret map elements remain DM-only, but discovery of the route reveals a clean player map for that floor. A model response that classifies a floor as `dm_only` is now schema-invalid and enters the bounded repair path rather than reaching preview rendering.
+- **Changed:** `packages/dungeon-engine/src/dm_dungeon/contracts/topology.py`; added a regression to `packages/dungeon-engine/tests/test_contracts.py` that rejects a DM-only lower-floor topology.
+- **Checks:** `uv run pytest -q packages/dungeon-engine/tests/test_contracts.py packages/dungeon-engine/tests/test_layout.py packages/dungeon-engine/tests/test_rendering.py` → `36 passed in 0.28s`; focused Ruff/format and `git diff --check` passed.
+- **Working tree:** modified `PROJECT_STATUS.md`, `packages/dungeon-engine/src/dm_dungeon/contracts/topology.py`, and `packages/dungeon-engine/tests/test_contracts.py`; no existing work was overwritten.
+- **Next:** P7-10b. First action: replace the synthetic Dungeon Studio model-panel start path with the shared gateway-backed prompt/default-resolution application service.
 
 ## Completed Implementation
 

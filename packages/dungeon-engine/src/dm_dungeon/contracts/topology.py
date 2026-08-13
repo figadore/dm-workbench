@@ -123,8 +123,11 @@ class RoomSizeConstraints(ContractModel):
 
 
 class TopologyFloor(VisibleContract):
-    """A floor requested by the topology graph."""
+    """A floor requested by the topology graph and published on discovery."""
 
+    # Floors are revealed as units. Secrets control access and individual map
+    # elements, never whether a discovered floor has a clean player map.
+    visibility: Literal[Visibility.PLAYER_SAFE]
     id: OpaqueId
     name: ShortText
     level_index: int

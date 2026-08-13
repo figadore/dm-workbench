@@ -88,6 +88,18 @@ def test_dm_only_element_requires_explicit_visibility(fixture_path: Path) -> Non
         load_dungeon_package_json(json.dumps(payload))
 
 
+def test_secret_access_does_not_make_a_floor_dm_only(fixture_path: Path) -> None:
+    """A discovered floor always has a clean map; only its secrets stay hidden."""
+    payload = read_json_object(fixture_path)
+    lower_floor = next(
+        floor for floor in payload["topology"]["floors"] if floor["id"] == "floor_lower"
+    )
+    lower_floor["visibility"] = "dm_only"
+
+    with pytest.raises(ValidationError, match="player_safe"):
+        load_dungeon_package_json(json.dumps(payload))
+
+
 def test_secret_door_cannot_be_player_safe(fixture_path: Path) -> None:
     payload = read_json_object(fixture_path)
     secret_door = next(
