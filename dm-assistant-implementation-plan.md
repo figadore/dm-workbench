@@ -1107,6 +1107,16 @@ dm prep approve <version-id>
 - No regional/world or illustration-first renderer has been introduced.
 - Model-assisted runs pin a narrow `DungeonGenerationContext`; there is no universal optional-field generation payload.
 
+### Deferred follow-up — Player-map reveal overlays
+
+This is deliberately **not** part of P7-10b's first web streaming/eval scope. Add a later Dungeon Studio/session-play workflow for discoveries such as a secret door opening a previously hidden wing:
+
+- Model a stable, independently publishable player-map reveal unit (an area/room/corridor group or renderer layer) with exact component IDs and an explicit initial publication state; it must not be inferred merely from adjacency or a room's `player_safe` classification.
+- Produce separately printable SVG/PNG/PDF overlay sections that register against the base floor grid, scale, origin, and page-calibration metadata, so a DM can physically place a newly discovered room/wing over or beside the existing player map.
+- Support a web-map equivalent that can reveal the same approved overlay layer without sending unrevealed geometry, secret-door markers, traps, creature starts, hidden DCs, or puzzle solutions to the player client.
+- Treat each reveal/publication action as durable preparation/session state with actor/time/package-version provenance, never as canonical campaign truth; preserve the original immutable dungeon package and pin any derived player-publication artifact/version.
+- Add leak, registration/alignment, partial-reveal, and repeatable-print tests. A hidden section must remain absent rather than appear as an unexplained disconnected player-safe room before its explicit reveal.
+
 ---
 
 ## P8 — Creature Profiles and Party-Aware Encounter Generation
