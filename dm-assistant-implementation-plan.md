@@ -1095,6 +1095,247 @@ dm dungeon export <version-id> --format roll20
 dm prep approve <version-id>
 ```
 
+### P7-12 — Dungeon model-interface V2 and run-integrity hardening
+
+This is a post-P7-10 reliability program prompted by live-provider evidence. The high-level authority boundary remains correct, but `DungeonGenerationIntentV1` exposes too much kernel detail, the shared gateway does not yet preserve native assistant/tool-result message roles, nominal cumulative deadlines are passed to each provider turn in full, INFO logs contain complete dungeon bodies, expected model/compile failures still collapse into generic execution errors, and artifact generation can be marked successful before all required assets are linked. Complete these slices in order before making the V2 profile the default. Do not rewrite immutable V1 artifacts or conflate this work with P3 canonical revisions.
+
+#### Target V2 boundary
+
+```text
+DM request + resolved DungeonGenerationContext + server-pinned seed
+    |
+    v
+model-authored DungeonGenerationProposalV2
+    `-- compact DungeonDesignSpecV2 using temporary local refs
+    |
+    v
+submit_dungeon_intent_v2 (one structured submission, no commit/approval)
+    |
+    v
+versioned deterministic design compiler
+    |-- validate local refs and bounded enums
+    |-- derive stable opaque IDs, counts, visibility, sizes, capacities, gates
+    `-- emit exact DungeonBrief + DungeonTopology
+    |
+    v
+existing deterministic preflight/layout/geometry pipeline
+    |-- accepted -> atomically persist complete draft package/assets
+    `-- rejected -> compact semantic diagnostics -> at most one fresh repair submission
+```
+
+The V2 model contract is intentionally not the kernel topology contract. The model may use bounded, human-readable local references such as `upper`, `archive`, or `sanctum` solely to relate submitted elements. Deterministic code maps those references to canonical package IDs using a pinned compiler/ID-derivation version. Semantic IDs must not depend on layout seed or array order; duplicate/ambiguous local references fail explicitly. Existing established opaque IDs may be supplied only by later explicit regeneration/edit workflows, never invented by the initial model submission.
+
+`DungeonDesignSpecV2` should require only creative decisions:
+
+- title, premise, purpose, themes, tones, pacing, and bounded prose constraints;
+- floors with names and relative scale bands;
+- rooms nested under floors with local ref, readable name, role, required/optional intent, relative size band, tags, and optional bounded preparation prose;
+- connections by local room ref with semantic passage type plus independent concealment/barrier/hazard intent;
+- requested branches, loops, secret routes, clues/keys/puzzles, encounter-slot intent, and final objectives by local ref;
+- explicit unknown/conflict/abstention fields in the Workbench proposal wrapper.
+
+The model must not supply schema-derived floor/room counts, canonical component IDs, package IDs, seeds, exact coordinates, numeric room dimensions/capacities, renderer layers, exact player/DM visibility, generated gate/trap IDs, validation status, asset metadata, lifecycle state, or canonical campaign operations. The compiler derives exact counts; maps relative floor/room size and occupancy bands through pinned tables; applies fail-closed visibility for secret/trapped routes and DM-only rooms; creates gate/key/clue references; and emits the strict existing kernel contracts. It may apply documented mechanical defaults but must return a warning or error rather than inventing missing narrative dependencies.
+
+`submit_dungeon_intent_v2` is a proposal-validation tool, not a persistence or generation authority. It accepts exactly one `DungeonGenerationProposalV2`, validates it, invokes the deterministic compiler and preflight, and returns one of:
+
+```text
+accepted: true
+candidate_hash
+compiler_version
+summary: floor/room/connection/secret-route counts plus entry/exit names
+warnings: bounded stable diagnostics
+```
+
+or:
+
+```text
+accepted: false
+diagnostics: at most 8 stable code/path/repair records
+```
+
+The accepted tool arguments are the structured model result; do not ask the model to echo the full proposal as final text. Do not return exact geometry, renderer output, source bodies, or the complete generated package to the model. A rejected submission may receive one fresh explicit repair request containing the previous compact proposal plus bounded diagnostics. It uses the same single submit tool and a newly calculated remaining budget; it is not represented as a fake user-message tool continuation.
+
+#### P7-12a — Architecture decision, contracts, and compatibility boundary
+
+**Work**
+
+- Update the technical architecture before implementation to distinguish `DungeonGenerationProposalV2`, model-independent `DungeonDesignSpecV2`, compiled kernel intent, exact `LayoutRequest`, and `DungeonPackage`.
+- Amend the model-tool section so initial generation uses one structured submission boundary. Keep incremental add/connect/regenerate tools as possible later DM-edit operations rather than exposing five overlapping full-intent tools in the initial task profile.
+- Record that local refs are noncanonical relation handles and specify deterministic, versioned ID derivation independent of layout seed and array position.
+- Define compiler ownership: the independently testable pure dungeon package owns `DungeonDesignSpecV2`, deterministic ID/default/policy compilation, and compile diagnostics; the Workbench owns the proposal wrapper, context, provider calls, attempt state, persistence, and approval boundaries.
+- Define V1 compatibility: existing `dungeon_generation_intent_v1`, specifications, lineage, artifacts, versions, and exports remain immutable/readable. V2 gets new schema/profile/instruction/compiler versions and does not rewrite V1 JSONB.
+- Decide explicitly whether existing `generation_run` JSONB fields can hold all safe prompt-attempt pins. Add a migration only if a concrete required query/constraint cannot be represented without one; do not add a second run database or queue.
+- Specify terminal run stages and error taxonomy: `model_transport`, `model_submission`, `intent_compile`, `deterministic_preflight`, `render`, `asset_stage`, `persistence`, `completed`.
+
+**Deliverables**
+
+- Updated `dm-assistant-technical-architecture.md` and this implementation plan.
+- JSON examples for a minimal one-floor dungeon, the two-floor Flooded Archive, one abstention, and one rejected local-reference case; examples remain synthetic and contain no real campaign text.
+- A compatibility table mapping V1 fields to V2 model fields, compiler-derived fields, or deliberately removed fields.
+
+**Done when**
+
+- Review can identify exactly which process owns every field and transition.
+- No V2 field lets a model select scope, seed, canonical ID, publication visibility, lifecycle, renderer syntax, arbitrary file/SQL access, approval, or canonical commit.
+- The first implementation task can begin without inventing contract behavior in code.
+
+#### P7-12b — Atomic generated-package completion and asset fault containment
+
+Fix persistence correctness before routing another profile through it.
+
+**Work**
+
+- Split deterministic preparation from database publication: compile/generate/validate/render all required specification, validation, DM-notes, DM/player preview, and manifest bytes before creating a current artifact version.
+- Validate every pending asset role, ordinal, MIME type, byte size, and audience policy before database publication. Keep clean exports fail-closed.
+- Stage content-addressed blobs before the relational transaction. A staged unreferenced hash may remain deduplicated after rollback; no artifact/version/run may claim success unless every required metadata/link row commits.
+- Add one repository/application operation that, in one PostgreSQL unit of work, creates the draft artifact when needed, creates its immutable version, links all required generated assets, advances `current_version_id`, and transitions the deterministic generation run to `succeeded`.
+- Keep a durable generation run `running` while deterministic work executes. On generation/render/staging/publication failure, transition it once to `failed` with stable stage/codes and create no current artifact version. Never finish a run as succeeded before asset links exist.
+- Delay initial artifact creation until a complete package is ready so model, compile, layout, and preview failures do not leave empty artifacts. Regeneration continues to create a child only on complete success.
+- Preserve the content-addressed store's no-overwrite/hash verification. Do not attempt to mutate or fill missing assets on historical immutable versions; retire an incomplete artifact through its lifecycle if necessary.
+
+**Tests**
+
+- PostgreSQL integration fault injection before version creation, during the Nth asset stage/link, during `current_version_id` update, and during run finish.
+- Assert each fault leaves a failed run, no partially current version, no partial artifact-asset rows, and no success response.
+- Assert a successful package has exactly the required role/ordinal set and that all MIME contracts validate before transaction entry.
+- Regression for the DM-notes MIME failure that previously produced a succeeded run/current version followed by CLI exit `1`.
+- Existing hand-authored Studio create/regenerate/export/approval behavior remains green.
+
+**Done when**
+
+- `success=true`, terminal run status `succeeded`, a current immutable version, and the complete required asset set become one observable outcome.
+- Any expected asset/persistence fault has a stable stage/code and cannot masquerade as model rejection or leave a playable incomplete draft.
+
+#### P7-12c — Shared model-run budgets, transcript contracts, and safe error taxonomy
+
+**Work**
+
+- Separate a one-shot `StructuredSubmissionRunner` from the general `BoundedToolLoop`; do not make the compact dungeon submission inherit open-ended agent behavior.
+- Enforce a truly cumulative monotonic time budget. Before each provider request, derive a request profile with `ceil(deadline-now)` seconds, bounded to the gateway contract; never pass the original full duration to every turn. Apply the same approach to remaining turn, tool-invocation, and token budgets across outer deterministic repair calls.
+- Treat missing usage as unknown rather than zero-cost success. Retain the provider output-token cap and bounded message/body character limits; record whether usage was measured or unavailable.
+- Reject duplicate tool-call IDs, unknown tool names, duplicate single-submit calls, and calls after the remaining budget is zero with stable model-run errors.
+- Route invalid tool arguments through bounded submission/schema diagnostics. Do not turn expected model argument mistakes into `ValueError`/`dungeon_execution_failed`.
+- Expand the normalized Python/Node gateway message contract to a discriminated union for `user`, `assistant`, and `tool_result`, matching `pi-ai`'s `AssistantMessage`/`ToolResultMessage` semantics including call ID/name, `isError`, content, and required opaque continuity signatures. Reject malformed role/content combinations.
+- Preserve Python/PostgreSQL as the durable authority. The gateway may translate normalized messages for transport but must not own campaign/domain state or an authoritative tool loop.
+- For V2 rejection repair, deliberately start a fresh bounded submission request with previous compact proposal and diagnostics. Reserve native assistant/tool-result continuation for workflows that truly execute iterative tools, and contract-test it independently.
+- Map provider, submission, compile, deterministic, asset, persistence, cancellation, rate-limit, usage-limit, and timeout failures to stable public codes. Keep tracebacks/provider text/model-authored abstention text out of public responses.
+
+**Tests**
+
+- Fake monotonic clock proves two/three turns cannot exceed the total deadline and that the gateway receives decreasing limits.
+- Python/Node contract tests round-trip user, assistant tool-call, and tool-result messages through the faux provider without converting them into plain user JSON.
+- Tool argument/schema failures enter one bounded repair path and preserve only safe diagnostics.
+- Cancellation works during every provider turn and no later turn starts.
+- Public CLI/API/web errors are stable and response-safe; unexpected exceptions retain a correlation/stage record without exposing values.
+
+**Done when**
+
+- A nominal 300-second profile cannot consume more than 300 seconds of provider request budget.
+- The code no longer claims native tool continuation while transporting only user messages.
+- Every expected failure maps to an actionable category rather than a generic internal typed-input failure.
+
+#### P7-12d — Compact `DungeonDesignSpecV2` and deterministic compiler
+
+**Work**
+
+- Add strict versioned model-independent contracts to `dm_dungeon` for floor, room, connection, objective, dependency, and preparation-prose intent using bounded enums/text/counts and `extra=forbid`.
+- Keep nesting shallow and defaults explicit for small-model reliability. Prefer omission/defaults over nullable fields, but do not create a universal optional-field context DTO.
+- Use orthogonal semantic connection fields so concealment, barrier, and hazard intent are not overloaded into one fragile enum. Examples: passage type (`passage`, `door`, `stairs`, `ladder`), concealment (`open`, `secret`), barrier (`none`, `locked`, `puzzle`), hazard (`none`, `trapped`).
+- Define relative `floor_scale`, `room_size`, and optional occupancy bands. Add pinned deterministic mappings to existing numeric kernel constraints; models never emit exact cells or occupant arithmetic.
+- Compile local refs into stable opaque IDs with a documented hash/slug algorithm and collision diagnostics. Keep IDs stable when unrelated arrays reorder or prose changes; change IDs only when the local semantic identity or compiler version changes.
+- Derive brief/floor/room counts, publication visibility, layers, gate/trap/clue IDs, dependency references, capacity ranges, and kernel defaults. Secret/trapped elements and connections to DM-only rooms become DM-only deterministically.
+- Require explicit entrance/final objective semantics or return a compact diagnostic; do not infer chronology or a final objective from unrelated prose. Apply only documented unambiguous defaults.
+- Return `DungeonDesignCompileResult` containing either exact `DungeonBrief`/`DungeonTopology` plus warnings and a canonical input/output hash, or bounded stable diagnostics with paths/local refs.
+- Keep compiler functions pure and independently testable with no Workbench/provider/database imports.
+
+**Tests**
+
+- Canonical JSON and schema-version round trips; unknown fields/versions fail.
+- Golden compilation for minimal, multi-floor, branch, loop, secret route, locked clue/key, trapped route, optional room, and final relic cases.
+- Property tests for deterministic IDs, reorder stability, unique references, count derivation, fail-closed visibility, gate solvability, and compile replay.
+- Dependency-isolation tests continue to prohibit Workbench/FastAPI/SQLAlchemy/provider imports.
+- The compiled Flooded Archive reaches the existing kernel without model-authored canonical IDs, counts, numeric dimensions/capacities, or visibility fields.
+
+**Done when**
+
+- A hand-authored compact V2 spec deterministically compiles into the existing strict kernel contracts and passes/fails existing validators with structured diagnostics.
+- Recompiling the same canonical V2 spec and compiler version produces byte-equivalent compiled intent.
+
+#### P7-12e — `submit_dungeon_intent_v2` and bounded submission repair
+
+**Work**
+
+- Add Workbench `DungeonGenerationProposalV2` around `DungeonDesignSpecV2` with intent summary, requested constraints, citations/rules fields for future grounded mode, unknowns/conflicts, and abstention. Standalone defaults still contain no retrieval/citations.
+- Define one server-owned `submit_dungeon_intent_v2` schema. Its input contains the proposal only; scope, campaign owner, seed, context, profile, compiler/generator versions, authorization, and publication policy remain server-supplied.
+- Add a `StructuredSubmissionRunner` that accepts exactly one valid submit call as the structured result. It validates arguments, runs the compiler and deterministic preflight, records the exact accepted proposal/compiled request in restricted lineage, and does not request a duplicate text response.
+- If syntax/reference/compile/preflight fails, return at most eight `code`, `path`, `affected_refs`, and `repair` records. Start at most one fresh repair submission with the complete compact prior proposal and diagnostics.
+- Do not expose review-brief, review-topology, generate-layout, validate-intent, or targeted-regeneration tools in the initial V2 profile. Those operations remain deterministic orchestration or later explicit edit workflows.
+- Create a new task-profile UUID/version, prompt/instruction version, output/tool schema version, and selection-policy version. Never reinterpret stored V1 profile lineage as V2.
+- Keep provider capability checks explicit: V2 requires reliable tool calls; provider-specific constrained argument generation may be enabled only when advertised and contract-tested. Preserve strict server validation for every provider.
+- Bound the proposal by floor/room/connection/text limits suitable for the product and gateway. Reject oversized designs with an actionable suggestion to split the task; do not silently truncate topology.
+
+**Tests**
+
+- Faux provider submits a valid proposal in one call and receives no second request.
+- Invalid JSON/tool arguments, duplicate submits, unknown refs, compile errors, and deterministic preflight failures use one repair at most and pin preservation/replacement lineage.
+- A model cannot submit seed, canonical IDs, scope, visibility policy, lifecycle, approval, SQL/file paths, renderer syntax, or campaign grounding.
+- Accepted output stores exact proposal hash, compiler input/output hash, profile/schema/compiler/generator versions, and semantic diagnostics without hidden reasoning.
+- Abstention is explicit and safe; arbitrary model-authored abstention text is not echoed publicly.
+
+**Done when**
+
+- The model expresses only compact creative intent, Python accepts the submit call as the final structured response, and deterministic code owns every exact/authoritative field.
+
+#### P7-12f — Shared CLI/web integration, durable attempts, and observability
+
+**Work**
+
+- Add one shared `DungeonPromptApplicationService` used by CLI and web. It resolves campaign/default model/effort/seed/context once, starts durable attempt state, invokes V2 submission/repair, invokes atomic package publication, and returns one common result.
+- Start a durable prompt-attempt `generation_run` before contacting the gateway for every surface, including native/Compose CLI. Use its UUID as caller run ID for cancellation and correlation; keep the final artifact package generation run separate and link both IDs in input scope/lineage.
+- Bind `attempt_run_id`, optional artifact `generation_run_id`, provider/model, profile version, and stage in Workbench logs. Have the gateway log both caller run ID and private gateway stream ID so one attempt is traceable across processes.
+- Replace full INFO-level `layout_request`/model body logging with hashes, schema/compiler/generator versions, seed, component counts, elapsed time, result, and stable diagnostic codes. Exact accepted proposal/compiled request remains in restricted immutable artifact lineage or an explicit authenticated diagnostic export, never ordinary logs.
+- Log Pydantic locations/types and stable application diagnostic codes, not raw Pydantic/custom messages containing model-authored IDs/text. Repair prompts may receive bounded safe messages independently of logs.
+- Add stage-specific terminal events and public errors for model transport, missing submit call, schema invalid, compile/reference invalid, topology/layout invalid, preview failure, asset stage failure, persistence failure, cancellation, and unexpected internal failure.
+- For unexpected exceptions, log correlation ID, stable stage, and exception class. Add an explicit local development/debug path for a redacted traceback; do not expose stack/provider/model bodies through normal CLI/API/web output.
+- Add `dm dungeon run inspect <attempt-run-id>` (or extend an existing run inspector) to show safe profile, timing, stages, hashes, counts, and diagnostics. It must not show credentials, prompts, raw provider responses, or unrestricted context/source bodies.
+- Ensure web SSE reconnect/cancel reads the same durable attempt state rather than maintaining a divergent error taxonomy.
+
+**Tests**
+
+- CLI and web faux-provider tests assert the same attempt ID, stage sequence, public code, and final artifact link.
+- Cross-process log capture proves caller run ID correlation and absence of prompts, source text, provider payloads, full layout requests, credentials, and secret URLs.
+- Failed pre-topology attempts are durably inspectable; successful attempts link to the final package generation run/version.
+- Structured log redaction tests include malicious IDs/messages that resemble credentials or log fields.
+- Existing hand-authored workflows remain fully operational with the gateway disabled.
+
+**Done when**
+
+- Every prompt attempt is durable and correlatable before provider contact.
+- Ordinary logs answer where and why a run stopped without containing dungeon/context bodies.
+- CLI and web cannot disagree about whether a draft exists or which failure category occurred.
+
+#### P7-12g — Small-model eval, rollout, and V1 retirement decision
+
+**Work**
+
+- Extend the synthetic eval set with compact one-floor, two-floor, secret lower level, branch/loop, clue/key gate, trap, optional room, hidden area, final relic, and intentionally impossible prompts. Do not include copyrighted or real campaign content.
+- Measure V1 versus V2 on tool compliance, first-pass schema validity, first-pass compile/preflight validity, success after one repair, preservation of requested semantics, deterministic package validity, player-output leakage, input/output tokens, latency, and DM edits.
+- Evaluate models by observed capability rather than branding. Include an opt-in live run for a measured smaller candidate such as Luna only after faux/provider contracts pass; never make live provider calls part of CI.
+- Set a candidate default only after documented thresholds. Initial target gates: 100% faux contract compliance; zero player-secret leaks; 100% deterministic replay for accepted proposals; at least 90% syntactically valid first submissions and 95% valid after one repair on the fixed synthetic suite; no generic internal error for expected model/compile failures. Record measured latency/token thresholds before enforcing them.
+- Add an inspectable opt-in `dungeon-intent-v2-eval` selection policy. Run V1/V2 comparisons without double-persisting artifacts or sending one provider response into another model's context.
+- Cut the default to V2 only after CLI, web, cancellation, atomic publication, logs, and eval gates pass. Retain V1 readers/replay fixtures; disable new V1 generation first, then decide separately whether obsolete V1 orchestration code can be removed.
+- Update operator/developer documentation with the compact boundary, safe live smoke procedure, run inspection, failure categories, and rollback to the prior profile selection.
+
+**Phase gate P7-12**
+
+- A small capable tool-calling model can submit the synthetic Flooded Archive through one compact call without canonical IDs, repeated counts, exact dimensions/capacities, seed, or visibility fields.
+- Deterministic compilation and existing kernel validation own all exact mechanics and fail closed.
+- One bounded repair is sufficient for expected model mistakes; cumulative time/turn/tool/token limits are real.
+- Every CLI/web attempt is durable, correlated, safely inspectable, and body-free in ordinary logs.
+- Successful status/current artifact version/required asset links are atomic; injected faults cannot leave a succeeded incomplete package.
+- Existing V1 artifacts remain readable and immutable, and gateway-disabled hand-authored Studio workflows remain green.
+- Objective V2 evals justify any default-model/profile change; model names alone do not.
+
 **Phase gate P7**
 
 - The independently runnable `dm_dungeon` package turns a constrained brief into a connected, non-overlapping, multi-floor practical grid with reproducible seed behavior and passes dependency-isolation tests.
