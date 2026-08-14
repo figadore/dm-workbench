@@ -168,7 +168,148 @@ def test_bounded_loop_executes_server_tool_and_records_run_lineage() -> None:
     assert record.usage_output_tokens == 16
 
 
-def test_bounded_loop_repairs_schema_invalid_output_with_safe_diagnostics() -> None:
+def test_bounded_loop_accepts_parallel_calls_within_the_invocation_budget() -> None:
+    _, resolved, _, tool = _resolved_profile()
+    profile = resolved.model_copy(update={"tool_budget": 2})
+    final = DungeonIntentV1(
+        intent="Build a three-room dungeon after parallel review.",
+        citation_ids=("cite-1",),
+    )
+    client = FakeClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="set_brief",
+                        call_id="call-1",
+                        arguments={"rooms": 3},
+                    ),
+                    ToolCall(
+                        tool_name="set_brief",
+                        call_id="call-2",
+                        arguments={"rooms": 3},
+                    ),
+                ),
+                input_tokens=5,
+                output_tokens=2,
+            ),
+            GatewayCompletion(
+                content=final.model_dump_json(),
+                input_tokens=7,
+                output_tokens=9,
+            ),
+        )
+    )
+
+    output, record = ModelTaskRunner(client).run(
+        profile=profile,
+        run_input=ModelRunInput(
+            messages=(PromptMessage(role="user", content="Create a dungeon."),),
+            authorized_citation_ids=("cite-1", "rules-1"),
+        ),
+        output_schema=DungeonIntentV1,
+        tools={tool.name: tool},
+    )
+
+    assert output == final
+    assert record.turn_count == 2
+    assert [item.call_id for item in record.tool_invocations] == ["call-1", "call-2"]
+
+
+def test_bounded_loop_logs_safe_tool_details_when_invocation_budget_is_exceeded(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    _, resolved, _, tool = _resolved_profile()
+    client = FakeClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="set_brief",
+                        call_id="call-1",
+                        arguments={"rooms": 3},
+                    ),
+                    ToolCall(
+                        tool_name="set_brief",
+                        call_id="call-2",
+                        arguments={"rooms": 3},
+                    ),
+                )
+            ),
+        )
+    )
+
+    with pytest.raises(ModelRunAbstained, match="tool budget exhausted"):
+        ModelTaskRunner(client).run(
+            profile=resolved,
+            run_input=ModelRunInput(
+                messages=(PromptMessage(role="user", content="Create a dungeon."),),
+            ),
+            output_schema=DungeonIntentV1,
+            tools={tool.name: tool},
+        )
+
+    record = next(
+        item
+        for item in caplog.records
+        if item.message == "model tool calls exceeded the bounded task budget"
+    )
+    assert record.event_data == {
+        "stage": "model_tool_policy",
+        "tool_budget": 1,
+        "prior_tool_count": 0,
+        "requested_tool_count": 2,
+        "requested_tool_names": ["set_brief", "set_brief"],
+    }
+
+
+def test_bounded_loop_logs_safe_tool_schema_diagnostics(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    _, resolved, _, tool = _resolved_profile()
+    client = FakeClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="set_brief",
+                        call_id="call-1",
+                        arguments={"rooms": 0},
+                    ),
+                )
+            ),
+        )
+    )
+
+    with pytest.raises(ValueError, match="invalid arguments for tool set_brief"):
+        ModelTaskRunner(client).run(
+            profile=resolved,
+            run_input=ModelRunInput(
+                messages=(PromptMessage(role="user", content="Create a dungeon."),),
+            ),
+            output_schema=DungeonIntentV1,
+            tools={tool.name: tool},
+        )
+
+    record = next(
+        item
+        for item in caplog.records
+        if item.message == "model tool arguments failed server schema validation"
+    )
+    assert record.event_data["stage"] == "model_tool_validation"
+    assert record.event_data["tool_name"] == "set_brief"
+    assert record.event_data["validation_errors"] == [
+        {
+            "location": ["rooms"],
+            "type": "greater_than_equal",
+            "message": "Input should be greater than or equal to 1",
+        }
+    ]
+
+
+def test_bounded_loop_repairs_schema_invalid_output_with_safe_diagnostics(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     _, resolved, _, tool = _resolved_profile()
     valid = DungeonIntentV1(
         intent="Build a repaired three-room dungeon.",
@@ -203,6 +344,20 @@ def test_bounded_loop_repairs_schema_invalid_output_with_safe_diagnostics() -> N
     assert record.turn_count == 2
     assert record.usage_input_tokens == 12
     assert record.usage_output_tokens == 11
+    validation_log = next(
+        item
+        for item in caplog.records
+        if item.message == "model output failed server schema validation"
+    )
+    assert validation_log.event_data["stage"] == "model_output_validation"
+    assert validation_log.event_data["turn"] == 1
+    assert validation_log.event_data["validation_errors"] == [
+        {
+            "location": ["intent"],
+            "type": "string_too_short",
+            "message": "String should have at least 1 character",
+        }
+    ]
 
 
 def test_bounded_loop_abstains_when_citations_are_unauthorized() -> None:

@@ -20,8 +20,10 @@ from dm_assistant.modules.modeling import (
     ToolInvocationRecord,
     ToolResult,
 )
+from dm_assistant.observability import get_logger
 
 OutputModel = TypeVar("OutputModel", bound=BaseModel)
+logger = get_logger(__name__)
 
 
 class GatewayCompletion(BaseModel):
@@ -139,6 +141,20 @@ class ModelTaskRunner:
                     len(tool_invocations) + len(completion.tool_calls)
                     > profile.tool_budget
                 ):
+                    logger.warning(
+                        "model tool calls exceeded the bounded task budget",
+                        extra={
+                            "event_data": {
+                                "stage": "model_tool_policy",
+                                "tool_budget": profile.tool_budget,
+                                "prior_tool_count": len(tool_invocations),
+                                "requested_tool_count": len(completion.tool_calls),
+                                "requested_tool_names": [
+                                    call.tool_name for call in completion.tool_calls
+                                ],
+                            }
+                        },
+                    )
                     raise ModelRunAbstained("tool budget exhausted before completion")
                 for call in completion.tool_calls:
                     if call.tool_name not in profile.allowed_tools:
@@ -185,6 +201,28 @@ class ModelTaskRunner:
             try:
                 final = output_schema.model_validate_json(completion.content)
             except ValidationError as error:
+                validation_errors = [
+                    {
+                        "location": [str(part) for part in item["loc"]],
+                        "type": item["type"],
+                        "message": item["msg"],
+                    }
+                    for item in error.errors(
+                        include_url=False,
+                        include_input=False,
+                    )[:16]
+                ]
+                logger.warning(
+                    "model output failed server schema validation",
+                    extra={
+                        "event_data": {
+                            "stage": "model_output_validation",
+                            "turn": turns,
+                            "turn_budget": profile.turn_budget,
+                            "validation_errors": validation_errors,
+                        }
+                    },
+                )
                 if turns >= profile.turn_budget:
                     raise ModelRunAbstained(
                         "model output failed schema validation within the repair budget"
@@ -199,17 +237,7 @@ class ModelTaskRunner:
                                     "Return a complete replacement JSON response that "
                                     "matches the required output schema exactly."
                                 ),
-                                "validation_errors": [
-                                    {
-                                        "location": [str(part) for part in item["loc"]],
-                                        "type": item["type"],
-                                        "message": item["msg"],
-                                    }
-                                    for item in error.errors(
-                                        include_url=False,
-                                        include_input=False,
-                                    )[:16]
-                                ],
+                                "validation_errors": validation_errors,
                             },
                             separators=(",", ":"),
                             sort_keys=True,
@@ -284,6 +312,26 @@ class ModelTaskRunner:
         try:
             args = tool.input_schema.model_validate(call.arguments)
         except ValidationError as error:
+            logger.warning(
+                "model tool arguments failed server schema validation",
+                extra={
+                    "event_data": {
+                        "stage": "model_tool_validation",
+                        "tool_name": tool.name,
+                        "validation_errors": [
+                            {
+                                "location": [str(part) for part in item["loc"]],
+                                "type": item["type"],
+                                "message": item["msg"],
+                            }
+                            for item in error.errors(
+                                include_url=False,
+                                include_input=False,
+                            )[:16]
+                        ],
+                    }
+                },
+            )
             raise ValueError(f"invalid arguments for tool {tool.name}") from error
         result = tool.handler(args)
         if profile.require_authorized_citations and any(

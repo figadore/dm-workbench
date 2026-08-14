@@ -74,19 +74,18 @@ _MAX_REPAIR_DIAGNOSTICS = 16
 logger = get_logger(__name__)
 
 
-class _ValidateDungeonIntentInput(BaseModel):
-    """Model-facing input accepted by the deterministic validation tool."""
+class _DungeonIntentToolInput(BaseModel):
+    """Model-authored intent accepted by server-seeded deterministic tools."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     intent: DungeonGenerationIntentV1
-    seed: int
 
 
-class _TargetedRegenerationInput(_ValidateDungeonIntentInput):
+class _TargetedRegenerationInput(_DungeonIntentToolInput):
     """Model request for a code-owned, non-persistent targeted layout preview."""
 
-    baseline_seed: int
+    seed: int
     locked_component_ids: list[str] = []
 
 
@@ -137,18 +136,20 @@ def resolve_dungeon_prompt_profile(
     )
     task = TaskProfile(
         profile_id=uuid.UUID("77777777-7777-7777-7777-777777777710"),
-        profile_version="1.0.0",
+        profile_version="1.2.0",
         task_name=_DUNGEON_INTENT_SCHEMA_NAME,
         prompt_version="prompt-1",
-        instruction_version="instructions-1",
+        instruction_version="instructions-3",
         output_schema_name=_DUNGEON_INTENT_SCHEMA_NAME,
         output_schema_version=_DUNGEON_INTENT_SCHEMA_VERSION,
         allowed_tools=_DUNGEON_TOOL_NAMES,
         # One optional deterministic tool turn, one response turn, and one
-        # schema-repair turn. A failed schema response is never accepted.
+        # schema-repair turn. Providers may emit multiple parallel calls in that
+        # one tool turn, so the invocation budget covers each allowlisted tool
+        # once. The turn budget still prevents a repeated open-ended tool loop.
         turn_budget=3,
-        tool_budget=1,
-        time_budget_seconds=180,
+        tool_budget=len(_DUNGEON_TOOL_NAMES),
+        time_budget_seconds=300,
         # This cumulative budget covers all bounded prompt + typed-tool-schema
         # turns and output, not only generated tokens. Gateway output stays 16K.
         token_budget=min(context_window_tokens, 150_000),
@@ -199,7 +200,7 @@ class DungeonPromptService:
             if stream_run_id is not None
             else self._gateway_client
         )
-        tools = _dungeon_tools()
+        tools = _dungeon_tools(command.seed)
         logger.info(
             "dungeon prompt started",
             extra={
@@ -398,7 +399,14 @@ def _initial_model_input(
                             "objects with id, text, and visibility, never bare strings. "
                             "Give each topology room a concise, human-readable name; "
                             "keep prose constraints, hooks, and feature details in the "
-                            "brief text fields rather than opaque IDs or map syntax."
+                            "brief text fields rather than opaque IDs or map syntax. "
+                            "For door connections, locked doors require gate_id, "
+                            "trapped doors require trap_id, and secret or trapped doors "
+                            "must use dm_only visibility. Every player_safe connection "
+                            "must connect only player_safe rooms; mark any connection to "
+                            "a dm_only room dm_only. Set brief.target_room_count exactly "
+                            "to the number of topology rooms, keep each floor's target "
+                            "count consistent, and include at least one exit-role room."
                         ),
                         "prompt": command.prompt,
                         "context": context.envelope,
@@ -459,10 +467,10 @@ def _preflight(
     return request, diagnostics, geometry.valid
 
 
-def _validate_intent_tool(value: _ValidateDungeonIntentInput) -> ToolResult:
+def _validate_intent_tool(value: _DungeonIntentToolInput, seed: int) -> ToolResult:
     """Return only structured deterministic validation diagnostics to the model."""
 
-    _, diagnostics, valid = _preflight(value.intent, value.seed)
+    _, diagnostics, valid = _preflight(value.intent, seed)
     return ToolResult(
         tool_name=_VALIDATE_INTENT_TOOL,
         call_id="server_validation",
@@ -470,7 +478,7 @@ def _validate_intent_tool(value: _ValidateDungeonIntentInput) -> ToolResult:
     )
 
 
-def _dungeon_tools() -> dict[str, ServerTool]:
+def _dungeon_tools(baseline_seed: int) -> dict[str, ServerTool]:
     return {
         _REVIEW_BRIEF_TOOL: ServerTool(
             name=_REVIEW_BRIEF_TOOL,
@@ -478,9 +486,9 @@ def _dungeon_tools() -> dict[str, ServerTool]:
                 "Review the typed dungeon brief. The server retains all IDs, "
                 "geometry, rendering, and persistence authority."
             ),
-            input_schema=_ValidateDungeonIntentInput,
+            input_schema=_DungeonIntentToolInput,
             handler=lambda value: _review_brief_tool(
-                cast(_ValidateDungeonIntentInput, value)
+                cast(_DungeonIntentToolInput, value)
             ),
         ),
         _REVIEW_TOPOLOGY_TOOL: ServerTool(
@@ -489,9 +497,9 @@ def _dungeon_tools() -> dict[str, ServerTool]:
                 "Validate typed room, connection, gate, clue, and secret-route "
                 "topology without generating geometry."
             ),
-            input_schema=_ValidateDungeonIntentInput,
+            input_schema=_DungeonIntentToolInput,
             handler=lambda value: _review_topology_tool(
-                cast(_ValidateDungeonIntentInput, value)
+                cast(_DungeonIntentToolInput, value)
             ),
         ),
         _GENERATE_LAYOUT_TOOL: ServerTool(
@@ -500,9 +508,9 @@ def _dungeon_tools() -> dict[str, ServerTool]:
                 "Generate and validate a deterministic layout preview from typed "
                 "intent. Returns only structured diagnostics and package identity."
             ),
-            input_schema=_ValidateDungeonIntentInput,
+            input_schema=_DungeonIntentToolInput,
             handler=lambda value: _generate_layout_tool(
-                cast(_ValidateDungeonIntentInput, value)
+                cast(_DungeonIntentToolInput, value), baseline_seed
             ),
         ),
         _VALIDATE_INTENT_TOOL: ServerTool(
@@ -511,9 +519,9 @@ def _dungeon_tools() -> dict[str, ServerTool]:
                 "Validate typed dungeon brief/topology intent with deterministic "
                 "topology, layout, and geometry checks."
             ),
-            input_schema=_ValidateDungeonIntentInput,
+            input_schema=_DungeonIntentToolInput,
             handler=lambda value: _validate_intent_tool(
-                cast(_ValidateDungeonIntentInput, value)
+                cast(_DungeonIntentToolInput, value), baseline_seed
             ),
         ),
         _REGENERATE_LAYOUT_TOOL: ServerTool(
@@ -524,13 +532,13 @@ def _dungeon_tools() -> dict[str, ServerTool]:
             ),
             input_schema=_TargetedRegenerationInput,
             handler=lambda value: _regenerate_layout_tool(
-                cast(_TargetedRegenerationInput, value)
+                cast(_TargetedRegenerationInput, value), baseline_seed
             ),
         ),
     }
 
 
-def _review_brief_tool(value: _ValidateDungeonIntentInput) -> ToolResult:
+def _review_brief_tool(value: _DungeonIntentToolInput) -> ToolResult:
     _require_non_abstained_intent(value.intent, None)
     assert value.intent.brief is not None
     brief = value.intent.brief
@@ -545,7 +553,7 @@ def _review_brief_tool(value: _ValidateDungeonIntentInput) -> ToolResult:
     )
 
 
-def _review_topology_tool(value: _ValidateDungeonIntentInput) -> ToolResult:
+def _review_topology_tool(value: _DungeonIntentToolInput) -> ToolResult:
     _require_non_abstained_intent(value.intent, None)
     assert value.intent.topology is not None
     report = validate_topology(value.intent.topology)
@@ -559,8 +567,8 @@ def _review_topology_tool(value: _ValidateDungeonIntentInput) -> ToolResult:
     )
 
 
-def _generate_layout_tool(value: _ValidateDungeonIntentInput) -> ToolResult:
-    request, diagnostics, valid = _preflight(value.intent, value.seed)
+def _generate_layout_tool(value: _DungeonIntentToolInput, seed: int) -> ToolResult:
+    request, diagnostics, valid = _preflight(value.intent, seed)
     return ToolResult(
         tool_name=_GENERATE_LAYOUT_TOOL,
         call_id="server_layout_generation",
@@ -572,8 +580,10 @@ def _generate_layout_tool(value: _ValidateDungeonIntentInput) -> ToolResult:
     )
 
 
-def _regenerate_layout_tool(value: _TargetedRegenerationInput) -> ToolResult:
-    request, diagnostics, valid = _preflight(value.intent, value.baseline_seed)
+def _regenerate_layout_tool(
+    value: _TargetedRegenerationInput, baseline_seed: int
+) -> ToolResult:
+    request, diagnostics, valid = _preflight(value.intent, baseline_seed)
     if not valid:
         return ToolResult(
             tool_name=_REGENERATE_LAYOUT_TOOL,

@@ -16,6 +16,7 @@ from dm_assistant.modules.modeling import (
     ToolCall,
     resolve_run_profile,
 )
+from dm_assistant.modules.preparation import AttachArtifactAsset
 from dm_assistant.modules.scope import TaskType, resolve_task_scope
 from dm_assistant.orchestration.dungeons import (
     CreatePromptedDungeonWorkflow,
@@ -30,10 +31,11 @@ from dm_assistant.orchestration.dungeons.prompting import (
 )
 from dm_assistant.orchestration.dungeons.service import (
     _build_dm_notes,
+    _dm_notes_asset,
     _dm_notes_text,
     _dm_presentation_package,
 )
-from dm_assistant.orchestration.modeling import GatewayCompletion
+from dm_assistant.orchestration.modeling import GatewayCompletion, GatewayToolSchema
 from dm_dungeon import (
     RenderAudience,
     SvgRenderRequest,
@@ -52,7 +54,7 @@ FIXTURE_PATH = (
 class FakeGatewayClient:
     def __init__(self, completions: tuple[GatewayCompletion, ...]) -> None:
         self._completions = list(completions)
-        self.tool_schema_names: tuple[str, ...] = ()
+        self.tool_schemas: tuple[GatewayToolSchema, ...] = ()
 
     def complete(
         self,
@@ -60,10 +62,10 @@ class FakeGatewayClient:
         profile: object,
         messages: tuple[PromptMessage, ...],
         allowed_tools: tuple[str, ...],
-        tool_schemas: tuple[object, ...],
+        tool_schemas: tuple[GatewayToolSchema, ...],
     ) -> GatewayCompletion:
         del profile, messages, allowed_tools
-        self.tool_schema_names = tuple(schema.name for schema in tool_schemas)
+        self.tool_schemas = tool_schemas
         if not self._completions:
             raise AssertionError("unexpected extra completion")
         return self._completions.pop(0)
@@ -181,7 +183,11 @@ def test_live_gateway_catalog_resolves_hyphenated_dungeon_profile() -> None:
     assert profile.requested_effort is ReasoningEffort.DEEP
     assert profile.output_schema_name == "dungeon_generation_intent_v1"
     assert profile.require_citation_ids is False
+    assert profile.task_profile_version == "1.2.0"
+    assert profile.instruction_version == "instructions-3"
     assert profile.turn_budget == 3
+    assert profile.time_budget_seconds == 300
+    assert profile.tool_budget == len(profile.allowed_tools) == 5
     assert profile.token_budget == 128_000
     assert "generate_dungeon_layout" in profile.allowed_tools
 
@@ -229,10 +235,7 @@ def test_prompt_workflow_uses_only_structured_validation_and_persists_lineage() 
                     ToolCall(
                         tool_name="validate_dungeon_intent",
                         call_id="validate-1",
-                        arguments={
-                            "intent": intent.model_dump(mode="json"),
-                            "seed": 1842,
-                        },
+                        arguments={"intent": intent.model_dump(mode="json")},
                     ),
                 ),
                 input_tokens=10,
@@ -263,13 +266,43 @@ def test_prompt_workflow_uses_only_structured_validation_and_persists_lineage() 
     assert len(stored.model_lineage) == 1
     assert stored.model_lineage[0].model_run.turn_count == 2
     assert stored.tool_runs[0].tool_name == "validate_dungeon_intent"
-    assert gateway.tool_schema_names == (
+    assert tuple(schema.name for schema in gateway.tool_schemas) == (
         "review_dungeon_brief",
         "review_dungeon_topology",
         "generate_dungeon_layout",
         "validate_dungeon_intent",
         "regenerate_dungeon_layout",
     )
+    schema_properties = {
+        schema.name: schema.parameters["properties"] for schema in gateway.tool_schemas
+    }
+    assert all(
+        "seed" not in schema_properties[name]
+        for name in (
+            "review_dungeon_brief",
+            "review_dungeon_topology",
+            "generate_dungeon_layout",
+            "validate_dungeon_intent",
+        )
+    )
+    assert "baseline_seed" not in schema_properties["regenerate_dungeon_layout"]
+    assert "seed" in schema_properties["regenerate_dungeon_layout"]
+
+
+def test_dm_notes_asset_uses_a_valid_plain_text_media_type() -> None:
+    request = compile_layout_request(_intent(), 1842)
+    asset = _dm_notes_asset(request, _build_dm_notes(request, "Synthetic request."))
+
+    command = AttachArtifactAsset(
+        campaign_id=uuid.uuid4(),
+        artifact_version_id=uuid.uuid4(),
+        role=asset.role,
+        ordinal=asset.ordinal,
+        media_type=asset.media_type,
+        data=asset.data,
+    )
+
+    assert command.media_type == "text/plain"
 
 
 def test_dm_notes_are_readable_and_dm_map_callouts_never_modify_player_map() -> None:
@@ -347,7 +380,6 @@ def test_prompt_workflow_allows_only_code_owned_targeted_regeneration_preview() 
                         call_id="regenerate-1",
                         arguments={
                             "intent": intent.model_dump(mode="json"),
-                            "baseline_seed": 1842,
                             "seed": 999999,
                             "locked_component_ids": [locked_room_id],
                         },

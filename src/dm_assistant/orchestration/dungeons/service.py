@@ -505,12 +505,7 @@ class DungeonStudioService:
                 "application/json",
                 _canonical_json_bytes(validation_report),
             ),
-            _PendingAsset(
-                ArtifactAssetRole.OTHER,
-                0,
-                "text/plain; charset=utf-8",
-                _dm_notes_text(request, resolved_dm_notes).encode(),
-            ),
+            _dm_notes_asset(request, resolved_dm_notes),
         )
         for asset in (*base_assets, *preview_assets):
             self._preparation.attach_asset(
@@ -593,6 +588,15 @@ def _build_dm_notes(
 
 def _humanize_id(value: str) -> str:
     return value.removeprefix("room_").replace("_", " ").replace("-", " ").title()
+
+
+def _dm_notes_asset(request: LayoutRequest, dm_notes: DungeonDmNotes) -> _PendingAsset:
+    return _PendingAsset(
+        ArtifactAssetRole.OTHER,
+        0,
+        "text/plain",
+        _dm_notes_text(request, dm_notes).encode(),
+    )
 
 
 def _dm_notes_text(request: LayoutRequest, dm_notes: DungeonDmNotes) -> str:
