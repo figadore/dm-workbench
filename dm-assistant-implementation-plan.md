@@ -1173,6 +1173,102 @@ The accepted tool arguments are the structured model result; do not ask the mode
 - JSON examples for a minimal one-floor dungeon, the two-floor Flooded Archive, one abstention, and one rejected local-reference case; examples remain synthetic and contain no real campaign text.
 - A compatibility table mapping V1 fields to V2 model fields, compiler-derived fields, or deliberately removed fields.
 
+**Frozen illustrative V2 examples (P7-12a)**
+
+These are proposal/design-shape examples, not kernel JSON or provider prompts. Exact enum spelling, bounds, canonical serialization, and compile diagnostics are frozen by P7-12d; the ownership boundary below is normative now.
+
+Minimal one-floor design:
+
+```json
+{
+  "proposal_version": "2",
+  "design": {
+    "title": "The Salt Cellar",
+    "premise": "A tide-worn cache protects a sealed ledger.",
+    "floors": [{
+      "local_ref": "cellar",
+      "name": "Salt Cellar",
+      "floor_scale": "small",
+      "rooms": [
+        {"local_ref": "entry", "name": "Wet Steps", "role": "entrance", "room_size": "small"},
+        {"local_ref": "vault", "name": "Ledger Vault", "role": "objective", "room_size": "medium"}
+      ]
+    }],
+    "connections": [{"from": "entry", "to": "vault", "passage": "door", "barrier": "none"}],
+    "objectives": [{"room_ref": "vault", "kind": "final_objective"}]
+  },
+  "unknowns": [],
+  "conflicts": []
+}
+```
+
+Two-floor synthetic Flooded Archive design:
+
+```json
+{
+  "proposal_version": "2",
+  "design": {
+    "title": "Flooded Archive",
+    "themes": ["flooded records", "lighthouse"],
+    "floors": [
+      {"local_ref": "upper", "name": "Keeper Level", "floor_scale": "small", "rooms": [
+        {"local_ref": "landing", "name": "Lantern Landing", "role": "entrance", "room_size": "small"},
+        {"local_ref": "lift", "name": "Archive Lift", "role": "transition", "room_size": "small"}
+      ]},
+      {"local_ref": "archive", "name": "Flooded Archive", "floor_scale": "medium", "rooms": [
+        {"local_ref": "stacks", "name": "Drowned Stacks", "role": "exploration", "room_size": "medium"},
+        {"local_ref": "reliquary", "name": "Seal Reliquary", "role": "objective", "room_size": "small"}
+      ]}
+    ],
+    "connections": [
+      {"from": "landing", "to": "lift", "passage": "door"},
+      {"from": "lift", "to": "stacks", "passage": "stairs"},
+      {"from": "stacks", "to": "reliquary", "passage": "passage", "concealment": "secret"}
+    ],
+    "objectives": [{"room_ref": "reliquary", "kind": "final_objective"}]
+  }
+}
+```
+
+Explicit safe abstention (no design is compiled or persisted):
+
+```json
+{
+  "proposal_version": "2",
+  "abstention": {"kind": "insufficient_creative_direction"},
+  "unknowns": ["desired dungeon purpose"],
+  "conflicts": []
+}
+```
+
+Rejected duplicate local reference (the compiler returns a bounded diagnostic):
+
+```json
+{
+  "proposal_version": "2",
+  "design": {"floors": [
+    {"local_ref": "upper", "rooms": [{"local_ref": "archive", "role": "entrance"}]},
+    {"local_ref": "lower", "rooms": [{"local_ref": "archive", "role": "objective"}]}
+  ]}
+}
+```
+
+```json
+{"accepted": false, "diagnostics": [{"code": "design.duplicate_local_ref", "path": "/design/floors/1/rooms/0/local_ref", "affected_refs": ["archive"], "repair": "use a unique room local ref"}]}
+```
+
+| V1 field/category | V2 disposition | Owner / compatibility |
+| --- | --- | --- |
+| V1 brief title, premise, theme, tone, hooks | compact design prose | model may propose; V1 stored value remains readable unchanged |
+| V1 floors/rooms/connections and role intent | local-ref design elements | model proposes relations; compiler resolves refs and exact kernel forms |
+| V1 package/component IDs | compiler-derived | V2 model cannot supply them; old V1 IDs remain historical data |
+| V1 floor/room counts, dimensions, capacities | compiler-derived | V2 uses relative scale/size/occupancy bands only |
+| V1 seed, layout/generator inputs, locks | server-owned `LayoutRequest` | never accepted in initial V2 submission |
+| V1 visibility/layers, gates/traps/clues/dependencies | compiler-derived policy | compiler fails closed and reports missing required dependencies |
+| V1 coordinates, geometry, renderer/export/asset metadata | deliberately removed from model contract | deterministic layout/rendering and atomic publication own them |
+| V1 validation/lifecycle/approval/campaign operations | deliberately removed from model contract | deterministic validation and authenticated human workflows own them |
+| V1 specification, lineage, artifacts, versions, exports | immutable read compatibility | V2 adds new version pins; it never rewrites V1 JSONB |
+
 **Done when**
 
 - Review can identify exactly which process owns every field and transition.

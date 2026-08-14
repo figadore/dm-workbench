@@ -55,7 +55,7 @@ The following are non-negotiable invariants:
 8. **Every commit is explainable.** Each canonical revision has a concise human-readable summary plus the complete accepted-item/evidence audit trail.
 9. **The LLM expresses intent; code owns mechanics.** Models may choose themes, room roles, topology constraints, encounter goals, and tactics. They do not author raw SVG, pixel geometry, pathfinding, export packages, or trusted difficulty arithmetic.
 10. **Preparation is not canon.** Approving a dungeon or encounter as ready for play does not assert that its planned inhabitants/events occurred. Played outcomes enter canon only through the normal change-set workflow.
-11. **Generation is reproducible and inspectable.** Every artifact version pins its input scope, seed, schemas, generator/renderer versions, rules profile, party snapshot, model/tool runs, validation report, and parent lineage. Application/database aggregate IDs may use UUID4, but component IDs inside deterministic generated packages must be retained from input or derived reproducibly from pinned input, seed, and generator version; deterministic generation must never call `uuid4()`.
+11. **Generation is reproducible and inspectable.** Every artifact version pins its input scope, seed, schemas, compiler/generator/renderer versions, rules profile, party snapshot, model/tool runs, validation report, and parent lineage. Application/database aggregate IDs may use UUID4, but deterministic package generation must never call `uuid4()`. For initial V2 dungeon generation, semantic component IDs derive only from compiler version plus canonical local semantic identity—not layout seed, prose, or array position—while seed-created auxiliary layout IDs may additionally use the pinned seed.
 12. **Context contracts remain task-specific.** A small common generation-context envelope carries scope, provenance, visibility, citations, and a payload hash; dungeon, encounter, session-preparation, and future scene contexts use separate versioned payload schemas rather than one universal optional-field object.
 13. **Package separation does not imply service separation.** The pure dungeon package runs in the Python Workbench process and cannot import Workbench persistence, HTTP, retrieval, or model orchestration. Encounter package extraction remains a measured later decision.
 
@@ -290,7 +290,9 @@ It owns no campaign documents, retrieval policy, canonical/preparation state, ap
 
 OAuth credentials live in a dedicated gateway secret file/volume, separate from Pi's normal auth file and from PostgreSQL. The first web setup should prefer OpenAI's device-code flow for a headless Proxmox gateway; the UI displays verification events but never receives access/refresh tokens. Re-login is an operational recovery path, so ordinary campaign backup/restore does not depend on copying OAuth credentials. For local/full-stack setup, an idempotent host bootstrap creates an ignored mode-`0600` environment file and generates distinct missing database, API, session-signing, and Workbench-to-gateway secrets; it preserves existing values and never generates provider credentials. The internal gateway token is the shared bearer credential only for Python-to-gateway calls and is injected into both services by Compose.
 
-Python sends a normalized request containing the resolved provider/model, supported effort level, context/messages, allowed tool schemas, output/token limits, run/session cache ID, and attachment references. The gateway returns normalized streaming events and final usage. Python validates every completed tool call against its own versioned schema and server-supplied scope, executes it through application services, records the result, and decides whether another bounded model turn is allowed. No model-facing tool can approve an artifact or commit canon.
+Python sends a normalized request containing the resolved provider/model, supported effort level, context/messages, allowed tool schemas, output/token limits, run/session cache ID, and attachment references. Message contracts are a discriminated union of `user`, `assistant`, and `tool_result`, preserving tool call ID/name, error flag, bounded content, and provider-required opaque continuity signatures; malformed role/content combinations are rejected. The gateway returns normalized streaming events and final usage. Python validates every completed tool call against its own versioned schema and server-supplied scope, executes it through application services, records the result, and decides whether another bounded model turn is allowed.
+
+Python owns cumulative monotonic deadline, turn, tool-invocation, and token budgets. Before every provider request it calculates the remaining budget and passes only that decreasing time limit to the gateway; missing provider usage is recorded as unknown, never zero-cost success. Compact V2 dungeon submission is a one-shot structured submission workflow, not a native iterative tool continuation: its one permitted repair starts a fresh request with bounded proposal/diagnostics. Native assistant/tool-result continuation is reserved for workflows that actually execute iterative tools. No model-facing tool can approve an artifact or commit canon.
 
 A versioned **model endpoint/profile** records runtime adapter, provider/model ID, observed capabilities/context limits, and availability metadata. A versioned **task profile** records task type, model profile, normalized effort (`fast`/`standard`/`deep`, mapped only to supported provider levels), context policy/budgets, allowed tools, output schema/token limit, fallback order, and prompt/instruction version. Each run pins the resolved snapshot and any per-run override. Model names such as Luna/Terra/Sol do not imply suitability; task-specific objective checks and blinded DM comparisons choose defaults.
 
@@ -526,55 +528,55 @@ started_at
 finished_at NULL
 ```
 
-A generation run records deterministic stages and model-gateway/tool interactions separately. Its generation-context envelope is validated against the named domain payload schema; it is not an untyped dumping ground for all possible context. Replaying the same pinned inputs and versions should reproduce the structured layout; a model call may require replaying its recorded structured output unless the provider guarantees deterministic inference.
+A generation run records deterministic stages and model-gateway/tool interactions separately. Its generation-context envelope is validated against the named domain payload schema; it is not an untyped dumping ground for all possible context. Safe attempt/profile/schema/compiler/hash/count/diagnostic pins may remain in the existing versioned JSONB fields unless a concrete query or constraint requires a migration; no second run database or queue is introduced. Replaying the same pinned inputs and versions should reproduce the structured layout; a model call may require replaying its recorded structured output unless the provider guarantees deterministic inference.
+
+Prompted dungeon attempts use the terminal stage taxonomy `model_transport`, `model_submission`, `intent_compile`, `deterministic_preflight`, `render`, `asset_stage`, `persistence`, and `completed`. Each terminal outcome records a stable public-safe code and body-free diagnostics; unexpected failures additionally retain only correlation, stage, and exception class in ordinary logs. A prompt-attempt run starts before provider contact. It is distinct from, and links to, the final artifact generation run so a failed pre-package attempt is durable without implying an artifact exists.
 
 P7-01 adds monotonically numbered immutable versions with a canonical specification hash, same-artifact parent constraints, same-campaign artifact/run constraints, and immutable asset-role rows. Database triggers reject version/asset/lifecycle-event mutation and allow a generation run to change exactly once from `running` to a terminal status while preserving all input/version/model/tool pins. Every artifact lifecycle change has an immutable actor/reason/version event. Creating a child of approved/used preparation returns it to `draft`; `retired` is terminal. These tables have no relationship to a canonical change set or campaign revision write. Input revision/snapshot UUIDs remain opaque pins until their owning schemas are added, at which point later migrations add ownership foreign keys without rewriting preparation history.
 
 ## Dungeon Generation Architecture
 
-Dungeon generation should be a constrained compilation pipeline:
+Dungeon generation is a constrained five-layer compilation pipeline:
 
 ```text
-GenerationContextEnvelope<DungeonGenerationContext> + DM request
+DM request + GenerationContextEnvelope<DungeonGenerationContext> + server-pinned seed
     |
     v
-Workbench orchestration and optional model-authored DungeonBrief/topology intent
+Workbench-owned DungeonGenerationProposalV2 (including abstention/unknown wrapper)
     |
     v
-pure dungeon package: typed schema validation
+pure DungeonDesignSpecV2 using temporary local relation refs
     |
     v
-deterministic topology/gating validation
+pure versioned compiler -> exact DungeonBrief + DungeonTopology (compiled intent)
     |
     v
-seeded geometry/layout engine
-    |
-    v
-pathfinding, capacity, and geometry validation
-    |
-    +--> structured diagnostics -> targeted model/DM repair
-    |
-    v
-renderer-neutral DungeonPackage
+exact LayoutRequest -> seeded layout/validation -> renderer-neutral DungeonPackage
     |
     +--> deterministic SVG / web PNG
     +--> low-ink, exact-scale tiled print PDF
     +--> Roll20-compatible grid-on/gridless PNG + metadata
 ```
 
-`DungeonGenerationContext` contains only dungeon-design inputs such as relevant location lore, themes, factions, plot hooks, geography, requested tone, and coarse party constraints. It does not accumulate encounter mechanics, session extraction state, or every field another task may someday need. The envelope and exact structured model output are pinned in the generation lineage.
+`DungeonGenerationContext` contains only dungeon-design inputs such as relevant location lore, themes, factions, plot hooks, geography, requested tone, and coarse party constraints. It does not accumulate encounter mechanics, session extraction state, or every field another task may someday need. The envelope, accepted proposal, compiler input/output hashes, and exact compiled request are restricted immutable lineage—not ordinary log bodies.
 
-The model authors intent through versioned Pydantic/JSON schemas and high-level tools; it does not emit raw coordinates for every wall or raw renderer syntax. The Workbench performs retrieval and model orchestration, then calls the in-process pure dungeon package. The package can also be driven directly from hand-authored synthetic JSON through its CLI/test adapter and cannot access the Workbench database or model gateway.
+The Workbench owns proposal wrapping, scope/context resolution, provider calls, prompt-attempt state, persistence, and human approval. The pure `dm_dungeon` package owns `DungeonDesignSpecV2`, deterministic ID/default/policy compilation, compile diagnostics, exact kernel contracts, layout, validation, renderers, and exporters. The model supplies compact creative intent only. It cannot select seed/scope/canonical IDs/publication visibility/lifecycle, exact coordinates or numeric dimensions/capacities, renderer syntax, assets, approval, canonical operations, files, or SQL. The package can also be driven directly from hand-authored synthetic JSON through its CLI/test adapter and cannot access the Workbench database or model gateway.
 
 Geometry-affecting features and stable encounter slots belong in `DungeonPackage`; prose-heavy room content and links to separately versioned encounter artifacts belong to the Workbench preparation layer and reference those stable room/zone/marker IDs. Each immutable Studio specification retains the original DM request, brief prose, hooks/constraints, and DM room-note index. A render-only DM overlay derives numbered room-name callouts from that index; it is included only in DM previews/exports and never changes the canonical deterministic package or player output. This preserves independent encounter regeneration without making the dungeon kernel depend on encounter orchestration.
 
+V1 compatibility is read-only and immutable: `dungeon_generation_intent_v1`, existing specifications, lineage, artifact versions, and exports are never rewritten or reinterpreted as V2. V2 receives new proposal/design/compiler/profile/instruction/schema versions. On success, deterministic preparation renders and validates every required asset, stages content-addressed blobs, then one PostgreSQL unit of work creates any artifact, its immutable version, all required asset links, its current-version pointer, and the successful final generation run. Staged unreferenced blobs may remain safely deduplicated after rollback; no current version or succeeded run is visible without the complete required role/ordinal asset set.
+
 ### Dungeon Specification Layers
 
-Keep three representations distinct:
+Keep five representations distinct:
 
-1. **Dungeon brief** — purpose, theme, tone, inhabitants, number of floors/rooms, desired pacing, constraints, and campaign hooks.
-2. **Topology/content graph** — stable room/area IDs, roles, approximate size/capacity, connections, loops, branches, gates, keys/clues, secret routes, stairs, encounter slots, and visibility.
-3. **Exact layout package** — floors, grid geometry, wall/door segments, rooms/polygons, corridors, stairs, zones, terrain/features, labels, encounter/position anchors, and render layers.
+1. **`DungeonGenerationProposalV2` (Workbench)** — proposal wrapper: compact design, request/context references, explicit unknowns/conflicts/abstention, and no authoritative package fields.
+2. **`DungeonDesignSpecV2` (pure package)** — model-independent creative design: bounded prose/themes, floors/rooms/connections/objectives/dependencies expressed with temporary local refs and relative bands only.
+3. **Compiled kernel intent (pure package)** — exact `DungeonBrief` and `DungeonTopology`, with canonical opaque IDs, counts, numeric constraints, visibility/layers, and gate/key/clue dependencies derived by a pinned compiler.
+4. **`LayoutRequest`** — exact compiled intent plus server-pinned seed, generator version, and explicit regeneration locks; it is the input to seeded layout.
+5. **`DungeonPackage`** — exact layout package: floors, grid geometry, wall/door segments, rooms/polygons, corridors, stairs, zones, terrain/features, labels, encounter/position anchors, and render layers.
+
+A V2 local ref such as `archive` or `sanctum` is a noncanonical relation handle, valid only within one design specification. Duplicate or ambiguous refs fail compilation. The compiler derives canonical opaque IDs from compiler version and canonical semantic identity, independent of seed, prose changes, and array order; changing the semantic identity or compiler version may change the ID. Only explicit later DM regeneration/edit workflows may provide already-established opaque IDs.
 
 A conceptual package can be stored as one versioned aggregate rather than one relational row per tile:
 
@@ -607,21 +609,15 @@ This first algorithm optimizes for reproducibility, inspectability, and clean fa
 
 ### Dungeon Primitives and Model Tools
 
-The application should expose operations such as:
+Initial V2 generation exposes exactly one structured model submission:
 
 ```text
-set_dungeon_brief(...)
-add_room(role, capacity, size_constraints, tags, ...)
-connect_rooms(kind, gate, secret, ...)
-add_floor_connection(...)
-add_feature(room_id, feature_kind, constraints, ...)
-attach_encounter_slot(...)
-generate_layout(seed, locked_components, ...)
-validate_dungeon(...)
-regenerate_component(component_id, ...)
+submit_dungeon_intent_v2(proposal)
 ```
 
-The server validates every operation, owns component identity, and decides exact placement. A model may supply already-established opaque IDs; otherwise deterministic code derives them from the pinned input, seed, generator version, and stable component key. Random UUID4 remains suitable for application/database aggregate IDs but is prohibited inside deterministic package generation. A model can request a loop or secret bypass; code computes a realizable route. Regeneration can lock accepted rooms/floors and change only a selected component.
+It validates one proposal, invokes the pure compiler and deterministic preflight, and returns either a compact accepted summary/hash/compiler version or at most eight stable code/path/affected-ref/repair diagnostics. It neither persists a package nor approves or commits anything. The accepted submit arguments are the structured result; the model is not asked to echo a duplicate final response. One rejected submission may receive one fresh bounded repair request with its compact prior proposal and diagnostics.
+
+Incremental `add_room`, `connect_rooms`, and targeted-regeneration operations remain possible later authenticated DM-edit workflows, not overlapping initial-generation model tools. The server owns component identity and exact placement. A model can request a loop or secret bypass; code computes a realizable route. Regeneration can lock accepted rooms/floors and change only a selected component.
 
 ### Deterministic Dungeon Validation
 

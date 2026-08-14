@@ -4,26 +4,29 @@
 
 ## Snapshot
 
-- **Last updated:** 2026-08-14 (P7-12 dungeon model-interface V2 implementation plan)
-- **Lifecycle:** P7-10a/P7-10b and the immediate live GPT-5.4 reliability repair are complete. Live evidence now drives a planned P7-12 hardening program: compact V2 model intent, deterministic compilation, real bounded message/budget semantics, durable body-free diagnostics, and atomic complete-package publication.
+- **Last updated:** 2026-08-14 (P7-12a V2 architecture/compatibility boundary)
+- **Lifecycle:** P7-10a/P7-10b and the immediate live GPT-5.4 reliability repair are complete. P7-12a now freezes the compact V2 ownership/compatibility boundary; remaining hardening slices cover atomic package publication, real bounded message/budget semantics, durable body-free diagnostics, and rollout evidence.
 - **Current phase:** P7 — Dungeon and Map Generation hardening.
-- **Current task:** Detailed P7-12 implementation plan complete; implementation is unstarted.
+- **Current task:** P7-12a complete; P7-12b is unstarted.
 - **Validated status:** P3-01 is unstarted: no P3 migration, implementation, or commit exists. P5-01 is complete in committed `eea08a4`; P5-02 is unstarted: no predicate schema, migration, operation, or commit exists.
 - **Fast-track note:** P3 is required only to promote generated dungeon facts to campaign canon. It does not block standalone prompt-to-package preparation work; P5-02 remains deferred until explicit campaign grounding needs it.
-- **Next task:** **P7-12a — update the architecture and freeze the V2 ownership/compatibility boundary before implementing contracts.** P3-01 remains queued after this explicit user-directed reliability program.
+- **Next task:** **P7-12b — implement atomic generated-package completion and asset fault containment.** First action: inspect the current preparation service/repositories and asset staging path, then define the single transactional complete-package publication operation. P3-01 remains queued after this explicit user-directed reliability program.
 - **Deferred design note:** A post-P7 player-map reveal-overlay workflow is recorded in `dm-assistant-implementation-plan.md`: independently publishable/printable aligned map sections for discovered secret areas, explicit durable reveal provenance, and fail-closed browser delivery. It is intentionally not scope for P7-10b.
 - **Schema head:** `0008_workbench_defaults`.
 - **Public baseline:** history begins with the final architecture/roadmap snapshot, uses the public GitHub author identity, and is licensed `AGPL-3.0-only`.
 
 Always inspect `git status --short --branch` and the latest log before changing files.
 
-## P7-12 Planning Handoff
+## P7-12a Architecture/Compatibility Handoff
 
-- **Completed:** Added a detailed, ordered `P7-12 — Dungeon model-interface V2 and run-integrity hardening` program to `dm-assistant-implementation-plan.md`. It defines the target compact proposal/submission/compiler boundary and seven independently gated slices: architecture/compatibility; atomic package publication; cumulative budgets/native transcript contracts/error taxonomy; pure V2 contracts/compiler; single `submit_dungeon_intent_v2` submission and one repair; shared durable CLI/web attempts plus body-free observability; and small-model eval/cutover.
-- **Key decisions proposed for architecture review:** the model submits temporary semantic refs and creative intent only; pure deterministic code derives canonical IDs/counts/numeric constraints/visibility/dependencies; the submit call is the structured result and never commits/approves; V1 artifacts remain immutable/readable; exact bodies leave INFO logs; prompt attempts become durable/correlated before provider contact; and artifact success/current-version/assets become one atomic database outcome after blobs are staged.
-- **Changed:** `dm-assistant-implementation-plan.md` and this handoff only for the planning task. No code or migration was added by the planning task. During planning, the previously uncommitted live-reliability implementation/test changes were committed externally as `d50db42`; this planning work did not alter or amend that commit.
-- **Checks:** `git diff --check` passed. No implementation test suite was required for the Markdown-only planning addition; committed baseline `d50db42` retains the prior focused `36 passed`, Ruff, mypy, rebuilt Compose readiness, and exact live exit-0 result.
-- **Next:** **P7-12a**. First action: update `dm-assistant-technical-architecture.md` with the five-layer proposal/design-spec/compiled-intent/layout/package boundary, local-ref/ID ownership, V1 compatibility, run stages, and migration decision; do not begin P7-12b code first.
+- **Completed:** Updated `dm-assistant-technical-architecture.md` and `dm-assistant-implementation-plan.md` to freeze the V2 five-layer boundary: Workbench `DungeonGenerationProposalV2`; pure `DungeonDesignSpecV2`; pure compiled exact kernel intent; exact seeded `LayoutRequest`; and `DungeonPackage`. The architecture assigns proposal/context/provider/attempt/persistence/approval ownership to Workbench and design/compiler/diagnostic/kernel ownership to pure `dm_dungeon`.
+- **Decisions frozen:** V2 local refs are temporary relation handles; deterministic semantic IDs derive from compiler version plus canonical semantic identity, never seed/prose/array order. V2 has one `submit_dungeon_intent_v2` structured submission with at most one fresh repair, not five overlapping initial tools. The model cannot select IDs, counts, numeric constraints, seed, visibility/layers, lifecycle, renderer/assets, scope, files/SQL, approval, or canon. V1 intents/specifications/lineage/artifacts/exports remain immutable/readable and gain no reinterpretation. Existing generation-run JSONB continues to hold safe attempt pins unless implementation demonstrates a concrete query/constraint that needs a migration.
+- **Run/publication contract frozen:** prompt attempts begin before provider contact; terminal stages are `model_transport`, `model_submission`, `intent_compile`, `deterministic_preflight`, `render`, `asset_stage`, `persistence`, and `completed`. Success requires staged/validated required assets plus one transaction that creates/links the immutable version, advances current version, and succeeds the final run. Ordinary logs are body-free; exact accepted proposal/compiled request remains restricted lineage.
+- **Examples:** The plan now contains synthetic minimal, two-floor Flooded Archive, abstention, and duplicate-local-ref examples plus the V1→V2 compatibility table.
+- **Changed:** `dm-assistant-technical-architecture.md`, `dm-assistant-implementation-plan.md`, and this handoff. No code or migration was added. Pre-existing planning edits were preserved.
+- **Checks:** `git diff --check` passed. Markdown-only task; no implementation suite required.
+- **Working tree:** modified `PROJECT_STATUS.md`, `dm-assistant-implementation-plan.md`, and `dm-assistant-technical-architecture.md`; no unrelated work was overwritten.
+- **Next:** **P7-12b**. First action: inspect preparation service/repository publication and asset staging paths before designing the one-transaction complete-package publication operation.
 
 ## DM Notes and DM-map Callouts Handoff
 
