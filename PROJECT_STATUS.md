@@ -4,18 +4,28 @@
 
 ## Snapshot
 
-- **Last updated:** 2026-08-14 (P7-12c shared bounded-run contracts complete)
-- **Lifecycle:** P7-10a/P7-10b and the immediate live GPT-5.4 reliability repair are complete. P7-12a freezes the compact V2 ownership/compatibility boundary, P7-12b makes publication atomic, and P7-12c enforces cumulative request budgets, normalized transcript roles, unknown usage, bounded tool failures, and safe provider transport categories. V2 compiler work is next.
+- **Last updated:** 2026-08-14 (P7-12d compact V2 compiler complete)
+- **Lifecycle:** P7-10a/P7-10b and the immediate live GPT-5.4 reliability repair are complete. P7-12a freezes the compact V2 ownership/compatibility boundary, P7-12b makes publication atomic, P7-12c enforces safe bounded runs, and P7-12d provides the pure compact V2 compiler. V2 structured submission work is next.
 - **Current phase:** P7 — Dungeon and Map Generation hardening.
-- **Current task:** P7-12c complete; P7-12d is unstarted.
+- **Current task:** P7-12d complete; P7-12e is unstarted.
 - **Validated status:** P3-01 is unstarted: no P3 migration, implementation, or commit exists. P5-01 is complete in committed `eea08a4`; P5-02 is unstarted: no predicate schema, migration, operation, or commit exists.
 - **Fast-track note:** P3 is required only to promote generated dungeon facts to campaign canon. It does not block standalone prompt-to-package preparation work; P5-02 remains deferred until explicit campaign grounding needs it.
-- **Next task:** **P7-12d — implement compact `DungeonDesignSpecV2` and the deterministic pure compiler.** First action: inspect the pure dungeon topology/brief contracts and add the strict V2 design contracts inside `packages/dungeon-engine`, without Workbench/provider imports. P3-01 remains queued after this explicit user-directed reliability program.
+- **Next task:** **P7-12e — implement `submit_dungeon_intent_v2` and one bounded submission repair.** First action: inspect the existing V1 prompt profile/tool runner and introduce the Workbench-only `DungeonGenerationProposalV2` wrapper around the new pure design contract. P3-01 remains queued after this explicit user-directed reliability program.
 - **Deferred design note:** A post-P7 player-map reveal-overlay workflow is recorded in `dm-assistant-implementation-plan.md`: independently publishable/printable aligned map sections for discovered secret areas, explicit durable reveal provenance, and fail-closed browser delivery. It is intentionally not scope for P7-10b.
 - **Schema head:** `0008_workbench_defaults`.
 - **Public baseline:** history begins with the final architecture/roadmap snapshot, uses the public GitHub author identity, and is licensed `AGPL-3.0-only`.
 
 Always inspect `git status --short --branch` and the latest log before changing files.
+
+## P7-12d Compact V2 Compiler Handoff
+
+- **Completed:** Added pure strict `DungeonDesignSpecV2` contracts with version `2.0.0`, bounded local refs/text/counts, forbidden extras, shallow floor/room/connection/objective/dependency intent, and orthogonal passage/concealment/barrier/hazard enums. The model cannot provide IDs, numeric dimensions/capacities, visibility, seed, or lifecycle fields.
+- **Compiler:** Added pure `compile_dungeon_design_v2()`, deterministic versioned opaque semantic IDs derived only from compiler version and local semantic identity, relative room-size/occupancy/floor-scale mappings, exact `DungeonBrief`/`DungeonTopology`/floor bounds, gate/key/clue compilation, DM-only secret/trap/gate policy, canonical input/output hashes, and bounded body-free diagnostics. Final-objective semantics deterministically materialize the V1 kernel's required exit role. Duplicate/unknown/self/cross-floor/missing-dependency cases reject without compiled output.
+- **Compatibility:** Added `objective` to the existing V1 `RoomRole` vocabulary so V2 model intent can remain readable before compilation; V2 compiles its final objective to V1's mechanical exit. Existing V1 artifacts are untouched.
+- **Tests/checks:** Added synthetic compiler tests for minimal kernel compilation, replay/reorder/prose ID stability, duplicate refs, key/gate visibility, schema round trips, and rejected model-owned extras. `uv run pytest -q packages/dungeon-engine/tests` → `116 passed`; focused Ruff and strict mypy passed; `git diff --check` passed.
+- **Changed:** `packages/dungeon-engine/src/dm_dungeon/{__init__.py,compiler.py,serialization.py}`, `packages/dungeon-engine/src/dm_dungeon/contracts/{__init__.py,design_v2.py,topology.py}`, `packages/dungeon-engine/tests/test_design_v2_compiler.py`, and this handoff. No migration; pure package only.
+- **Working tree:** files above are modified/untracked and uncommitted; no pre-existing work was present or overwritten.
+- **Next:** **P7-12e**. First action: inspect the V1 prompt profile/tool runner and add the Workbench-only proposal wrapper and `submit_dungeon_intent_v2` contract around this compiler.
 
 ## P7-12c Shared Budget WIP Handoff
 

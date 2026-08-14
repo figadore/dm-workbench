@@ -32,6 +32,7 @@ class RoomRole(StrEnum):
     EXPLORATION = "exploration"
     HUB = "hub"
     OPTIONAL = "optional"
+    OBJECTIVE = "objective"
     PUZZLE = "puzzle"
     SET_PIECE = "set_piece"
     SOCIAL = "social"

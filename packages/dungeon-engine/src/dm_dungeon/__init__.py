@@ -1,6 +1,17 @@
 """Pure deterministic dungeon contracts and generation kernel."""
 
-from dm_dungeon.contracts import DungeonBrief, DungeonPackage, DungeonTopology
+from dm_dungeon.compiler import (
+    DUNGEON_DESIGN_COMPILER_VERSION,
+    DungeonDesignCompileDiagnostic,
+    DungeonDesignCompileResult,
+    compile_dungeon_design_v2,
+)
+from dm_dungeon.contracts import (
+    DungeonBrief,
+    DungeonDesignSpecV2,
+    DungeonPackage,
+    DungeonTopology,
+)
 from dm_dungeon.export import (
     AssemblyMode,
     PaperSize,
@@ -31,8 +42,11 @@ from dm_dungeon.rendering import (
     write_svg,
 )
 from dm_dungeon.serialization import (
+    dungeon_design_v2_json_schema,
     dungeon_package_json_schema,
+    load_dungeon_design_v2_json,
     load_dungeon_package_json,
+    read_dungeon_design_v2,
     read_dungeon_package,
     to_canonical_json,
     write_dungeon_package,
@@ -53,7 +67,11 @@ from dm_dungeon.validation import (
 __version__ = "0.1.0"
 
 __all__ = [
+    "DUNGEON_DESIGN_COMPILER_VERSION",
     "DungeonBrief",
+    "DungeonDesignCompileDiagnostic",
+    "DungeonDesignCompileResult",
+    "DungeonDesignSpecV2",
     "DungeonPackage",
     "AssemblyMode",
     "DungeonTopology",
@@ -76,14 +94,18 @@ __all__ = [
     "SvgThemeName",
     "TopologyValidationReport",
     "__version__",
+    "compile_dungeon_design_v2",
+    "dungeon_design_v2_json_schema",
     "dungeon_package_json_schema",
     "evaluate_encounter_fit",
     "export_pdf",
     "export_png",
     "find_anchor_path",
     "generate_layout",
+    "load_dungeon_design_v2_json",
     "load_dungeon_package_json",
     "load_layout_request_json",
+    "read_dungeon_design_v2",
     "read_dungeon_package",
     "read_layout_request",
     "render_svg",
