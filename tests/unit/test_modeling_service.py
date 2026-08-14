@@ -38,6 +38,7 @@ class BriefToolInput(BaseModel):
 class FakeClient:
     def __init__(self, completions: tuple[GatewayCompletion, ...]) -> None:
         self._completions = list(completions)
+        self.messages: list[tuple[PromptMessage, ...]] = []
 
     def complete(
         self,
@@ -47,7 +48,8 @@ class FakeClient:
         allowed_tools: tuple[str, ...],
         tool_schemas: tuple[object, ...],
     ) -> GatewayCompletion:
-        del profile, messages, allowed_tools, tool_schemas
+        del profile, allowed_tools, tool_schemas
+        self.messages.append(messages)
         if not self._completions:
             raise AssertionError("unexpected extra gateway call")
         return self._completions.pop(0)
@@ -281,7 +283,9 @@ def test_bounded_loop_logs_safe_tool_schema_diagnostics(
         )
     )
 
-    with pytest.raises(ValueError, match="invalid arguments for tool set_brief"):
+    with pytest.raises(
+        ModelRunAbstained, match="tool arguments failed schema validation"
+    ):
         ModelTaskRunner(client).run(
             profile=resolved,
             run_input=ModelRunInput(
@@ -299,11 +303,7 @@ def test_bounded_loop_logs_safe_tool_schema_diagnostics(
     assert record.event_data["stage"] == "model_tool_validation"
     assert record.event_data["tool_name"] == "set_brief"
     assert record.event_data["validation_errors"] == [
-        {
-            "location": ["rooms"],
-            "type": "greater_than_equal",
-            "message": "Input should be greater than or equal to 1",
-        }
+        {"location": ["rooms"], "type": "greater_than_equal"}
     ]
 
 
@@ -358,6 +358,112 @@ def test_bounded_loop_repairs_schema_invalid_output_with_safe_diagnostics(
             "message": "String should have at least 1 character",
         }
     ]
+
+
+def test_bounded_loop_preserves_assistant_and_tool_result_roles() -> None:
+    _, profile, _, tool = _resolved_profile()
+    client = FakeClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="set_brief", call_id="call-1", arguments={"rooms": 3}
+                    ),
+                )
+            ),
+            GatewayCompletion(
+                content=DungeonIntentV1(
+                    intent="Build a synthetic dungeon.",
+                    citation_ids=("cite-1", "rules-1"),
+                ).model_dump_json()
+            ),
+        )
+    )
+    _, record = ModelTaskRunner(client).run(
+        profile=profile,
+        run_input=ModelRunInput(
+            messages=(PromptMessage(role="user", content="Create a dungeon."),),
+            authorized_citation_ids=("cite-1", "rules-1"),
+        ),
+        output_schema=DungeonIntentV1,
+        tools={tool.name: tool},
+    )
+
+    assert [message.role for message in client.messages[1]] == [
+        "user",
+        "assistant",
+        "tool_result",
+    ]
+    assert client.messages[1][-1].tool_call_id == "call-1"
+    assert record.usage_measured is False
+    assert record.usage_input_tokens is None
+
+
+def test_bounded_loop_does_not_start_a_later_turn_after_cancellation() -> None:
+    _, profile, _, tool = _resolved_profile()
+    client = FakeClient(
+        (GatewayCompletion(content=DungeonIntentV1(intent="unused").model_dump_json()),)
+    )
+    with pytest.raises(ModelRunAbstained, match="cancelled"):
+        ModelTaskRunner(client, is_cancelled=lambda: True).run(
+            profile=profile,
+            run_input=ModelRunInput(
+                messages=(PromptMessage(role="user", content="Create a dungeon."),),
+            ),
+            output_schema=DungeonIntentV1,
+            tools={tool.name: tool},
+        )
+    assert client.messages == []
+
+
+def test_bounded_loop_sends_decreasing_cumulative_deadlines() -> None:
+    _, profile, _, tool = _resolved_profile()
+    valid = DungeonIntentV1(
+        intent="Build a synthetic dungeon.",
+        citation_ids=("cite-1", "rules-1"),
+        requested_constraints=("single entrance",),
+    )
+
+    class RecordingClient(FakeClient):
+        def __init__(self) -> None:
+            super().__init__(
+                (
+                    GatewayCompletion(content=json.dumps({"intent": ""})),
+                    GatewayCompletion(content=valid.model_dump_json()),
+                )
+            )
+            self.time_limits: list[int] = []
+
+        def complete(
+            self,
+            *,
+            profile: ResolvedModelRunProfile,
+            messages: tuple[PromptMessage, ...],
+            allowed_tools: tuple[str, ...],
+            tool_schemas: tuple[object, ...],
+        ) -> GatewayCompletion:
+            self.time_limits.append(profile.time_budget_seconds)
+            return super().complete(
+                profile=profile,
+                messages=messages,
+                allowed_tools=allowed_tools,
+                tool_schemas=tool_schemas,
+            )
+
+    clock_values = iter((0.0, 0.0, 10.1, 10.1, 11.0))
+    client = RecordingClient()
+    output, _ = ModelTaskRunner(client, monotonic_clock=lambda: next(clock_values)).run(
+        profile=profile,
+        run_input=ModelRunInput(
+            messages=(PromptMessage(role="user", content="Create a dungeon."),),
+            authorized_citation_ids=("cite-1", "rules-1"),
+        ),
+        output_schema=DungeonIntentV1,
+        tools={tool.name: tool},
+    )
+
+    assert output == valid
+    assert client.time_limits == [30, 20]
 
 
 def test_bounded_loop_abstains_when_citations_are_unauthorized() -> None:

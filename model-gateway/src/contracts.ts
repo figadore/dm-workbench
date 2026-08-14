@@ -6,12 +6,28 @@ export interface GatewayToolSchema {
   readonly parameters: Record<string, unknown>;
 }
 
+export type GatewayMessage =
+  | { readonly role: "user"; readonly content: string }
+  | {
+      readonly role: "assistant";
+      readonly content: string;
+      readonly toolCalls: readonly { readonly id: string; readonly name: string; readonly arguments: Record<string, unknown> }[];
+      readonly opaqueContinuitySignatures: readonly string[];
+    }
+  | {
+      readonly role: "tool_result";
+      readonly content: string;
+      readonly toolCallId: string;
+      readonly toolName: string;
+      readonly isError: boolean;
+    };
+
 export interface GatewayStreamRequest {
   readonly provider: string;
   readonly model: string;
   readonly effort: GatewayEffort;
   readonly systemPrompt?: string;
-  readonly messages: readonly { readonly role: "user"; readonly content: string }[];
+  readonly messages: readonly GatewayMessage[];
   readonly tools: readonly GatewayToolSchema[];
   readonly outputTokenLimit: number;
   readonly timeLimitSeconds: number;
@@ -75,19 +91,33 @@ export function parseStreamRequest(value: unknown): GatewayStreamRequest {
   let promptCharacters = 0;
   const normalizedMessages = messages.map((message) => {
     const item = expectObject(message, "message must be an object");
-    expectOnlyKeys(item, new Set(["role", "content"]));
-    if (item.role !== "user") {
-      throw new GatewayRequestError(
-        "unsupported_message_role",
-        "only user messages are supported",
-      );
-    }
+    const role = expectString(item.role, "message role must be a string");
     const content = expectString(item.content, "message content must be a string");
-    if (content.length === 0 || content.length > MAX_MESSAGE_CHARACTERS) {
+    if (content.length > MAX_MESSAGE_CHARACTERS) {
       throw new GatewayRequestError("message_limit", "invalid message length");
     }
     promptCharacters += content.length;
-    return { role: "user" as const, content };
+    if (role === "user") {
+      expectOnlyKeys(item, new Set(["role", "content"]));
+      if (content.length === 0) throw new GatewayRequestError("message_limit", "invalid message length");
+      return { role: "user" as const, content };
+    }
+    if (role === "assistant") {
+      expectOnlyKeys(item, new Set(["role", "content", "tool_calls", "opaque_continuity_signatures"]));
+      const calls = item.tool_calls === undefined ? [] : expectArray(item.tool_calls, "tool_calls must be an array").map((call) => {
+        const value = expectObject(call, "tool call must be an object");
+        expectOnlyKeys(value, new Set(["tool_name", "call_id", "arguments"]));
+        return { id: expectIdentifier(value.call_id, "tool call ID"), name: expectIdentifier(value.tool_name, "tool name"), arguments: expectObject(value.arguments, "tool arguments must be an object") };
+      });
+      const signatures = item.opaque_continuity_signatures === undefined ? [] : expectArray(item.opaque_continuity_signatures, "opaque continuity signatures must be an array").map((value) => expectString(value, "opaque continuity signature must be a string"));
+      return { role: "assistant" as const, content, toolCalls: calls, opaqueContinuitySignatures: signatures };
+    }
+    if (role === "tool_result") {
+      expectOnlyKeys(item, new Set(["role", "content", "tool_call_id", "tool_name", "is_error"]));
+      if (content.length === 0 || typeof item.is_error !== "boolean") throw new GatewayRequestError("invalid_message_role", "invalid tool result message");
+      return { role: "tool_result" as const, content, toolCallId: expectIdentifier(item.tool_call_id, "tool call ID"), toolName: expectIdentifier(item.tool_name, "tool name"), isError: item.is_error };
+    }
+    throw new GatewayRequestError("invalid_message_role", "unsupported message role");
   });
 
   const systemPrompt = optionalString(object.system_prompt, "system_prompt");

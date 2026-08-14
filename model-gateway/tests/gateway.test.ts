@@ -14,7 +14,7 @@ import {
 } from "@earendil-works/pi-ai";
 
 import { FileCredentialStore } from "../src/credentials.js";
-import type { GatewayStreamRequest } from "../src/contracts.js";
+import { parseStreamRequest, type GatewayStreamRequest } from "../src/contracts.js";
 import { createPiAiRuntime, type GatewayRuntime } from "../src/runtime.js";
 import { createGatewayServer } from "../src/server.js";
 
@@ -67,10 +67,34 @@ test("health, catalog, and streams require the internal caller token", async (t)
   assert.match(events, /event: text_delta/);
   assert.match(events, /event: tool_call/);
   assert.match(events, /"id":"call_synthetic"/);
-  assert.match(events, /event: usage/);
-  assert.match(events, /"input_tokens":\d+/);
-  assert.match(events, /"output_tokens":\d+/);
+  assert.doesNotMatch(events, /event: usage/);
   assert.match(events, /event: done/);
+});
+
+test("normalized transcript roles preserve tool continuity without user-message flattening", () => {
+  const request = parseStreamRequest(fauxStreamRequest({
+    messages: [
+      { role: "user", content: "Create a synthetic dungeon brief." },
+      {
+        role: "assistant",
+        content: "",
+        tool_calls: [{ tool_name: "set_brief", call_id: "call_synthetic", arguments: { rooms: 3 } }],
+        opaque_continuity_signatures: ["opaque-provider-signature"],
+      },
+      {
+        role: "tool_result",
+        content: "{\"status\":\"ok\"}",
+        tool_call_id: "call_synthetic",
+        tool_name: "set_brief",
+        is_error: false,
+      },
+    ],
+  }));
+
+  assert.deepEqual(request.messages.map((message) => message.role), ["user", "assistant", "tool_result"]);
+  assert.equal(request.messages[1]?.role === "assistant" && request.messages[1].toolCalls[0]?.id, "call_synthetic");
+  assert.equal(request.messages[2]?.role === "tool_result" && request.messages[2].toolCallId, "call_synthetic");
+  assert.throws(() => parseStreamRequest(fauxStreamRequest({ messages: [{ role: "tool_result", content: "x" }] })));
 });
 
 test("credential persistence serializes writes, uses restrictive permissions, and never exposes tokens", async () => {

@@ -169,10 +169,6 @@ class PiGatewayClient:
         tool_schemas: tuple[GatewayToolSchema, ...],
         run_id: str | None = None,
     ) -> GatewayCompletion:
-        if any(message.role != "user" for message in messages):
-            raise ModelGatewayTransportError(
-                "private gateway accepts only user messages"
-            )
         if tuple(schema.name for schema in tool_schemas) != allowed_tools:
             raise ModelGatewayTransportError(
                 "gateway tool schemas do not match the allowed tool policy"
@@ -184,7 +180,44 @@ class PiGatewayClient:
                 "model": profile.model_id,
                 "effort": profile.requested_effort.value,
                 "messages": [
-                    {"role": message.role, "content": message.content}
+                    {
+                        "role": message.role,
+                        "content": message.content,
+                        **(
+                            {
+                                "tool_calls": [
+                                    call.model_dump(mode="json")
+                                    for call in message.tool_calls
+                                ]
+                            }
+                            if message.tool_calls
+                            else {}
+                        ),
+                        **(
+                            {"tool_call_id": message.tool_call_id}
+                            if message.tool_call_id is not None
+                            else {}
+                        ),
+                        **(
+                            {"tool_name": message.tool_name}
+                            if message.tool_name is not None
+                            else {}
+                        ),
+                        **(
+                            {"is_error": message.is_error}
+                            if message.is_error is not None
+                            else {}
+                        ),
+                        **(
+                            {
+                                "opaque_continuity_signatures": list(
+                                    message.opaque_continuity_signatures
+                                )
+                            }
+                            if message.opaque_continuity_signatures
+                            else {}
+                        ),
+                    }
                     for message in messages
                 ],
                 "tools": [schema.model_dump(mode="json") for schema in tool_schemas],
@@ -287,8 +320,8 @@ class PiGatewayClient:
 def _decode_sse(response: Any, deadline: float) -> GatewayCompletion:
     content: list[str] = []
     tool_calls: list[ToolCall] = []
-    input_tokens = 0
-    output_tokens = 0
+    input_tokens: int | None = None
+    output_tokens: int | None = None
     event_name: str | None = None
     data_lines: list[str] = []
     completed = False

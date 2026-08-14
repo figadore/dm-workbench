@@ -21,6 +21,7 @@ from dm_assistant.modules.preparation import (
     PendingArtifactAsset,
     PreparationService,
     PublishGeneratedPackage,
+    RequiredArtifactAsset,
     StartGenerationRun,
     ToolRunPin,
     TransitionArtifact,
@@ -497,6 +498,10 @@ class DungeonStudioService:
                         )
                         for asset in (*base_assets, *preview_assets)
                     ),
+                    required_assets=tuple(
+                        RequiredArtifactAsset(role=asset.role, ordinal=asset.ordinal)
+                        for asset in (*base_assets, *preview_assets)
+                    ),
                 )
             )
         except Exception:  # publication must not leave a running/successful run
@@ -505,19 +510,23 @@ class DungeonStudioService:
                 "message": "Generated package publication failed.",
                 "severity": "error",
             }
-            self._preparation.finish_generation_run(
-                FinishGenerationRun(
-                    campaign_id=campaign_id,
-                    run_id=run.id,
-                    status=GenerationStatus.FAILED,
-                    validation_report={
-                        **validation_report,
-                        "valid": False,
-                        "stage": "persistence",
-                        "diagnostics": [persistence_diagnostic],
-                    },
+            if (
+                self._preparation.get_generation_run(campaign_id, run.id).status
+                is GenerationStatus.RUNNING
+            ):
+                self._preparation.finish_generation_run(
+                    FinishGenerationRun(
+                        campaign_id=campaign_id,
+                        run_id=run.id,
+                        status=GenerationStatus.FAILED,
+                        validation_report={
+                            **validation_report,
+                            "valid": False,
+                            "stage": "persistence",
+                            "diagnostics": [persistence_diagnostic],
+                        },
+                    )
                 )
-            )
             _log_generation_result(
                 run_id=run.id,
                 stage="persistence",

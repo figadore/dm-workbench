@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 import uuid
 from typing import Protocol, cast
 
@@ -201,6 +202,7 @@ class DungeonPromptService:
             else self._gateway_client
         )
         tools = _dungeon_tools(command.seed)
+        deadline_monotonic = time.monotonic() + profile.time_budget_seconds
         logger.info(
             "dungeon prompt started",
             extra={
@@ -217,6 +219,7 @@ class DungeonPromptService:
                 run_input=_initial_model_input(command, context),
                 output_schema=DungeonGenerationIntentV1,
                 tools=tools,
+                deadline_monotonic=deadline_monotonic,
             )
             _require_non_abstained_intent(intent, record)
         except ModelRunAbstained:
@@ -239,6 +242,7 @@ class DungeonPromptService:
                     ),
                     output_schema=DungeonGenerationIntentV1,
                     tools=tools,
+                    deadline_monotonic=deadline_monotonic,
                 )
                 _require_non_abstained_intent(repaired_intent, repaired_record)
             except ModelRunAbstained:
@@ -708,6 +712,10 @@ def _remaining_profile(
 ) -> ResolvedModelRunProfile:
     remaining_turns = profile.turn_budget - record.turn_count
     remaining_tools = profile.tool_budget - len(record.tool_invocations)
+    if not record.usage_measured:
+        raise ModelRunAbstained("model usage was unavailable; repair budget is unknown")
+    assert record.usage_input_tokens is not None
+    assert record.usage_output_tokens is not None
     remaining_tokens = (
         profile.token_budget - record.usage_input_tokens - record.usage_output_tokens
     )

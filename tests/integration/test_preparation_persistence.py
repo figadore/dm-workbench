@@ -1,9 +1,11 @@
 """Preparation lifecycle, lineage, pinning, ownership, and asset integration tests."""
 
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+from pydantic import JsonValue
 from sqlalchemy import Engine, func, select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
@@ -25,6 +27,7 @@ from dm_assistant.modules.preparation import (
     PendingArtifactAsset,
     PreparationService,
     PublishGeneratedPackage,
+    RequiredArtifactAsset,
     StartGenerationRun,
     ToolRunPin,
     TransitionArtifact,
@@ -53,15 +56,24 @@ def create_campaign(
     return campaign_id
 
 
-def make_service(engine: Engine, tmp_path: Path) -> PreparationService:
+def make_service(
+    engine: Engine,
+    tmp_path: Path,
+    *,
+    publication_fault_hook: Callable[[str], None] | None = None,
+) -> PreparationService:
     return PreparationService(
         engine,
         LocalAssetStore(tmp_path / "assets", tmp_path / "scratch"),
+        publication_fault_hook=publication_fault_hook,
     )
 
 
 def start_run(service: PreparationService, campaign_id: uuid.UUID) -> uuid.UUID:
-    payload = {"location": "synthetic_archive", "themes": ["flooded"]}
+    payload: dict[str, JsonValue] = {
+        "location": "synthetic_archive",
+        "themes": ["flooded"],
+    }
     context = GenerationContextPin(
         envelope_kind="dungeon_generation",
         payload_version="1.0.0",
@@ -191,6 +203,10 @@ def test_complete_generated_package_is_published_atomically_with_run_success(
                     data=b'{"valid":true}',
                 ),
             ),
+            required_assets=(
+                RequiredArtifactAsset(role=ArtifactAssetRole.SPECIFICATION),
+                RequiredArtifactAsset(role=ArtifactAssetRole.VALIDATION_REPORT),
+            ),
         )
     )
 
@@ -212,6 +228,82 @@ def test_complete_generated_package_is_published_atomically_with_run_success(
     assert run[0] == GenerationStatus.SUCCEEDED.value
     assert run[1] is not None
     assert set(links) == {"specification", "validation_report"}
+
+
+@pytest.mark.parametrize(
+    ("checkpoint", "occurrence"),
+    (
+        ("asset_stage", 1),
+        ("version_creation", 1),
+        ("asset_link", 2),
+        ("current_version", 1),
+        ("run_finish", 1),
+    ),
+)
+def test_generated_package_faults_leave_no_partial_publication(
+    db_engine: Engine,
+    tmp_path: Path,
+    checkpoint: str,
+    occurrence: int,
+) -> None:
+    campaign_id = create_campaign(db_engine)
+    seen = 0
+
+    def fail_at(stage: str) -> None:
+        nonlocal seen
+        if stage == checkpoint:
+            seen += 1
+        if seen == occurrence:
+            raise RuntimeError(f"synthetic {stage} fault")
+
+    service = make_service(db_engine, tmp_path, publication_fault_hook=fail_at)
+    run_id = start_run(service, campaign_id)
+    command = PublishGeneratedPackage(
+        campaign_id=campaign_id,
+        generation_run_id=run_id,
+        title="Faulted Synthetic Archive",
+        schema_version="1.0.0",
+        specification={"package_id": "pkg_faulted"},
+        validation_report={"valid": True, "diagnostics": []},
+        change_summary="Attempt an atomically published synthetic package.",
+        created_by="synthetic-dm",
+        assets=(
+            PendingArtifactAsset(
+                role=ArtifactAssetRole.SPECIFICATION,
+                media_type="application/json",
+                data=b'{"package_id":"pkg_faulted"}',
+            ),
+            PendingArtifactAsset(
+                role=ArtifactAssetRole.VALIDATION_REPORT,
+                media_type="application/json",
+                data=b'{"valid":true}',
+            ),
+        ),
+        required_assets=(
+            RequiredArtifactAsset(role=ArtifactAssetRole.SPECIFICATION),
+            RequiredArtifactAsset(role=ArtifactAssetRole.VALIDATION_REPORT),
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match=checkpoint):
+        service.publish_generated_package(command)
+
+    run = service.get_generation_run(campaign_id, run_id)
+    assert run.status is GenerationStatus.FAILED
+    assert run.validation_report["stage"] == checkpoint
+    with db_engine.connect() as connection:
+        assert (
+            connection.scalar(select(func.count()).select_from(PreparationArtifact))
+            == 0
+        )
+        assert (
+            connection.scalar(
+                select(func.count()).select_from(PreparationArtifactVersion)
+            )
+            == 0
+        )
+        assert connection.scalar(select(func.count()).select_from(ArtifactAsset)) == 0
+        assert connection.scalar(select(func.count()).select_from(GeneratedAsset)) == 0
 
 
 def test_generation_run_pins_every_input_and_becomes_immutable(

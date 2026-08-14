@@ -218,9 +218,9 @@ def test_failed_layout_retains_diagnostics_run_without_partial_version(
     )
 
     assert result.success is False
+    assert result.artifact_id is None
     assert result.artifact_version_id is None
     assert result.diagnostics
-    assert preparation.list_versions(campaign_id, result.artifact_id) == ()
     with db_engine.connect() as connection:
         run = connection.execute(
             select(GenerationRun.status, GenerationRun.validation_report).where(
@@ -249,6 +249,7 @@ def test_provider_free_dungeon_workflow_persists_previews_exports_and_approval(
     )
 
     assert created.success is True
+    assert created.artifact_id is not None
     assert created.artifact_version_id is not None
     first_version = preparation.get_version(
         campaign_id,
@@ -261,7 +262,7 @@ def test_provider_free_dungeon_workflow_persists_previews_exports_and_approval(
     assert first_version.validation_report["valid"] is True
     assert first_specification.package.metadata.seed == 424242
     first_assets = preparation.list_assets(campaign_id, first_version.id)
-    assert len(first_assets) == 14
+    assert len(first_assets) == 15
     assert {item.role for item in first_assets} >= {
         ArtifactAssetRole.SPECIFICATION,
         ArtifactAssetRole.VALIDATION_REPORT,

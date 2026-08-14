@@ -2,6 +2,7 @@
 
 import uuid
 from collections.abc import Callable
+from typing import Literal
 
 from sqlalchemy import Engine, func, select
 from sqlalchemy.orm import Session
@@ -49,6 +50,14 @@ from dm_assistant.modules.preparation.repository import (
 
 RepositoryFactory = Callable[[Session], PreparationRepository]
 IdFactory = Callable[[], uuid.UUID]
+PublicationCheckpoint = Literal[
+    "asset_stage",
+    "version_creation",
+    "asset_link",
+    "current_version",
+    "run_finish",
+]
+PublicationFaultHook = Callable[[PublicationCheckpoint], None]
 _ALLOWED_TRANSITIONS = {
     ArtifactLifecycle.DRAFT: frozenset(
         {ArtifactLifecycle.APPROVED_FOR_PLAY, ArtifactLifecycle.RETIRED}
@@ -71,11 +80,13 @@ class PreparationService:
         *,
         repository_factory: RepositoryFactory = SqlAlchemyPreparationRepository,
         id_factory: IdFactory = uuid.uuid4,
+        publication_fault_hook: PublicationFaultHook | None = None,
     ) -> None:
         self._session_factory = build_session_factory(engine)
         self._asset_store = asset_store
         self._repository_factory = repository_factory
         self._id_factory = id_factory
+        self._publication_fault_hook = publication_fault_hook
 
     def create_artifact(self, command: CreateArtifact) -> ArtifactRecord:
         artifact_id = self._id_factory()
@@ -294,11 +305,33 @@ class PreparationService:
         success is committed until every staged blob has validated metadata.
         """
 
-        staged = tuple(
-            (asset, self._stage_pending_asset(asset)) for asset in command.assets
-        )
-        artifact_id = command.artifact_id or self._id_factory()
-        version_id = self._id_factory()
+        stage: list[PublicationCheckpoint] = ["asset_stage"]
+        try:
+            staged = tuple(
+                (asset, self._stage_pending_asset(asset)) for asset in command.assets
+            )
+            artifact_id = command.artifact_id or self._id_factory()
+            version_id = self._id_factory()
+            return self._publish_staged_generated_package(
+                command=command,
+                staged=staged,
+                artifact_id=artifact_id,
+                version_id=version_id,
+                stage=stage,
+            )
+        except Exception:
+            self._finish_failed_publication_run(command, stage[0])
+            raise
+
+    def _publish_staged_generated_package(
+        self,
+        *,
+        command: PublishGeneratedPackage,
+        staged: tuple[tuple[PendingArtifactAsset, StoredBlob], ...],
+        artifact_id: uuid.UUID,
+        version_id: uuid.UUID,
+        stage: list[PublicationCheckpoint],
+    ) -> PublishedGeneratedPackage:
         with transactional_session(self._session_factory) as session:
             repository = self._repository_factory(session)
             run = repository.get_generation_run(
@@ -346,6 +379,8 @@ class PreparationService:
             elif artifact.lifecycle == ArtifactLifecycle.RETIRED.value:
                 raise ConflictError("A retired artifact cannot receive new versions.")
 
+            stage[0] = "version_creation"
+            self._publication_checkpoint(stage[0])
             version_number = repository.next_version_number(artifact.id)
             self._validate_parent(
                 repository,
@@ -384,6 +419,8 @@ class PreparationService:
             repository.add_version(version)
             repository.flush_version(version)
             for pending, blob in staged:
+                stage[0] = "asset_link"
+                self._publication_checkpoint(stage[0])
                 asset = repository.get_or_add_asset(
                     asset_id=self._id_factory(),
                     sha256=blob.sha256,
@@ -407,6 +444,8 @@ class PreparationService:
                         asset_id=asset.id,
                     )
                 )
+            stage[0] = "current_version"
+            self._publication_checkpoint(stage[0])
             previous_lifecycle = ArtifactLifecycle(artifact.lifecycle)
             artifact.current_version_id = version.id
             if previous_lifecycle is not ArtifactLifecycle.DRAFT:
@@ -422,6 +461,8 @@ class PreparationService:
                         reason="New immutable artifact version created.",
                     )
                 )
+            stage[0] = "run_finish"
+            self._publication_checkpoint(stage[0])
             run.status = GenerationStatus.SUCCEEDED.value
             run.validation_report = command.validation_report
             run.finished_at = session.scalar(select(func.now()))
@@ -433,11 +474,45 @@ class PreparationService:
         return result
 
     def _stage_pending_asset(self, asset: PendingArtifactAsset) -> StoredBlob:
+        self._publication_checkpoint("asset_stage")
         blob = self._asset_store.put_bytes(asset.data)
         if blob.byte_size != len(asset.data):
             raise ConflictError("Staged asset size does not match its input bytes.")
         self._asset_store.verify(blob)
         return blob
+
+    def _publication_checkpoint(self, stage: PublicationCheckpoint) -> None:
+        if self._publication_fault_hook is not None:
+            self._publication_fault_hook(stage)
+
+    def _finish_failed_publication_run(
+        self,
+        command: PublishGeneratedPackage,
+        stage: PublicationCheckpoint,
+    ) -> None:
+        try:
+            self.finish_generation_run(
+                FinishGenerationRun(
+                    campaign_id=command.campaign_id,
+                    run_id=command.generation_run_id,
+                    status=GenerationStatus.FAILED,
+                    validation_report={
+                        "valid": False,
+                        "stage": stage,
+                        "diagnostics": [
+                            {
+                                "code": "preparation.package_publication_failed",
+                                "severity": "error",
+                            }
+                        ],
+                    },
+                )
+            )
+        except (ConflictError, ResourceNotFoundError):
+            # Preserve the primary storage/transaction error. A successful
+            # publication is already terminal; a missing run has no durable
+            # state to repair.
+            pass
 
     def create_artifact_version(
         self,

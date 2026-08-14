@@ -12,6 +12,9 @@ from dm_assistant.modules.preparation import (
     DungeonGenerationContext,
     GenerationContextEnvelope,
     GenerationContextPin,
+    PendingArtifactAsset,
+    PublishGeneratedPackage,
+    RequiredArtifactAsset,
     StartGenerationRun,
     ToolRunPin,
     VisibilityPolicy,
@@ -57,7 +60,9 @@ def test_generation_context_envelope_round_trips_hash_and_rejects_grounding() ->
         payload_sha256=canonical_json_sha256(payload.model_dump(mode="json")),
     )
 
-    assert envelope.payload_sha256 == canonical_json_sha256(payload.model_dump(mode="json"))
+    assert envelope.payload_sha256 == canonical_json_sha256(
+        payload.model_dump(mode="json")
+    )
     assert envelope.campaign_revision_id is None
     assert envelope.corpus_snapshot_id is None
     assert envelope.rules_profile_id is None
@@ -120,6 +125,37 @@ def test_generation_run_requires_schema_versions_and_strict_tool_pins() -> None:
     )
     assert run.seed == 42
     assert run.context is not None
+
+
+def test_generated_package_requires_exact_declared_asset_set() -> None:
+    common = {
+        "campaign_id": uuid.uuid4(),
+        "generation_run_id": uuid.uuid4(),
+        "title": "Synthetic complete package",
+        "schema_version": "1.0.0",
+        "specification": {"package_id": "synthetic"},
+        "validation_report": {"valid": True},
+        "change_summary": "Publish a complete synthetic package.",
+        "created_by": "synthetic-dm",
+        "assets": (
+            PendingArtifactAsset(
+                role=ArtifactAssetRole.SPECIFICATION,
+                media_type="application/json",
+                data=b"{}",
+            ),
+        ),
+    }
+    package = PublishGeneratedPackage(
+        **common,
+        required_assets=(RequiredArtifactAsset(role=ArtifactAssetRole.SPECIFICATION),),
+    )
+    assert package.assets == common["assets"]
+
+    with pytest.raises(ValidationError, match="required role set"):
+        PublishGeneratedPackage(
+            **common,
+            required_assets=(RequiredArtifactAsset(role=ArtifactAssetRole.MANIFEST),),
+        )
 
 
 def test_asset_attachment_rejects_unknown_roles_media_and_fields() -> None:

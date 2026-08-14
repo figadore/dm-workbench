@@ -167,11 +167,36 @@ class PiAiGatewayRuntime implements GatewayRuntime {
         ...(request.systemPrompt === undefined
           ? {}
           : { systemPrompt: request.systemPrompt }),
-        messages: request.messages.map((message) => ({
-          role: "user" as const,
-          content: message.content,
-          timestamp: Date.now(),
-        })),
+        messages: request.messages.map((message) => {
+          const timestamp = Date.now();
+          if (message.role === "user") {
+            return { role: "user" as const, content: message.content, timestamp };
+          }
+          if (message.role === "assistant") {
+            return {
+              role: "assistant" as const,
+              content: [
+                ...(message.content === "" ? [] : [{ type: "text" as const, text: message.content }]),
+                ...message.opaqueContinuitySignatures.map((thinkingSignature) => ({ type: "thinking" as const, thinking: "", thinkingSignature })),
+                ...message.toolCalls.map((call) => ({ type: "toolCall" as const, id: call.id, name: call.name, arguments: call.arguments })),
+              ],
+              api: model.api,
+              provider: model.provider,
+              model: model.id,
+              usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+              stopReason: message.toolCalls.length > 0 ? "toolUse" as const : "stop" as const,
+              timestamp,
+            };
+          }
+          return {
+            role: "toolResult" as const,
+            toolCallId: message.toolCallId,
+            toolName: message.toolName,
+            content: [{ type: "text" as const, text: message.content }],
+            isError: message.isError,
+            timestamp,
+          };
+        }),
         tools: request.tools.map(toPiTool),
       },
       {

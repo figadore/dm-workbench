@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import time
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
@@ -33,8 +34,8 @@ class GatewayCompletion(BaseModel):
 
     content: str | None = None
     tool_calls: tuple[ToolCall, ...] = ()
-    input_tokens: int = 0
-    output_tokens: int = 0
+    input_tokens: int | None = None
+    output_tokens: int | None = None
 
 
 class GatewayToolSchema(BaseModel):
@@ -89,8 +90,16 @@ class ModelRunAbstained(RuntimeError):
 class ModelTaskRunner:
     """Run a bounded model loop while enforcing profile, citation, and tool policy."""
 
-    def __init__(self, client: GatewayClient) -> None:
+    def __init__(
+        self,
+        client: GatewayClient,
+        *,
+        monotonic_clock: Callable[[], float] = time.monotonic,
+        is_cancelled: Callable[[], bool] = lambda: False,
+    ) -> None:
         self._client = client
+        self._monotonic_clock = monotonic_clock
+        self._is_cancelled = is_cancelled
 
     def run(
         self,
@@ -99,17 +108,23 @@ class ModelTaskRunner:
         run_input: ModelRunInput,
         output_schema: type[OutputModel],
         tools: Mapping[str, ServerTool],
+        deadline_monotonic: float | None = None,
     ) -> tuple[OutputModel, ModelRunRecord]:
         started_at = datetime.now(UTC)
         messages = tuple(run_input.messages)
         tool_invocations: list[ToolInvocationRecord] = []
-        total_input_tokens = 0
-        total_output_tokens = 0
+        total_input_tokens: int | None = 0
+        total_output_tokens: int | None = 0
         turns = 0
-        deadline = time.monotonic() + profile.time_budget_seconds
+        deadline = deadline_monotonic or (
+            self._monotonic_clock() + profile.time_budget_seconds
+        )
 
         while True:
-            if time.monotonic() >= deadline:
+            if self._is_cancelled():
+                raise ModelRunAbstained("model run cancelled")
+            remaining_seconds = math.ceil(deadline - self._monotonic_clock())
+            if remaining_seconds < 1:
                 raise ModelRunAbstained("time budget exhausted before a final answer")
             if turns >= profile.turn_budget:
                 raise ModelRunAbstained("turn budget exhausted before a final answer")
@@ -119,8 +134,11 @@ class ModelTaskRunner:
                     "task profile allows unregistered tools: "
                     + ", ".join(sorted(unknown_tools))
                 )
+            request_profile = profile.model_copy(
+                update={"time_budget_seconds": remaining_seconds}
+            )
             completion = self._client.complete(
-                profile=profile,
+                profile=request_profile,
                 messages=messages,
                 allowed_tools=profile.allowed_tools,
                 tool_schemas=tuple(
@@ -128,15 +146,25 @@ class ModelTaskRunner:
                 ),
             )
             turns += 1
-            total_input_tokens += completion.input_tokens
-            total_output_tokens += completion.output_tokens
-            _check_token_budget(
-                profile.token_budget, total_input_tokens, total_output_tokens
-            )
-            if time.monotonic() >= deadline:
+            if completion.input_tokens is None or completion.output_tokens is None:
+                total_input_tokens = None
+                total_output_tokens = None
+            elif total_input_tokens is not None and total_output_tokens is not None:
+                total_input_tokens += completion.input_tokens
+                total_output_tokens += completion.output_tokens
+                _check_token_budget(
+                    profile.token_budget, total_input_tokens, total_output_tokens
+                )
+            if self._monotonic_clock() >= deadline:
                 raise ModelRunAbstained("time budget exhausted before a final answer")
 
             if completion.tool_calls:
+                call_ids = tuple(call.call_id for call in completion.tool_calls)
+                if len(set(call_ids)) != len(call_ids) or any(
+                    call_id in {item.call_id for item in tool_invocations}
+                    for call_id in call_ids
+                ):
+                    raise ModelRunAbstained("duplicate model tool call ID")
                 if (
                     len(tool_invocations) + len(completion.tool_calls)
                     > profile.tool_budget
@@ -156,14 +184,19 @@ class ModelTaskRunner:
                         },
                     )
                     raise ModelRunAbstained("tool budget exhausted before completion")
+                messages = messages + (
+                    PromptMessage(
+                        role="assistant",
+                        content=completion.content or "",
+                        tool_calls=completion.tool_calls,
+                    ),
+                )
                 for call in completion.tool_calls:
                     if call.tool_name not in profile.allowed_tools:
-                        raise ValueError(
-                            f"tool {call.tool_name} is not allowed for this task"
-                        )
+                        raise ModelRunAbstained("model requested an unauthorized tool")
                     tool = tools.get(call.tool_name)
                     if tool is None:
-                        raise ValueError(f"tool {call.tool_name} is not registered")
+                        raise ModelRunAbstained("model requested an unavailable tool")
                     result = self._execute_tool(
                         profile=profile,
                         tool=tool,
@@ -180,17 +213,15 @@ class ModelTaskRunner:
                     )
                     messages = messages + (
                         PromptMessage(
-                            role="user",
+                            role="tool_result",
                             content=json.dumps(
-                                {
-                                    "kind": "server_tool_result",
-                                    "tool_call_id": call.call_id,
-                                    "tool_name": call.tool_name,
-                                    "result": result.model_dump(mode="json"),
-                                },
+                                result.model_dump(mode="json"),
                                 separators=(",", ":"),
                                 sort_keys=True,
                             ),
+                            tool_call_id=call.call_id,
+                            tool_name=call.tool_name,
+                            is_error=False,
                         ),
                     )
                 continue
@@ -322,7 +353,6 @@ class ModelTaskRunner:
                             {
                                 "location": [str(part) for part in item["loc"]],
                                 "type": item["type"],
-                                "message": item["msg"],
                             }
                             for item in error.errors(
                                 include_url=False,
@@ -332,7 +362,9 @@ class ModelTaskRunner:
                     }
                 },
             )
-            raise ValueError(f"invalid arguments for tool {tool.name}") from error
+            raise ModelRunAbstained(
+                "model tool arguments failed schema validation"
+            ) from error
         result = tool.handler(args)
         if profile.require_authorized_citations and any(
             citation not in authorized_citations for citation in result.citation_ids
@@ -349,8 +381,8 @@ class ModelTaskRunner:
         output: OutputModel,
         status: str,
         abstain_reason: str | None,
-        input_tokens: int,
-        output_tokens: int,
+        input_tokens: int | None,
+        output_tokens: int | None,
         turn_count: int,
         tool_invocations: tuple[ToolInvocationRecord, ...],
     ) -> tuple[OutputModel, ModelRunRecord]:
@@ -370,6 +402,7 @@ class ModelTaskRunner:
             abstain_reason=abstain_reason,
             usage_input_tokens=input_tokens,
             usage_output_tokens=output_tokens,
+            usage_measured=input_tokens is not None and output_tokens is not None,
             tool_invocations=tool_invocations,
         )
         return output, record

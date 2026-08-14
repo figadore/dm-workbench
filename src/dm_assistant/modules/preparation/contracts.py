@@ -246,6 +246,13 @@ class PendingArtifactAsset(ContractModel):
     data: bytes = Field(min_length=1)
 
 
+class RequiredArtifactAsset(ContractModel):
+    """One complete package role/ordinal expected before publication."""
+
+    role: ArtifactAssetRole
+    ordinal: int = Field(default=0, ge=0, le=32767)
+
+
 class PublishGeneratedPackage(ContractModel):
     """Atomically publish a fully staged generated package and succeed its run."""
 
@@ -263,15 +270,21 @@ class PublishGeneratedPackage(ContractModel):
     input_pins: InputPins = InputPins()
     created_by: ShortText
     assets: tuple[PendingArtifactAsset, ...] = Field(min_length=1)
+    required_assets: tuple[RequiredArtifactAsset, ...] = Field(min_length=1)
 
     @model_validator(mode="after")
-    def require_valid_unique_assets(self) -> Self:
+    def require_valid_complete_unique_assets(self) -> Self:
         if self.validation_report.get("valid") is not True:
             raise ValueError("generated package publication requires a valid report")
         keys = {(item.role, item.ordinal) for item in self.assets}
-        if len(keys) != len(self.assets):
+        required = {(item.role, item.ordinal) for item in self.required_assets}
+        if len(keys) != len(self.assets) or len(required) != len(self.required_assets):
             raise ValueError(
                 "generated package asset roles and ordinals must be unique"
+            )
+        if keys != required:
+            raise ValueError(
+                "generated package assets do not match the required role set"
             )
         return self
 

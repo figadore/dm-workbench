@@ -243,7 +243,8 @@ function writePiEvent(response: ServerResponse, event: { readonly type: string; 
     }
     case "done": {
       const message = event.message as { usage: unknown; stopReason: unknown };
-      writeEvent(response, "usage", normalizeUsage(message.usage));
+      const usage = normalizeUsage(message.usage);
+      if (usage !== undefined) writeEvent(response, "usage", usage);
       writeEvent(response, "completion", { reason: message.stopReason });
       return;
     }
@@ -274,19 +275,19 @@ function safeProviderError(value: unknown): { code: string; message: string } {
   return { code: "provider_error", message: "model stream failed" };
 }
 
-function normalizeUsage(value: unknown): { input_tokens: number; output_tokens: number } {
+function normalizeUsage(value: unknown): { input_tokens: number; output_tokens: number } | undefined {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    return { input_tokens: 0, output_tokens: 0 };
+    return undefined;
   }
   const usage = value as Record<string, unknown>;
-  return {
-    input_tokens: nonNegativeInteger(usage.inputTokens ?? usage.input_tokens),
-    output_tokens: nonNegativeInteger(usage.outputTokens ?? usage.output_tokens),
-  };
+  const input = usage.inputTokens ?? usage.input_tokens;
+  const output = usage.outputTokens ?? usage.output_tokens;
+  if (!isNonNegativeInteger(input) || !isNonNegativeInteger(output)) return undefined;
+  return { input_tokens: input, output_tokens: output };
 }
 
-function nonNegativeInteger(value: unknown): number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
 function writeSafeError(response: ServerResponse, error: unknown, streamId: string): void {

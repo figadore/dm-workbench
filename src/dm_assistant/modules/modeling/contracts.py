@@ -186,21 +186,53 @@ class ResolvedModelRunProfile(ContractModel):
     override_notes: dict[str, JsonValue] = Field(default_factory=dict)
 
 
+class ToolCall(ContractModel):
+    tool_name: Slug
+    call_id: str = Field(min_length=1, max_length=160)
+    arguments: dict[str, JsonValue] = Field(default_factory=dict)
+
+
 class PromptMessage(ContractModel):
-    role: Literal["system", "user", "assistant"]
-    content: PromptText
+    """Strict normalized transcript message for private gateway transport."""
+
+    role: Literal["user", "assistant", "tool_result"]
+    content: str = Field(min_length=0, max_length=16_000)
+    tool_calls: tuple[ToolCall, ...] = ()
+    tool_call_id: str | None = Field(default=None, min_length=1, max_length=160)
+    tool_name: Slug | None = None
+    is_error: bool | None = None
+    opaque_continuity_signatures: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_role_shape(self) -> Self:
+        if self.role == "user":
+            if (
+                not self.content
+                or self.tool_calls
+                or self.tool_call_id
+                or self.tool_name
+                or self.is_error is not None
+            ):
+                raise ValueError("user messages cannot carry tool result fields")
+        elif self.role == "assistant":
+            if self.tool_call_id or self.tool_name or self.is_error is not None:
+                raise ValueError("assistant messages cannot carry tool result fields")
+        elif (
+            not self.content
+            or self.tool_call_id is None
+            or self.tool_name is None
+            or self.is_error is None
+        ):
+            raise ValueError(
+                "tool_result messages require call ID, name, and error flag"
+            )
+        return self
 
 
 class ModelRunInput(ContractModel):
     messages: tuple[PromptMessage, ...] = Field(min_length=1)
     authorized_citation_ids: tuple[str, ...] = ()
     official_rule_ids: tuple[str, ...] = ()
-
-
-class ToolCall(ContractModel):
-    tool_name: Slug
-    call_id: str = Field(min_length=1, max_length=160)
-    arguments: dict[str, JsonValue] = Field(default_factory=dict)
 
 
 class ToolResult(ContractModel):
@@ -229,8 +261,9 @@ class ModelRunRecord(ContractModel):
     output_payload: dict[str, JsonValue] | None = None
     status: Literal["succeeded", "abstained"]
     abstain_reason: str | None = None
-    usage_input_tokens: int = Field(ge=0)
-    usage_output_tokens: int = Field(ge=0)
+    usage_input_tokens: int | None = Field(default=None, ge=0)
+    usage_output_tokens: int | None = Field(default=None, ge=0)
+    usage_measured: bool
     tool_invocations: tuple[ToolInvocationRecord, ...] = ()
 
 
