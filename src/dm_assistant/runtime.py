@@ -19,6 +19,7 @@ from dm_assistant.modules.library.snapshots import CorpusSnapshotService
 from dm_assistant.modules.library.workflows import LibrarySourceWorkflow
 from dm_assistant.modules.modeling import ModelTaskSelectionStore
 from dm_assistant.modules.preparation import PreparationService
+from dm_assistant.observability import configure_logging
 from dm_assistant.orchestration.dungeons import (
     DungeonPromptService,
     DungeonStudioService,
@@ -45,6 +46,10 @@ class WorkbenchRuntime:
 def workbench_runtime(settings: Settings | None = None) -> Iterator[WorkbenchRuntime]:
     """Compose application services and deterministically dispose the DB engine."""
     resolved = settings if settings is not None else load_settings()
+    configure_logging(
+        resolved.log_level.value,
+        secret_values=resolved.logging_secret_values(),
+    )
     engine = build_engine(resolved)
     asset_store = LocalAssetStore(resolved.asset_root, resolved.scratch_root)
     preparation = PreparationService(engine, asset_store)

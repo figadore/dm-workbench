@@ -27,6 +27,7 @@ from dm_assistant.modules.preparation import (
     VisibilityPolicy,
     canonical_json_sha256,
 )
+from dm_assistant.observability import bind_log_context, get_logger
 from dm_assistant.orchestration.dungeons.contracts import (
     CreateDungeonWorkflow,
     CreatePromptedDungeonWorkflow,
@@ -65,6 +66,7 @@ from dm_dungeon.export import (
 
 _STUDIO_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 _VERSION_SCHEMA = "dungeon-studio-v1"
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -332,6 +334,11 @@ class DungeonStudioService:
                     validation_report=report,
                 )
             )
+            _log_generation_result(
+                run_id=run.id,
+                stage="layout",
+                diagnostics=diagnostics,
+            )
             return DungeonWorkflowResult(
                 success=False,
                 artifact_id=artifact_id,
@@ -368,6 +375,11 @@ class DungeonStudioService:
                     validation_report=validation_report,
                 )
             )
+            _log_generation_result(
+                run_id=run.id,
+                stage="validation",
+                diagnostics=diagnostics,
+            )
             return DungeonWorkflowResult(
                 success=False,
                 artifact_id=artifact_id,
@@ -383,7 +395,16 @@ class DungeonStudioService:
 
         try:
             preview_assets = _preview_assets(package)
-        except ConflictError:
+        except ConflictError as error:
+            logger.error(
+                "dungeon preview generation failed",
+                extra={
+                    "event_data": {
+                        "failure": str(error),
+                        "package_id": package.id,
+                    }
+                },
+            )
             render_diagnostic: dict[str, JsonValue] = {
                 "code": "studio.preview_failed",
                 "message": "Deterministic preview generation failed.",
@@ -402,6 +423,11 @@ class DungeonStudioService:
                     status=GenerationStatus.FAILED,
                     validation_report=failed_report,
                 )
+            )
+            _log_generation_result(
+                run_id=run.id,
+                stage="preview",
+                diagnostics=(render_diagnostic,),
             )
             return DungeonWorkflowResult(
                 success=False,
@@ -467,12 +493,37 @@ class DungeonStudioService:
                     data=asset.data,
                 )
             )
+        _log_generation_result(run_id=run.id, stage="completed", diagnostics=())
         return DungeonWorkflowResult(
             success=True,
             artifact_id=artifact_id,
             artifact_version_id=version.id,
             generation_run_id=run.id,
             diagnostics=diagnostics,
+        )
+
+
+def _log_generation_result(
+    *,
+    run_id: uuid.UUID,
+    stage: str,
+    diagnostics: tuple[dict[str, JsonValue], ...],
+) -> None:
+    """Write safe, correlatable dungeon-run breadcrumbs to the process log."""
+    with bind_log_context(generation_run_id=str(run_id)):
+        logger.info(
+            "dungeon generation finished",
+            extra={
+                "event_data": {
+                    "stage": stage,
+                    "success": stage == "completed",
+                    "diagnostic_codes": [
+                        value["code"]
+                        for value in diagnostics
+                        if isinstance(value.get("code"), str)
+                    ],
+                }
+            },
         )
 
 
@@ -497,7 +548,10 @@ def _preview_assets(package: DungeonPackage) -> tuple[_PendingAsset, ...]:
                 ),
             )
             if not svg.success or svg.svg is None:
-                raise ConflictError("Dungeon preview SVG rendering failed.")
+                raise ConflictError(
+                    "Dungeon preview SVG rendering failed: "
+                    f"{_render_diagnostic_summary(svg.diagnostics)}"
+                )
             svg_role = (
                 ArtifactAssetRole.DM_SVG
                 if audience is RenderAudience.DM
@@ -527,7 +581,10 @@ def _preview_assets(package: DungeonPackage) -> tuple[_PendingAsset, ...]:
                 or png.data is None
                 or png.result.manifest is None
             ):
-                raise ConflictError("Dungeon preview PNG rendering failed.")
+                raise ConflictError(
+                    "Dungeon preview PNG rendering failed: "
+                    f"{_render_diagnostic_summary(png.result.diagnostics)}"
+                )
             png_role = (
                 ArtifactAssetRole.DM_PNG
                 if audience is RenderAudience.DM
@@ -640,6 +697,16 @@ def _append_roll20_assets(
             ),
         )
     )
+
+
+def _render_diagnostic_summary(diagnostics: tuple[object, ...]) -> str:
+    """Produce a bounded safe diagnostic summary for server logs only."""
+    details: list[str] = []
+    for diagnostic in diagnostics[:4]:
+        code = getattr(diagnostic, "code", "unknown")
+        message = getattr(diagnostic, "message", "no diagnostic message")
+        details.append(f"{code}: {message}")
+    return "; ".join(details) if details else "no renderer diagnostics"
 
 
 def _regression_case(

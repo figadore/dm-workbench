@@ -340,4 +340,19 @@ class DungeonTopology(VersionedContract):
                 "secret_bypasses": (item.id for item in self.secret_bypasses),
             }
         )
+        rooms = {room.id: room for room in self.rooms}
+        for connection in self.connections:
+            if connection.visibility is not Visibility.PLAYER_SAFE:
+                continue
+            hidden_endpoints = tuple(
+                room_id
+                for room_id in (connection.from_room_id, connection.to_room_id)
+                if (room := rooms.get(room_id)) is not None
+                and room.visibility is not Visibility.PLAYER_SAFE
+            )
+            if hidden_endpoints:
+                raise ValueError(
+                    "player_safe connections cannot connect to dm_only rooms: "
+                    f"{connection.id!r} references {hidden_endpoints!r}"
+                )
         return self

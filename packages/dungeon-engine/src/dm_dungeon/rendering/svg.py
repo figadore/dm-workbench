@@ -7,6 +7,7 @@ from collections.abc import Iterable
 
 from dm_dungeon.contracts.common import Visibility
 from dm_dungeon.contracts.geometry import (
+    CorridorLayout,
     GridPoint,
     LayeredMapElement,
     MapGeometry,
@@ -31,6 +32,7 @@ from dm_dungeon.rendering.contracts import (
 )
 from dm_dungeon.rendering.themes import get_theme
 from dm_dungeon.validation import DiagnosticSeverity, validate_geometry
+from dm_dungeon.validation.grid import cells_for_corridor
 
 SVG_NAMESPACE = "http://www.w3.org/2000/svg"
 
@@ -305,26 +307,53 @@ def _render_corridors(
         ):
             continue
         component = _component_group(group, corridor, "corridor", rendered_ids)
-        points = _points(corridor.path.points, scale)
-        width = corridor.width_cells * scale
+        fill_path, outline_path = _corridor_footprint_paths(corridor, scale)
         ET.SubElement(
             component,
-            "polyline",
-            {
-                "class": "corridor-outline",
-                "points": points,
-                "stroke-width": str(width + 4),
-            },
-        )
-        ET.SubElement(
-            component,
-            "polyline",
+            "path",
             {
                 "class": "corridor",
-                "points": points,
-                "stroke-width": str(max(1, width - 2)),
+                "d": fill_path,
             },
         )
+        ET.SubElement(
+            component,
+            "path",
+            {
+                "class": "corridor-outline",
+                "d": outline_path,
+                "stroke-width": "4",
+            },
+        )
+
+
+def _corridor_footprint_paths(corridor: CorridorLayout, scale: int) -> tuple[str, str]:
+    """Render the validator's exact raster footprint, never a stroked centerline.
+
+    A stroke centered on a grid-line spills into a room on one side (especially for
+    even widths), while the geometry validator treats the same centerline as a set
+    of whole cells. Filling those exact cells and outlining only their outer edges
+    keeps the visual map aligned with validated walkable geometry.
+    """
+    cells = cells_for_corridor(corridor.path, corridor.width_cells)
+    ordered_cells = sorted(cells, key=lambda cell: (cell[1], cell[0]))
+    fill_parts: list[str] = []
+    outline_parts: list[str] = []
+    for x, y in ordered_cells:
+        left = x * scale
+        top = y * scale
+        right = (x + 1) * scale
+        bottom = (y + 1) * scale
+        fill_parts.append(f"M{left},{top}H{right}V{bottom}H{left}Z")
+        for neighbor, start, end in (
+            ((x, y - 1), (left, top), (right, top)),
+            ((x + 1, y), (right, top), (right, bottom)),
+            ((x, y + 1), (right, bottom), (left, bottom)),
+            ((x - 1, y), (left, bottom), (left, top)),
+        ):
+            if neighbor not in cells:
+                outline_parts.append(f"M{start[0]},{start[1]}L{end[0]},{end[1]}")
+    return "".join(fill_parts), "".join(outline_parts)
 
 
 def _render_rooms(

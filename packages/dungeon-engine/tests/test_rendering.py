@@ -79,6 +79,46 @@ def test_upper_floor_svg_matches_golden_snapshot(
     assert result.svg == golden
 
 
+def test_corridor_rendering_uses_the_validated_cell_footprint(
+    synthetic_package: DungeonPackage,
+) -> None:
+    original = next(
+        item
+        for item in synthetic_package.corridors
+        if item.id == "corridor_vault_secret"
+    )
+    widened = original.model_copy(update={"width_cells": 2})
+    package = synthetic_package.model_copy(
+        update={
+            "corridors": tuple(
+                widened if item.id == widened.id else item
+                for item in synthetic_package.corridors
+            )
+        }
+    )
+
+    result = render_svg(package, render_request(package, RenderAudience.DM))
+
+    assert result.svg is not None
+    root = ET.fromstring(result.svg)
+    corridor = next(
+        element
+        for element in root.iter()
+        if element.attrib.get("data-component-id") == widened.id
+    )
+    fill = next(
+        element for element in corridor if element.attrib.get("class") == "corridor"
+    )
+    # The two-cell corridor at y=6 occupies rows 6 and 7, never row 5. The
+    # old centered SVG stroke spilled upward into row 5 despite validation
+    # declaring only rows 6 and 7 walkable.
+    assert fill.tag.endswith("path")
+    assert fill.attrib["d"] == (
+        "M260,120H280V140H260ZM280,120H300V140H280ZM300,120H320V140H300Z"
+        "M260,140H280V160H260ZM280,140H300V160H280ZM300,140H320V160H300Z"
+    )
+
+
 def test_player_svg_omits_every_dm_only_upper_floor_component(
     synthetic_package: DungeonPackage,
 ) -> None:

@@ -111,6 +111,13 @@ async function route(
       const streamId = randomUUID();
       const controller = new AbortController();
       activeStreams.set(streamId, controller);
+      activeStreams.set(streamRequest.runId, controller);
+      logGatewayEvent("model stream started", {
+        stream_id: streamId,
+        provider_id: streamRequest.provider,
+        model_id: streamRequest.model,
+        time_limit_seconds: streamRequest.timeLimitSeconds,
+      });
       response.writeHead(200, {
         "cache-control": "no-store",
         connection: "keep-alive",
@@ -125,26 +132,80 @@ async function route(
         controller.abort();
       }, streamRequest.timeLimitSeconds * 1_000);
       try {
+        let eventCount = 0;
+        let textCharacters = 0;
+        let thinkingCharacters = 0;
+        let toolCallCount = 0;
+        let terminalType: string | undefined;
         for await (const event of options.runtime.stream(streamRequest, controller.signal)) {
           if (controller.signal.aborted) {
             break;
           }
+          eventCount += 1;
+          if (event.type === "text_delta" && typeof event.delta === "string") {
+            textCharacters += event.delta.length;
+          } else if (event.type === "thinking_delta" && typeof event.delta === "string") {
+            thinkingCharacters += event.delta.length;
+          } else if (event.type === "toolcall_end") {
+            toolCallCount += 1;
+          }
+          if (event.type === "done" || event.type === "error") {
+            terminalType = event.type;
+          }
           writePiEvent(response, event);
         }
+        if (terminalType !== undefined) {
+          logGatewayEvent("model stream terminal event", {
+            stream_id: streamId,
+            event_count: eventCount,
+            text_characters: textCharacters,
+            thinking_characters: thinkingCharacters,
+            tool_call_count: toolCallCount,
+            terminal_type: terminalType,
+          });
+        }
         if (timedOut) {
+          logGatewayEvent("model stream timed out", {
+            stream_id: streamId,
+            event_count: eventCount,
+            text_characters: textCharacters,
+            thinking_characters: thinkingCharacters,
+            tool_call_count: toolCallCount,
+          });
           writeEvent(response, "error", { code: "timeout", message: "stream time limit reached" });
         } else if (controller.signal.aborted) {
+          logGatewayEvent("model stream cancelled", {
+            stream_id: streamId,
+            event_count: eventCount,
+            text_characters: textCharacters,
+            thinking_characters: thinkingCharacters,
+            tool_call_count: toolCallCount,
+          });
           writeEvent(response, "error", { code: "cancelled", message: "stream cancelled" });
+        } else if (terminalType === undefined) {
+          logGatewayEvent("model stream ended without terminal provider event", {
+            stream_id: streamId,
+            event_count: eventCount,
+            text_characters: textCharacters,
+            thinking_characters: thinkingCharacters,
+            tool_call_count: toolCallCount,
+          });
+          writeEvent(response, "error", {
+            code: "provider_error",
+            message: "model stream ended without a terminal response",
+          });
         }
       } catch (error: unknown) {
         if (timedOut) {
+          logGatewayEvent("model stream timed out", { stream_id: streamId });
           writeEvent(response, "error", { code: "timeout", message: "stream time limit reached" });
         } else {
-          writeSafeError(response, error);
+          writeSafeError(response, error, streamId);
         }
       } finally {
         clearTimeout(timeout);
         activeStreams.delete(streamId);
+        activeStreams.delete(streamRequest.runId);
         writeEvent(response, "done", {});
         response.end();
       }
@@ -186,8 +247,11 @@ function writePiEvent(response: ServerResponse, event: { readonly type: string; 
       writeEvent(response, "completion", { reason: message.stopReason });
       return;
     }
-    case "error":
-      writeEvent(response, "error", safeProviderError(event.error));
+    case "error": {
+      const error = safeProviderError(event.error);
+      logGatewayEvent("model provider stream error", { code: error.code });
+      writeEvent(response, "error", error);
+    }
   }
 }
 
@@ -225,12 +289,22 @@ function nonNegativeInteger(value: unknown): number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 0;
 }
 
-function writeSafeError(response: ServerResponse, error: unknown): void {
+function writeSafeError(response: ServerResponse, error: unknown, streamId: string): void {
   if (error instanceof GatewayRuntimeError) {
+    logGatewayEvent("model gateway runtime error", { stream_id: streamId, code: error.code });
     writeEvent(response, "error", { code: error.code, message: error.message });
     return;
   }
+  logGatewayEvent("model gateway stream exception", {
+    stream_id: streamId,
+    exception_type: error instanceof Error ? error.constructor.name : typeof error,
+  });
   writeEvent(response, "error", { code: "provider_error", message: "model stream failed" });
+}
+
+function logGatewayEvent(message: string, data: Record<string, string | number>): void {
+  // Never log prompts, provider response content, or credentials from the gateway.
+  process.stderr.write(`${JSON.stringify({ timestamp: new Date().toISOString(), level: "INFO", message, data })}\n`);
 }
 
 function writeHttpError(response: ServerResponse, error: unknown): void {

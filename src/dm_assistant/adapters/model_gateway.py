@@ -167,6 +167,7 @@ class PiGatewayClient:
         messages: tuple[PromptMessage, ...],
         allowed_tools: tuple[str, ...],
         tool_schemas: tuple[GatewayToolSchema, ...],
+        run_id: str | None = None,
     ) -> GatewayCompletion:
         if any(message.role != "user" for message in messages):
             raise ModelGatewayTransportError(
@@ -189,7 +190,7 @@ class PiGatewayClient:
                 "tools": [schema.model_dump(mode="json") for schema in tool_schemas],
                 "output_token_limit": min(profile.token_budget, 16_384),
                 "time_limit_seconds": profile.time_budget_seconds,
-                "run_id": str(uuid4()),
+                "run_id": run_id or str(uuid4()),
             },
             allow_nan=False,
             separators=(",", ":"),
@@ -222,6 +223,12 @@ class PiGatewayClient:
             raise ModelGatewayTransportError(
                 "model gateway request timed out"
             ) from error
+
+    def cancel_stream(self, run_id: str) -> None:
+        """Request cancellation of one gateway stream by its caller-owned ID."""
+        self._json_request(
+            f"/v1/streams/{run_id}", method="DELETE", expected_status=202
+        )
 
     def _json_request(
         self,

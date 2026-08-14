@@ -8,6 +8,7 @@ from typing import Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, JsonValue
 
+from dm_assistant.adapters.model_gateway import PiGatewayClient
 from dm_assistant.modules.modeling import (
     DungeonGenerationIntentV1,
     GatewayModelCatalogEntry,
@@ -30,6 +31,7 @@ from dm_assistant.modules.preparation import (
     ToolRunPin,
     canonical_json_sha256,
 )
+from dm_assistant.observability import get_logger
 from dm_assistant.orchestration.dungeons.contracts import (
     CreatePromptedDungeonWorkflow,
     DungeonWorkflowResult,
@@ -38,6 +40,8 @@ from dm_assistant.orchestration.dungeons.contracts import (
 )
 from dm_assistant.orchestration.modeling import (
     GatewayClient,
+    GatewayCompletion,
+    GatewayToolSchema,
     ModelRunAbstained,
     ModelTaskRunner,
     ServerTool,
@@ -67,6 +71,7 @@ _DUNGEON_TOOL_NAMES = (
     _REGENERATE_LAYOUT_TOOL,
 )
 _MAX_REPAIR_DIAGNOSTICS = 16
+logger = get_logger(__name__)
 
 
 class _ValidateDungeonIntentInput(BaseModel):
@@ -183,35 +188,70 @@ class DungeonPromptService:
         self,
         command: PromptDungeonWorkflow,
         profile: ResolvedModelRunProfile,
+        stream_run_id: str | None = None,
     ) -> DungeonWorkflowResult:
         """Generate a draft from a standalone DM prompt with at most one repair."""
 
         _validate_profile(profile)
         context = _build_standalone_context(command)
-        runner = ModelTaskRunner(self._gateway_client)
-        tools = _dungeon_tools()
-        intent, record = runner.run(
-            profile=profile,
-            run_input=_initial_model_input(command, context),
-            output_schema=DungeonGenerationIntentV1,
-            tools=tools,
+        runner = ModelTaskRunner(
+            _RunBoundGatewayClient(self._gateway_client, stream_run_id)
+            if stream_run_id is not None
+            else self._gateway_client
         )
-        _require_non_abstained_intent(intent, record)
-
-        lineage = [_lineage(intent, record)]
-        request, diagnostics, valid = _preflight(intent, command.seed)
-        if not valid:
-            repaired_profile = _remaining_profile(profile, record)
-            repaired_intent, repaired_record = runner.run(
-                profile=repaired_profile,
-                run_input=_repair_model_input(command, context, intent, diagnostics),
+        tools = _dungeon_tools()
+        logger.info(
+            "dungeon prompt started",
+            extra={
+                "event_data": {
+                    "stage": "model_intent",
+                    "provider_id": profile.provider_id,
+                    "model_id": profile.model_id,
+                }
+            },
+        )
+        try:
+            intent, record = runner.run(
+                profile=profile,
+                run_input=_initial_model_input(command, context),
                 output_schema=DungeonGenerationIntentV1,
                 tools=tools,
             )
-            _require_non_abstained_intent(repaired_intent, repaired_record)
+            _require_non_abstained_intent(intent, record)
+        except ModelRunAbstained:
+            logger.warning(
+                "dungeon prompt stopped before topology was accepted",
+                extra={"event_data": {"stage": "model_intent", "accepted": False}},
+            )
+            raise
+
+        lineage = [_lineage(intent, record)]
+        request, diagnostics, valid = _preflight(intent, command.seed)
+        _log_layout_request(request=request, diagnostics=diagnostics, valid=valid)
+        if not valid:
+            repaired_profile = _remaining_profile(profile, record)
+            try:
+                repaired_intent, repaired_record = runner.run(
+                    profile=repaired_profile,
+                    run_input=_repair_model_input(
+                        command, context, intent, diagnostics
+                    ),
+                    output_schema=DungeonGenerationIntentV1,
+                    tools=tools,
+                )
+                _require_non_abstained_intent(repaired_intent, repaired_record)
+            except ModelRunAbstained:
+                logger.warning(
+                    "dungeon prompt stopped during topology repair",
+                    extra={
+                        "event_data": {"stage": "topology_repair", "accepted": False}
+                    },
+                )
+                raise
             lineage.append(_lineage(repaired_intent, repaired_record))
             intent = repaired_intent
-            request, _, _ = _preflight(intent, command.seed)
+            request, diagnostics, valid = _preflight(intent, command.seed)
+            _log_layout_request(request=request, diagnostics=diagnostics, valid=valid)
 
         model_lineage = tuple(lineage)
         return self._dungeon_studio.create_prompted(
@@ -226,6 +266,61 @@ class DungeonPromptService:
                 tool_runs=_tool_run_pins(model_lineage),
             )
         )
+
+
+class _RunBoundGatewayClient:
+    """Bind a web-operation UUID to pi gateway cancellation without changing tools."""
+
+    def __init__(self, client: GatewayClient, run_id: str) -> None:
+        self._client = client
+        self._run_id = run_id
+
+    def complete(
+        self,
+        *,
+        profile: ResolvedModelRunProfile,
+        messages: tuple[PromptMessage, ...],
+        allowed_tools: tuple[str, ...],
+        tool_schemas: tuple[GatewayToolSchema, ...],
+    ) -> GatewayCompletion:
+        if isinstance(self._client, PiGatewayClient):
+            return self._client.complete(
+                profile=profile,
+                messages=messages,
+                allowed_tools=allowed_tools,
+                tool_schemas=tool_schemas,
+                run_id=self._run_id,
+            )
+        return self._client.complete(
+            profile=profile,
+            messages=messages,
+            allowed_tools=allowed_tools,
+            tool_schemas=tool_schemas,
+        )
+
+
+def _log_layout_request(
+    *,
+    request: LayoutRequest,
+    diagnostics: tuple[dict[str, JsonValue], ...],
+    valid: bool,
+) -> None:
+    """Expose the exact typed generator input when a model topology was accepted."""
+    logger.info(
+        "dungeon topology compiled",
+        extra={
+            "event_data": {
+                "stage": "deterministic_preflight",
+                "valid": valid,
+                "diagnostic_codes": [
+                    item["code"]
+                    for item in diagnostics
+                    if isinstance(item.get("code"), str)
+                ],
+                "layout_request": request.model_dump(mode="json"),
+            }
+        },
+    )
 
 
 def compile_layout_request(

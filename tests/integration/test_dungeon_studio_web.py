@@ -5,6 +5,7 @@ import json
 import re
 import uuid
 from pathlib import Path
+from urllib.request import Request
 
 import httpx
 import pytest
@@ -12,7 +13,8 @@ from fastapi import FastAPI
 from sqlalchemy import Engine
 
 from dm_assistant.api import create_app
-from dm_assistant.config import RuntimeEnvironment, Settings
+from dm_assistant.config import ModelGatewayPolicy, RuntimeEnvironment, Settings
+from dm_assistant.modules.modeling import DungeonGenerationIntentV1
 from dm_assistant.db import Campaign, build_session_factory, transactional_session
 from dm_assistant.readiness import check_readiness
 from dm_dungeon import LayoutRequest, read_dungeon_package, to_canonical_json
@@ -43,6 +45,24 @@ def layout_document() -> str:
         generator_version="orthogonal-v1",
     )
     return to_canonical_json(request)
+
+
+class _GatewayResponse:
+    def __init__(self, body: bytes) -> None:
+        self.status = 200
+        self._lines = body.splitlines(keepends=True)
+
+    def __enter__(self) -> "_GatewayResponse":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        return None
+
+    def __iter__(self):  # type: ignore[no-untyped-def]
+        return iter(self._lines)
+
+    def read(self) -> bytes:
+        return b"".join(self._lines)
 
 
 async def run_web_workflow(

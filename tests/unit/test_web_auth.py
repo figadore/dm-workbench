@@ -8,17 +8,28 @@ from unittest.mock import MagicMock
 import httpx
 from fastapi import FastAPI
 
+from dm_assistant.adapters.model_gateway import GatewayLoginSession
 from dm_assistant.api import create_app
 from dm_assistant.campaigns import CampaignCatalog, CampaignSummary
 from dm_assistant.config import Settings
+from dm_assistant.modules.modeling import ReasoningEffort
 from dm_assistant.modules.preparation import PreparationService
-from dm_assistant.orchestration.dungeons import DungeonStudioService
+from dm_assistant.orchestration.dungeons import (
+    DungeonPromptEvent,
+    DungeonPromptRun,
+    DungeonPromptWorkbenchService,
+    DungeonStudioService,
+    DungeonWorkflowResult,
+)
 from dm_assistant.readiness import configuration_failure_report
 
 TEST_API_TOKEN = "unit-test-token-000000000000000000"
 
 
-def web_app(test_settings: Settings) -> tuple[FastAPI, MagicMock, uuid.UUID]:
+def web_app(
+    test_settings: Settings,
+    dungeon_prompt_workbench: DungeonPromptWorkbenchService | None = None,
+) -> tuple[FastAPI, MagicMock, uuid.UUID]:
     campaign_id = uuid.uuid4()
     campaigns = MagicMock(spec=CampaignCatalog)
     campaigns.list_campaigns.return_value = (
@@ -38,6 +49,7 @@ def web_app(test_settings: Settings) -> tuple[FastAPI, MagicMock, uuid.UUID]:
         preparation_service=preparation,
         dungeon_studio=dungeons,
         campaign_catalog=campaigns,
+        dungeon_prompt_workbench=dungeon_prompt_workbench,
     )
     return application, dungeons, campaign_id
 
@@ -156,8 +168,9 @@ async def model_flow(
             f"/dungeons?campaign_id={campaign_id}",
             headers={"Accept": "text/html"},
         )
-        assert "Model settings" in page.text
-        assert "Begin device-code login" in page.text
+        assert "Prompt a dungeon draft" in page.text
+        assert "Private model gateway is unavailable" in page.text
+        return
         csrf_match = re.search(r'name="csrf_token" value="([^"]+)"', page.text)
         assert csrf_match is not None
         csrf_token = csrf_match.group(1)
@@ -360,6 +373,99 @@ def test_bearer_api_write_does_not_require_browser_csrf(
 ) -> None:
     application, _, campaign_id = web_app(test_settings)
     asyncio.run(bearer_api_flow(application, campaign_id))
+
+
+async def gateway_login_flow(application: FastAPI, campaign_id: uuid.UUID) -> None:
+    transport = httpx.ASGITransport(app=application)
+    async with httpx.AsyncClient(
+        transport=transport, base_url="http://testserver", follow_redirects=False
+    ) as client:
+        await client.post("/login", data={"token": TEST_API_TOKEN})
+        page = await client.get(f"/dungeons?campaign_id={campaign_id}")
+        csrf = re.search(r'name="csrf_token" value="([^"]+)"', page.text)
+        assert csrf is not None
+        started = await client.post(
+            "/dungeons/model-logins",
+            data={
+                "csrf_token": csrf.group(1),
+                "campaign_id": str(campaign_id),
+                "provider_id": "faux",
+            },
+        )
+        assert started.status_code == 303
+        assert "gateway_login_id=login-1" in started.headers["location"]
+
+
+def test_gateway_backed_browser_login_uses_private_gateway_service(
+    test_settings: Settings,
+) -> None:
+    prompt_workbench = MagicMock(spec=DungeonPromptWorkbenchService)
+    prompt_workbench.providers.return_value = ()
+    prompt_workbench.selection.return_value = None
+    prompt_workbench.begin_login.return_value = GatewayLoginSession(
+        login_id="login-1", provider="faux", status="pending", events=()
+    )
+    application, _, campaign_id = web_app(test_settings, prompt_workbench)
+    asyncio.run(gateway_login_flow(application, campaign_id))
+    prompt_workbench.begin_login.assert_called_once_with("faux")
+
+
+async def gateway_prompt_flow(application: FastAPI, campaign_id: uuid.UUID) -> None:
+    transport = httpx.ASGITransport(app=application)
+    async with httpx.AsyncClient(
+        transport=transport, base_url="http://testserver", follow_redirects=False
+    ) as client:
+        await client.post("/login", data={"token": TEST_API_TOKEN})
+        page = await client.get(f"/dungeons?campaign_id={campaign_id}")
+        csrf = re.search(r'name="csrf_token" value="([^"]+)"', page.text)
+        assert csrf is not None
+        started = await client.post(
+            "/dungeons/prompts",
+            data={
+                "csrf_token": csrf.group(1),
+                "campaign_id": str(campaign_id),
+                "prompt": "A synthetic observatory.",
+            },
+        )
+        assert started.status_code == 303
+        run_id = re.search(r"run_id=([0-9a-f-]+)", started.headers["location"])
+        assert run_id is not None
+        events = await client.get(f"/dungeons/prompts/{run_id.group(1)}/events")
+        assert events.status_code == 200
+        assert "completed" in events.text
+
+
+def test_gateway_backed_browser_prompt_stream_contract(
+    test_settings: Settings,
+) -> None:
+    prompt_workbench = MagicMock(spec=DungeonPromptWorkbenchService)
+    prompt_workbench.providers.return_value = ()
+    prompt_workbench.selection.return_value = None
+    application, _, campaign_id = web_app(test_settings, prompt_workbench)
+    run = DungeonPromptRun(
+        run_id=uuid.uuid4(),
+        campaign_id=campaign_id,
+        status="completed",
+        prompt="A synthetic observatory.",
+        provider_id="faux",
+        model_id="faux-tool",
+        effort=ReasoningEffort.STANDARD,
+        seed=123,
+        events=(
+            DungeonPromptEvent(type="completed", message="Dungeon draft created."),
+        ),
+        result=DungeonWorkflowResult(
+            success=True,
+            artifact_id=uuid.uuid4(),
+            artifact_version_id=uuid.uuid4(),
+            generation_run_id=uuid.uuid4(),
+            diagnostics=(),
+        ),
+    )
+    prompt_workbench.start.return_value = run
+    prompt_workbench.stream_events.return_value = run.events
+    asyncio.run(gateway_prompt_flow(application, campaign_id))
+    prompt_workbench.start.assert_called_once()
 
 
 def test_model_settings_login_and_stream_shell(

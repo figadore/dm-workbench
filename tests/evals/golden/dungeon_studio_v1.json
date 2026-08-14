@@ -1,0 +1,4 @@
+[
+  {"case_id":"first_pass_layout","first_pass_valid":true,"repair_count":0,"targeted_edit_preserved":true,"render_export_valid":true,"context_relevant":true,"dm_edited":false},
+  {"case_id":"repair_and_preservation","first_pass_valid":false,"repair_count":1,"targeted_edit_preserved":true,"render_export_valid":true,"context_relevant":true,"dm_edited":true}
+]

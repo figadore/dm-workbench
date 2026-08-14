@@ -100,6 +100,22 @@ def test_secret_access_does_not_make_a_floor_dm_only(fixture_path: Path) -> None
         load_dungeon_package_json(json.dumps(payload))
 
 
+def test_player_safe_connection_cannot_reveal_dm_only_room(
+    fixture_path: Path,
+) -> None:
+    payload = read_json_object(fixture_path)
+    room_sanctum = next(
+        room for room in payload["topology"]["rooms"] if room["id"] == "room_sanctum"
+    )
+    room_sanctum["visibility"] = "dm_only"
+
+    with pytest.raises(
+        ValidationError,
+        match="player_safe connections cannot connect to dm_only rooms",
+    ):
+        load_dungeon_package_json(json.dumps(payload))
+
+
 def test_secret_door_cannot_be_player_safe(fixture_path: Path) -> None:
     payload = read_json_object(fixture_path)
     secret_door = next(

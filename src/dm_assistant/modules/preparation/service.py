@@ -2,9 +2,8 @@
 
 import uuid
 from collections.abc import Callable
-from datetime import UTC, datetime
 
-from sqlalchemy import Engine
+from sqlalchemy import Engine, func, select
 from sqlalchemy.orm import Session
 
 from dm_assistant.adapters.assets import AssetStore, StoredBlob
@@ -276,7 +275,9 @@ class PreparationService:
                 raise ConflictError("The generation run is already terminal.")
             run.status = command.status.value
             run.validation_report = command.validation_report
-            run.finished_at = datetime.now(UTC)
+            # Use the database clock so the persisted invariant remains valid
+            # even when application and PostgreSQL clocks differ slightly.
+            run.finished_at = session.scalar(select(func.now()))
         return _generation_run_record(run)
 
     def create_artifact_version(

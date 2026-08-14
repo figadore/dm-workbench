@@ -1,12 +1,18 @@
 """Thin authenticated server-rendered Workbench and Dungeon Studio routes."""
 
 import uuid
-from pathlib import Path
 from collections.abc import Iterable
+from pathlib import Path
 from typing import Annotated
+from urllib.parse import quote
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.responses import (
+    HTMLResponse,
+    RedirectResponse,
+    Response,
+    StreamingResponse,
+)
 from fastapi.templating import Jinja2Templates
 
 from dm_assistant.auth import (
@@ -24,6 +30,7 @@ from dm_assistant.modules.modeling.workbench import ModelWorkbenchService
 from dm_assistant.modules.preparation import PreparationService
 from dm_assistant.orchestration.dungeons import (
     CreateDungeonWorkflow,
+    DungeonPromptWorkbenchService,
     DungeonStudioService,
     ExportDungeonWorkflow,
     RegenerateDungeonWorkflow,
@@ -41,11 +48,13 @@ def create_web_router(
     dungeons: DungeonStudioService,
     preparation: PreparationService,
     model_workbench: ModelWorkbenchService | None = None,
+    dungeon_prompt_workbench: DungeonPromptWorkbenchService | None = None,
 ) -> APIRouter:
     """Build the shared shell using injected application services only."""
     router = APIRouter(include_in_schema=False)
     session_codec = SessionCodec(settings.session_secret)
     resolved_model_workbench = model_workbench or ModelWorkbenchService()
+    resolved_dungeon_prompt_workbench = dungeon_prompt_workbench
 
     @router.get("/login", response_class=HTMLResponse)
     def login_page(request: Request) -> HTMLResponse:
@@ -96,6 +105,7 @@ def create_web_router(
         request: Request,
         campaign_id: uuid.UUID | None = None,
         login_id: uuid.UUID | None = None,
+        gateway_login_id: str | None = None,
         run_id: uuid.UUID | None = None,
     ) -> HTMLResponse:
         available = campaigns.list_campaigns()
@@ -105,8 +115,12 @@ def create_web_router(
             available = campaigns.list_campaigns()
         selected = campaign_id or active.id
         artifacts = preparation.list_artifacts(selected)
-        login = resolved_model_workbench.get_login(login_id) if login_id is not None else None
-        active_run = resolved_model_workbench.get_run(run_id) if run_id is not None else None
+        login = (
+            resolved_model_workbench.get_login(login_id)
+            if login_id is not None
+            else None
+        )
+        active_run = None
         return _template(
             request,
             "dungeons.html",
@@ -118,7 +132,33 @@ def create_web_router(
                 "model_selection": resolved_model_workbench.selection(),
                 "model_task_profiles": resolved_model_workbench.task_profiles(),
                 "model_login": login,
-                "model_active_run": active_run.model_dump(mode="json") if active_run else None,
+                "model_active_run": active_run.model_dump(mode="json")
+                if active_run
+                else None,
+                "dungeon_prompt_available": resolved_dungeon_prompt_workbench
+                is not None,
+                "dungeon_prompt_providers": (
+                    resolved_dungeon_prompt_workbench.providers()
+                    if resolved_dungeon_prompt_workbench is not None
+                    else ()
+                ),
+                "dungeon_prompt_selection": (
+                    resolved_dungeon_prompt_workbench.selection()
+                    if resolved_dungeon_prompt_workbench is not None
+                    else None
+                ),
+                "dungeon_prompt_run": (
+                    resolved_dungeon_prompt_workbench.get(run_id)
+                    if resolved_dungeon_prompt_workbench is not None
+                    and run_id is not None
+                    else None
+                ),
+                "dungeon_prompt_login": (
+                    resolved_dungeon_prompt_workbench.login_status(gateway_login_id)
+                    if resolved_dungeon_prompt_workbench is not None
+                    and gateway_login_id is not None
+                    else None
+                ),
             },
         )
 
@@ -144,7 +184,9 @@ def create_web_router(
                     item.model_dump(mode="json")
                     for item in resolved_model_workbench.list_ask_runs()
                 ],
-                "ask_active_run": active_run.model_dump(mode="json") if active_run else None,
+                "ask_active_run": active_run.model_dump(mode="json")
+                if active_run
+                else None,
             },
         )
 
@@ -173,14 +215,14 @@ def create_web_router(
         if record is None:
             raise InvalidInputError("The attachment was not found.")
         data = resolved_model_workbench.read_attachment(attachment_id)
-        disposition = "inline" if record.media_type.startswith("image/") else "attachment"
+        disposition = (
+            "inline" if record.media_type.startswith("image/") else "attachment"
+        )
         return Response(
             content=data,
             media_type=record.media_type,
             headers={
-                "Content-Disposition": (
-                    f'{disposition}; filename="{record.filename}"'
-                ),
+                "Content-Disposition": (f'{disposition}; filename="{record.filename}"'),
                 "X-Content-Type-Options": "nosniff",
             },
         )
@@ -221,7 +263,7 @@ def create_web_router(
     def ask_events(run_id: uuid.UUID) -> StreamingResponse:
         def iterator() -> Iterable[bytes]:
             for event in resolved_model_workbench.stream_ask_run_events(run_id):
-                yield f"data: {event.model_dump_json()}\n\n".encode("utf-8")
+                yield f"data: {event.model_dump_json()}\n\n".encode()
 
         return StreamingResponse(
             iterator(),
@@ -326,13 +368,126 @@ def create_web_router(
     def model_run_events(run_id: uuid.UUID) -> StreamingResponse:
         def iterator() -> Iterable[bytes]:
             for event in resolved_model_workbench.stream_run_events(run_id):
-                yield f"data: {event.model_dump_json()}\n\n".encode("utf-8")
+                yield f"data: {event.model_dump_json()}\n\n".encode()
 
         return StreamingResponse(
             iterator(),
             media_type="text/event-stream; charset=utf-8",
             headers={"Cache-Control": "no-store"},
         )
+
+    @router.post("/dungeons/model-logins")
+    def dungeon_model_login_start(
+        request: Request,
+        campaign_id: Annotated[uuid.UUID, Form()],
+        provider_id: Annotated[str, Form()],
+        csrf_token: Annotated[str, Form()],
+    ) -> RedirectResponse:
+        _require_csrf(request, csrf_token)
+        if resolved_dungeon_prompt_workbench is None:
+            raise InvalidInputError("Model generation is unavailable.")
+        login = resolved_dungeon_prompt_workbench.begin_login(provider_id)
+        return RedirectResponse(
+            _dungeons_url(campaign_id=campaign_id, gateway_login_id=login.login_id),
+            status_code=303,
+        )
+
+    @router.post("/dungeons/model-logins/{login_id}/prompts/{prompt_id}")
+    def dungeon_model_login_respond(
+        request: Request,
+        login_id: str,
+        prompt_id: str,
+        campaign_id: Annotated[uuid.UUID, Form()],
+        value: Annotated[str, Form()],
+        csrf_token: Annotated[str, Form()],
+    ) -> RedirectResponse:
+        _require_csrf(request, csrf_token)
+        if resolved_dungeon_prompt_workbench is None:
+            raise InvalidInputError("Model generation is unavailable.")
+        resolved_dungeon_prompt_workbench.respond_to_login(login_id, prompt_id, value)
+        return RedirectResponse(
+            _dungeons_url(campaign_id=campaign_id, gateway_login_id=login_id),
+            status_code=303,
+        )
+
+    @router.post("/dungeons/prompts")
+    def dungeon_prompt_start(
+        request: Request,
+        campaign_id: Annotated[uuid.UUID, Form()],
+        prompt: Annotated[str, Form()],
+        csrf_token: Annotated[str, Form()],
+        provider_id: Annotated[str | None, Form()] = None,
+        model_id: Annotated[str | None, Form()] = None,
+        effort: Annotated[str | None, Form()] = None,
+        seed: Annotated[int | None, Form()] = None,
+        title: Annotated[str | None, Form()] = None,
+        constraint: Annotated[list[str] | None, Form()] = None,
+    ) -> RedirectResponse:
+        _require_csrf(request, csrf_token)
+        if resolved_dungeon_prompt_workbench is None:
+            raise InvalidInputError(
+                "Model generation is unavailable; manual Dungeon Studio operations remain available."
+            )
+        run = resolved_dungeon_prompt_workbench.start(
+            campaign_id=campaign_id,
+            prompt=prompt,
+            provider_id=provider_id or None,
+            model_id=model_id or None,
+            effort=ReasoningEffort(effort) if effort else None,
+            seed=seed,
+            title=title or None,
+            constraints=tuple(constraint or ()),
+        )
+        return RedirectResponse(
+            _dungeons_url(campaign_id=campaign_id, run_id=run.run_id), status_code=303
+        )
+
+    @router.post("/dungeons/prompts/{run_id}/cancel")
+    def dungeon_prompt_cancel(
+        request: Request,
+        run_id: uuid.UUID,
+        csrf_token: Annotated[str, Form()],
+        campaign_id: Annotated[uuid.UUID, Form()],
+    ) -> RedirectResponse:
+        _require_csrf(request, csrf_token)
+        if resolved_dungeon_prompt_workbench is None:
+            raise InvalidInputError("Model generation is unavailable.")
+        resolved_dungeon_prompt_workbench.cancel(run_id)
+        return RedirectResponse(
+            _dungeons_url(campaign_id=campaign_id, run_id=run_id), status_code=303
+        )
+
+    @router.get("/dungeons/prompts/{run_id}/events")
+    def dungeon_prompt_events(run_id: uuid.UUID) -> StreamingResponse:
+        if resolved_dungeon_prompt_workbench is None:
+            raise InvalidInputError("Model generation is unavailable.")
+
+        def iterator() -> Iterable[bytes]:
+            for event in resolved_dungeon_prompt_workbench.stream_events(run_id):
+                yield f"data: {event.model_dump_json()}\\n\\n".encode()
+
+        return StreamingResponse(
+            iterator(),
+            media_type="text/event-stream; charset=utf-8",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.post("/dungeons/model-selection")
+    def dungeon_model_selection(
+        request: Request,
+        campaign_id: Annotated[uuid.UUID, Form()],
+        provider_id: Annotated[str, Form()],
+        model_id: Annotated[str, Form()],
+        effort: Annotated[str, Form()],
+        csrf_token: Annotated[str, Form()],
+    ) -> RedirectResponse:
+        _require_csrf(request, csrf_token)
+        if resolved_dungeon_prompt_workbench is None:
+            raise InvalidInputError("Model generation is unavailable.")
+        resolved_dungeon_prompt_workbench.save_selection(
+            provider_id=provider_id, model_id=model_id, effort=ReasoningEffort(effort)
+        )
+        return RedirectResponse(_dungeons_url(campaign_id=campaign_id), status_code=303)
 
     @router.post("/campaigns")
     def campaign_create(
@@ -586,6 +741,7 @@ def _dungeons_url(
     *,
     campaign_id: uuid.UUID | None = None,
     login_id: uuid.UUID | None = None,
+    gateway_login_id: str | None = None,
     run_id: uuid.UUID | None = None,
 ) -> str:
     params: list[str] = []
@@ -593,6 +749,8 @@ def _dungeons_url(
         params.append(f"campaign_id={campaign_id}")
     if login_id is not None:
         params.append(f"login_id={login_id}")
+    if gateway_login_id is not None:
+        params.append(f"gateway_login_id={quote(gateway_login_id, safe='')}")
     if run_id is not None:
         params.append(f"run_id={run_id}")
     query = f"?{'&'.join(params)}" if params else ""

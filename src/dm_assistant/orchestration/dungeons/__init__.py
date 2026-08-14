@@ -19,12 +19,20 @@ from dm_assistant.orchestration.dungeons.prompting import (
     resolve_dungeon_prompt_profile,
 )
 from dm_assistant.orchestration.dungeons.service import DungeonStudioService
+from dm_assistant.orchestration.dungeons.web_prompt import (
+    DungeonPromptEvent,
+    DungeonPromptRun,
+    DungeonPromptWorkbenchService,
+)
 
 __all__ = [
     "ApproveDungeonWorkflow",
     "CreateDungeonWorkflow",
     "CreatePromptedDungeonWorkflow",
+    "DungeonPromptEvent",
+    "DungeonPromptRun",
     "DungeonPromptService",
+    "DungeonPromptWorkbenchService",
     "DungeonGenerationRegressionCase",
     "DungeonStudioDetail",
     "DungeonStudioService",

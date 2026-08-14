@@ -11,7 +11,7 @@
   <p>{{ version.change_summary }}</p>
   <p><code>{{ version.id }}</code> · parent <code>{{ version.parent_version_id or "none" }}</code> · spec hash <code>{{ version.specification_sha256 }}</code></p>
   <details><summary>Validation and pinned input</summary><pre>{{ version.validation_report|tojson(indent=2) }}</pre><pre>{{ version.input_pins.model_dump(mode="json")|tojson(indent=2) }}</pre></details>
-  {% if generation_runs[version.id] %}<details><summary>Generation run, schemas, tools, and renderer lineage</summary><pre>{{ generation_runs[version.id].model_dump(mode="json")|tojson(indent=2) }}</pre></details>{% endif %}
+  {% if generation_runs[version.id] %}<details><summary>Generation context inspector</summary><dl><dt>Envelope kind</dt><dd><code>{{ generation_runs[version.id].context_envelope_kind or "none" }}</code></dd><dt>Payload version</dt><dd><code>{{ generation_runs[version.id].context_payload_version or "none" }}</code></dd><dt>Payload hash</dt><dd><code>{{ generation_runs[version.id].context_payload_sha256 or "none" }}</code></dd><dt>Selected citation/source labels</dt><dd><pre>{{ generation_runs[version.id].context_source_links|tojson(indent=2) }}</pre></dd></dl><p>Standalone dungeon runs intentionally have no campaign revision, corpus snapshot, rules profile, or source bodies.</p></details><details><summary>Generation run, schemas, tools, and renderer lineage</summary><pre>{{ generation_runs[version.id].model_dump(mode="json")|tojson(indent=2) }}</pre></details>{% endif %}
   <div class="assets">
   {% for asset in version_assets[version.id] %}
     <div>

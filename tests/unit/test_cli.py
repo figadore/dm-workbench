@@ -17,10 +17,12 @@ from dm_assistant.cli.main import (
     _emit_dungeon_failure_summary,
     _model_run_rejected_error,
     _prompt_execution_error,
+    _provider_smoke_profile,
     _render_login_event,
     _resolve_dungeon_model_selection,
     app,
 )
+from dm_assistant.modules.modeling import ReasoningEffort
 from dm_assistant.orchestration.modeling import ModelRunAbstained
 
 runner = CliRunner()
@@ -101,6 +103,20 @@ def test_help_lists_foundation_commands() -> None:
     assert model_help.exit_code == 0
     assert "providers" in model_help.output
     assert "login" in model_help.output
+
+
+def test_provider_smoke_profile_is_short_lived_and_tool_free() -> None:
+    profile = _provider_smoke_profile(
+        _provider(authenticated=True),
+        _provider(authenticated=True).models[0],
+        ReasoningEffort.STANDARD,
+    )
+
+    assert profile.allowed_tools == ()
+    assert profile.turn_budget == 1
+    assert profile.tool_budget == 0
+    assert profile.time_budget_seconds == 30
+    assert profile.token_budget == 256
 
 
 def test_prompt_defaults_run_inline_login_and_choose_compatible_model(

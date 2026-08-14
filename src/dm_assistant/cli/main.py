@@ -7,7 +7,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import typer
 from pydantic import BaseModel, JsonValue
@@ -49,7 +49,18 @@ from dm_assistant.modules.library import (
     SourceVisibility,
     VisibilityLabel,
 )
-from dm_assistant.modules.modeling import ReasoningEffort, TaskModelSelection
+from dm_assistant.modules.modeling import (
+    GatewayModelCatalogEntry,
+    ModelEndpointProfile,
+    PromptMessage,
+    ReasoningEffort,
+    ReasoningLevel,
+    ResolvedModelRunProfile,
+    TaskModelSelection,
+    TaskProfile,
+    resolve_run_profile,
+    supported_from_reasoning,
+)
 from dm_assistant.modules.scope import TaskType, resolve_task_scope
 from dm_assistant.orchestration.dungeons import (
     CreateDungeonWorkflow,
@@ -335,6 +346,57 @@ def model_providers() -> None:
         with workbench_runtime() as runtime:
             gateway = _require_model_gateway(runtime.model_gateway)
             _emit_models(gateway.providers())
+
+
+@model_app.command("smoke")
+def model_smoke(
+    prompt: Annotated[
+        str, typer.Argument(help="Short non-sensitive provider probe.")
+    ] = "Reply with OK.",
+    provider: Annotated[str, typer.Option("--provider")] = "openai-codex",
+    model: Annotated[str, typer.Option("--model")] = "gpt-5.4",
+    effort: Annotated[
+        ReasoningEffort, typer.Option("--effort")
+    ] = ReasoningEffort.STANDARD,
+) -> None:
+    """Send one minimal text-only request through the private pi-ai gateway."""
+    with _render_domain_errors():
+        with workbench_runtime() as runtime:
+            gateway = _require_model_gateway(runtime.model_gateway)
+            selected_provider = next(
+                (item for item in gateway.providers() if item.id == provider), None
+            )
+            if selected_provider is None:
+                raise InvalidInputError("The selected model provider is unavailable.")
+            if not selected_provider.authenticated:
+                raise InvalidInputError("The selected model provider requires login.")
+            selected_model = next(
+                (item for item in selected_provider.models if item.id == model), None
+            )
+            if selected_model is None or "text" not in selected_model.capabilities:
+                raise InvalidInputError("The selected text model is unavailable.")
+            completion = gateway.complete(
+                profile=_provider_smoke_profile(
+                    selected_provider, selected_model, effort
+                ),
+                messages=(PromptMessage(role="user", content=prompt),),
+                allowed_tools=(),
+                tool_schemas=(),
+            )
+            if completion.content is None:
+                raise InvalidInputError("The selected model returned no text response.")
+            _emit_document(
+                {
+                    "provider": selected_provider.id,
+                    "model": selected_model.id,
+                    "effort": effort.value,
+                    "response": completion.content,
+                    "usage": {
+                        "input_tokens": completion.input_tokens,
+                        "output_tokens": completion.output_tokens,
+                    },
+                }
+            )
 
 
 @model_app.command("login")
@@ -715,6 +777,63 @@ def _resolve_dungeon_model_selection(
         else ReasoningEffort.STANDARD
     )
     return selected_provider, selected_model, selected_effort
+
+
+def _provider_smoke_profile(
+    provider: GatewayProvider,
+    model: GatewayCatalogModel,
+    effort: ReasoningEffort,
+) -> ResolvedModelRunProfile:
+    """Build an intentionally tool-free, short-lived profile for transport smoke tests."""
+    reasoning_levels = (
+        (ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH)
+        if "thinking" in model.capabilities
+        else (ReasoningLevel.MEDIUM,)
+    )
+    supported_efforts = supported_from_reasoning(reasoning_levels)
+    endpoint = ModelEndpointProfile(
+        profile_id=uuid4(),
+        profile_version="1.0.0",
+        runtime_adapter="pi_ai",
+        provider_id=provider.id,
+        model_id=model.id,
+        supported_efforts=supported_efforts,
+        default_effort=ReasoningEffort.STANDARD,
+        observed_capabilities=model.capabilities,
+        context_window_tokens=model.context_window,
+        output_token_limit=min(model.max_output_tokens, 256),
+    )
+    task = TaskProfile(
+        profile_id=uuid4(),
+        profile_version="1.0.0",
+        task_name="provider_transport_smoke_v1",
+        prompt_version="1.0.0",
+        instruction_version="1.0.0",
+        output_schema_name="plain_text",
+        output_schema_version="1.0.0",
+        allowed_tools=(),
+        turn_budget=1,
+        tool_budget=0,
+        time_budget_seconds=30,
+        token_budget=256,
+        require_citation_ids=False,
+        require_authorized_citations=False,
+    )
+    catalog = GatewayModelCatalogEntry(
+        provider_id=provider.id,
+        model_id=model.id,
+        runtime_adapter="pi_ai",
+        observed_capabilities=model.capabilities,
+        supported_reasoning_levels=reasoning_levels,
+        context_window_tokens=model.context_window,
+        output_token_limit=min(model.max_output_tokens, 256),
+    )
+    return resolve_run_profile(
+        endpoint_profile=endpoint,
+        task_profile=task,
+        catalog_entry=catalog,
+        requested_effort=effort,
+    )
 
 
 def _default_provider(

@@ -9,13 +9,14 @@ from sqlalchemy import Engine
 
 from dm_assistant import __version__
 from dm_assistant.adapters.assets import LocalAssetStore
+from dm_assistant.adapters.model_gateway import PiGatewayClient
 from dm_assistant.adapters.sources import LocalSourceReader
 from dm_assistant.api.dungeons import create_dungeon_api_router
 from dm_assistant.api.errors import domain_error_handler
 from dm_assistant.api.library import create_library_api_router
 from dm_assistant.api.middleware import SecurityObservabilityMiddleware
 from dm_assistant.campaigns import CampaignCatalog
-from dm_assistant.config import Settings, load_settings
+from dm_assistant.config import ModelGatewayPolicy, Settings, load_settings
 from dm_assistant.db import build_engine
 from dm_assistant.errors import DomainError, ResourceNotFoundError
 from dm_assistant.modules.library.catalog import LibraryDocumentCatalog
@@ -23,10 +24,14 @@ from dm_assistant.modules.library.retrieval import LibraryLexicalSearchService
 from dm_assistant.modules.library.service import LibraryIngestionService
 from dm_assistant.modules.library.snapshots import CorpusSnapshotService
 from dm_assistant.modules.library.workflows import LibrarySourceWorkflow
-from dm_assistant.modules.modeling import ModelWorkbenchService
+from dm_assistant.modules.modeling import ModelTaskSelectionStore, ModelWorkbenchService
 from dm_assistant.modules.preparation import PreparationService
 from dm_assistant.observability import configure_logging
-from dm_assistant.orchestration.dungeons import DungeonStudioService
+from dm_assistant.orchestration.dungeons import (
+    DungeonPromptService,
+    DungeonPromptWorkbenchService,
+    DungeonStudioService,
+)
 from dm_assistant.readiness import ReadinessCheck, ReadinessReport, check_readiness
 from dm_assistant.web import create_web_router
 
@@ -42,6 +47,7 @@ def create_app(
     dungeon_studio: DungeonStudioService | None = None,
     campaign_catalog: CampaignCatalog | None = None,
     model_workbench: ModelWorkbenchService | None = None,
+    dungeon_prompt_workbench: DungeonPromptWorkbenchService | None = None,
 ) -> FastAPI:
     """Create the default-authenticated DM Assistant HTTP application."""
     resolved_settings = settings if settings is not None else load_settings()
@@ -78,7 +84,26 @@ def create_app(
     resolved_dungeons = dungeon_studio or DungeonStudioService(resolved_preparation)
     resolved_campaigns = campaign_catalog or CampaignCatalog(database_engine)
     resolved_model_workbench = model_workbench or ModelWorkbenchService(
-        asset_store=LocalAssetStore(resolved_settings.asset_root, resolved_settings.scratch_root)
+        asset_store=LocalAssetStore(
+            resolved_settings.asset_root, resolved_settings.scratch_root
+        )
+    )
+    gateway = (
+        None
+        if resolved_settings.model_gateway_policy is ModelGatewayPolicy.DISABLED
+        else PiGatewayClient.from_settings(resolved_settings)
+    )
+    resolved_dungeon_prompt_workbench = dungeon_prompt_workbench or (
+        DungeonPromptWorkbenchService(
+            settings=resolved_settings,
+            campaigns=resolved_campaigns,
+            selections=ModelTaskSelectionStore(database_engine),
+            gateway=gateway,
+            prompts=DungeonPromptService(resolved_dungeons, gateway),
+            preparation=resolved_preparation,
+        )
+        if gateway is not None
+        else None
     )
     library_catalog = LibraryDocumentCatalog(database_engine)
     library_search = LibraryLexicalSearchService(database_engine)
@@ -100,6 +125,7 @@ def create_app(
     application.state.preparation_service = resolved_preparation
     application.state.dungeon_studio = resolved_dungeons
     application.state.model_workbench = resolved_model_workbench
+    application.state.dungeon_prompt_workbench = resolved_dungeon_prompt_workbench
     application.add_middleware(
         SecurityObservabilityMiddleware,
         settings=resolved_settings,
@@ -121,6 +147,7 @@ def create_app(
             dungeons=resolved_dungeons,
             preparation=resolved_preparation,
             model_workbench=resolved_model_workbench,
+            dungeon_prompt_workbench=resolved_dungeon_prompt_workbench,
         )
     )
 

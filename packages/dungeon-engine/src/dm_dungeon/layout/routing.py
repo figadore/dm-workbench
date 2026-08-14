@@ -7,6 +7,8 @@ from dm_dungeon.layout.contracts import FloorLayoutBounds
 from dm_dungeon.layout.placement import Rect
 from dm_dungeon.layout.random_source import DeterministicRandom
 
+_UNRELATED_ROOM_CLEARANCE_CELLS = 1
+
 
 def route_between_rooms(
     source: Rect,
@@ -96,11 +98,19 @@ def _blocked_room_points(
                 for y in range(rect.y + 1, rect.bottom)
             )
             continue
-        for x in range(rect.x, rect.right):
-            for y in range(rect.y, rect.bottom):
+        for x in range(
+            rect.x - _UNRELATED_ROOM_CLEARANCE_CELLS,
+            rect.right + _UNRELATED_ROOM_CLEARANCE_CELLS,
+        ):
+            for y in range(
+                rect.y - _UNRELATED_ROOM_CLEARANCE_CELLS,
+                rect.bottom + _UNRELATED_ROOM_CLEARANCE_CELLS,
+            ):
                 # Horizontal corridors expand over y offsets; vertical corridors over
                 # x offsets. Reserving both directions is conservative but guarantees
-                # a later turn cannot sweep through unrelated room cells.
+                # a later turn cannot sweep through unrelated room cells. The one-cell
+                # halo also prevents a corridor from reading as an undeclared doorway
+                # when it runs flush along another room's wall.
                 blocked.update(
                     (x - offset, y)
                     for offset in range(-negative_offset, positive_offset + 1)

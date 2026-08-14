@@ -1,0 +1,34 @@
+<section>
+  <h2>Prompt a dungeon draft</h2>
+  <p>Model output is typed intent only. Deterministic code validates, renders, and persists a preparation draft; it never changes campaign canon.</p>
+  {% if dungeon_prompt_available and dungeon_prompt_providers %}
+  <details><summary>Gateway provider and model status</summary>
+    {% for provider in dungeon_prompt_providers %}
+    <p><strong>{{ provider.name }}</strong> — {{ "authenticated" if provider.authenticated else "signed out" }}</p>
+    {% if not provider.authenticated and "oauth" in provider.auth_modes %}<form method="post" action="/dungeons/model-logins"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="campaign_id" value="{{ selected_campaign_id }}"><input type="hidden" name="provider_id" value="{{ provider.id }}"><button type="submit">Begin {{ provider.name }} device login</button></form>{% endif %}
+    {% endfor %}
+  </details>
+  {% if dungeon_prompt_login %}<article><h3>Provider login</h3><p>Status: <span class="status">{{ dungeon_prompt_login.status }}</span></p>{% for event in dungeon_prompt_login.events %}{% if event.verification_uri %}<p>Verification URI: <code>{{ event.verification_uri }}</code></p>{% endif %}{% if event.user_code %}<p>User code: <code>{{ event.user_code }}</code></p>{% endif %}{% if event.prompt_id %}<form method="post" action="/dungeons/model-logins/{{ dungeon_prompt_login.login_id }}/prompts/{{ event.prompt_id }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="campaign_id" value="{{ selected_campaign_id }}"><label>{{ event.message or "Continue login" }}<input name="value" required></label><button type="submit">Continue login</button></form>{% endif %}{% endfor %}<p><a href="/dungeons?campaign_id={{ selected_campaign_id }}&gateway_login_id={{ dungeon_prompt_login.login_id }}">Refresh login status</a></p></article>{% endif %}
+  <form method="post" action="/dungeons/model-selection">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="campaign_id" value="{{ selected_campaign_id }}">
+    <label>Provider<select name="provider_id">{% for provider in dungeon_prompt_providers %}<option value="{{ provider.id }}" {% if dungeon_prompt_selection and provider.id == dungeon_prompt_selection.provider_id %}selected{% endif %}>{{ provider.name }}</option>{% endfor %}</select></label>
+    <label>Model<select name="model_id">{% for provider in dungeon_prompt_providers %}{% for model in provider.models %}<option value="{{ model.id }}" {% if dungeon_prompt_selection and model.id == dungeon_prompt_selection.model_id %}selected{% endif %}>{{ provider.name }} / {{ model.name }}</option>{% endfor %}{% endfor %}</select></label>
+    <label>Effort<select name="effort"><option value="standard">standard</option><option value="fast">fast</option><option value="deep">deep</option></select></label>
+    <button type="submit">Save dungeon model default</button>
+  </form>
+  <form method="post" action="/dungeons/prompts">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="campaign_id" value="{{ selected_campaign_id }}">
+    <label for="dungeon-prompt">Dungeon request<textarea id="dungeon-prompt" name="prompt" required maxlength="4000" placeholder="A compact abandoned observatory with a hidden archive."></textarea></label>
+    <label>Optional title<input name="title" maxlength="200"></label><label>Optional reproducible seed<input name="seed" type="number"></label>
+    <button type="submit">Generate prompted draft</button>
+  </form>
+  {% if dungeon_prompt_run %}
+  <article><h3>Prompt run <code>{{ dungeon_prompt_run.run_id }}</code></h3><p>Status: <span class="status">{{ dungeon_prompt_run.status }}</span></p>
+    {% if dungeon_prompt_run.provider_id %}<p>Resolved: <code>{{ dungeon_prompt_run.provider_id }}/{{ dungeon_prompt_run.model_id }}</code>, {{ dungeon_prompt_run.effort.value }}, seed {{ dungeon_prompt_run.seed }}</p>{% endif %}
+    <p><a href="/dungeons/prompts/{{ dungeon_prompt_run.run_id }}/events">Reconnect stream</a></p>
+    {% if dungeon_prompt_run.status in ["queued", "running"] %}<form method="post" action="/dungeons/prompts/{{ dungeon_prompt_run.run_id }}/cancel"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="campaign_id" value="{{ selected_campaign_id }}"><button type="submit">Cancel prompt</button></form>{% endif %}
+    <div data-sse-url="/dungeons/prompts/{{ dungeon_prompt_run.run_id }}/events" data-sse-target="dungeon-prompt-events"></div><pre id="dungeon-prompt-events">{{ dungeon_prompt_run.model_dump(mode="json").events|tojson(indent=2) }}</pre>
+    {% if dungeon_prompt_run.result and dungeon_prompt_run.result.success %}<p><a href="/dungeons/{{ dungeon_prompt_run.result.artifact_id }}?campaign_id={{ selected_campaign_id }}">Inspect generated draft</a></p>{% elif dungeon_prompt_run.error_code %}<p>Safe result: <code>{{ dungeon_prompt_run.error_code }}</code></p>{% endif %}
+  </article>{% endif %}
+  {% else %}<p>Private model gateway is unavailable. You can still create, inspect, validate, render, export, and approve hand-authored deterministic drafts below.</p>{% endif %}
+</section>
