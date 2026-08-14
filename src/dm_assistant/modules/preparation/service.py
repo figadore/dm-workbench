@@ -26,6 +26,9 @@ from dm_assistant.modules.preparation.contracts import (
     GenerationRunSnapshot,
     GenerationStatus,
     InputPins,
+    PendingArtifactAsset,
+    PublishedGeneratedPackage,
+    PublishGeneratedPackage,
     StartGenerationRun,
     TransitionArtifact,
     VisibilityPolicy,
@@ -279,6 +282,162 @@ class PreparationService:
             # even when application and PostgreSQL clocks differ slightly.
             run.finished_at = session.scalar(select(func.now()))
         return _generation_run_record(run)
+
+    def publish_generated_package(
+        self,
+        command: PublishGeneratedPackage,
+    ) -> PublishedGeneratedPackage:
+        """Stage blobs, then atomically expose a complete version and succeeded run.
+
+        Content-addressed blobs intentionally outlive a rolled-back relational
+        transaction. No artifact, version, asset link, current pointer, or run
+        success is committed until every staged blob has validated metadata.
+        """
+
+        staged = tuple(
+            (asset, self._stage_pending_asset(asset)) for asset in command.assets
+        )
+        artifact_id = command.artifact_id or self._id_factory()
+        version_id = self._id_factory()
+        with transactional_session(self._session_factory) as session:
+            repository = self._repository_factory(session)
+            run = repository.get_generation_run(
+                command.campaign_id,
+                command.generation_run_id,
+                for_update=True,
+            )
+            if run is None:
+                raise ResourceNotFoundError("The generation run was not found.")
+            if run.status != GenerationStatus.RUNNING.value:
+                raise ConflictError(
+                    "Only a running generation run can publish a package."
+                )
+
+            artifact = repository.get_artifact(
+                command.campaign_id, artifact_id, for_update=True
+            )
+            if artifact is None:
+                if command.artifact_id is not None:
+                    raise ResourceNotFoundError(
+                        "The preparation artifact was not found."
+                    )
+                artifact = PreparationArtifact(
+                    id=artifact_id,
+                    campaign_id=command.campaign_id,
+                    artifact_type=command.artifact_type.value,
+                    title=command.title,
+                    lifecycle=ArtifactLifecycle.DRAFT.value,
+                    current_version_id=None,
+                    visibility_policy=command.visibility_policy.value,
+                    created_by=command.created_by,
+                )
+                repository.add_artifact(artifact)
+                repository.add_lifecycle_event(
+                    ArtifactLifecycleEvent(
+                        id=self._id_factory(),
+                        artifact_id=artifact.id,
+                        artifact_version_id=None,
+                        from_lifecycle=None,
+                        to_lifecycle=ArtifactLifecycle.DRAFT.value,
+                        actor=command.created_by,
+                        reason="Artifact created with complete generated package.",
+                    )
+                )
+            elif artifact.lifecycle == ArtifactLifecycle.RETIRED.value:
+                raise ConflictError("A retired artifact cannot receive new versions.")
+
+            version_number = repository.next_version_number(artifact.id)
+            self._validate_parent(
+                repository,
+                CreateArtifactVersion(
+                    campaign_id=command.campaign_id,
+                    artifact_id=artifact.id,
+                    parent_version_id=command.parent_version_id,
+                    schema_version=command.schema_version,
+                    specification=command.specification,
+                    validation_report=command.validation_report,
+                    change_summary=command.change_summary,
+                    input_pins=command.input_pins,
+                    generation_run_id=command.generation_run_id,
+                    created_by=command.created_by,
+                ),
+                version_number,
+            )
+            version = PreparationArtifactVersion(
+                id=version_id,
+                campaign_id=command.campaign_id,
+                artifact_id=artifact.id,
+                version_number=version_number,
+                parent_version_id=command.parent_version_id,
+                schema_version=command.schema_version,
+                specification=command.specification,
+                specification_sha256=canonical_json_sha256(command.specification),
+                validation_report=command.validation_report,
+                change_summary=command.change_summary,
+                input_campaign_revision_id=command.input_pins.campaign_revision_id,
+                input_corpus_snapshot_id=command.input_pins.corpus_snapshot_id,
+                input_rules_profile_id=command.input_pins.rules_profile_id,
+                input_party_snapshot_id=command.input_pins.party_snapshot_id,
+                generation_run_id=run.id,
+                created_by=command.created_by,
+            )
+            repository.add_version(version)
+            repository.flush_version(version)
+            for pending, blob in staged:
+                asset = repository.get_or_add_asset(
+                    asset_id=self._id_factory(),
+                    sha256=blob.sha256,
+                    byte_size=blob.byte_size,
+                    media_type=pending.media_type,
+                    storage_locator=blob.storage_locator,
+                )
+                if (
+                    asset.byte_size != blob.byte_size
+                    or asset.storage_locator != blob.storage_locator
+                    or asset.media_type != pending.media_type
+                ):
+                    raise ConflictError(
+                        "Stored asset metadata conflicts with its hash."
+                    )
+                repository.add_artifact_asset(
+                    ArtifactAsset(
+                        artifact_version_id=version.id,
+                        role=pending.role.value,
+                        ordinal=pending.ordinal,
+                        asset_id=asset.id,
+                    )
+                )
+            previous_lifecycle = ArtifactLifecycle(artifact.lifecycle)
+            artifact.current_version_id = version.id
+            if previous_lifecycle is not ArtifactLifecycle.DRAFT:
+                artifact.lifecycle = ArtifactLifecycle.DRAFT.value
+                repository.add_lifecycle_event(
+                    ArtifactLifecycleEvent(
+                        id=self._id_factory(),
+                        artifact_id=artifact.id,
+                        artifact_version_id=version.id,
+                        from_lifecycle=previous_lifecycle.value,
+                        to_lifecycle=ArtifactLifecycle.DRAFT.value,
+                        actor=command.created_by,
+                        reason="New immutable artifact version created.",
+                    )
+                )
+            run.status = GenerationStatus.SUCCEEDED.value
+            run.validation_report = command.validation_report
+            run.finished_at = session.scalar(select(func.now()))
+            result = PublishedGeneratedPackage(
+                artifact=_artifact_record(artifact),
+                version=_version_record(version),
+                generation_run=_generation_run_record(run),
+            )
+        return result
+
+    def _stage_pending_asset(self, asset: PendingArtifactAsset) -> StoredBlob:
+        blob = self._asset_store.put_bytes(asset.data)
+        if blob.byte_size != len(asset.data):
+            raise ConflictError("Staged asset size does not match its input bytes.")
+        self._asset_store.verify(blob)
+        return blob
 
     def create_artifact_version(
         self,

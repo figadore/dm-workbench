@@ -127,7 +127,7 @@ class DungeonGenerationRegressionCase(WorkflowModel):
 
 class DungeonWorkflowResult(WorkflowModel):
     success: bool
-    artifact_id: UUID
+    artifact_id: UUID | None
     artifact_version_id: UUID | None
     generation_run_id: UUID
     diagnostics: tuple[dict[str, JsonValue], ...]

@@ -15,12 +15,12 @@ from dm_assistant.modules.preparation import (
     ArtifactRecord,
     ArtifactType,
     AttachArtifactAsset,
-    CreateArtifact,
-    CreateArtifactVersion,
     FinishGenerationRun,
     GenerationContextPin,
     GenerationStatus,
+    PendingArtifactAsset,
     PreparationService,
+    PublishGeneratedPackage,
     StartGenerationRun,
     ToolRunPin,
     TransitionArtifact,
@@ -96,18 +96,10 @@ class DungeonStudioService:
         return self._preparation.list_artifacts(campaign_id)
 
     def create(self, command: CreateDungeonWorkflow) -> DungeonWorkflowResult:
-        artifact = self._preparation.create_artifact(
-            CreateArtifact(
-                campaign_id=command.campaign_id,
-                artifact_type=ArtifactType.DUNGEON,
-                title=command.title,
-                visibility_policy=VisibilityPolicy.DM_ONLY,
-                created_by=command.created_by,
-            )
-        )
         return self._generate_version(
             campaign_id=command.campaign_id,
-            artifact_id=artifact.id,
+            artifact_id=None,
+            artifact_title=command.title,
             parent_version_id=None,
             request=command.layout_request,
             change_summary="Create deterministic dungeon from hand-authored intent.",
@@ -120,18 +112,10 @@ class DungeonStudioService:
     ) -> DungeonWorkflowResult:
         """Persist a model-authored intent through the deterministic Studio path."""
 
-        artifact = self._preparation.create_artifact(
-            CreateArtifact(
-                campaign_id=command.campaign_id,
-                artifact_type=ArtifactType.DUNGEON,
-                title=command.title,
-                visibility_policy=VisibilityPolicy.DM_ONLY,
-                created_by=command.created_by,
-            )
-        )
         return self._generate_version(
             campaign_id=command.campaign_id,
-            artifact_id=artifact.id,
+            artifact_id=None,
+            artifact_title=command.title,
             parent_version_id=None,
             request=command.layout_request,
             change_summary="Create deterministic dungeon from model-authored intent.",
@@ -165,6 +149,7 @@ class DungeonStudioService:
         return self._generate_version(
             campaign_id=command.campaign_id,
             artifact_id=command.artifact_id,
+            artifact_title=None,
             parent_version_id=command.parent_version_id,
             request=request,
             change_summary=command.change_summary,
@@ -278,7 +263,8 @@ class DungeonStudioService:
         self,
         *,
         campaign_id: uuid.UUID,
-        artifact_id: uuid.UUID,
+        artifact_id: uuid.UUID | None,
+        artifact_title: str | None,
         parent_version_id: uuid.UUID | None,
         request: LayoutRequest,
         change_summary: str,
@@ -292,10 +278,11 @@ class DungeonStudioService:
     ) -> DungeonWorkflowResult:
         request_document = json.loads(to_canonical_json(request))
         input_scope: dict[str, JsonValue] = {
-            "artifact_id": str(artifact_id),
             "layout_request_sha256": canonical_json_sha256(request_document),
             "package_id": request.package_id,
         }
+        if artifact_id is not None:
+            input_scope["artifact_id"] = str(artifact_id)
         schema_versions: dict[str, str] = {
             "dungeon_brief": request.brief.schema_version,
             "dungeon_topology": request.topology.schema_version,
@@ -471,27 +458,6 @@ class DungeonStudioService:
             dm_notes=resolved_dm_notes,
             model_lineage=model_lineage,
         )
-        self._preparation.finish_generation_run(
-            FinishGenerationRun(
-                campaign_id=campaign_id,
-                run_id=run.id,
-                status=GenerationStatus.SUCCEEDED,
-                validation_report=validation_report,
-            )
-        )
-        version = self._preparation.create_artifact_version(
-            CreateArtifactVersion(
-                campaign_id=campaign_id,
-                artifact_id=artifact_id,
-                parent_version_id=parent_version_id,
-                schema_version=_VERSION_SCHEMA,
-                specification=specification.model_dump(mode="json"),
-                validation_report=validation_report,
-                change_summary=change_summary,
-                generation_run_id=run.id,
-                created_by=created_by,
-            )
-        )
         base_assets = (
             _PendingAsset(
                 ArtifactAssetRole.SPECIFICATION,
@@ -507,22 +473,68 @@ class DungeonStudioService:
             ),
             _dm_notes_asset(request, resolved_dm_notes),
         )
-        for asset in (*base_assets, *preview_assets):
-            self._preparation.attach_asset(
-                AttachArtifactAsset(
+        try:
+            published = self._preparation.publish_generated_package(
+                PublishGeneratedPackage(
                     campaign_id=campaign_id,
-                    artifact_version_id=version.id,
-                    role=asset.role,
-                    ordinal=asset.ordinal,
-                    media_type=asset.media_type,
-                    data=asset.data,
+                    generation_run_id=run.id,
+                    artifact_id=artifact_id,
+                    artifact_type=ArtifactType.DUNGEON,
+                    title=artifact_title or request.brief.title,
+                    visibility_policy=VisibilityPolicy.DM_ONLY,
+                    parent_version_id=parent_version_id,
+                    schema_version=_VERSION_SCHEMA,
+                    specification=specification.model_dump(mode="json"),
+                    validation_report=validation_report,
+                    change_summary=change_summary,
+                    created_by=created_by,
+                    assets=tuple(
+                        PendingArtifactAsset(
+                            role=asset.role,
+                            ordinal=asset.ordinal,
+                            media_type=asset.media_type,
+                            data=asset.data,
+                        )
+                        for asset in (*base_assets, *preview_assets)
+                    ),
                 )
+            )
+        except Exception:  # publication must not leave a running/successful run
+            persistence_diagnostic: dict[str, JsonValue] = {
+                "code": "studio.persistence_failed",
+                "message": "Generated package publication failed.",
+                "severity": "error",
+            }
+            self._preparation.finish_generation_run(
+                FinishGenerationRun(
+                    campaign_id=campaign_id,
+                    run_id=run.id,
+                    status=GenerationStatus.FAILED,
+                    validation_report={
+                        **validation_report,
+                        "valid": False,
+                        "stage": "persistence",
+                        "diagnostics": [persistence_diagnostic],
+                    },
+                )
+            )
+            _log_generation_result(
+                run_id=run.id,
+                stage="persistence",
+                diagnostics=(persistence_diagnostic,),
+            )
+            return DungeonWorkflowResult(
+                success=False,
+                artifact_id=artifact_id,
+                artifact_version_id=None,
+                generation_run_id=run.id,
+                diagnostics=(persistence_diagnostic,),
             )
         _log_generation_result(run_id=run.id, stage="completed", diagnostics=())
         return DungeonWorkflowResult(
             success=True,
-            artifact_id=artifact_id,
-            artifact_version_id=version.id,
+            artifact_id=published.artifact.id,
+            artifact_version_id=published.version.id,
             generation_run_id=run.id,
             diagnostics=diagnostics,
         )

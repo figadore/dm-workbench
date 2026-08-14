@@ -22,7 +22,9 @@ from dm_assistant.modules.preparation import (
     GenerationContextPin,
     GenerationStatus,
     InputPins,
+    PendingArtifactAsset,
     PreparationService,
+    PublishGeneratedPackage,
     StartGenerationRun,
     ToolRunPin,
     TransitionArtifact,
@@ -33,6 +35,7 @@ from dm_assistant.modules.preparation.models import (
     ArtifactAsset,
     ArtifactLifecycleEvent,
     GeneratedAsset,
+    GenerationRun,
     PreparationArtifact,
     PreparationArtifactVersion,
 )
@@ -156,6 +159,59 @@ def create_artifact_and_version(
         )
     )
     return artifact.id, version.id
+
+
+def test_complete_generated_package_is_published_atomically_with_run_success(
+    db_engine: Engine,
+    tmp_path: Path,
+) -> None:
+    campaign_id = create_campaign(db_engine)
+    service = make_service(db_engine, tmp_path)
+    run_id = start_run(service, campaign_id)
+
+    published = service.publish_generated_package(
+        PublishGeneratedPackage(
+            campaign_id=campaign_id,
+            generation_run_id=run_id,
+            title="Atomic Synthetic Archive",
+            schema_version="1.0.0",
+            specification={"package_id": "pkg_atomic", "seed": 424242},
+            validation_report={"valid": True, "diagnostics": []},
+            change_summary="Publish a complete synthetic generated package.",
+            created_by="synthetic-dm",
+            assets=(
+                PendingArtifactAsset(
+                    role=ArtifactAssetRole.SPECIFICATION,
+                    media_type="application/json",
+                    data=b'{"package_id":"pkg_atomic"}',
+                ),
+                PendingArtifactAsset(
+                    role=ArtifactAssetRole.VALIDATION_REPORT,
+                    media_type="application/json",
+                    data=b'{"valid":true}',
+                ),
+            ),
+        )
+    )
+
+    assert published.generation_run.status is GenerationStatus.SUCCEEDED
+    assert published.artifact.current_version_id == published.version.id
+    with db_engine.connect() as connection:
+        run = connection.execute(
+            select(GenerationRun.status, GenerationRun.finished_at).where(
+                GenerationRun.id == run_id
+            )
+        ).one()
+        links = list(
+            connection.scalars(
+                select(ArtifactAsset.role).where(
+                    ArtifactAsset.artifact_version_id == published.version.id
+                )
+            )
+        )
+    assert run[0] == GenerationStatus.SUCCEEDED.value
+    assert run[1] is not None
+    assert set(links) == {"specification", "validation_report"}
 
 
 def test_generation_run_pins_every_input_and_becomes_immutable(

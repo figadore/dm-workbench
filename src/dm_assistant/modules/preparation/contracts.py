@@ -141,8 +141,11 @@ class DungeonGenerationContext(ContractModel):
 
     @model_validator(mode="after")
     def normalize_constraints(self) -> Self:
-        object.__setattr__(self, "requested_constraints", tuple(self.requested_constraints))
+        object.__setattr__(
+            self, "requested_constraints", tuple(self.requested_constraints)
+        )
         return self
+
     preparation_owner_id: ShortText
     standalone_provenance: ShortText
 
@@ -234,6 +237,45 @@ class AttachArtifactAsset(ContractModel):
     data: bytes
 
 
+class PendingArtifactAsset(ContractModel):
+    """Validated bytes staged before an immutable version is published."""
+
+    role: ArtifactAssetRole
+    ordinal: int = Field(default=0, ge=0, le=32767)
+    media_type: MediaType
+    data: bytes = Field(min_length=1)
+
+
+class PublishGeneratedPackage(ContractModel):
+    """Atomically publish a fully staged generated package and succeed its run."""
+
+    campaign_id: UUID
+    generation_run_id: UUID
+    artifact_id: UUID | None = None
+    artifact_type: ArtifactType = ArtifactType.DUNGEON
+    title: ShortText
+    visibility_policy: VisibilityPolicy = VisibilityPolicy.DM_ONLY
+    parent_version_id: UUID | None = None
+    schema_version: VersionText
+    specification: dict[str, JsonValue]
+    validation_report: dict[str, JsonValue]
+    change_summary: SummaryText
+    input_pins: InputPins = InputPins()
+    created_by: ShortText
+    assets: tuple[PendingArtifactAsset, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def require_valid_unique_assets(self) -> Self:
+        if self.validation_report.get("valid") is not True:
+            raise ValueError("generated package publication requires a valid report")
+        keys = {(item.role, item.ordinal) for item in self.assets}
+        if len(keys) != len(self.assets):
+            raise ValueError(
+                "generated package asset roles and ordinals must be unique"
+            )
+        return self
+
+
 class TransitionArtifact(ContractModel):
     campaign_id: UUID
     artifact_id: UUID
@@ -297,6 +339,14 @@ class GenerationRunRecord(ContractModel):
     campaign_id: UUID
     generation_kind: str
     status: GenerationStatus
+
+
+class PublishedGeneratedPackage(ContractModel):
+    """The only successful observable result of complete package publication."""
+
+    artifact: ArtifactRecord
+    version: ArtifactVersionRecord
+    generation_run: GenerationRunRecord
 
 
 class GenerationRunSnapshot(ContractModel):

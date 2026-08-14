@@ -4,10 +4,10 @@
 
 ## Snapshot
 
-- **Last updated:** 2026-08-14 (P7-12a V2 architecture/compatibility boundary)
-- **Lifecycle:** P7-10a/P7-10b and the immediate live GPT-5.4 reliability repair are complete. P7-12a now freezes the compact V2 ownership/compatibility boundary; remaining hardening slices cover atomic package publication, real bounded message/budget semantics, durable body-free diagnostics, and rollout evidence.
+- **Last updated:** 2026-08-14 (P7-12b atomic publication WIP)
+- **Lifecycle:** P7-10a/P7-10b and the immediate live GPT-5.4 reliability repair are complete. P7-12a freezes the compact V2 ownership/compatibility boundary. P7-12b has its first atomic-publication implementation slice but still needs PostgreSQL fault injection and failure-state completion before it can be marked complete.
 - **Current phase:** P7 — Dungeon and Map Generation hardening.
-- **Current task:** P7-12a complete; P7-12b is unstarted.
+- **Current task:** P7-12b WIP.
 - **Validated status:** P3-01 is unstarted: no P3 migration, implementation, or commit exists. P5-01 is complete in committed `eea08a4`; P5-02 is unstarted: no predicate schema, migration, operation, or commit exists.
 - **Fast-track note:** P3 is required only to promote generated dungeon facts to campaign canon. It does not block standalone prompt-to-package preparation work; P5-02 remains deferred until explicit campaign grounding needs it.
 - **Next task:** **P7-12b — implement atomic generated-package completion and asset fault containment.** First action: inspect the current preparation service/repositories and asset staging path, then define the single transactional complete-package publication operation. P3-01 remains queued after this explicit user-directed reliability program.
@@ -16,6 +16,16 @@
 - **Public baseline:** history begins with the final architecture/roadmap snapshot, uses the public GitHub author identity, and is licensed `AGPL-3.0-only`.
 
 Always inspect `git status --short --branch` and the latest log before changing files.
+
+## P7-12b Atomic Publication WIP Handoff
+
+- **Implemented:** Added `PublishGeneratedPackage`, `PendingArtifactAsset`, and `PublishedGeneratedPackage` preparation contracts. `PreparationService.publish_generated_package()` stages/verifies all content-addressed blobs before opening its PostgreSQL transaction, then atomically creates a new artifact when needed, its immutable version, all asset metadata/role rows, the current-version pointer, and the successful generation run. Staged blobs may remain unreferenced after relational rollback by design.
+- **Dungeon Studio change:** Initial hand-authored and prompted generation no longer create an empty artifact before layout/rendering succeeds. They submit the complete specification, validation report, DM notes, DM/player previews, and manifests to the one publication operation. Failed initial layout/validation/preview/persistence results can now have `artifact_id=null`; successful results retain an artifact ID. Regeneration continues against its existing artifact.
+- **Tests:** Added PostgreSQL integration coverage for the successful observable atomic outcome (succeeded run, current version, and complete linked role set). `DM_TEST_DATABASE_URL` is unset here, so it was collected but skipped with the rest of the PostgreSQL suite.
+- **Checks:** `uv run pytest -q tests/unit/test_prompted_dungeon_workflow.py tests/unit/test_preparation_contracts.py tests/integration/test_preparation_persistence.py` → `14 passed, 8 skipped`; focused Ruff format/lint and strict mypy passed. `git diff --check` remains required at final handoff.
+- **Incomplete/unsafe:** Fault injection is not yet implemented for staging, Nth link, pointer update, or run finish. The generic publish exception path in `DungeonStudioService` marks the run failed, but it still needs direct integration proof for each injected persistence fault and verification that its terminal transition itself cannot mask the original failure. Do not call P7-12b complete or route V2 through this yet.
+- **Working tree:** modified `PROJECT_STATUS.md`, `src/dm_assistant/modules/preparation/{__init__.py,contracts.py,service.py}`, `src/dm_assistant/orchestration/dungeons/{contracts.py,service.py}`, and `tests/integration/test_preparation_persistence.py`; existing P7-12a Markdown changes remain committed in `e80b2b3` and were not altered.
+- **Next:** Continue **P7-12b**. First action: add a repository/asset-store fault-injection seam and PostgreSQL tests proving every failure leaves a failed run, no artifact/version/asset links/current pointer, and no success result.
 
 ## P7-12a Architecture/Compatibility Handoff
 
