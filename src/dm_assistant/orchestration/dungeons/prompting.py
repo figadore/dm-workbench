@@ -264,6 +264,7 @@ class DungeonPromptService:
                 model_task_profile_id=profile.task_profile_id,
                 model_lineage=model_lineage,
                 tool_runs=_tool_run_pins(model_lineage),
+                source_prompt=command.prompt,
             )
         )
 
@@ -394,7 +395,10 @@ def _initial_model_input(
                             "approval, or canonical state. Use stable descriptive IDs. "
                             "DungeonBrief.purpose is exactly one enum string. Brief "
                             "inhabitants, constraints, and campaign_hooks contain typed "
-                            "objects with id, text, and visibility, never bare strings."
+                            "objects with id, text, and visibility, never bare strings. "
+                            "Give each topology room a concise, human-readable name; "
+                            "keep prose constraints, hooks, and feature details in the "
+                            "brief text fields rather than opaque IDs or map syntax."
                         ),
                         "prompt": command.prompt,
                         "context": context.envelope,

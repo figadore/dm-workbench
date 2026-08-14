@@ -17,6 +17,15 @@
 
 Always inspect `git status --short --branch` and the latest log before changing files.
 
+## DM Notes and DM-map Callouts Handoff
+
+- **Completed:** Prompted Dungeon Studio versions now pin the original DM request alongside a readable DM-notes index. The dungeon detail view displays the request, brief overview, inhabitants, constraints, hooks, and numbered room notes; a DM-only plain-text notes download is attached to each new version. DM previews and DM export maps receive a render-only numbered room-name overlay that points to those notes. Player SVG/PNG/PDF/Roll20 outputs use the untouched package and therefore fail closed against the callouts and notes. Existing stored prompted specifications recover the original request from their already-pinned model-run input; older/manual specifications receive deterministic fallback room notes.
+- **Changed:** `src/dm_assistant/orchestration/dungeons/contracts.py`; `src/dm_assistant/orchestration/dungeons/prompting.py`; `src/dm_assistant/orchestration/dungeons/service.py`; `src/dm_assistant/web/routes.py`; `src/dm_assistant/web/templates/dungeon_detail.html`; `packages/dungeon-engine/src/dm_dungeon/contracts/topology.py`; synthetic fixture `packages/dungeon-engine/tests/fixtures/sunken_archive.v1.json`; `tests/unit/test_prompted_dungeon_workflow.py`; `dm-assistant-technical-architecture.md`. No migration: notes are an additive field in each immutable JSON specification.
+- **Checks:** `uv run pytest -q tests/unit/test_prompted_dungeon_workflow.py packages/dungeon-engine/tests/test_contracts.py packages/dungeon-engine/tests/test_rendering.py` → `32 passed in 0.55s`; full `uv run pytest -q packages/dungeon-engine/tests` → `111 passed in 2.08s`; focused Ruff/format, strict mypy, and `git diff --check` passed. The combined web-auth run remains blocked by the existing local `.env` gateway-token versus disabled-fixture policy conflict.
+- **Working tree:** the files above are modified and uncommitted; pre-existing work was not overwritten.
+- **Next:** **P3-01** remains the single recommended task. First action: read the canonical revision/change-set architecture section and define the first migration/contracts.
+- **Suggested commit:** `P7-10b add durable DM notes and map callouts`.
+
 ## Current Repair Handoff
 
 - **WIP:** Replaced the Dungeon Studio page's synthetic prompt entry with `DungeonPromptWorkbenchService`, which uses the existing `PiGatewayClient`, `DungeonPromptService`, active campaign ownership, persisted `dungeon-task-baseline-v2` selection defaults, generated seeds, and the exact standalone task scope. The form starts a reconnectable SSE status run, exposes safe completion/failure/cancel state, and links a successful persisted draft; gateway-disabled pages explicitly retain the hand-authored workflow. The existing synthetic model workbench remains only for the separate Ask/model-shell legacy path, not Dungeon Studio prompting.

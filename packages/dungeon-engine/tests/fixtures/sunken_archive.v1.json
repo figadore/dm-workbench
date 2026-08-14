@@ -66,6 +66,7 @@
     "rooms": [
       {
         "id": "room_entrance",
+        "name": "Entrance",
         "floor_id": "floor_upper",
         "role": "entrance",
         "required": true,
@@ -87,6 +88,7 @@
       },
       {
         "id": "room_hall",
+        "name": "Archive Hall",
         "floor_id": "floor_upper",
         "role": "hub",
         "required": true,
@@ -108,6 +110,7 @@
       },
       {
         "id": "room_vault",
+        "name": "Secret Index Vault",
         "floor_id": "floor_upper",
         "role": "treasure",
         "required": false,
@@ -129,6 +132,7 @@
       },
       {
         "id": "room_crypt",
+        "name": "Drowned Crypt",
         "floor_id": "floor_lower",
         "role": "puzzle",
         "required": true,
@@ -150,6 +154,7 @@
       },
       {
         "id": "room_antechamber",
+        "name": "Flooded Antechamber",
         "floor_id": "floor_lower",
         "role": "transition",
         "required": true,
@@ -171,6 +176,7 @@
       },
       {
         "id": "room_sanctum",
+        "name": "Guardian Sanctum",
         "floor_id": "floor_lower",
         "role": "boss",
         "required": true,
@@ -192,6 +198,7 @@
       },
       {
         "id": "room_exit",
+        "name": "Dry Exit",
         "floor_id": "floor_lower",
         "role": "exit",
         "required": true,

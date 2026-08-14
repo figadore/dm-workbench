@@ -23,12 +23,28 @@ class PromptedDungeonModelLineage(WorkflowModel):
     intent: DungeonGenerationIntentV1
 
 
+class DungeonRoomDmNote(WorkflowModel):
+    """DM-facing prose linked to one stable generated room."""
+
+    room_id: str = Field(min_length=1, max_length=200)
+    name: str = Field(min_length=1, max_length=200)
+    text: str = Field(min_length=1, max_length=4_000)
+
+
+class DungeonDmNotes(WorkflowModel):
+    """Readable preparation material kept outside the pure dungeon package."""
+
+    source_prompt: str | None = Field(default=None, min_length=1, max_length=4_000)
+    room_notes: tuple[DungeonRoomDmNote, ...] = ()
+
+
 class DungeonStudioSpecification(WorkflowModel):
     """Immutable persisted input plus exact deterministic output and lineage."""
 
     schema_version: Literal["1.0.0"]
     layout_request: LayoutRequest
     package: DungeonPackage
+    dm_notes: DungeonDmNotes = DungeonDmNotes()
     model_lineage: tuple[PromptedDungeonModelLineage, ...] = ()
 
 
@@ -74,6 +90,7 @@ class CreatePromptedDungeonWorkflow(WorkflowModel):
     model_task_profile_id: UUID
     model_lineage: tuple[PromptedDungeonModelLineage, ...] = Field(min_length=1)
     tool_runs: tuple[ToolRunPin, ...] = ()
+    source_prompt: str = Field(min_length=1, max_length=4_000)
 
 
 class RegenerateDungeonWorkflow(WorkflowModel):

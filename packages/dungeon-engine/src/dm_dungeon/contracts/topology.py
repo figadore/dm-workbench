@@ -139,6 +139,9 @@ class TopologyRoom(VisibleContract):
 
     id: OpaqueId
     floor_id: OpaqueId
+    # A concise human-facing name; prose-heavy room notes remain in the
+    # Workbench preparation layer rather than the deterministic kernel.
+    name: ShortText | None = None
     role: RoomRole
     required: bool
     size: RoomSizeConstraints

@@ -566,7 +566,7 @@ renderer-neutral DungeonPackage
 
 The model authors intent through versioned Pydantic/JSON schemas and high-level tools; it does not emit raw coordinates for every wall or raw renderer syntax. The Workbench performs retrieval and model orchestration, then calls the in-process pure dungeon package. The package can also be driven directly from hand-authored synthetic JSON through its CLI/test adapter and cannot access the Workbench database or model gateway.
 
-Geometry-affecting features and stable encounter slots belong in `DungeonPackage`; prose-heavy room content and links to separately versioned encounter artifacts belong to the Workbench preparation layer and reference those stable room/zone/marker IDs. This preserves independent encounter regeneration without making the dungeon kernel depend on encounter orchestration.
+Geometry-affecting features and stable encounter slots belong in `DungeonPackage`; prose-heavy room content and links to separately versioned encounter artifacts belong to the Workbench preparation layer and reference those stable room/zone/marker IDs. Each immutable Studio specification retains the original DM request, brief prose, hooks/constraints, and DM room-note index. A render-only DM overlay derives numbered room-name callouts from that index; it is included only in DM previews/exports and never changes the canonical deterministic package or player output. This preserves independent encounter regeneration without making the dungeon kernel depend on encounter orchestration.
 
 ### Dungeon Specification Layers
 

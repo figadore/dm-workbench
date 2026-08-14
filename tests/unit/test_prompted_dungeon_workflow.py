@@ -28,8 +28,20 @@ from dm_assistant.orchestration.dungeons.prompting import (
     compile_layout_request,
     resolve_dungeon_prompt_profile,
 )
+from dm_assistant.orchestration.dungeons.service import (
+    _build_dm_notes,
+    _dm_notes_text,
+    _dm_presentation_package,
+)
 from dm_assistant.orchestration.modeling import GatewayCompletion
-from dm_dungeon import generate_layout, read_dungeon_package, to_canonical_json
+from dm_dungeon import (
+    RenderAudience,
+    SvgRenderRequest,
+    generate_layout,
+    read_dungeon_package,
+    render_svg,
+    to_canonical_json,
+)
 
 FIXTURE_PATH = (
     Path(__file__).parents[2]
@@ -247,6 +259,7 @@ def test_prompt_workflow_uses_only_structured_validation_and_persists_lineage() 
     assert context.envelope_kind == "dungeon_generation"
     assert payload["prompt_input_sha256"] != ""
     assert context.source_links == ()
+    assert stored.source_prompt == "A flooded archive beneath a lighthouse."
     assert len(stored.model_lineage) == 1
     assert stored.model_lineage[0].model_run.turn_count == 2
     assert stored.tool_runs[0].tool_name == "validate_dungeon_intent"
@@ -257,6 +270,45 @@ def test_prompt_workflow_uses_only_structured_validation_and_persists_lineage() 
         "validate_dungeon_intent",
         "regenerate_dungeon_layout",
     )
+
+
+def test_dm_notes_are_readable_and_dm_map_callouts_never_modify_player_map() -> None:
+    package = read_dungeon_package(FIXTURE_PATH)
+    request = compile_layout_request(_intent(), 1842)
+    notes = _build_dm_notes(
+        request,
+        "Access to the larger lower level should depend on discovering a secret passage from the upper archive.",
+        package,
+    )
+
+    assert notes.room_notes[0].name == "Entrance"
+    assert "## Original request" in _dm_notes_text(request, notes)
+    presented = _dm_presentation_package(package, notes)
+    assert len(presented.labels) == len(package.labels) + len(notes.room_notes)
+    assert all(
+        label.visibility.value == "dm_only"
+        for label in presented.labels[-len(notes.room_notes) :]
+    )
+    dm_svg = render_svg(
+        presented,
+        SvgRenderRequest(
+            schema_version="1.0.0",
+            package_id=presented.id,
+            floor_id="floor_upper",
+            audience=RenderAudience.DM,
+        ),
+    )
+    player_svg = render_svg(
+        presented,
+        SvgRenderRequest(
+            schema_version="1.0.0",
+            package_id=presented.id,
+            floor_id="floor_upper",
+            audience=RenderAudience.PLAYER,
+        ),
+    )
+    assert "[1] Entrance" in (dm_svg.svg or "")
+    assert "[1] Entrance" not in (player_svg.svg or "")
 
 
 def test_prompt_workflow_repairs_invalid_topology_with_remaining_budget() -> None:

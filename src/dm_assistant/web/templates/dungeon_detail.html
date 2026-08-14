@@ -10,12 +10,21 @@
   <h2>Version {{ version.version_number }}{% if version.id == detail.current_version_id %} (current){% endif %}</h2>
   <p>{{ version.change_summary }}</p>
   <p><code>{{ version.id }}</code> · parent <code>{{ version.parent_version_id or "none" }}</code> · spec hash <code>{{ version.specification_sha256 }}</code></p>
+  {% set brief = version.specification["layout_request"]["brief"] %}{% set dm_notes = dm_notes_by_version[version.id] %}
+  <details open><summary>DM notes and generation brief</summary>
+    {% if dm_notes.source_prompt %}<h3>Original request</h3><pre>{{ dm_notes.source_prompt }}</pre>{% endif %}
+    <h3>Overview</h3><p>{{ brief["summary"] }}</p>
+    {% if brief.get("inhabitants") %}<h3>Inhabitants</h3><ul>{% for item in brief["inhabitants"] %}<li>{{ item["text"] }}</li>{% endfor %}</ul>{% endif %}
+    {% if brief.get("constraints") %}<h3>Constraints</h3><ul>{% for item in brief["constraints"] %}<li>{{ item["text"] }}</li>{% endfor %}</ul>{% endif %}
+    {% if brief.get("campaign_hooks") %}<h3>Hooks</h3><ul>{% for item in brief["campaign_hooks"] %}<li>{{ item["text"] }}</li>{% endfor %}</ul>{% endif %}
+    {% if dm_notes.room_notes %}<h3>Room notes</h3><ol>{% for note in dm_notes.room_notes %}<li id="room-note-{{ note.room_id }}"><strong>{{ note.name }}</strong>: {{ note.text }}</li>{% endfor %}</ol><p>DM-map callouts use these room-note numbers; they are excluded from all player outputs.</p>{% endif %}
+  </details>
   <details><summary>Validation and pinned input</summary><pre>{{ version.validation_report|tojson(indent=2) }}</pre><pre>{{ version.input_pins.model_dump(mode="json")|tojson(indent=2) }}</pre></details>
   {% if generation_runs[version.id] %}<details><summary>Generation context inspector</summary><dl><dt>Envelope kind</dt><dd><code>{{ generation_runs[version.id].context_envelope_kind or "none" }}</code></dd><dt>Payload version</dt><dd><code>{{ generation_runs[version.id].context_payload_version or "none" }}</code></dd><dt>Payload hash</dt><dd><code>{{ generation_runs[version.id].context_payload_sha256 or "none" }}</code></dd><dt>Selected citation/source labels</dt><dd><pre>{{ generation_runs[version.id].context_source_links|tojson(indent=2) }}</pre></dd></dl><p>Standalone dungeon runs intentionally have no campaign revision, corpus snapshot, rules profile, or source bodies.</p></details><details><summary>Generation run, schemas, tools, and renderer lineage</summary><pre>{{ generation_runs[version.id].model_dump(mode="json")|tojson(indent=2) }}</pre></details>{% endif %}
   <div class="assets">
   {% for asset in version_assets[version.id] %}
     <div>
-      <strong>{{ asset.role.value }} #{{ asset.ordinal }}</strong><br>
+      <strong>{% if asset.role.value == "other" %}DM notes{% else %}{{ asset.role.value }} #{{ asset.ordinal }}{% endif %}</strong><br>
       <a href="/assets/{{ asset.asset_id }}?campaign_id={{ campaign_id }}">Open/download ({{ asset.media_type }})</a>
       {% if asset.media_type in ["image/png", "image/svg+xml"] %}<br><img class="preview" src="/assets/{{ asset.asset_id }}?campaign_id={{ campaign_id }}" alt="{{ asset.role.value }} preview">{% endif %}
     </div>

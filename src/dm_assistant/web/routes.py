@@ -549,6 +549,12 @@ def create_web_router(
             version.id: preparation.list_assets(campaign_id, version.id)
             for version in versions
         }
+        dm_notes_by_version = {
+            version.id: dungeons.notes_for_version(
+                campaign_id=campaign_id, artifact_version_id=version.id
+            )
+            for version in versions
+        }
         generation_runs = {
             version.id: (
                 preparation.get_generation_run(campaign_id, version.generation_run_id)
@@ -565,6 +571,7 @@ def create_web_router(
                 "detail": detail,
                 "versions": versions,
                 "version_assets": version_assets,
+                "dm_notes_by_version": dm_notes_by_version,
                 "generation_runs": generation_runs,
             },
         )

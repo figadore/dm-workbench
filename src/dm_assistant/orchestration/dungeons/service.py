@@ -31,7 +31,9 @@ from dm_assistant.observability import bind_log_context, get_logger
 from dm_assistant.orchestration.dungeons.contracts import (
     CreateDungeonWorkflow,
     CreatePromptedDungeonWorkflow,
+    DungeonDmNotes,
     DungeonGenerationRegressionCase,
+    DungeonRoomDmNote,
     DungeonStudioDetail,
     DungeonStudioSpecification,
     DungeonVersionComparison,
@@ -56,6 +58,13 @@ from dm_dungeon import (
     to_canonical_json,
     validate_geometry,
     validate_topology,
+)
+from dm_dungeon.contracts import (
+    GridPoint,
+    Label,
+    RenderLayer,
+    RenderLayerKind,
+    Visibility,
 )
 from dm_dungeon.export import (
     PdfArtifact,
@@ -132,6 +141,7 @@ class DungeonStudioService:
             model_task_profile_id=command.model_task_profile_id,
             model_lineage=command.model_lineage,
             tool_runs=command.tool_runs,
+            dm_notes=_build_dm_notes(command.layout_request, command.source_prompt),
         )
 
     def regenerate(
@@ -159,6 +169,7 @@ class DungeonStudioService:
             request=request,
             change_summary=command.change_summary,
             created_by=command.created_by,
+            dm_notes=_resolved_dm_notes(specification),
         )
 
     def export(self, command: ExportDungeonWorkflow) -> tuple[uuid.UUID, ...]:
@@ -167,7 +178,9 @@ class DungeonStudioService:
             command.artifact_version_id,
         )
         specification = _load_specification(snapshot.specification)
-        assets = _export_assets(specification.package)
+        assets = _export_assets(
+            specification.package, _resolved_dm_notes(specification)
+        )
         records = tuple(
             self._preparation.attach_asset(
                 AttachArtifactAsset(
@@ -203,6 +216,14 @@ class DungeonStudioService:
             )
         )
         return self.inspect(campaign_id=campaign_id, artifact_id=artifact_id)
+
+    def notes_for_version(
+        self, *, campaign_id: uuid.UUID, artifact_version_id: uuid.UUID
+    ) -> DungeonDmNotes:
+        """Return presentation notes, including a safe legacy-spec fallback."""
+
+        version = self._preparation.get_version(campaign_id, artifact_version_id)
+        return _resolved_dm_notes(_load_specification(version.specification))
 
     def inspect(
         self,
@@ -267,6 +288,7 @@ class DungeonStudioService:
         model_task_profile_id: uuid.UUID | None = None,
         model_lineage: tuple[PromptedDungeonModelLineage, ...] = (),
         tool_runs: tuple[ToolRunPin, ...] = (),
+        dm_notes: DungeonDmNotes | None = None,
     ) -> DungeonWorkflowResult:
         request_document = json.loads(to_canonical_json(request))
         input_scope: dict[str, JsonValue] = {
@@ -394,7 +416,8 @@ class DungeonStudioService:
             )
 
         try:
-            preview_assets = _preview_assets(package)
+            resolved_dm_notes = dm_notes or _build_dm_notes(request, None, package)
+            preview_assets = _preview_assets(package, resolved_dm_notes)
         except ConflictError as error:
             logger.error(
                 "dungeon preview generation failed",
@@ -445,6 +468,7 @@ class DungeonStudioService:
             schema_version=_STUDIO_SCHEMA_VERSION,
             layout_request=request,
             package=package,
+            dm_notes=resolved_dm_notes,
             model_lineage=model_lineage,
         )
         self._preparation.finish_generation_run(
@@ -481,6 +505,12 @@ class DungeonStudioService:
                 "application/json",
                 _canonical_json_bytes(validation_report),
             ),
+            _PendingAsset(
+                ArtifactAssetRole.OTHER,
+                0,
+                "text/plain; charset=utf-8",
+                _dm_notes_text(request, resolved_dm_notes).encode(),
+            ),
         )
         for asset in (*base_assets, *preview_assets):
             self._preparation.attach_asset(
@@ -501,6 +531,134 @@ class DungeonStudioService:
             generation_run_id=run.id,
             diagnostics=diagnostics,
         )
+
+
+def _resolved_dm_notes(specification: DungeonStudioSpecification) -> DungeonDmNotes:
+    if specification.dm_notes.room_notes:
+        return specification.dm_notes
+    source_prompt = specification.dm_notes.source_prompt
+    if source_prompt is None:
+        for lineage in specification.model_lineage:
+            for message in lineage.model_run.run_input.messages:
+                try:
+                    document = json.loads(message.content)
+                except json.JSONDecodeError:
+                    continue
+                prompt = document.get("prompt")
+                if isinstance(prompt, str) and prompt:
+                    source_prompt = prompt
+                    break
+            if source_prompt is not None:
+                break
+    return _build_dm_notes(
+        specification.layout_request, source_prompt, specification.package
+    )
+
+
+def _build_dm_notes(
+    request: LayoutRequest,
+    source_prompt: str | None,
+    package: DungeonPackage | None = None,
+) -> DungeonDmNotes:
+    """Build durable, human-readable room notes without changing kernel state."""
+
+    floors = {floor.id: floor.name for floor in request.topology.floors}
+    feature_names: dict[str, list[str]] = {}
+    for feature in () if package is None else package.features:
+        if feature.room_id is not None:
+            detail = feature.name
+            if feature.details:
+                detail = f"{detail}: {feature.details}"
+            feature_names.setdefault(feature.room_id, []).append(detail)
+    notes: list[DungeonRoomDmNote] = []
+    for room in request.topology.rooms:
+        name = room.name or _humanize_id(room.id)
+        fragments = [f"{name} is a {room.role.value.replace('_', ' ')} area"]
+        floor_name = floors.get(room.floor_id)
+        if floor_name:
+            fragments.append(f"on {floor_name}")
+        if room.tags:
+            fragments.append(f"Tags: {', '.join(room.tags)}")
+        if room.id in feature_names:
+            fragments.append(f"Features: {'; '.join(feature_names[room.id])}")
+        notes.append(
+            DungeonRoomDmNote(
+                room_id=room.id,
+                name=name,
+                text=". ".join(fragments) + ".",
+            )
+        )
+    return DungeonDmNotes(source_prompt=source_prompt, room_notes=tuple(notes))
+
+
+def _humanize_id(value: str) -> str:
+    return value.removeprefix("room_").replace("_", " ").replace("-", " ").title()
+
+
+def _dm_notes_text(request: LayoutRequest, dm_notes: DungeonDmNotes) -> str:
+    """Create a portable DM-only notes download from the immutable specification."""
+
+    brief = request.brief
+    sections = [f"# {brief.title}", "", brief.summary]
+    if dm_notes.source_prompt:
+        sections.extend(("", "## Original request", dm_notes.source_prompt))
+    for heading, items in (
+        ("Inhabitants", brief.inhabitants),
+        ("Constraints", brief.constraints),
+        ("Hooks", brief.campaign_hooks),
+    ):
+        if items:
+            sections.extend(
+                ("", f"## {heading}", *[f"- {item.text}" for item in items])
+            )
+    if dm_notes.room_notes:
+        sections.extend(("", "## Room notes"))
+        sections.extend(
+            f"{index}. {note.name}: {note.text}"
+            for index, note in enumerate(dm_notes.room_notes, start=1)
+        )
+    return "\n".join(sections) + "\n"
+
+
+def _dm_presentation_package(
+    package: DungeonPackage, dm_notes: DungeonDmNotes
+) -> DungeonPackage:
+    """Add DM-only numbered room callouts to a render-only package copy."""
+
+    if not dm_notes.room_notes:
+        return package
+    layer_id = "dm_room_notes"
+    layer = RenderLayer(
+        id=layer_id,
+        name="DM room-note callouts",
+        kind=RenderLayerKind.DM_ANNOTATIONS,
+        z_index=101,
+        include_in_dm_export=True,
+        include_in_player_export=False,
+        visibility=Visibility.DM_ONLY,
+    )
+    rooms = {room.id: room for room in package.rooms}
+    labels: list[Label] = list(package.labels)
+    for index, note in enumerate(dm_notes.room_notes, start=1):
+        room = rooms.get(note.room_id)
+        if room is None:
+            continue
+        points = room.boundary.points
+        x = (min(point.x for point in points) + max(point.x for point in points)) // 2
+        y = (min(point.y for point in points) + max(point.y for point in points)) // 2
+        labels.append(
+            Label(
+                id=f"dm_note_{note.room_id}",
+                layer_id=layer_id,
+                floor_id=room.floor_id,
+                visibility=Visibility.DM_ONLY,
+                text=f"[{index}] {note.name}",
+                position=GridPoint(x=x, y=y),
+            )
+        )
+    return package.model_copy(
+        update={"layers": (*package.layers, layer), "labels": tuple(labels)}
+    )
 
 
 def _log_generation_result(
@@ -527,13 +685,20 @@ def _log_generation_result(
         )
 
 
-def _preview_assets(package: DungeonPackage) -> tuple[_PendingAsset, ...]:
+def _preview_assets(
+    package: DungeonPackage, dm_notes: DungeonDmNotes
+) -> tuple[_PendingAsset, ...]:
     assets: list[_PendingAsset] = []
     for floor_index, floor in enumerate(package.floors):
         for audience_index, audience in enumerate(RenderAudience):
             ordinal = floor_index * 2 + audience_index
+            rendered_package = (
+                _dm_presentation_package(package, dm_notes)
+                if audience is RenderAudience.DM
+                else package
+            )
             svg = render_svg(
-                package,
+                rendered_package,
                 SvgRenderRequest(
                     schema_version="1.0.0",
                     package_id=package.id,
@@ -561,7 +726,7 @@ def _preview_assets(package: DungeonPackage) -> tuple[_PendingAsset, ...]:
                 _PendingAsset(svg_role, floor_index, "image/svg+xml", svg.svg.encode())
             )
             png = export_png(
-                package,
+                rendered_package,
                 PngExportRequest(
                     schema_version="1.0.0",
                     package_id=package.id,
@@ -604,13 +769,20 @@ def _preview_assets(package: DungeonPackage) -> tuple[_PendingAsset, ...]:
     return tuple(assets)
 
 
-def _export_assets(package: DungeonPackage) -> tuple[_PendingAsset, ...]:
+def _export_assets(
+    package: DungeonPackage, dm_notes: DungeonDmNotes
+) -> tuple[_PendingAsset, ...]:
     assets: list[_PendingAsset] = []
     for floor_index, floor in enumerate(package.floors):
         for audience_index, audience in enumerate(RenderAudience):
             audience_ordinal = floor_index * 2 + audience_index
+            rendered_package = (
+                _dm_presentation_package(package, dm_notes)
+                if audience is RenderAudience.DM
+                else package
+            )
             pdf = export_pdf(
-                package,
+                rendered_package,
                 PdfExportRequest(
                     schema_version="1.0.0",
                     package_id=package.id,
@@ -621,7 +793,7 @@ def _export_assets(package: DungeonPackage) -> tuple[_PendingAsset, ...]:
             )
             _append_pdf_assets(assets, pdf, floor_index, audience, audience_ordinal)
             roll20 = export_roll20_bundle(
-                package,
+                rendered_package,
                 Roll20ExportRequest(
                     schema_version="1.0.0",
                     package_id=package.id,
