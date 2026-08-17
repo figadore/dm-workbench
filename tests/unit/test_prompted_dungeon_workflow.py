@@ -1,6 +1,7 @@
 """Synthetic P7-09 prompt-to-dungeon workflow coverage."""
 
 import uuid
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,7 @@ from dm_assistant.modules.modeling import (
     DungeonGenerationIntentV1,
     GatewayModelCatalogEntry,
     ModelEndpointProfile,
+    ModelRunInput,
     PromptMessage,
     ReasoningEffort,
     ReasoningLevel,
@@ -22,12 +24,14 @@ from dm_assistant.orchestration.dungeons import (
     CreatePromptedDungeonWorkflow,
     DungeonGenerationRegressionCase,
     DungeonPromptService,
+    DungeonV2SubmissionService,
     DungeonWorkflowResult,
     PromptDungeonWorkflow,
 )
 from dm_assistant.orchestration.dungeons.prompting import (
     compile_layout_request,
     resolve_dungeon_prompt_profile,
+    resolve_dungeon_v2_prompt_profile,
 )
 from dm_assistant.orchestration.dungeons.service import (
     _build_dm_notes,
@@ -190,6 +194,121 @@ def test_live_gateway_catalog_resolves_hyphenated_dungeon_profile() -> None:
     assert profile.tool_budget == len(profile.allowed_tools) == 5
     assert profile.token_budget == 128_000
     assert "generate_dungeon_layout" in profile.allowed_tools
+
+
+def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
+    proposal = {
+        "proposal_version": "2",
+        "design": {
+            "schema_version": "2.0.0",
+            "title": "Salt Cellar",
+            "premise": "A sealed ledger waits below the tide.",
+            "themes": ["salt"],
+            "floors": [
+                {
+                    "local_ref": "cellar",
+                    "name": "Salt Cellar",
+                    "rooms": [
+                        {"local_ref": "entry", "name": "Wet Steps", "role": "entrance"},
+                        {
+                            "local_ref": "vault",
+                            "name": "Ledger Vault",
+                            "role": "objective",
+                        },
+                    ],
+                }
+            ],
+            "connections": [
+                {
+                    "local_ref": "entry-vault",
+                    "from_ref": "entry",
+                    "to_ref": "vault",
+                    "passage": "door",
+                }
+            ],
+            "objectives": [{"room_ref": "vault", "kind": "final_objective"}],
+            "dependencies": [],
+        },
+    }
+    gateway = FakeGatewayClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_intent_v2",
+                        call_id="submit-1",
+                        arguments={"proposal": proposal},
+                    ),
+                ),
+                input_tokens=10,
+                output_tokens=10,
+            ),
+        )
+    )
+    profile = resolve_dungeon_v2_prompt_profile(
+        provider_id="faux",
+        model_id="faux_deterministic_v1",
+        capabilities=("text", "tool_calls"),
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+    )
+
+    result = DungeonV2SubmissionService(gateway).submit(
+        profile=profile,
+        run_input=ModelRunInput(
+            messages=(PromptMessage(role="user", content="synthetic request"),)
+        ),
+        seed=1842,
+    )
+
+    assert result.compilation is not None and result.compilation.accepted
+    assert result.layout_request is not None
+    assert result.model_run.turn_count == 1
+    assert result.model_run.tool_invocations[0].tool_name == "submit_dungeon_intent_v2"
+    assert tuple(schema.name for schema in gateway.tool_schemas) == (
+        "submit_dungeon_intent_v2",
+    )
+
+    invalid = deepcopy(proposal)
+    invalid_design = invalid["design"]
+    assert isinstance(invalid_design, dict)
+    invalid_design["objectives"] = []
+    repair_gateway = FakeGatewayClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_intent_v2",
+                        call_id="submit-invalid",
+                        arguments={"proposal": invalid},
+                    ),
+                ),
+                input_tokens=10,
+                output_tokens=10,
+            ),
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_intent_v2",
+                        call_id="submit-repair",
+                        arguments={"proposal": proposal},
+                    ),
+                ),
+                input_tokens=10,
+                output_tokens=10,
+            ),
+        )
+    )
+    repaired = DungeonV2SubmissionService(repair_gateway).submit(
+        profile=profile,
+        run_input=ModelRunInput(
+            messages=(PromptMessage(role="user", content="synthetic request"),)
+        ),
+        seed=1842,
+    )
+    assert repaired.repaired is True
+    assert len(repaired.model_runs) == 2
+    assert repaired.compilation is not None and repaired.compilation.accepted
 
 
 def test_failed_generation_regression_case_is_self_contained_and_replayable() -> None:

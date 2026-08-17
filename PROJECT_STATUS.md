@@ -4,18 +4,27 @@
 
 ## Snapshot
 
-- **Last updated:** 2026-08-14 (P7-12d compact V2 compiler complete)
-- **Lifecycle:** P7-10a/P7-10b and the immediate live GPT-5.4 reliability repair are complete. P7-12a freezes the compact V2 ownership/compatibility boundary, P7-12b makes publication atomic, P7-12c enforces safe bounded runs, and P7-12d provides the pure compact V2 compiler. V2 structured submission work is next.
+- **Last updated:** 2026-08-14 (P7-12e structured V2 submission complete)
+- **Lifecycle:** P7-10a/P7-10b and the immediate live GPT-5.4 reliability repair are complete. P7-12a freezes the compact V2 ownership/compatibility boundary, P7-12b makes publication atomic, P7-12c enforces safe bounded runs, P7-12d provides the pure compact V2 compiler, and P7-12e adds one-submit V2 orchestration with one bounded repair. Shared CLI/web durable-attempt integration is next.
 - **Current phase:** P7 — Dungeon and Map Generation hardening.
-- **Current task:** P7-12d complete; P7-12e is unstarted.
+- **Current task:** P7-12e complete; P7-12f is unstarted.
 - **Validated status:** P3-01 is unstarted: no P3 migration, implementation, or commit exists. P5-01 is complete in committed `eea08a4`; P5-02 is unstarted: no predicate schema, migration, operation, or commit exists.
 - **Fast-track note:** P3 is required only to promote generated dungeon facts to campaign canon. It does not block standalone prompt-to-package preparation work; P5-02 remains deferred until explicit campaign grounding needs it.
-- **Next task:** **P7-12e — implement `submit_dungeon_intent_v2` and one bounded submission repair.** First action: inspect the existing V1 prompt profile/tool runner and introduce the Workbench-only `DungeonGenerationProposalV2` wrapper around the new pure design contract. P3-01 remains queued after this explicit user-directed reliability program.
+- **Next task:** **P7-12f — shared CLI/web V2 integration, durable attempts, and body-free observability.** First action: inspect CLI/web prompt entry points and generation-run persistence to design the shared `DungeonPromptApplicationService` without routing existing V1 traffic prematurely. P3-01 remains queued after this explicit user-directed reliability program.
 - **Deferred design note:** A post-P7 player-map reveal-overlay workflow is recorded in `dm-assistant-implementation-plan.md`: independently publishable/printable aligned map sections for discovered secret areas, explicit durable reveal provenance, and fail-closed browser delivery. It is intentionally not scope for P7-10b.
 - **Schema head:** `0008_workbench_defaults`.
 - **Public baseline:** history begins with the final architecture/roadmap snapshot, uses the public GitHub author identity, and is licensed `AGPL-3.0-only`.
 
 Always inspect `git status --short --branch` and the latest log before changing files.
+
+## P7-12e Structured Submission Handoff
+
+- **Completed:** Added Workbench-only `DungeonGenerationProposalV2`, bounded safe abstention, and the sole `SubmitDungeonIntentV2Input` wrapper around the pure V2 design. `StructuredSubmissionRunner` makes exactly one provider request, accepts exactly one named tool call, parses JSON arguments under strict schemas, records one invocation, and never asks for duplicate final text.
+- **V2 path:** `DungeonV2SubmissionService` resolves a distinct tool-call-required profile (`2.0.0`, one turn/one tool), compiles and deterministic-preflights the pure design using the server-provided seed, and returns only bounded acceptance/diagnostic metadata. A rejected non-abstention receives at most one **fresh** request containing the full compact prior proposal plus at most eight safe diagnostics. It shares one monotonic deadline and remaining measured token/time budget; unavailable usage stops repair safely. It neither persists nor approves; P7-12f owns durable surface integration.
+- **Tests/checks:** Faux gateway coverage proves a valid compact submit exposes only `submit_dungeon_intent_v2`, produces a compiled request, records one invocation, and makes no second completion; a compiler rejection produces exactly one fresh repair and records both runs. `uv run pytest -q tests/unit/test_prompted_dungeon_workflow.py tests/unit/test_modeling_service.py tests/unit/test_model_gateway_client.py` → `24 passed`; focused Ruff and strict mypy passed; `git diff --check` passed.
+- **Changed:** `src/dm_assistant/orchestration/modeling/{__init__.py,submission.py}`, `src/dm_assistant/orchestration/dungeons/{__init__.py,contracts.py,prompting.py}`, `tests/unit/test_prompted_dungeon_workflow.py`, and this handoff. No migration.
+- **Working tree:** listed files are modified/untracked and uncommitted; P7-12d remains committed and untouched.
+- **Next:** **P7-12f**. First action: inspect CLI/web prompt entry points and generation-run persistence before introducing a shared V2 application service; keep V1 traffic unchanged until that durable integration is complete.
 
 ## P7-12d Compact V2 Compiler Handoff
 

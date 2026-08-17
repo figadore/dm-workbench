@@ -9,6 +9,10 @@ from dm_assistant.orchestration.modeling.service import (
     ServerTool,
     build_dungeon_intent_tool_result,
 )
+from dm_assistant.orchestration.modeling.submission import (
+    StructuredSubmissionRunner,
+    StructuredSubmissionTool,
+)
 
 __all__ = [
     "GatewayClient",
@@ -17,5 +21,7 @@ __all__ = [
     "ModelRunAbstained",
     "ModelTaskRunner",
     "ServerTool",
+    "StructuredSubmissionRunner",
+    "StructuredSubmissionTool",
     "build_dungeon_intent_tool_result",
 ]
