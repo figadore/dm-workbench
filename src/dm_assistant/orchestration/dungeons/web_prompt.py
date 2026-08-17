@@ -30,16 +30,18 @@ from dm_assistant.modules.preparation import (
     FinishGenerationRun,
     GenerationStatus,
     PreparationService,
-    StartGenerationRun,
 )
 from dm_assistant.modules.scope import TaskType, resolve_task_scope
+from dm_assistant.orchestration.dungeons.application import (
+    DungeonPromptApplicationService,
+)
 from dm_assistant.orchestration.dungeons.contracts import (
     DungeonWorkflowResult,
     PromptDungeonWorkflow,
 )
 from dm_assistant.orchestration.dungeons.prompting import (
     DungeonPromptService,
-    resolve_dungeon_prompt_profile,
+    resolve_dungeon_v2_prompt_profile,
 )
 from dm_assistant.orchestration.modeling import ModelRunAbstained
 
@@ -104,6 +106,7 @@ class DungeonPromptWorkbenchService:
         gateway: PiGatewayClient | None,
         prompts: DungeonPromptService | None,
         preparation: PreparationService,
+        applications: DungeonPromptApplicationService | None = None,
     ) -> None:
         self._settings = settings
         self._campaigns = campaigns
@@ -111,6 +114,11 @@ class DungeonPromptWorkbenchService:
         self._gateway = gateway
         self._prompts = prompts
         self._preparation = preparation
+        self._applications = applications or (
+            DungeonPromptApplicationService(preparation, prompts)
+            if prompts is not None
+            else None
+        )
         self._lock = threading.Lock()
         self._runs: dict[uuid.UUID, _RunState] = {}
 
@@ -166,24 +174,23 @@ class DungeonPromptWorkbenchService:
         title: str | None = None,
         constraints: tuple[str, ...] = (),
     ) -> DungeonPromptRun:
-        if self._gateway is None or self._prompts is None:
+        if self._gateway is None or self._applications is None:
             raise InvalidInputError(
                 "Model generation is unavailable; manual Dungeon Studio operations remain available."
             )
         if not prompt.strip():
             raise InvalidInputError("The dungeon prompt is required.")
         resolved_seed = seed if seed is not None else secrets.randbits(63)
-        durable = self._preparation.start_generation_run(
-            StartGenerationRun(
-                campaign_id=campaign_id,
-                generation_kind="dungeon_prompt_web",
-                seed=resolved_seed,
-                input_scope={"task_type": "standalone_dungeon", "surface": "web"},
-                schema_versions={"dungeon_prompt_web": "1.0.0"},
-            )
+        command = self._command(
+            campaign_id=campaign_id,
+            prompt=prompt,
+            seed=resolved_seed,
+            title=title,
+            constraints=constraints,
         )
+        durable_id = self._applications.begin_attempt(command, surface="web")
         state = _RunState(
-            run_id=durable.id,
+            run_id=durable_id,
             campaign_id=campaign_id,
             prompt=prompt,
             seed=resolved_seed,
@@ -277,7 +284,7 @@ class DungeonPromptWorkbenchService:
                 state.effort, state.seed = resolved_effort, resolved_seed
                 if state.cancelled.is_set():
                     return
-            profile = resolve_dungeon_prompt_profile(
+            profile = resolve_dungeon_v2_prompt_profile(
                 provider_id=provider.id,
                 model_id=model.id,
                 capabilities=model.capabilities,
@@ -285,23 +292,20 @@ class DungeonPromptWorkbenchService:
                 output_token_limit=model.max_output_tokens,
                 requested_effort=resolved_effort,
             )
-            result = self._prompts.create(  # type: ignore[union-attr]
-                PromptDungeonWorkflow(
-                    campaign_id=self.get(run_id).campaign_id,
-                    title=title,
-                    prompt=self.get(run_id).prompt,
-                    seed=resolved_seed,
-                    created_by="dm-web",
-                    scope=resolve_task_scope(
-                        dm_principal_id="dm",
-                        campaign_owner_id="dm",
-                        task_type=TaskType.STANDALONE_DUNGEON,
-                    ),
-                    requested_constraints=constraints,
-                ),
-                profile,
-                stream_run_id=str(run_id),
+            command = self._command(
+                campaign_id=self.get(run_id).campaign_id,
+                prompt=self.get(run_id).prompt,
+                seed=resolved_seed,
+                title=title,
+                constraints=constraints,
             )
+            attempt = self._applications.execute(  # type: ignore[union-attr]
+                command, profile, surface="web", attempt_run_id=run_id
+            )
+            if attempt.result is None:
+                self._fail(run_id, attempt.public_code)
+                return
+            result = attempt.result
         except (ModelRunAbstained, ValueError, RuntimeError):
             self._fail(run_id, "dungeon_prompt_failed")
             return
@@ -328,6 +332,29 @@ class DungeonPromptWorkbenchService:
                         message="Deterministic validation did not produce a draft.",
                     )
                 )
+
+    @staticmethod
+    def _command(
+        *,
+        campaign_id: uuid.UUID,
+        prompt: str,
+        seed: int,
+        title: str | None,
+        constraints: tuple[str, ...],
+    ) -> PromptDungeonWorkflow:
+        return PromptDungeonWorkflow(
+            campaign_id=campaign_id,
+            title=title,
+            prompt=prompt,
+            seed=seed,
+            created_by="dm-web",
+            scope=resolve_task_scope(
+                dm_principal_id="dm",
+                campaign_owner_id="dm",
+                task_type=TaskType.STANDALONE_DUNGEON,
+            ),
+            requested_constraints=constraints,
+        )
 
     def _resolve(
         self,

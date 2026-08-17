@@ -28,6 +28,7 @@ from dm_assistant.modules.modeling import ModelTaskSelectionStore, ModelWorkbenc
 from dm_assistant.modules.preparation import PreparationService
 from dm_assistant.observability import configure_logging
 from dm_assistant.orchestration.dungeons import (
+    DungeonPromptApplicationService,
     DungeonPromptService,
     DungeonPromptWorkbenchService,
     DungeonStudioService,
@@ -101,6 +102,9 @@ def create_app(
             gateway=gateway,
             prompts=DungeonPromptService(resolved_dungeons, gateway),
             preparation=resolved_preparation,
+            applications=DungeonPromptApplicationService(
+                resolved_preparation, DungeonPromptService(resolved_dungeons, gateway)
+            ),
         )
         if gateway is not None
         else None

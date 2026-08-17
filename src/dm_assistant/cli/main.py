@@ -67,7 +67,7 @@ from dm_assistant.orchestration.dungeons import (
     ExportDungeonWorkflow,
     PromptDungeonWorkflow,
     RegenerateDungeonWorkflow,
-    resolve_dungeon_prompt_profile,
+    resolve_dungeon_v2_prompt_profile,
 )
 from dm_assistant.orchestration.modeling import ModelRunAbstained
 from dm_assistant.paths import resolve_allowlisted_file
@@ -95,6 +95,11 @@ library_app = typer.Typer(
     help="Immutable source documents and scoped lexical search.",
     no_args_is_help=True,
 )
+run_app = typer.Typer(
+    name="run",
+    help="Safe durable dungeon prompt-attempt inspection.",
+    no_args_is_help=True,
+)
 model_app = typer.Typer(
     name="model",
     help="Private model-gateway provider setup and inspection.",
@@ -103,6 +108,7 @@ model_app = typer.Typer(
 app.add_typer(campaign_app, name="campaign")
 app.add_typer(dungeon_app, name="dungeon")
 app.add_typer(library_app, name="library")
+dungeon_app.add_typer(run_app, name="run")
 app.add_typer(model_app, name="model")
 
 
@@ -457,7 +463,7 @@ def dungeon_prompt(
     with _render_domain_errors():
         with workbench_runtime() as runtime:
             gateway = _require_model_gateway(runtime.model_gateway)
-            prompted = runtime.dungeon_prompts
+            prompted = runtime.dungeon_prompt_application
             if prompted is None:
                 raise InvalidInputError("The model gateway is not enabled.")
             resolved_campaign_id = (
@@ -491,7 +497,7 @@ def dungeon_prompt(
             )
             resolved_seed = seed if seed is not None else secrets.randbits(63)
             try:
-                profile = resolve_dungeon_prompt_profile(
+                profile = resolve_dungeon_v2_prompt_profile(
                     provider_id=selected_provider.id,
                     model_id=selected_model.id,
                     capabilities=selected_model.capabilities,
@@ -499,7 +505,7 @@ def dungeon_prompt(
                     output_token_limit=selected_model.max_output_tokens,
                     requested_effort=selected_effort,
                 )
-                result = prompted.create(
+                attempt = prompted.execute(
                     PromptDungeonWorkflow(
                         campaign_id=resolved_campaign_id,
                         title=title,
@@ -514,7 +520,11 @@ def dungeon_prompt(
                         requested_constraints=tuple(constraint or ()),
                     ),
                     profile,
+                    surface="cli",
                 )
+                if attempt.result is None:
+                    raise ModelRunAbstained(attempt.public_code)
+                result = attempt.result
             except ModelGatewayTransportError as error:
                 raise InvalidInputError(str(error)) from None
             except ModelRunAbstained as error:
@@ -529,6 +539,7 @@ def dungeon_prompt(
                 raise _prompt_execution_error(error) from None
             resolved_title = title
             if result.success:
+                assert result.artifact_id is not None
                 resolved_title = runtime.dungeons.inspect(
                     campaign_id=resolved_campaign_id,
                     artifact_id=result.artifact_id,
@@ -549,6 +560,25 @@ def dungeon_prompt(
             if not result.success:
                 _emit_dungeon_failure_summary(result.diagnostics)
                 raise typer.Exit(code=1)
+
+
+@run_app.command("inspect")
+def dungeon_run_inspect(
+    attempt_run_id: Annotated[UUID, typer.Argument(help="Durable prompt attempt UUID.")],
+    campaign_id: Annotated[UUID | None, typer.Option("--campaign")] = None,
+) -> None:
+    """Show safe attempt metadata without prompt, provider, or context bodies."""
+    with _render_domain_errors():
+        with workbench_runtime() as runtime:
+            resolved_campaign_id = campaign_id or runtime.campaigns.ensure_active_campaign().id
+            run = runtime.preparation.get_generation_run(resolved_campaign_id, attempt_run_id)
+            _emit_document({
+                "attempt_run_id": str(run.id), "status": run.status.value,
+                "generation_kind": run.generation_kind, "seed": run.seed,
+                "input_scope": run.input_scope, "schema_versions": run.schema_versions,
+                "generator_versions": run.generator_versions,
+                "validation_report": run.validation_report,
+            })
 
 
 @dungeon_app.command("generate")

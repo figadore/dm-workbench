@@ -1,5 +1,7 @@
 """Provider-independent Dungeon Studio workflow contracts."""
 
+from __future__ import annotations
+
 from typing import Literal
 from uuid import UUID
 
@@ -20,7 +22,14 @@ class PromptedDungeonModelLineage(WorkflowModel):
 
     model_run_id: UUID
     model_run: ModelRunRecord
-    intent: DungeonGenerationIntentV1
+    intent: DungeonGenerationIntentV1 | None = None
+    proposal_v2: DungeonGenerationProposalV2 | None = None
+
+    @model_validator(mode="after")
+    def require_one_model_result(self) -> PromptedDungeonModelLineage:
+        if (self.intent is None) == (self.proposal_v2 is None):
+            raise ValueError("lineage requires exactly one model result")
+        return self
 
 
 class DungeonRoomDmNote(WorkflowModel):
@@ -101,7 +110,7 @@ class DungeonGenerationProposalV2(WorkflowModel):
         return document
 
     @model_validator(mode="after")
-    def require_design_or_safe_abstention(self) -> "DungeonGenerationProposalV2":
+    def require_design_or_safe_abstention(self) -> DungeonGenerationProposalV2:
         if (self.design is None) == (self.abstention is None):
             raise ValueError("proposal requires exactly one of design or abstention")
         if self.abstention is not None and self.intent_summary is not None:
@@ -127,7 +136,7 @@ class PromptDungeonWorkflow(WorkflowModel):
     requested_constraints: tuple[str, ...] = ()
 
     @model_validator(mode="after")
-    def require_standalone_scope(self) -> "PromptDungeonWorkflow":
+    def require_standalone_scope(self) -> PromptDungeonWorkflow:
         if self.scope.task_type is not TaskType.STANDALONE_DUNGEON:
             raise ValueError(
                 "prompted dungeon workflow requires standalone_dungeon scope"

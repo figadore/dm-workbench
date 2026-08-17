@@ -1,5 +1,9 @@
 """Provider-independent Dungeon Studio application boundary."""
 
+from dm_assistant.orchestration.dungeons.application import (
+    DungeonPromptApplicationService,
+    DungeonPromptAttemptResult,
+)
 from dm_assistant.orchestration.dungeons.contracts import (
     ApproveDungeonWorkflow,
     CreateDungeonWorkflow,
@@ -34,6 +38,8 @@ __all__ = [
     "ApproveDungeonWorkflow",
     "CreateDungeonWorkflow",
     "CreatePromptedDungeonWorkflow",
+    "DungeonPromptApplicationService",
+    "DungeonPromptAttemptResult",
     "DungeonPromptEvent",
     "DungeonPromptRun",
     "DungeonPromptService",

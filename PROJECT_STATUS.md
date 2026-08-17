@@ -4,18 +4,27 @@
 
 ## Snapshot
 
-- **Last updated:** 2026-08-14 (P7-12e structured V2 submission complete)
+- **Last updated:** 2026-08-14 (P7-12f shared V2 application integration complete)
 - **Lifecycle:** P7-10a/P7-10b and the immediate live GPT-5.4 reliability repair are complete. P7-12a freezes the compact V2 ownership/compatibility boundary, P7-12b makes publication atomic, P7-12c enforces safe bounded runs, P7-12d provides the pure compact V2 compiler, and P7-12e adds one-submit V2 orchestration with one bounded repair. Shared CLI/web durable-attempt integration is next.
 - **Current phase:** P7 — Dungeon and Map Generation hardening.
-- **Current task:** P7-12e complete; P7-12f is unstarted.
+- **Current task:** P7-12f complete.
 - **Validated status:** P3-01 is unstarted: no P3 migration, implementation, or commit exists. P5-01 is complete in committed `eea08a4`; P5-02 is unstarted: no predicate schema, migration, operation, or commit exists.
 - **Fast-track note:** P3 is required only to promote generated dungeon facts to campaign canon. It does not block standalone prompt-to-package preparation work; P5-02 remains deferred until explicit campaign grounding needs it.
-- **Next task:** **P7-12f — shared CLI/web V2 integration, durable attempts, and body-free observability.** First action: inspect CLI/web prompt entry points and generation-run persistence to design the shared `DungeonPromptApplicationService` without routing existing V1 traffic prematurely. P3-01 remains queued after this explicit user-directed reliability program.
+- **Next task:** **P7-12g — small-model eval, rollout, and V1 retirement decision.** First action: extend the synthetic eval set with compact V2 success, abstention, and invalid-reference cases without adding real campaign/provider text.
 - **Deferred design note:** A post-P7 player-map reveal-overlay workflow is recorded in `dm-assistant-implementation-plan.md`: independently publishable/printable aligned map sections for discovered secret areas, explicit durable reveal provenance, and fail-closed browser delivery. It is intentionally not scope for P7-10b.
 - **Schema head:** `0008_workbench_defaults`.
 - **Public baseline:** history begins with the final architecture/roadmap snapshot, uses the public GitHub author identity, and is licensed `AGPL-3.0-only`.
 
 Always inspect `git status --short --branch` and the latest log before changing files.
+
+## P7-12f Shared Integration Handoff
+
+- **Completed:** Added one `DungeonPromptApplicationService` for both CLI and web V2 submission. It creates a durable `dungeon_prompt_v2` attempt before model/provider contact, uses that UUID as the gateway caller run ID, invokes compact submission/pure compilation/atomic Studio publication, and records safe terminal linkage to the separate artifact generation run/version. Web SSE remains a presentation projection and no longer creates the former divergent `dungeon_prompt_web` durable run. Added `dm dungeon run inspect <attempt-run-id>` with safe metadata only.
+- **Observability:** V2 topology logging now emits only layout hash, seed, generator version, component counts, validation outcome, and diagnostic codes—not the layout request body. Attempt logs include correlation ID, stage, public code, and exception class only. V2 lineage retains the accepted proposal under immutable artifact lineage rather than misrepresenting it as V1 intent.
+- **Checks:** `uv run pytest -q tests/unit/test_prompted_dungeon_workflow.py tests/unit/test_cli.py tests/unit/test_modeling_service.py tests/unit/test_model_gateway_client.py` → `40 passed`; focused Ruff and strict mypy passed; `git diff --check` passed. `tests/unit/test_web_auth.py` remains blocked before collection by the existing local `.env` disabled-gateway/internal-token conflict.
+- **Changed:** `src/dm_assistant/orchestration/dungeons/application.py` (new), `src/dm_assistant/{api/app.py,cli/main.py,runtime.py}`, `src/dm_assistant/orchestration/dungeons/{__init__.py,contracts.py,prompting.py,service.py,web_prompt.py}`, and this handoff. No migration.
+- **Working tree:** listed files modified/untracked and uncommitted; no pre-existing work was overwritten.
+- **Next:** **P7-12g.** First action: extend synthetic V2 eval fixtures for success, abstention, and invalid references.
 
 ## P7-12e Structured Submission Handoff
 

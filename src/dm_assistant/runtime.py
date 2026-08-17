@@ -21,6 +21,7 @@ from dm_assistant.modules.modeling import ModelTaskSelectionStore
 from dm_assistant.modules.preparation import PreparationService
 from dm_assistant.observability import configure_logging
 from dm_assistant.orchestration.dungeons import (
+    DungeonPromptApplicationService,
     DungeonPromptService,
     DungeonStudioService,
 )
@@ -35,6 +36,7 @@ class WorkbenchRuntime:
     dungeons: DungeonStudioService
     model_gateway: PiGatewayClient | None
     dungeon_prompts: DungeonPromptService | None
+    dungeon_prompt_application: DungeonPromptApplicationService | None
     model_selections: ModelTaskSelectionStore
     library_catalog: LibraryDocumentCatalog
     library_ingestion: LibraryIngestionService
@@ -76,6 +78,10 @@ def workbench_runtime(settings: Settings | None = None) -> Iterator[WorkbenchRun
             dungeons=dungeons,
             model_gateway=model_gateway,
             dungeon_prompts=dungeon_prompts,
+            dungeon_prompt_application=(
+                None if dungeon_prompts is None
+                else DungeonPromptApplicationService(preparation, dungeon_prompts)
+            ),
             model_selections=ModelTaskSelectionStore(engine),
             library_catalog=LibraryDocumentCatalog(engine),
             library_ingestion=library_ingestion,

@@ -371,6 +371,46 @@ class DungeonPromptService:
         self._dungeon_studio = dungeon_studio
         self._gateway_client = gateway_client
 
+    def create_v2(
+        self,
+        command: PromptDungeonWorkflow,
+        profile: ResolvedModelRunProfile,
+        stream_run_id: str | None = None,
+    ) -> DungeonWorkflowResult:
+        """Submit compact V2 intent then publish through the existing atomic Studio path."""
+        context = _build_standalone_context(command)
+        gateway: GatewayClient = (
+            _RunBoundGatewayClient(self._gateway_client, stream_run_id)
+            if stream_run_id is not None
+            else self._gateway_client
+        )
+        submitted = DungeonV2SubmissionService(gateway).submit(
+            profile=profile,
+            run_input=_initial_v2_model_input(command, context),
+            seed=command.seed,
+        )
+        if submitted.proposal.abstention is not None or submitted.layout_request is None:
+            raise ModelRunAbstained("dungeon proposal was not accepted")
+        lineage = tuple(
+            PromptedDungeonModelLineage(
+                model_run_id=uuid.uuid4(), model_run=run, proposal_v2=submitted.proposal
+            )
+            for run in submitted.model_runs
+        )
+        return self._dungeon_studio.create_prompted(
+            CreatePromptedDungeonWorkflow(
+                campaign_id=command.campaign_id,
+                title=command.title or submitted.layout_request.brief.title,
+                layout_request=submitted.layout_request,
+                created_by=command.created_by,
+                context=context,
+                model_task_profile_id=profile.task_profile_id,
+                model_lineage=lineage,
+                tool_runs=_tool_run_pins(lineage),
+                source_prompt=command.prompt,
+            )
+        )
+
     def create(
         self,
         command: PromptDungeonWorkflow,
@@ -508,7 +548,14 @@ def _log_layout_request(
                     for item in diagnostics
                     if isinstance(item.get("code"), str)
                 ],
-                "layout_request": request.model_dump(mode="json"),
+                "layout_request_sha256": canonical_json_sha256(
+                    request.model_dump(mode="json")
+                ),
+                "seed": request.seed,
+                "generator_version": request.generator_version,
+                "floor_count": len(request.topology.floors),
+                "room_count": len(request.topology.rooms),
+                "connection_count": len(request.topology.connections),
             }
         },
     )
@@ -564,6 +611,18 @@ def _build_standalone_context(
         envelope=envelope.model_dump(mode="json"),
         payload_sha256=envelope.payload_sha256,
     )
+
+
+def _initial_v2_model_input(
+    command: PromptDungeonWorkflow,
+    context: GenerationContextPin,
+) -> ModelRunInput:
+    return ModelRunInput(messages=(PromptMessage(role="user", content=_canonical_message({
+        "task": _DUNGEON_V2_SCHEMA_NAME,
+        "instruction": "Use submit_dungeon_intent_v2 exactly once. Submit compact creative intent only; the server owns IDs, seed, geometry, visibility, validation, persistence, and approval.",
+        "prompt": command.prompt,
+        "context": context.envelope,
+    })),))
 
 
 def _initial_model_input(
@@ -918,7 +977,11 @@ def _tool_run_pins(
     return tuple(
         ToolRunPin(
             tool_name=invocation.tool_name,
-            schema_version=_DUNGEON_INTENT_SCHEMA_VERSION,
+            schema_version=(
+                _DUNGEON_INTENT_SCHEMA_VERSION
+                if lineage.intent is not None
+                else _DUNGEON_V2_SCHEMA_VERSION
+            ),
             input_sha256=canonical_json_sha256(invocation.arguments),
             output_sha256=canonical_json_sha256(
                 invocation.result.model_dump(mode="json")
