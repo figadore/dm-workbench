@@ -45,7 +45,7 @@ def generated_topology(room_count: int) -> DungeonTopology:
             }
         )
     payload = {
-        "schema_version": "1.0.0",
+        "schema_version": "1.1.0",
         "id": "topology_layout_property",
         "visibility": "dm_only",
         "floors": [
@@ -117,7 +117,7 @@ def test_generated_chain_layouts_are_successful_and_repeatable(
         brief=generated_brief(room_count),
         topology=generated_topology(room_count),
         seed=seed,
-        generator_version="orthogonal-v1",
+        generator_version="orthogonal-v2",
     )
 
     first = generate_layout(request)
@@ -146,7 +146,7 @@ def test_overlapping_generated_room_mutation_is_always_rejected(
         brief=generated_brief(room_count),
         topology=generated_topology(room_count),
         seed=seed,
-        generator_version="orthogonal-v1",
+        generator_version="orthogonal-v2",
     )
     result = generate_layout(request)
     assert result.package is not None

@@ -181,6 +181,8 @@ class DoorLayout(FloorBoundMapElement):
     door_type: DoorType
     segment: GridSegment
     connects_room_ids: tuple[OpaqueId, OpaqueId]
+    from_hidden: bool = False
+    to_hidden: bool = False
     gate_id: OpaqueId | None = None
     hazard_id: OpaqueId | None = None
 
@@ -190,9 +192,22 @@ class DoorLayout(FloorBoundMapElement):
             raise ValueError("locked doors require gate_id")
         if self.door_type is DoorType.TRAPPED and self.hazard_id is None:
             raise ValueError("trapped doors require hazard_id")
-        if self.door_type in {DoorType.SECRET, DoorType.TRAPPED}:
+        has_hidden_endpoint = self.from_hidden or self.to_hidden
+        if self.door_type is DoorType.SECRET and not has_hidden_endpoint:
+            raise ValueError("secret doors require at least one hidden endpoint")
+        if self.door_type is not DoorType.SECRET and has_hidden_endpoint:
+            raise ValueError("hidden door endpoints require secret door type")
+        if self.door_type is DoorType.TRAPPED:
             if self.visibility is not Visibility.DM_ONLY:
-                raise ValueError("secret and trapped doors must be dm_only")
+                raise ValueError("trapped doors must be dm_only")
+        if (
+            self.door_type is DoorType.SECRET
+            and self.visibility is Visibility.PLAYER_SAFE
+            and self.from_hidden == self.to_hidden
+        ):
+            raise ValueError(
+                "player_safe secret doors require exactly one visible endpoint"
+            )
         return self
 
 
@@ -202,16 +217,15 @@ class StairLayout(FloorBoundMapElement):
     position: GridPoint
     direction: StairDirection
     vertical_link_id: OpaqueId
-    hidden: bool = False
 
 
 class VerticalEndpoint(ContractModel):
-    """One endpoint of a cross-floor link."""
+    """One independently publishable endpoint of a cross-floor link."""
 
     floor_id: OpaqueId
     position: GridPoint
+    visibility: Visibility = Visibility.PLAYER_SAFE
     stair_id: OpaqueId | None = None
-    hidden: bool = False
 
 
 class VerticalLinkLayout(VisibleContract):

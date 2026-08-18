@@ -62,7 +62,7 @@ class DungeonPromptApplicationService:
                 generation_kind="dungeon_prompt_v2",
                 seed=command.seed,
                 input_scope={"task_type": "standalone_dungeon", "surface": surface},
-                schema_versions={"dungeon_generation_proposal": "2.0.0"},
+                schema_versions={"dungeon_generation_proposal": "2.1.0"},
             )
         ).id
 

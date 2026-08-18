@@ -198,7 +198,7 @@ def generate_layout(request: LayoutRequest) -> LayoutResult:
 
     try:
         package = DungeonPackage(
-            schema_version="1.0.0",
+            schema_version="1.1.0",
             id=request.package_id,
             brief=request.brief,
             topology=request.topology,
@@ -510,6 +510,51 @@ def _resolve_floor_bounds(
     return resolved
 
 
+def _endpoint_visibility(hidden: bool, room_visibility: Visibility) -> Visibility:
+    if hidden or room_visibility is Visibility.DM_ONLY:
+        return Visibility.DM_ONLY
+    return Visibility.PLAYER_SAFE
+
+
+def _combined_visibility(*values: Visibility) -> Visibility:
+    if any(value is Visibility.PLAYER_SAFE for value in values):
+        return Visibility.PLAYER_SAFE
+    return Visibility.DM_ONLY
+
+
+def _connection_endpoint_visibilities(
+    from_hidden: bool,
+    to_hidden: bool,
+    declared_visibility: Visibility,
+    from_room_visibility: Visibility,
+    to_room_visibility: Visibility,
+) -> tuple[Visibility, Visibility]:
+    if not from_hidden and not to_hidden:
+        return declared_visibility, declared_visibility
+    return (
+        _endpoint_visibility(from_hidden, from_room_visibility),
+        _endpoint_visibility(to_hidden, to_room_visibility),
+    )
+
+
+def _connection_layout_visibility(
+    from_hidden: bool,
+    to_hidden: bool,
+    declared_visibility: Visibility,
+    from_room_visibility: Visibility,
+    to_room_visibility: Visibility,
+) -> Visibility:
+    return _combined_visibility(
+        *_connection_endpoint_visibilities(
+            from_hidden,
+            to_hidden,
+            declared_visibility,
+            from_room_visibility,
+            to_room_visibility,
+        )
+    )
+
+
 def _generate_same_floor_connections(
     request: LayoutRequest,
     room_rects: dict[str, Rect],
@@ -528,7 +573,15 @@ def _generate_same_floor_connections(
         if not isinstance(connection, CorridorConnection | DoorConnection):
             continue
         source_room = topology_rooms[connection.from_room_id]
+        target_room = topology_rooms[connection.to_room_id]
         floor_id = source_room.floor_id
+        layout_visibility = _connection_layout_visibility(
+            connection.from_hidden,
+            connection.to_hidden,
+            connection.visibility,
+            source_room.visibility,
+            target_room.visibility,
+        )
         corridor_id = (
             connection.id
             if isinstance(connection, CorridorConnection)
@@ -592,7 +645,7 @@ def _generate_same_floor_connections(
             corridors.append(
                 CorridorLayout(
                     id=corridor_id,
-                    layer_id=layer_by_visibility[connection.visibility],
+                    layer_id=layer_by_visibility[layout_visibility],
                     floor_id=floor_id,
                     path=route,
                     width_cells=width,
@@ -600,7 +653,7 @@ def _generate_same_floor_connections(
                         connection.from_room_id,
                         connection.to_room_id,
                     ),
-                    visibility=connection.visibility,
+                    visibility=layout_visibility,
                 )
             )
 
@@ -625,7 +678,7 @@ def _generate_same_floor_connections(
             doors.append(
                 DoorLayout(
                     id=connection.id,
-                    layer_id=layer_by_visibility[connection.visibility],
+                    layer_id=layer_by_visibility[layout_visibility],
                     floor_id=floor_id,
                     door_type=connection.door_type,
                     segment=segment,
@@ -633,9 +686,11 @@ def _generate_same_floor_connections(
                         connection.from_room_id,
                         connection.to_room_id,
                     ),
+                    from_hidden=connection.from_hidden,
+                    to_hidden=connection.to_hidden,
                     gate_id=connection.gate_id,
                     hazard_id=connection.trap_id,
-                    visibility=connection.visibility,
+                    visibility=layout_visibility,
                 )
             )
     return corridors, doors
@@ -647,6 +702,7 @@ def _generate_floor_transitions(
     layer_by_visibility: dict[Visibility, str],
     diagnostics: list[LayoutDiagnostic],
 ) -> tuple[list[StairLayout], list[VerticalLinkLayout]]:
+    topology_rooms = {room.id: room for room in request.topology.rooms}
     locked_stairs = {item.id: item for item in request.locked.stairs}
     locked_links = {item.id: item for item in request.locked.vertical_links}
     stairs: list[StairLayout] = []
@@ -654,6 +710,14 @@ def _generate_floor_transitions(
 
     for connection in request.topology.connections:
         if isinstance(connection, StairConnection):
+            from_visibility, to_visibility = _connection_endpoint_visibilities(
+                connection.from_hidden,
+                connection.to_hidden,
+                connection.visibility,
+                topology_rooms[connection.from_room_id].visibility,
+                topology_rooms[connection.to_room_id].visibility,
+            )
+            link_visibility = _combined_visibility(from_visibility, to_visibility)
             from_stair_id, to_stair_id = _stair_ids(request, connection.id)
             locked_link = locked_links.get(connection.id)
             from_position = _locked_stair_position(
@@ -668,23 +732,21 @@ def _generate_floor_transitions(
             ) or _center_point(room_rects[connection.to_room_id])
             from_stair = locked_stairs.get(from_stair_id) or StairLayout(
                 id=from_stair_id,
-                layer_id=layer_by_visibility[connection.visibility],
+                layer_id=layer_by_visibility[from_visibility],
                 floor_id=connection.from_floor_id,
                 position=from_position,
                 direction=connection.direction,
                 vertical_link_id=connection.id,
-                hidden=connection.from_hidden,
-                visibility=connection.visibility,
+                visibility=from_visibility,
             )
             to_stair = locked_stairs.get(to_stair_id) or StairLayout(
                 id=to_stair_id,
-                layer_id=layer_by_visibility[connection.visibility],
+                layer_id=layer_by_visibility[to_visibility],
                 floor_id=connection.to_floor_id,
                 position=to_position,
                 direction=_opposite_direction(connection.direction),
                 vertical_link_id=connection.id,
-                hidden=connection.to_hidden,
-                visibility=connection.visibility,
+                visibility=to_visibility,
             )
             stairs.extend((from_stair, to_stair))
             links.append(
@@ -696,20 +758,27 @@ def _generate_floor_transitions(
                         VerticalEndpoint(
                             floor_id=connection.from_floor_id,
                             position=from_stair.position,
+                            visibility=from_visibility,
                             stair_id=from_stair.id,
-                            hidden=connection.from_hidden,
                         ),
                         VerticalEndpoint(
                             floor_id=connection.to_floor_id,
                             position=to_stair.position,
+                            visibility=to_visibility,
                             stair_id=to_stair.id,
-                            hidden=connection.to_hidden,
                         ),
                     ),
-                    visibility=connection.visibility,
+                    visibility=link_visibility,
                 )
             )
         elif isinstance(connection, VerticalConnection):
+            from_visibility, to_visibility = _connection_endpoint_visibilities(
+                connection.from_hidden,
+                connection.to_hidden,
+                connection.visibility,
+                topology_rooms[connection.from_room_id].visibility,
+                topology_rooms[connection.to_room_id].visibility,
+            )
             links.append(
                 locked_links.get(connection.id)
                 or VerticalLinkLayout(
@@ -719,17 +788,17 @@ def _generate_floor_transitions(
                         VerticalEndpoint(
                             floor_id=connection.from_floor_id,
                             position=_center_point(room_rects[connection.from_room_id]),
+                            visibility=from_visibility,
                             stair_id=None,
-                            hidden=connection.from_hidden,
                         ),
                         VerticalEndpoint(
                             floor_id=connection.to_floor_id,
                             position=_center_point(room_rects[connection.to_room_id]),
+                            visibility=to_visibility,
                             stair_id=None,
-                            hidden=connection.to_hidden,
                         ),
                     ),
-                    visibility=connection.visibility,
+                    visibility=_combined_visibility(from_visibility, to_visibility),
                 )
             )
 

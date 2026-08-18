@@ -578,6 +578,10 @@ Keep five representations distinct:
 
 A V2 local ref such as `archive` or `sanctum` is a noncanonical relation handle, valid only within one design specification. Duplicate or ambiguous refs fail compilation. The compiler derives canonical opaque IDs from compiler version and canonical semantic identity, independent of seed, prose changes, and array order; changing the semantic identity or compiler version may change the ID. Only explicit later DM regeneration/edit workflows may provide already-established opaque IDs.
 
+The current pre-release `2.1.0` design contract supports directional connection concealment with `from_hidden` and `to_hidden` on doors, stairs, and ladders; `concealment=secret` is the symmetric shorthand. The compiler computes initial room discovery as directed traversal from the entrance. Layout derives publication per endpoint and containing-room visibility rather than treating one hidden endpoint as making both endpoints invisible. A one-sided secret door is rendered as an ordinary door in player output from its publishable side while DM output retains the secret classification; clean metadata receives the same normalization. Explicit in-play reveal state and overlay publication remain a later Workbench feature.
+
+Because this contract changed before any external consumer or retained dungeon artifact existed, the implementation advances the active design/topology/package/compiler/generator/renderer pins and updates synthetic fixtures in place rather than carrying unused compatibility readers. Once retained artifacts or consumers exist, future changes follow the immutable reader/replay policy above.
+
 A conceptual package can be stored as one versioned aggregate rather than one relational row per tile:
 
 ```text

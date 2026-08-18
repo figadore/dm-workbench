@@ -254,7 +254,7 @@ def test_unknown_generator_version_is_rejected(layout_request: LayoutRequest) ->
     payload = json.loads(to_canonical_json(layout_request))
     payload["generator_version"] = "future-layout"
 
-    with pytest.raises(ValidationError, match="orthogonal-v1"):
+    with pytest.raises(ValidationError, match="orthogonal-v2"):
         load_layout_request_json(json.dumps(payload))
 
 

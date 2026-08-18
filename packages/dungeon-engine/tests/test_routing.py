@@ -21,7 +21,7 @@ def test_wide_corridor_does_not_clip_an_adjacent_unrelated_room() -> None:
             height_cells=12,
         ),
         width_cells=3,
-        random_source=DeterministicRandom(7, "orthogonal-v1"),
+        random_source=DeterministicRandom(7, "orthogonal-v2"),
     )
 
     assert route is not None
@@ -48,7 +48,7 @@ def test_corridor_leaves_clearance_from_an_unrelated_room_wall() -> None:
             height_cells=12,
         ),
         width_cells=1,
-        random_source=DeterministicRandom(7, "orthogonal-v1"),
+        random_source=DeterministicRandom(7, "orthogonal-v2"),
     )
 
     assert route is not None

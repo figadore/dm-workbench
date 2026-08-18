@@ -35,7 +35,7 @@ from dm_dungeon.contracts.geometry import (
 )
 from dm_dungeon.contracts.topology import DoorConnection, DungeonTopology
 
-DUNGEON_PACKAGE_SCHEMA_VERSION = "1.0.0"
+DUNGEON_PACKAGE_SCHEMA_VERSION = "1.1.0"
 
 
 class ComponentIdStrategy(StrEnum):
@@ -62,7 +62,7 @@ class DungeonPackage(VersionedContract):
 
     supported_schema_version = DUNGEON_PACKAGE_SCHEMA_VERSION
 
-    schema_version: Literal["1.0.0"]
+    schema_version: Literal["1.1.0"]
     id: OpaqueId
     brief: DungeonBrief
     topology: DungeonTopology

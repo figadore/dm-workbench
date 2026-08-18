@@ -8,16 +8,19 @@ from pydantic import ValidationError
 
 from dm_dungeon import (
     DungeonDesignSpecV2,
+    DungeonPackage,
     compile_dungeon_design_v2,
     load_dungeon_design_v2_json,
     to_canonical_json,
     validate_topology,
 )
+from dm_dungeon.layout import LayoutRequest, generate_layout
+from dm_dungeon.rendering import RenderAudience, SvgRenderRequest, render_svg
 
 
 def _minimal_design() -> dict[str, object]:
     return {
-        "schema_version": "2.0.0",
+        "schema_version": "2.1.0",
         "title": "Salt Cellar",
         "premise": "A tide-worn cache protects a sealed ledger.",
         "themes": ["salt", "tide"],
@@ -59,11 +62,46 @@ def _spec(payload: dict[str, object]) -> DungeonDesignSpecV2:
     return DungeonDesignSpecV2.model_validate_json(json.dumps(payload))
 
 
+def _generate(payload: dict[str, object]) -> DungeonPackage:
+    compiled = compile_dungeon_design_v2(_spec(payload))
+    assert compiled.accepted
+    assert compiled.brief is not None
+    assert compiled.topology is not None
+    generated = generate_layout(
+        LayoutRequest(
+            schema_version="1.0.0",
+            package_id="directional-concealment-test",
+            brief=compiled.brief,
+            topology=compiled.topology,
+            seed=1042,
+            generator_version="orthogonal-v2",
+            floor_bounds=compiled.floor_bounds,
+        )
+    )
+    assert generated.package is not None
+    return generated.package
+
+
+def _render(package: DungeonPackage, floor_id: str, audience: RenderAudience) -> str:
+    result = render_svg(
+        package,
+        SvgRenderRequest(
+            schema_version="1.0.0",
+            package_id=package.id,
+            floor_id=floor_id,
+            audience=audience,
+            pixels_per_cell=20,
+        ),
+    )
+    assert result.svg is not None
+    return result.svg
+
+
 def test_compiler_generates_exact_kernel_intent_without_model_ids_or_counts() -> None:
     result = compile_dungeon_design_v2(_spec(_minimal_design()))
 
     assert result.accepted is True
-    assert result.compiler_version == "dungeon-design-v2-compiler-2"
+    assert result.compiler_version == "dungeon-design-v2-compiler-3"
     assert result.brief is not None
     assert result.topology is not None
     assert result.brief.floor_count == 1
@@ -152,36 +190,99 @@ def test_compiler_hides_rooms_reachable_only_through_secret_access() -> None:
     assert validate_topology(result.topology).valid is True
 
 
-def test_compiler_preserves_one_sided_hidden_ladder_intent() -> None:
+def test_one_sided_hidden_door_is_safe_and_visible_from_its_open_side() -> None:
     payload = _minimal_design()
+    connection = payload["connections"][0]
+    assert isinstance(connection, dict)
+    connection["to_hidden"] = True
+
+    package = _generate(payload)
+
+    door = package.doors[0]
+    floor_id = package.floors[0].id
+    dm_svg = _render(package, floor_id, RenderAudience.DM)
+    player_svg = _render(package, floor_id, RenderAudience.PLAYER)
+    assert door.from_hidden is False
+    assert door.to_hidden is True
+    assert f'data-component-id="{door.id}"' in player_svg
+    assert 'data-door-type="normal"' in player_svg
+    assert 'data-door-type="secret"' not in player_svg
+    assert "door-secret-symbol" not in player_svg
+    assert f'data-component-id="{door.id}"' in dm_svg
+    assert 'data-door-type="secret"' in dm_svg
+    assert "door-secret-symbol" in dm_svg
+
+
+@pytest.mark.parametrize(
+    ("hidden_passage", "public_passage"),
+    (("ladder", "stairs"), ("stairs", "ladder")),
+)
+def test_one_sided_hidden_vertical_link_renders_only_its_publishable_endpoint(
+    hidden_passage: str,
+    public_passage: str,
+) -> None:
+    payload = _minimal_design()
+    upper = payload["floors"][0]
+    assert isinstance(upper, dict)
+    upper_rooms = upper["rooms"]
+    assert isinstance(upper_rooms, list)
+    upper["rooms"] = [upper_rooms[0]]
     payload["floors"].append(
         {
             "local_ref": "lower",
             "name": "Lower Archive",
             "rooms": [
-                {"local_ref": "landing", "name": "Landing", "role": "exploration"}
+                {"local_ref": "landing", "name": "Landing", "role": "exploration"},
+                {"local_ref": "vault", "name": "Vault", "role": "objective"},
             ],
         }
     )
-    connections = payload["connections"]
-    assert isinstance(connections, list)
-    connections.append(
+    payload["connections"] = [
         {
-            "local_ref": "hidden-ladder",
+            "local_ref": "public-stairs",
             "from_ref": "entry",
             "to_ref": "landing",
-            "passage": "ladder",
+            "passage": public_passage,
+        },
+        {
+            "local_ref": "hidden-descent",
+            "from_ref": "entry",
+            "to_ref": "landing",
+            "passage": hidden_passage,
             "from_hidden": True,
             "to_hidden": False,
-        }
+        },
+        {
+            "local_ref": "landing-vault",
+            "from_ref": "landing",
+            "to_ref": "vault",
+        },
+    ]
+
+    package = _generate(payload)
+
+    hidden_link = next(
+        item for item in package.vertical_links if item.link_type == hidden_passage
     )
-
-    result = compile_dungeon_design_v2(_spec(payload))
-
-    assert result.accepted and result.topology is not None
-    ladder = next(item for item in result.topology.connections if item.from_hidden)
-    assert ladder.from_hidden is True
-    assert ladder.to_hidden is False
+    upper_floor = next(item for item in package.floors if item.name == "Salt Cellar")
+    lower_floor = next(item for item in package.floors if item.name == "Lower Archive")
+    upper_player = _render(package, upper_floor.id, RenderAudience.PLAYER)
+    lower_player = _render(package, lower_floor.id, RenderAudience.PLAYER)
+    upper_dm = _render(package, upper_floor.id, RenderAudience.DM)
+    lower_dm = _render(package, lower_floor.id, RenderAudience.DM)
+    assert [item.visibility.value for item in hidden_link.endpoints] == [
+        "dm_only",
+        "player_safe",
+    ]
+    upper_endpoint, lower_endpoint = hidden_link.endpoints
+    upper_component_id = upper_endpoint.stair_id or hidden_link.id
+    lower_component_id = lower_endpoint.stair_id or hidden_link.id
+    upper_component = f'data-component-id="{upper_component_id}"'
+    lower_component = f'data-component-id="{lower_component_id}"'
+    assert upper_component not in upper_player
+    assert lower_component in lower_player
+    assert upper_component in upper_dm
+    assert lower_component in lower_dm
 
 
 def test_compiler_derives_dm_only_gate_and_key_from_relative_intent() -> None:

@@ -42,7 +42,7 @@ def layout_document() -> str:
         brief=package.brief,
         topology=package.topology,
         seed=424242,
-        generator_version="orthogonal-v1",
+        generator_version="orthogonal-v2",
     )
     return to_canonical_json(request)
 

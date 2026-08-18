@@ -28,7 +28,7 @@ from dm_dungeon.validation.diagnostics import DiagnosticSeverity
 
 LAYOUT_REQUEST_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 LAYOUT_RESULT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
-ORTHOGONAL_LAYOUT_GENERATOR_VERSION: Literal["orthogonal-v1"] = "orthogonal-v1"
+ORTHOGONAL_LAYOUT_GENERATOR_VERSION: Literal["orthogonal-v2"] = "orthogonal-v2"
 PositiveCells = Annotated[int, Field(ge=1)]
 NonNegativeCells = Annotated[int, Field(ge=0)]
 PositiveAttempts = Annotated[int, Field(ge=1, le=256)]
@@ -120,7 +120,7 @@ class LayoutRequest(VersionedContract):
     brief: DungeonBrief
     topology: DungeonTopology
     seed: int
-    generator_version: Literal["orthogonal-v1"]
+    generator_version: Literal["orthogonal-v2"]
     grid: GridSpec = GridSpec()
     floor_bounds: tuple[FloorLayoutBounds, ...] = ()
     locked: LockedLayoutComponents = LockedLayoutComponents()
@@ -140,7 +140,7 @@ class LayoutResult(VersionedContract):
     supported_schema_version = LAYOUT_RESULT_SCHEMA_VERSION
 
     schema_version: Literal["1.0.0"]
-    generator_version: Literal["orthogonal-v1"]
+    generator_version: Literal["orthogonal-v2"]
     seed: int
     random_draw_count: NonNegativeCount
     success: bool

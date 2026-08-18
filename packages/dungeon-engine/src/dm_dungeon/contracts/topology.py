@@ -16,7 +16,7 @@ from dm_dungeon.contracts.common import (
     ensure_unique_ids,
 )
 
-DUNGEON_TOPOLOGY_SCHEMA_VERSION = "1.0.0"
+DUNGEON_TOPOLOGY_SCHEMA_VERSION = "1.1.0"
 PositiveCells = Annotated[int, Field(ge=1)]
 NonNegativeCount = Annotated[int, Field(ge=0)]
 PositiveCount = Annotated[int, Field(ge=1)]
@@ -166,6 +166,12 @@ class CorridorConnection(ConnectionBase):
     kind: Literal["corridor"]
     minimum_width_cells: PositiveCells = 1
 
+    @model_validator(mode="after")
+    def reject_hidden_corridor_endpoints(self) -> Self:
+        if self.from_hidden or self.to_hidden:
+            raise ValueError("corridors cannot have hidden endpoints")
+        return self
+
 
 class DoorConnection(ConnectionBase):
     """A typed door intent between two rooms."""
@@ -181,6 +187,11 @@ class DoorConnection(ConnectionBase):
             raise ValueError("locked doors require gate_id")
         if self.door_type is DoorType.TRAPPED and self.trap_id is None:
             raise ValueError("trapped doors require trap_id")
+        has_hidden_endpoint = self.from_hidden or self.to_hidden
+        if self.door_type is DoorType.SECRET and not has_hidden_endpoint:
+            raise ValueError("secret doors require at least one hidden endpoint")
+        if self.door_type is not DoorType.SECRET and has_hidden_endpoint:
+            raise ValueError("hidden door endpoints require secret door type")
         if self.door_type in {DoorType.SECRET, DoorType.TRAPPED}:
             if self.visibility is not Visibility.DM_ONLY:
                 raise ValueError("secret and trapped doors must be dm_only")
@@ -195,6 +206,14 @@ class StairConnection(ConnectionBase):
     to_floor_id: OpaqueId
     direction: StairDirection = StairDirection.BOTH
 
+    @model_validator(mode="after")
+    def require_hidden_connections_to_be_dm_only(self) -> Self:
+        if (
+            self.from_hidden or self.to_hidden
+        ) and self.visibility is not Visibility.DM_ONLY:
+            raise ValueError("stairs with hidden endpoints must be dm_only")
+        return self
+
 
 class VerticalConnection(ConnectionBase):
     """A non-stair topology connection between floors."""
@@ -203,6 +222,14 @@ class VerticalConnection(ConnectionBase):
     from_floor_id: OpaqueId
     to_floor_id: OpaqueId
     link_type: VerticalLinkKind
+
+    @model_validator(mode="after")
+    def require_hidden_connections_to_be_dm_only(self) -> Self:
+        if (
+            self.from_hidden or self.to_hidden
+        ) and self.visibility is not Visibility.DM_ONLY:
+            raise ValueError("vertical links with hidden endpoints must be dm_only")
+        return self
 
 
 type TopologyConnection = Annotated[
@@ -316,7 +343,7 @@ class DungeonTopology(VersionedContract):
 
     supported_schema_version = DUNGEON_TOPOLOGY_SCHEMA_VERSION
 
-    schema_version: Literal["1.0.0"]
+    schema_version: Literal["1.1.0"]
     id: OpaqueId
     visibility: Visibility
     floors: tuple[TopologyFloor, ...] = Field(min_length=1)

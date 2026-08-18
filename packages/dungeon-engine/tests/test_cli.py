@@ -18,7 +18,7 @@ def test_validate_command_accepts_synthetic_package(
     assert main(["validate", str(fixture_path)]) == 0
 
     output = capsys.readouterr().out
-    assert output == "valid DungeonPackage 1.0.0: pkg_sunken_archive\n"
+    assert output == "valid DungeonPackage 1.1.0: pkg_sunken_archive\n"
 
 
 def test_canonicalize_command_writes_stable_json(

@@ -61,6 +61,7 @@ from dm_dungeon import (
     validate_topology,
 )
 from dm_dungeon.contracts import (
+    DUNGEON_PACKAGE_SCHEMA_VERSION,
     GridPoint,
     Label,
     RenderLayer,
@@ -68,11 +69,13 @@ from dm_dungeon.contracts import (
     Visibility,
 )
 from dm_dungeon.export import (
+    ROLL20_EXPORTER_VERSION,
     PdfArtifact,
     Roll20Artifact,
     Roll20ExportRequest,
     export_roll20_bundle,
 )
+from dm_dungeon.rendering import SVG_RENDERER_VERSION
 
 _STUDIO_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 _VERSION_SCHEMA = "dungeon-studio-v1"
@@ -288,7 +291,7 @@ class DungeonStudioService:
             "dungeon_brief": request.brief.schema_version,
             "dungeon_topology": request.topology.schema_version,
             "layout_request": request.schema_version,
-            "dungeon_package": "1.0.0",
+            "dungeon_package": DUNGEON_PACKAGE_SCHEMA_VERSION,
             "dungeon_studio": _STUDIO_SCHEMA_VERSION,
         }
         generator_versions = {
@@ -309,7 +312,7 @@ class DungeonStudioService:
                     latest_lineage.intent.schema_version
                 )
             else:
-                schema_versions["dungeon_generation_proposal"] = "2.0.0"
+                schema_versions["dungeon_generation_proposal"] = "2.1.0"
                 generator_versions["design_compiler"] = (
                     dm_dungeon.DUNGEON_DESIGN_COMPILER_VERSION
                 )
@@ -324,10 +327,10 @@ class DungeonStudioService:
                 schema_versions=schema_versions,
                 generator_versions=generator_versions,
                 renderer_versions={
-                    "svg": "svg-v1",
+                    "svg": SVG_RENDERER_VERSION,
                     "png": "png-v1",
                     "pdf": "pdf-v1",
-                    "roll20": "roll20-v1",
+                    "roll20": ROLL20_EXPORTER_VERSION,
                 },
                 model_task_profile_id=model_task_profile_id,
                 model_run_ids=tuple(item.model_run_id for item in model_lineage),

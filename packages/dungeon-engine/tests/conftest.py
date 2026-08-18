@@ -28,7 +28,7 @@ def layout_request(synthetic_package: DungeonPackage) -> LayoutRequest:
         brief=synthetic_package.brief,
         topology=synthetic_package.topology,
         seed=424242,
-        generator_version="orthogonal-v1",
+        generator_version="orthogonal-v2",
     )
 
 

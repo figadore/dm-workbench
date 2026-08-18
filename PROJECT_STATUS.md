@@ -7,8 +7,8 @@
 ## Current Snapshot
 
 - **Last updated:** 2026-08-17
-- **Branch:** `fast-track-prompt-to-dungeon` — ahead of `origin/fast-track-prompt-to-dungeon` by 14 commits.
-- **Working tree:** only the user-directed V2 connection-validity prompt guidance is uncommitted: `PROJECT_STATUS.md`, `src/dm_assistant/orchestration/dungeons/prompting.py`, and `tests/unit/test_prompted_dungeon_workflow.py`. Earlier debug logging, repair diagnostics, V2 review, and eval work were committed as `9497431` (`debug logging, fix some doors`); no migration changes.
+- **Branch:** `fast-track-prompt-to-dungeon` — ahead of `origin/fast-track-prompt-to-dungeon` by 17 commits.
+- **Working tree:** uncommitted user-directed directional endpoint concealment work. The active pre-consumer design contract is now `2.1.0` with compiler-3, topology/package `1.1.0`, orthogonal-v2, svg-v2, and roll20-v2 pins; synthetic fixtures/callers were updated in place because no retained dungeon artifacts or external consumers exist. No migration changed.
 - **Current phase:** P3 — Canonical Revisions, Review, and Change Logging.
 - **Last completed task:** P7-12g plus post-completion P7 V2 correctness review.
 - **Current task:** **P3-01 — Campaign revision and change-set schema** (not started).
@@ -66,6 +66,23 @@ User-directed V2 connection-guidance verification:
 - `uv run mypy --strict src/dm_assistant/orchestration/dungeons/prompting.py` → passed.
 - `git diff --check` → passed.
 
+Last-two-commit review verification:
+
+- `uv run pytest -q packages/dungeon-engine/tests` → `120 passed`.
+- `uv run pytest -q tests/unit/test_prompted_dungeon_workflow.py tests/unit/test_cli.py` → `30 passed`.
+- `uv run pytest -q tests/unit tests/evals` → `177 passed`.
+- Focused Ruff lint and format checks over all reviewed files → passed.
+- Strict mypy over all reviewed source files → passed.
+- `git diff --check` → passed.
+
+Directional endpoint concealment verification:
+
+- `uv run pytest -q packages/dungeon-engine/tests` → `122 passed`.
+- `uv run pytest -q tests/unit tests/evals` → `177 passed`.
+- `make test-integration PYTEST_ARGS='tests/integration/test_dungeon_studio_cli.py tests/integration/test_dungeon_studio_web_prompt.py tests/integration/test_preparation_persistence.py'` → `16 passed`.
+- Focused Ruff lint/format and strict mypy over changed source/tests → passed after formatting.
+- `git diff --check` → passed.
+
 The frozen suite contains ten synthetic compact V2 cases: one/two floor, secret lower level, actual branch plus loop, clue gate, trap, optional hidden area, final relic, invalid-reference repair, and safe impossible-request abstention. It now enforces the declared first-pass outcomes and requested semantics, compiler/layout validity, deterministic replay, and omission of all compiler-classified DM-only components from player SVG. A body-free comparison contract records independent V1/V2 observations for tool/schema/compile/repair/semantic/package/secrecy, token, latency, and optional DM-edit metrics; it cannot accept provider response bodies or pass one response into the other run. `dungeon-intent-v2-eval` is explicitly documented as an opt-in comparison policy.
 
 **P7-12g rollout decision:** retain the existing V2 new-generation path and V1 immutable readers/replay compatibility, but do **not** retire V1 orchestration or make an additional default/profile change. No opt-in live small-model comparison has been recorded; the synthetic suite alone cannot supply that evidence. Live calls remain excluded from CI.
@@ -74,7 +91,7 @@ The frozen suite contains ten synthetic compact V2 cases: one/two floor, secret 
 
 Review fixes completed:
 
-- Rooms reachable only through secret access are compiler-derived `dm_only`; clean player rendering no longer exposes hidden-wing room geometry. Traps/barriers retain visible destination geometry while their mechanics remain DM-only. This behavior is pinned as `dungeon-design-v2-compiler-2`, and final artifact generation runs now record that compiler version without reinterpreting compiler-1 lineage.
+- Rooms reachable only through secret access are compiler-derived `dm_only`; clean player rendering no longer exposes hidden-wing room geometry. Traps/barriers retain visible destination geometry while their mechanics remain DM-only. Directional concealment is pinned as `dungeon-design-v2-compiler-3`, and final artifact generation runs record the active compiler version.
 - Multiple dependencies targeting one barred connection now fail with a stable compiler diagnostic instead of silently selecting the last dependency.
 - A schema-invalid V2 submit call now consumes the one bounded fresh repair path with safe location-only diagnostics and measured remaining budgets. Failed and repaired submissions preserve their own exact lineage rather than associating every run with the final proposal.
 - Web no longer attempts to terminally finish an application-owned prompt run a second time, and non-cancellation `ModelRunAbstained` failures are no longer mislabeled as cancelled.
@@ -86,17 +103,17 @@ Deferred review notes (do not fold into P3-01 opportunistically):
 - Prompt-attempt inspection still does not durably pin the resolved provider/model/profile. The run begins correctly before catalog/provider contact, but the existing immutable start fields have no later safe metadata-enrichment operation. Design an explicit constrained attempt-metadata update or stage-event projection before claiming full P7-12f inspection coverage.
 - Browser reconnect state is still process-local in `DungeonPromptWorkbenchService._runs`; the durable generation run survives, but a Workbench restart cannot reconstruct SSE/UI events or the final artifact link. A future P7 observability slice should project web state from durable attempt records.
 - The application boundary still collapses most non-cancellation transport/submission/compile failures to `dungeon_prompt_failed`. Extend the public-safe stage/code taxonomy without exposing provider/model text.
-- The implemented compact V2 schema still omits some target-boundary creative fields from P7-12 (room tags/preparation prose, tones, explicit branch/loop requests, and encounter-slot intent). The implementation plan now records a dedicated deferred follow-up. Add them only through a new design/schema/compiler version with synthetic small-model evidence; do not reinterpret stored `2.0.0` proposals.
+- The implemented compact V2 schema still omits some target-boundary creative fields from P7-12 (room tags/preparation prose, tones, explicit branch/loop requests, and encounter-slot intent). The implementation plan records a dedicated deferred follow-up. Add them only with synthetic small-model evidence; once retained artifacts or external consumers exist, use a new design/schema/compiler version rather than replacing the active contract in place.
 - The frozen V2 evaluator directly checks SVG component secrecy; PNG/PDF/Roll20 secrecy remains covered by lower-level exporter tests rather than this cross-version comparison. A future eval revision should aggregate all clean package roles before using leakage as rollout evidence.
 
 ## User-Directed V2 Follow-up Tracker
 
 - [x] **Explain a skipped V2 repair when gateway usage is unavailable.** The application now emits stable `dungeon_prompt_repair_usage_unavailable`, and the CLI explains that deterministic validation failed but safe automatic repair could not start because the gateway did not report token usage. This is not presented as a model abstention. Covered by focused CLI/application classification tests.
-- [ ] **Enable secret vertical links** (stairs/ladders). This requires a new versioned V2 design/compiler contract; `2.0.0` remains immutable and currently rejects them.
-- [ ] **Add directional endpoint concealment/discovery semantics** for connections, so an endpoint can be hidden from one room/floor and visible from the other. Design this with fail-closed player maps and explicit reveal/publication state; current V2 only has one connection-wide concealment value.
+- [x] **Enable secret vertical links** (stairs/ladders). Design `2.1.0` accepts directional or symmetric hidden endpoints; compiler-3 derives directed discovery and endpoint publication.
+- [x] **Add directional endpoint concealment/discovery semantics** for connections. Doors, stairs, and ladders support independent `from_hidden`/`to_hidden`; layout combines endpoint concealment with room publication, player output normalizes a publishable one-sided secret door, and DM output retains the secret classification. Durable in-play reveal/overlay state remains deferred.
 - [x] **Bounded fresh V2 repair exists.** It remains one fresh request containing the prior compact proposal and safe diagnostics, subject to cumulative time/token budgets.
 - [ ] **Make bounded repair usable with unavailable provider usage.** Requires an explicit architecture/budget-policy decision; do not treat unknown usage as zero.
-- [x] **Add compact connection-validity guidance/example to the initial V2 prompt.** The versioned V2 instruction now distinguishes same-floor passage/door links from cross-floor stairs/ladders and shows the valid `2.0.0` hidden-descent pattern: a same-floor secret door into a hidden transition room followed by an open vertical link. Instruction lineage is now `instructions-2`; focused prompt-content coverage is present.
+- [x] **Add compact connection-validity guidance/example to the initial V2 prompt.** Instruction lineage `instructions-3` distinguishes same-floor passage/door links from cross-floor stairs/ladders and gives a compact one-sided hidden-ladder example using `from_hidden`/`to_hidden`.
 
 ## P7-12g Guardrails
 
@@ -107,8 +124,9 @@ Deferred review notes (do not fold into P3-01 opportunistically):
 
 ## Handoff
 
-- **Files changed in this handoff:** uncommitted user-directed connection guidance in `src/dm_assistant/orchestration/dungeons/prompting.py`, focused coverage in `tests/unit/test_prompted_dungeon_workflow.py`, and this handoff. Earlier debug logging, repair diagnostics, V2 review, and eval work are committed in `9497431`; no migration changed.
+- **Files changed in this handoff:** directional design/compiler/topology/layout/package/render/export contracts and implementations under `packages/dungeon-engine/src/dm_dungeon/`; synthetic package, golden, compiler, rendering, Roll20, contract, property, and CLI tests; Workbench prompting/application/service plus prompt/eval/integration fixtures; architecture/plan documentation; and this handoff. No migration changed.
+- **Implementation decision:** because there are no retained generated dungeons or external consumers, the active contracts and synthetic fixtures were advanced in place rather than adding unused compatibility readers. Cheap version pins were still advanced so new lineage is self-describing. Connection-wide topology remains fail-closed, while exact layout derives per-endpoint publication from concealment plus room visibility; this fixes the original bug where one hidden endpoint suppressed both.
 - **P7-12g and review are complete:** V2 rollout behavior is unchanged; V1 is retained for immutable readers/replay and not retired. The documented opt-in live comparison remains an operator action, not CI. No migration changed.
 - **Single next recommended task:** P3-01 — Campaign revision and change-set schema. **First concrete action:** read P3-01 plus the canonical-write architecture sections, then inspect `migrations/`, `src/dm_assistant/db/models.py`, and the preparation schema before designing one atomic revision/change-set migration.
-- **Suggested commit subject:** `P7-12g add V2 connection-validity prompt guidance`.
+- **Suggested commit subject:** `P7-12g add directional connection concealment`.
 - Before changing code or schema: inspect `git status --short --branch`, read this file, then read the P3-01 plan and applicable architecture invariants.

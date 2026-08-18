@@ -371,7 +371,10 @@ def _preserves_expected_semantics(
         flags.add("one_floor")
     if len(design.floors) == 2:
         flags.add("two_floor")
-    if any(item.concealment.value == "secret" for item in design.connections):
+    if any(
+        item.concealment.value == "secret" or item.from_hidden or item.to_hidden
+        for item in design.connections
+    ):
         flags.add("secret")
     if max(room_degree.values(), default=0) >= 3:
         flags.add("branch")
@@ -424,6 +427,6 @@ def _layout_request(result: DungeonDesignCompileResult, case_id: str) -> LayoutR
         brief=result.brief,
         topology=result.topology,
         seed=seed,
-        generator_version="orthogonal-v1",
+        generator_version="orthogonal-v2",
         floor_bounds=result.floor_bounds,
     )

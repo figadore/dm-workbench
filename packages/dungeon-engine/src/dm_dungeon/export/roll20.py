@@ -6,6 +6,7 @@ import zipfile
 from collections.abc import Iterable
 
 from dm_dungeon.contracts.package import DungeonPackage
+from dm_dungeon.contracts.topology import DoorType
 from dm_dungeon.export.contracts import (
     ExportDiagnostic,
     ExportDiagnosticCode,
@@ -28,6 +29,7 @@ from dm_dungeon.export.roll20_contracts import (
     Roll20TokenPlacement,
     Roll20WallPolygon,
 )
+from dm_dungeon.rendering import RenderAudience
 from dm_dungeon.serialization import to_canonical_json
 from dm_dungeon.validation.diagnostics import DiagnosticSeverity
 
@@ -104,7 +106,12 @@ def export_roll20_bundle(
         Roll20DoorSegment(
             component_id=door.id,
             floor_id=door.floor_id,
-            door_type=door.door_type,
+            door_type=(
+                DoorType.NORMAL
+                if request.audience is RenderAudience.PLAYER
+                and door.door_type is DoorType.SECRET
+                else door.door_type
+            ),
             start=door.segment.start,
             end=door.segment.end,
         )

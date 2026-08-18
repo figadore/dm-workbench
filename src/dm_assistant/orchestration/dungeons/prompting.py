@@ -64,12 +64,13 @@ from dm_dungeon import (
     validate_geometry,
     validate_topology,
 )
+from dm_dungeon.layout import ORTHOGONAL_LAYOUT_GENERATOR_VERSION
 
 _DUNGEON_CONTEXT_KIND = "dungeon_generation"
 _DUNGEON_INTENT_SCHEMA_NAME = "dungeon_generation_intent_v1"
 _DUNGEON_INTENT_SCHEMA_VERSION = "1.0.0"
 _DUNGEON_V2_SCHEMA_NAME = "dungeon_generation_proposal_v2"
-_DUNGEON_V2_SCHEMA_VERSION = "2.0.0"
+_DUNGEON_V2_SCHEMA_VERSION = "2.1.0"
 _SUBMIT_DUNGEON_INTENT_V2_TOOL = "submit_dungeon_intent_v2"
 _REVIEW_BRIEF_TOOL = "review_dungeon_brief"
 _REVIEW_TOPOLOGY_TOOL = "review_dungeon_topology"
@@ -85,11 +86,11 @@ _DUNGEON_TOOL_NAMES = (
 )
 _MAX_REPAIR_DIAGNOSTICS = 16
 _V2_CONNECTION_GUIDANCE = (
-    "Connection rules for design 2.0.0: use passage or door only between rooms on "
-    "one floor; use stairs or ladder only between different floors. Use from_hidden "
-    "and to_hidden independently for doors, stairs, or ladders; for example, a "
-    "ladder hidden under an upper-floor rug has from_hidden true and to_hidden false. "
-    "Locked, puzzle, and trapped intent still requires a door."
+    "Connection rules: use passage or door only between rooms on one floor; use "
+    "stairs or ladder only between different floors. Use from_hidden and to_hidden "
+    "independently for doors, stairs, or ladders; for example, a ladder hidden under "
+    "an upper-floor rug has from_hidden true and to_hidden false. Locked, puzzle, "
+    "and trapped intent still requires a door."
 )
 logger = get_logger(__name__)
 
@@ -230,9 +231,9 @@ def resolve_dungeon_v2_prompt_profile(
     return base.model_copy(
         update={
             "task_profile_id": uuid.UUID("77777777-7777-7777-7777-777777777712"),
-            "task_profile_version": "2.0.0",
-            "prompt_version": "prompt-2",
-            "instruction_version": "instructions-2",
+            "task_profile_version": "2.1.0",
+            "prompt_version": "prompt-3",
+            "instruction_version": "instructions-3",
             "output_schema_name": _DUNGEON_V2_SCHEMA_NAME,
             "output_schema_version": _DUNGEON_V2_SCHEMA_VERSION,
             "allowed_tools": (_SUBMIT_DUNGEON_INTENT_V2_TOOL,),
@@ -625,7 +626,7 @@ def compile_layout_request(
     source: dict[str, JsonValue] = {
         "intent": intent_document,
         "seed": seed,
-        "generator_version": "orthogonal-v1",
+        "generator_version": ORTHOGONAL_LAYOUT_GENERATOR_VERSION,
     }
     package_id = f"dungeon_{canonical_json_sha256(source)[:32]}"
     return LayoutRequest(
@@ -634,7 +635,7 @@ def compile_layout_request(
         brief=intent.brief,
         topology=intent.topology,
         seed=seed,
-        generator_version="orthogonal-v1",
+        generator_version=ORTHOGONAL_LAYOUT_GENERATOR_VERSION,
     )
 
 
@@ -777,7 +778,7 @@ def _compile_v2_layout_request(
         brief=compiled.brief,
         topology=compiled.topology,
         seed=seed,
-        generator_version="orthogonal-v1",
+        generator_version=ORTHOGONAL_LAYOUT_GENERATOR_VERSION,
         floor_bounds=compiled.floor_bounds,
     )
 
@@ -1143,7 +1144,7 @@ def _validate_v2_profile(profile: ResolvedModelRunProfile) -> None:
     if profile.output_schema_name != _DUNGEON_V2_SCHEMA_NAME:
         raise ValueError("V2 submission requires the dungeon V2 proposal schema")
     if profile.output_schema_version != _DUNGEON_V2_SCHEMA_VERSION:
-        raise ValueError("V2 submission requires proposal schema version 2.0.0")
+        raise ValueError("V2 submission requires proposal schema version 2.1.0")
     if profile.allowed_tools != (_SUBMIT_DUNGEON_INTENT_V2_TOOL,):
         raise ValueError("V2 submission exposes only submit_dungeon_intent_v2")
     if profile.turn_budget != 1 or profile.tool_budget != 1:

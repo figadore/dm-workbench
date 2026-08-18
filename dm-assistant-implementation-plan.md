@@ -1441,12 +1441,15 @@ branch/loop requirements, and encounter-slot intent. Connections can incidentall
 form branches or loops today, but there is no separate requested-property contract
 for deterministic validation, and generated room notes remain mostly mechanical.
 
-Do not add these fields to or reinterpret stored `2.0.0` proposals. Introduce a new
-design/schema/compiler version, preserve existing readers and exact compiled
-lineage, and add synthetic small-model coverage for omission/default behavior,
-semantic preservation, compiler derivation, bounded prose, encounter-anchor
-ownership, and deterministic branch/loop validation. Keep prose in the Workbench
-preparation layer and stable IDs/geometry/encounter anchors in deterministic code.
+Directional endpoint concealment was added in the pre-consumer `2.1.0` contract;
+there were no retained dungeon artifacts, so the active synthetic fixtures and
+pins were advanced in place without carrying an unused `2.0.0` reader. Add the
+remaining creative fields through a later design/schema/compiler version once
+there are retained artifacts or external consumers, with synthetic small-model
+coverage for omission/default behavior, semantic preservation, compiler
+derivation, bounded prose, encounter-anchor ownership, and deterministic
+branch/loop validation. Keep prose in the Workbench preparation layer and stable
+IDs/geometry/encounter anchors in deterministic code.
 
 **Phase gate P7**
 

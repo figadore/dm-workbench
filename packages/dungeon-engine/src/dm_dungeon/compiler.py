@@ -19,6 +19,7 @@ from dm_dungeon.contracts.design_v2 import (
     BarrierIntent,
     Concealment,
     DependencyKind,
+    DesignConnectionV2,
     DungeonDesignSpecV2,
     HazardIntent,
     PassageType,
@@ -47,8 +48,8 @@ from dm_dungeon.contracts.topology import (
 )
 from dm_dungeon.layout.contracts import FloorLayoutBounds
 
-DUNGEON_DESIGN_COMPILER_VERSION: Literal["dungeon-design-v2-compiler-2"] = (
-    "dungeon-design-v2-compiler-2"
+DUNGEON_DESIGN_COMPILER_VERSION: Literal["dungeon-design-v2-compiler-3"] = (
+    "dungeon-design-v2-compiler-3"
 )
 
 
@@ -65,7 +66,7 @@ class DungeonDesignCompileResult(ContractModel):
     """A complete exact intent or a bounded set of compiler diagnostics."""
 
     accepted: bool
-    compiler_version: Literal["dungeon-design-v2-compiler-2"]
+    compiler_version: Literal["dungeon-design-v2-compiler-3"]
     input_hash: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
     output_hash: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")] | None = None
     brief: DungeonBrief | None = None
@@ -314,7 +315,7 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
         for floor in sorted(spec.floors, key=lambda value: value.local_ref)
     )
     topology = DungeonTopology(
-        schema_version="1.0.0",
+        schema_version="1.1.0",
         id=_component_id("topology", "root"),
         visibility=Visibility.PLAYER_SAFE,
         floors=floors,
@@ -355,19 +356,15 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
     )
 
 
-def _hidden_from(connection: object) -> bool:
-    return bool(getattr(connection, "from_hidden", False)) or (
-        getattr(connection, "concealment", Concealment.OPEN) is Concealment.SECRET
-    )
+def _hidden_from(connection: DesignConnectionV2) -> bool:
+    return connection.from_hidden or connection.concealment is Concealment.SECRET
 
 
-def _hidden_to(connection: object) -> bool:
-    return bool(getattr(connection, "to_hidden", False)) or (
-        getattr(connection, "concealment", Concealment.OPEN) is Concealment.SECRET
-    )
+def _hidden_to(connection: DesignConnectionV2) -> bool:
+    return connection.to_hidden or connection.concealment is Concealment.SECRET
 
 
-def _hidden_at_either_end(connection: object) -> bool:
+def _hidden_at_either_end(connection: DesignConnectionV2) -> bool:
     return _hidden_from(connection) or _hidden_to(connection)
 
 
@@ -505,6 +502,17 @@ def _validate_design(spec: DungeonDesignSpecV2) -> list[DungeonDesignCompileDiag
                         "use passage or door on one floor",
                     )
                 )
+        if connection.passage is PassageType.PASSAGE and _hidden_at_either_end(
+            connection
+        ):
+            diagnostics.append(
+                _diagnostic(
+                    "design.connection_intent_unsupported",
+                    f"/connections/{index}",
+                    (connection.local_ref,),
+                    "use a door, stair, or ladder for hidden endpoint intent",
+                )
+            )
         if connection.passage is not PassageType.DOOR and (
             connection.hazard is HazardIntent.TRAPPED
             or connection.barrier is not BarrierIntent.NONE

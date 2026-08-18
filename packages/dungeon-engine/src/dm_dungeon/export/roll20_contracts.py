@@ -22,7 +22,7 @@ from dm_dungeon.rendering import RenderAudience, SvgThemeName
 ROLL20_EXPORT_REQUEST_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 ROLL20_EXPORT_MANIFEST_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 ROLL20_EXPORT_RESULT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
-ROLL20_EXPORTER_VERSION: Literal["roll20-v1"] = "roll20-v1"
+ROLL20_EXPORTER_VERSION: Literal["roll20-v2"] = "roll20-v2"
 SafePrefix = Annotated[
     str,
     StringConstraints(
@@ -133,7 +133,7 @@ class Roll20ExportManifest(VersionedContract):
     supported_schema_version = ROLL20_EXPORT_MANIFEST_SCHEMA_VERSION
 
     schema_version: Literal["1.0.0"]
-    exporter_version: Literal["roll20-v1"]
+    exporter_version: Literal["roll20-v2"]
     package_id: OpaqueId
     floor_id: OpaqueId
     audience: RenderAudience

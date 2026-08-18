@@ -247,7 +247,7 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
     proposal = {
         "proposal_version": "2",
         "design": {
-            "schema_version": "2.0.0",
+            "schema_version": "2.1.0",
             "title": "Salt Cellar",
             "premise": "A sealed ledger waits below the tide.",
             "themes": ["salt"],

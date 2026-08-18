@@ -44,7 +44,7 @@ def test_package_json_schema_exposes_versioned_root_and_definitions() -> None:
     schema = dungeon_package_json_schema()
 
     assert schema["title"] == "DungeonPackage"
-    assert schema["properties"]["schema_version"]["const"] == "1.0.0"
+    assert schema["properties"]["schema_version"]["const"] == "1.1.0"
     assert "DungeonBrief" in schema["$defs"]
     assert "DungeonTopology" in schema["$defs"]
     assert "RenderLayer" in schema["$defs"]
@@ -125,7 +125,7 @@ def test_secret_door_cannot_be_player_safe(fixture_path: Path) -> None:
     secret_door["layer_id"] = "layer_base"
 
     with pytest.raises(
-        ValidationError, match="secret and trapped doors must be dm_only"
+        ValidationError, match="player_safe secret doors require exactly one"
     ):
         load_dungeon_package_json(json.dumps(payload))
 

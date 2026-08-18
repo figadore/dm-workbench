@@ -12,6 +12,8 @@ from PIL import Image
 from pydantic import ValidationError
 
 from dm_dungeon import DungeonPackage, to_canonical_json
+from dm_dungeon.contracts import Visibility
+from dm_dungeon.contracts.topology import DoorType
 from dm_dungeon.export import (
     ExportDiagnosticCode,
     Roll20AssetRole,
@@ -144,6 +146,51 @@ def test_player_manifest_omits_every_dm_only_geometry_and_metadata(
         "connection_entry_door"
     }
     assert manifest.token_placements == ()
+
+
+def test_player_manifest_normalizes_a_one_sided_secret_door(
+    synthetic_package: DungeonPackage,
+) -> None:
+    # A visible endpoint is published as an ordinary door; only the DM export
+    # retains the concealed-side classification.
+    package = synthetic_package
+    original = next(item for item in package.doors if item.door_type is DoorType.NORMAL)
+    directional = original.model_copy(
+        update={
+            "door_type": DoorType.SECRET,
+            "to_hidden": True,
+            "visibility": Visibility.PLAYER_SAFE,
+        }
+    )
+    package = package.model_copy(
+        update={
+            "doors": tuple(
+                directional if item.id == original.id else item
+                for item in package.doors
+            )
+        }
+    )
+
+    player = export_roll20_bundle(package, roll20_request(package))
+    dm = export_roll20_bundle(
+        package,
+        roll20_request(package, audience="dm"),
+    )
+
+    assert player.result.manifest is not None
+    assert dm.result.manifest is not None
+    player_door = next(
+        item
+        for item in player.result.manifest.door_segments
+        if item.component_id == directional.id
+    )
+    dm_door = next(
+        item
+        for item in dm.result.manifest.door_segments
+        if item.component_id == directional.id
+    )
+    assert player_door.door_type is DoorType.NORMAL
+    assert dm_door.door_type is DoorType.SECRET
 
 
 def test_dm_only_metadata_changes_do_not_change_player_bundle(

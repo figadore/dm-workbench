@@ -109,7 +109,7 @@ def start_run(service: PreparationService, campaign_id: uuid.UUID) -> uuid.UUID:
                 "dungeon_brief": "1.0.0",
                 "dungeon_package": "1.0.0",
             },
-            generator_versions={"layout": "orthogonal-v1"},
+            generator_versions={"layout": "orthogonal-v2"},
             renderer_versions={"svg": "svg-v1", "png": "png-v1"},
             model_task_profile_id=uuid.uuid4(),
             model_run_ids=(uuid.uuid4(),),
@@ -348,7 +348,7 @@ def test_generation_run_pins_every_input_and_becomes_immutable(
     assert row["context_payload_sha256"]
     assert row["context_source_links"][0]["source_id"] == "synthetic-source"
     assert row["schema_versions"]["dungeon_package"] == "1.0.0"
-    assert row["generator_versions"] == {"layout": "orthogonal-v1"}
+    assert row["generator_versions"] == {"layout": "orthogonal-v2"}
     assert row["renderer_versions"]["png"] == "png-v1"
     assert len(row["model_run_ids"]) == 1
     assert row["tool_runs"][0]["tool_name"] == "validate_geometry"

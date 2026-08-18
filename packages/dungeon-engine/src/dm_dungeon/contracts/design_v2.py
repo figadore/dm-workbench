@@ -19,7 +19,7 @@ from dm_dungeon.contracts.common import (
 )
 from dm_dungeon.contracts.topology import RoomRole
 
-DUNGEON_DESIGN_V2_SCHEMA_VERSION: Literal["2.0.0"] = "2.0.0"
+DUNGEON_DESIGN_V2_SCHEMA_VERSION: Literal["2.1.0"] = "2.1.0"
 LocalRef = Annotated[
     str,
     Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_-]*$"),
@@ -99,8 +99,9 @@ class DesignConnectionV2(ContractModel):
     from_ref: LocalRef
     to_ref: LocalRef
     passage: PassageType = PassageType.PASSAGE
-    # `concealment` is retained only for existing local fixtures; new intent is
-    # directional, so a connection can be hidden independently at either end.
+    # `concealment=secret` remains the compact symmetric shorthand. Endpoint
+    # flags express the common asymmetric case without making publication a
+    # model-owned decision.
     concealment: Concealment = Concealment.OPEN
     from_hidden: bool = False
     to_hidden: bool = False
@@ -128,7 +129,7 @@ class DungeonDesignSpecV2(VersionedContract):
 
     supported_schema_version = DUNGEON_DESIGN_V2_SCHEMA_VERSION
 
-    schema_version: Literal["2.0.0"]
+    schema_version: Literal["2.1.0"]
     title: ShortText
     premise: NonEmptyText
     purpose: DungeonPurpose = DungeonPurpose.RUIN

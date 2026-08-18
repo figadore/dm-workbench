@@ -15,7 +15,7 @@ from dm_dungeon.validation.diagnostics import DiagnosticSeverity
 
 SVG_RENDER_REQUEST_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 SVG_RENDER_RESULT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
-SVG_RENDERER_VERSION: Literal["svg-v1"] = "svg-v1"
+SVG_RENDERER_VERSION: Literal["svg-v2"] = "svg-v2"
 PixelsPerCell = Annotated[int, Field(ge=8, le=512)]
 PositivePixels = Annotated[int, Field(ge=1)]
 Sha256Hex = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
@@ -78,7 +78,7 @@ class SvgRenderResult(VersionedContract):
     supported_schema_version = SVG_RENDER_RESULT_SCHEMA_VERSION
 
     schema_version: Literal["1.0.0"]
-    renderer_version: Literal["svg-v1"]
+    renderer_version: Literal["svg-v2"]
     package_id: OpaqueId
     floor_id: OpaqueId
     audience: RenderAudience

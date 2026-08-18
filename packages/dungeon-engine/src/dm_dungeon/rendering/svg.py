@@ -412,11 +412,17 @@ def _render_doors(
         ):
             continue
         component = _component_group(group, door, "door", rendered_ids)
-        component.set("data-door-type", door.door_type.value)
+        rendered_door_type = (
+            DoorType.NORMAL
+            if request.audience is RenderAudience.PLAYER
+            and door.door_type is DoorType.SECRET
+            else door.door_type
+        )
+        component.set("data-door-type", rendered_door_type.value)
         css_class = "door"
-        if door.door_type is DoorType.SECRET:
+        if rendered_door_type is DoorType.SECRET:
             css_class += " door-secret"
-        elif door.door_type is DoorType.TRAPPED:
+        elif rendered_door_type is DoorType.TRAPPED:
             css_class += " door-trapped"
         ET.SubElement(
             component,
@@ -429,7 +435,7 @@ def _render_doors(
                 "y2": str(door.segment.end.y * scale),
             },
         )
-        if door.door_type in {DoorType.SECRET, DoorType.TRAPPED}:
+        if rendered_door_type in {DoorType.SECRET, DoorType.TRAPPED}:
             midpoint = _segment_midpoint(door.segment.start, door.segment.end)
             symbol = ET.SubElement(
                 component,
@@ -442,7 +448,7 @@ def _render_doors(
                     "data-kind": "door-secret-symbol",
                 },
             )
-            symbol.text = "S" if door.door_type is DoorType.SECRET else "!"
+            symbol.text = "S" if rendered_door_type is DoorType.SECRET else "!"
 
 
 def _render_features_and_hazards(
@@ -483,10 +489,8 @@ def _render_transitions(
     group = ET.SubElement(root, "g", {"id": "transitions"})
     rendered_stair_ids: set[str] = set()
     for stair in package.stairs:
-        if (
-            stair.floor_id != floor_id
-            or (request.audience is RenderAudience.PLAYER and stair.hidden)
-            or not _layered_visible(stair, layers, request.audience)
+        if stair.floor_id != floor_id or not _layered_visible(
+            stair, layers, request.audience
         ):
             continue
         component = _component_group(group, stair, "stair", rendered_ids)
@@ -505,7 +509,10 @@ def _render_transitions(
             (index, endpoint)
             for index, endpoint in enumerate(link.endpoints)
             if endpoint.floor_id == floor_id
-            and not (request.audience is RenderAudience.PLAYER and endpoint.hidden)
+            and (
+                request.audience is RenderAudience.DM
+                or endpoint.visibility is Visibility.PLAYER_SAFE
+            )
             and (
                 endpoint.stair_id is None or endpoint.stair_id not in rendered_stair_ids
             )

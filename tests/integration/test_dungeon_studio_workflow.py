@@ -71,7 +71,7 @@ def request_fixture() -> LayoutRequest:
         brief=package.brief,
         topology=package.topology,
         seed=424242,
-        generator_version="orthogonal-v1",
+        generator_version="orthogonal-v2",
     )
 
 

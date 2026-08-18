@@ -7,7 +7,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 def rasterize_svg(svg: str, dpi: int) -> bytes:
-    """Rasterize the trusted SVG subset emitted by ``svg-v1``."""
+    """Rasterize the trusted SVG subset emitted by the pinned SVG renderer."""
     root = ET.fromstring(svg)
     width = int(root.attrib["width"])
     height = int(root.attrib["height"])

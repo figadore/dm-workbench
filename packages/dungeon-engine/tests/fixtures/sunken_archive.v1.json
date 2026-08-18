@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "id": "pkg_sunken_archive",
   "brief": {
     "schema_version": "1.0.0",
@@ -44,7 +44,7 @@
     "tags": ["synthetic", "archive"]
   },
   "topology": {
-    "schema_version": "1.0.0",
+    "schema_version": "1.1.0",
     "id": "topology_sunken_archive",
     "visibility": "dm_only",
     "floors": [
@@ -225,6 +225,8 @@
         "id": "connection_entry_corridor",
         "from_room_id": "room_entrance",
         "to_room_id": "room_hall",
+        "from_hidden": false,
+        "to_hidden": false,
         "minimum_width_cells": 1,
         "visibility": "player_safe"
       },
@@ -233,6 +235,8 @@
         "id": "connection_entry_door",
         "from_room_id": "room_entrance",
         "to_room_id": "room_hall",
+        "from_hidden": false,
+        "to_hidden": false,
         "door_type": "normal",
         "gate_id": null,
         "trap_id": null,
@@ -243,6 +247,8 @@
         "id": "connection_vault_secret",
         "from_room_id": "room_hall",
         "to_room_id": "room_vault",
+        "from_hidden": true,
+        "to_hidden": true,
         "door_type": "secret",
         "gate_id": null,
         "trap_id": null,
@@ -253,6 +259,8 @@
         "id": "connection_archive_stairs",
         "from_room_id": "room_hall",
         "to_room_id": "room_crypt",
+        "from_hidden": false,
+        "to_hidden": false,
         "from_floor_id": "floor_upper",
         "to_floor_id": "floor_lower",
         "direction": "both",
@@ -263,6 +271,8 @@
         "id": "connection_crypt_trap",
         "from_room_id": "room_crypt",
         "to_room_id": "room_antechamber",
+        "from_hidden": false,
+        "to_hidden": false,
         "door_type": "trapped",
         "gate_id": null,
         "trap_id": "hazard_needle_lock",
@@ -273,6 +283,8 @@
         "id": "connection_sanctum_lock",
         "from_room_id": "room_antechamber",
         "to_room_id": "room_sanctum",
+        "from_hidden": false,
+        "to_hidden": false,
         "door_type": "locked",
         "gate_id": "gate_sanctum",
         "trap_id": null,
@@ -283,6 +295,8 @@
         "id": "connection_secret_ladder",
         "from_room_id": "room_vault",
         "to_room_id": "room_sanctum",
+        "from_hidden": true,
+        "to_hidden": true,
         "from_floor_id": "floor_upper",
         "to_floor_id": "floor_lower",
         "link_type": "ladder",
@@ -293,6 +307,8 @@
         "id": "connection_sanctum_exit",
         "from_room_id": "room_sanctum",
         "to_room_id": "room_exit",
+        "from_hidden": false,
+        "to_hidden": false,
         "minimum_width_cells": 1,
         "visibility": "player_safe"
       }
@@ -615,6 +631,8 @@
       "door_type": "normal",
       "segment": {"start": {"x": 5, "y": 5}, "end": {"x": 5, "y": 7}},
       "connects_room_ids": ["room_entrance", "room_hall"],
+      "from_hidden": false,
+      "to_hidden": false,
       "gate_id": null,
       "hazard_id": null,
       "visibility": "player_safe"
@@ -626,6 +644,8 @@
       "door_type": "secret",
       "segment": {"start": {"x": 13, "y": 5}, "end": {"x": 13, "y": 7}},
       "connects_room_ids": ["room_hall", "room_vault"],
+      "from_hidden": true,
+      "to_hidden": true,
       "gate_id": null,
       "hazard_id": null,
       "visibility": "dm_only"
@@ -637,6 +657,8 @@
       "door_type": "trapped",
       "segment": {"start": {"x": 7, "y": 5}, "end": {"x": 7, "y": 7}},
       "connects_room_ids": ["room_crypt", "room_antechamber"],
+      "from_hidden": false,
+      "to_hidden": false,
       "gate_id": null,
       "hazard_id": "hazard_needle_lock",
       "visibility": "dm_only"
@@ -648,6 +670,8 @@
       "door_type": "locked",
       "segment": {"start": {"x": 13, "y": 5}, "end": {"x": 13, "y": 7}},
       "connects_room_ids": ["room_antechamber", "room_sanctum"],
+      "from_hidden": false,
+      "to_hidden": false,
       "gate_id": "gate_sanctum",
       "hazard_id": null,
       "visibility": "player_safe"
@@ -678,8 +702,8 @@
       "id": "connection_archive_stairs",
       "link_type": "stairs",
       "endpoints": [
-        {"floor_id": "floor_upper", "position": {"x": 10, "y": 7}, "stair_id": "stair_upper_archive"},
-        {"floor_id": "floor_lower", "position": {"x": 4, "y": 6}, "stair_id": "stair_lower_archive"}
+        {"floor_id": "floor_upper", "position": {"x": 10, "y": 7}, "visibility": "player_safe", "stair_id": "stair_upper_archive"},
+        {"floor_id": "floor_lower", "position": {"x": 4, "y": 6}, "visibility": "player_safe", "stair_id": "stair_lower_archive"}
       ],
       "visibility": "player_safe"
     },
@@ -687,8 +711,8 @@
       "id": "connection_secret_ladder",
       "link_type": "ladder",
       "endpoints": [
-        {"floor_id": "floor_upper", "position": {"x": 17, "y": 6}, "stair_id": null},
-        {"floor_id": "floor_lower", "position": {"x": 19, "y": 4}, "stair_id": null}
+        {"floor_id": "floor_upper", "position": {"x": 17, "y": 6}, "visibility": "dm_only", "stair_id": null},
+        {"floor_id": "floor_lower", "position": {"x": 19, "y": 4}, "visibility": "dm_only", "stair_id": null}
       ],
       "visibility": "dm_only"
     }
