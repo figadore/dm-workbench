@@ -1432,24 +1432,91 @@ Fix persistence correctness before routing another profile through it.
 - Existing V1 artifacts remain readable and immutable, and gateway-disabled hand-authored Studio workflows remain green.
 - Objective V2 evals justify any default-model/profile change; model names alone do not.
 
-#### Deferred follow-up — Complete the compact V2 creative contract
+### P7-13 — Dungeon output, map readability, asset UX, and print refresh
 
-The implemented `DungeonDesignSpecV2` covers the essential map structure, but it
-currently omits several creative-intent fields named by the P7-12 target boundary:
-overall tones, room tags, bounded room-specific preparation prose, explicit
-branch/loop requirements, and encounter-slot intent. Connections can incidentally
-form branches or loops today, but there is no separate requested-property contract
-for deterministic validation, and generated room notes remain mostly mechanical.
+This user-directed post-P7-12 program is specified in detail in
+[`dungeon-output-refresh-plan.md`](dungeon-output-refresh-plan.md). The latest retained
+output exposed coupled geometry, renderer, feature-content, asset-presentation, and
+print failures. Complete these slices in order; do not fold them into P3 canonical
+revision work or reinterpret immutable V1/V2 artifacts.
 
-Directional endpoint concealment was added in the pre-consumer `2.1.0` contract;
-there were no retained dungeon artifacts, so the active synthetic fixtures and
-pins were advanced in place without carrying an unused `2.0.0` reader. Add the
-remaining creative fields through a later design/schema/compiler version once
-there are retained artifacts or external consumers, with synthetic small-model
-coverage for omission/default behavior, semantic preservation, compiler
-derivation, bounded prose, encounter-anchor ownership, and deterministic
-branch/loop validation. Keep prose in the Workbench preparation layer and stable
-IDs/geometry/encounter anchors in deterministic code.
+#### P7-13a — Output quality baseline and print fail-closed switch
+
+- Freeze a synthetic output regression fixture and objective geometry, collision,
+  feature-completeness, asset-presentation, and print-sparsity metrics.
+- Split PDF and Roll20 export selection at the shared application boundary.
+- Centrally disable new exact-scale PDF generation with stable CLI/API/web behavior;
+  retain historical PDF access and keep Roll20 export operational.
+
+#### P7-13b — Connection semantics, compact placement, and geometry validation
+
+- Remove the universal room gap: direct-door rooms share a wall, passage links use
+  explicit corridor cells, and unrelated rooms retain one cell of rock clearance.
+- Version connection geometry so direct doors are not synthetic corridors; route
+  passages straight-first with endpoint approach/lead constraints and deterministic
+  bend/length/clearance scoring.
+- Prohibit corridor interior overlap with rooms, endpoint doglegs, undeclared openings,
+  and doors not located on a shared wall.
+
+#### P7-13c — Renderer visual grammar and collision-free annotation
+
+- Replace raw room IDs with stable short callouts linked to a DM key.
+- Add one code-owned grayscale-safe grammar for rooms, ordinary/secret/locked/trapped
+  doors, traps, puzzles, clues/keys, transitions, objectives, and physical features.
+- Add deterministic text-bound collision avoidance and preserve fail-closed player
+  filtering before XML/PNG/PDF construction.
+
+#### P7-13d — Doors, traps, puzzles, features, and a usable DM guide
+
+- Introduce a new retained-artifact-safe creative/proposal/compiler contract rather
+  than mutating V2. Include tones, room tags/preparation prose, explicit branch/loop
+  requirements, encounter-slot intent, features, composable door mechanics, traps,
+  hazards, and puzzles.
+- Let the model propose bounded creative descriptions and relative challenge bands;
+  deterministic pinned policy owns stable IDs, exact marker placement, visibility,
+  numeric difficulty values, dependency validation, and completeness diagnostics.
+- Keep geometry/markers in `dm_dungeon`; keep prose-heavy keyed notes in the Workbench.
+  A missing trap effect or puzzle solution is unknown/incomplete, never invented.
+
+#### P7-13e — Asset catalog, inline viewing, and meaningful filenames
+
+- Project immutable role/ordinal links into floor/audience/purpose groups: Maps, DM
+  guide, Virtual tabletop, Print, and Advanced technical lineage.
+- Add artifact-version-scoped Open and Download routes with safe purpose-derived
+  filenames. Images, trusted SVG, text, JSON, and PDFs can open in-browser; ZIP remains
+  attachment-only; DM notes download as UTF-8 `.txt`.
+- Stop presenting persistence labels such as `manifest #0` and UUID blob names as the
+  primary user interface.
+
+#### P7-13f — Print redesign and guarded re-enable
+
+- Add separate bounded reference-map and selected-region exact-scale tactical modes.
+- Preflight crop dimensions, page count, occupied coverage, paper, audience, and scale;
+  reject excessive or mostly blank output before generating bytes.
+- Re-enable print only after sparse-map rejection, per-page visual-content checks,
+  exact calibration, and stitch/alignment gates pass.
+
+#### P7-13g — Integrated UX/eval gate and rollout
+
+- Exercise prompt through floor preview, DM/player switch, keyed guide, VTT download,
+  print preflight, and preparation review in one browser workflow.
+- Preserve topology/geometry validity, deterministic replay, secrecy, atomic
+  publication, cancellation, package isolation, and historical reader gates.
+- Roll out new profile/generator/renderer pins only after synthetic metrics and manual
+  DM review pass; retain rollback to the prior generation path.
+
+**Phase gate P7-13**
+
+- Direct doors are shared-wall openings; valid corridor bends never occur at room
+  endpoints or overlap room interiors.
+- Default maps contain no opaque IDs or colliding labels and use one consistent keyed
+  feature grammar.
+- The DM can identify secret/locked/trapped doors and difficulty plus every trap,
+  puzzle, clue/key, transition, objective, and feature; player assets leak none of it.
+- Assets are organized by purpose/floor/audience, common formats open inline, downloads
+  have meaningful names, and notes are `.txt`.
+- New print output remains disabled until reference/tactical preflight and nonblank-page
+  gates pass; historical assets remain immutable/readable.
 
 **Phase gate P7**
 

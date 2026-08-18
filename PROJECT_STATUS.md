@@ -6,13 +6,13 @@
 
 ## Current Snapshot
 
-- **Last updated:** 2026-08-17
-- **Branch:** `fast-track-prompt-to-dungeon` — ahead of `origin/fast-track-prompt-to-dungeon` by 17 commits.
-- **Working tree:** uncommitted user-directed directional endpoint concealment work. The active pre-consumer design contract is now `2.1.0` with compiler-3, topology/package `1.1.0`, orthogonal-v2, svg-v2, and roll20-v2 pins; synthetic fixtures/callers were updated in place because no retained dungeon artifacts or external consumers exist. No migration changed.
-- **Current phase:** P3 — Canonical Revisions, Review, and Change Logging.
-- **Last completed task:** P7-12g plus post-completion P7 V2 correctness review.
-- **Current task:** **P3-01 — Campaign revision and change-set schema** (not started).
-- **First action:** Read the P3-01 plan section and canonical-write architecture invariants, then inspect the existing migration head/models before proposing the revision/change-set migration.
+- **Last updated:** 2026-08-18
+- **Branch:** `fast-track-prompt-to-dungeon` — ahead of `origin/fast-track-prompt-to-dungeon` by 18 commits.
+- **Working tree:** documentation-only user-directed dungeon-output refresh plan: `dungeon-output-refresh-plan.md`, P7-13 task slices in the implementation plan, architecture decisions, and this handoff. No code or migration changed.
+- **Current phase:** P7-13 — Dungeon output, map readability, asset UX, and print refresh (user-directed priority; P3 remains deferred, not partially started).
+- **Last completed task:** P7-13 planning baseline.
+- **Current task:** **P7-13a — Output quality baseline and print fail-closed switch** (not started).
+- **First action:** add the synthetic retained-output regression fixture and focused tests that measure current connector geometry, raw/colliding labels, missing keyed features, sparse print pages, and raw asset presentation before changing behavior.
 - **Schema head:** `0008_workbench_defaults`.
 
 ## Current Implementation State
@@ -103,7 +103,7 @@ Deferred review notes (do not fold into P3-01 opportunistically):
 - Prompt-attempt inspection still does not durably pin the resolved provider/model/profile. The run begins correctly before catalog/provider contact, but the existing immutable start fields have no later safe metadata-enrichment operation. Design an explicit constrained attempt-metadata update or stage-event projection before claiming full P7-12f inspection coverage.
 - Browser reconnect state is still process-local in `DungeonPromptWorkbenchService._runs`; the durable generation run survives, but a Workbench restart cannot reconstruct SSE/UI events or the final artifact link. A future P7 observability slice should project web state from durable attempt records.
 - The application boundary still collapses most non-cancellation transport/submission/compile failures to `dungeon_prompt_failed`. Extend the public-safe stage/code taxonomy without exposing provider/model text.
-- The implemented compact V2 schema still omits some target-boundary creative fields from P7-12 (room tags/preparation prose, tones, explicit branch/loop requests, and encounter-slot intent). The implementation plan records a dedicated deferred follow-up. Add them only with synthetic small-model evidence; once retained artifacts or external consumers exist, use a new design/schema/compiler version rather than replacing the active contract in place.
+- The implemented compact V2 schema still omits some target-boundary creative fields from P7-12 (room tags/preparation prose, tones, explicit branch/loop requests, and encounter-slot intent). P7-13d now combines that work with door/trap/puzzle/feature completeness. Add it only with synthetic small-model evidence and a new design/schema/compiler version; retained output now exists, so replacing the active V2 contract in place is prohibited.
 - The frozen V2 evaluator directly checks SVG component secrecy; PNG/PDF/Roll20 secrecy remains covered by lower-level exporter tests rather than this cross-version comparison. A future eval revision should aggregate all clean package roles before using leakage as rollout evidence.
 
 ## User-Directed V2 Follow-up Tracker
@@ -115,6 +115,16 @@ Deferred review notes (do not fold into P3-01 opportunistically):
 - [ ] **Make bounded repair usable with unavailable provider usage.** Requires an explicit architecture/budget-policy decision; do not treat unknown usage as zero.
 - [x] **Add compact connection-validity guidance/example to the initial V2 prompt.** Instruction lineage `instructions-3` distinguishes same-floor passage/door links from cross-floor stairs/ladders and gives a compact one-sided hidden-ladder example using `from_hidden`/`to_hidden`.
 
+## P7-13 Output Refresh Decisions
+
+- The detailed baseline and ordered slices are in [`dungeon-output-refresh-plan.md`](dungeon-output-refresh-plan.md); the implementation plan owns stable task IDs P7-13a through P7-13g.
+- The inspected screenshot is `Screenshot 2026-08-18 at 7.31.33 AM.png`. It confirms tiny endpoint doglegs/box-like corridor outlines plus overlapping raw room IDs and numbered room labels.
+- There is no universal five-foot room gap: direct-door rooms share a wall, passage links use explicit corridor cells, and unrelated rooms retain one cell of rock clearance.
+- Default maps use short keyed callouts and one grayscale-safe feature grammar. Opaque IDs remain in lineage/developer inspection only.
+- New feature intent and composable door mechanics require retained-artifact-safe versioned contracts. Geometry/marker IDs stay in `dm_dungeon`; prose-heavy DM guide content stays in the Workbench.
+- Print is planned to fail closed in P7-13a. **Current code still generates PDFs** until that slice is implemented. Historical PDFs must remain readable.
+- The redesigned print feature separates bounded reference maps from selected-region exact-scale tactical tiles and rejects excessive/sparse jobs during preflight.
+
 ## P7-12g Guardrails
 
 - Keep all eval inputs and expected outputs synthetic.
@@ -124,9 +134,12 @@ Deferred review notes (do not fold into P3-01 opportunistically):
 
 ## Handoff
 
-- **Files changed in this handoff:** directional design/compiler/topology/layout/package/render/export contracts and implementations under `packages/dungeon-engine/src/dm_dungeon/`; synthetic package, golden, compiler, rendering, Roll20, contract, property, and CLI tests; Workbench prompting/application/service plus prompt/eval/integration fixtures; architecture/plan documentation; and this handoff. No migration changed.
-- **Implementation decision:** because there are no retained generated dungeons or external consumers, the active contracts and synthetic fixtures were advanced in place rather than adding unused compatibility readers. Cheap version pins were still advanced so new lineage is self-describing. Connection-wide topology remains fail-closed, while exact layout derives per-endpoint publication from concealment plus room visibility; this fixes the original bug where one hidden endpoint suppressed both.
-- **P7-12g and review are complete:** V2 rollout behavior is unchanged; V1 is retained for immutable readers/replay and not retired. The documented opt-in live comparison remains an operator action, not CI. No migration changed.
-- **Single next recommended task:** P3-01 — Campaign revision and change-set schema. **First concrete action:** read P3-01 plus the canonical-write architecture sections, then inspect `migrations/`, `src/dm_assistant/db/models.py`, and the preparation schema before designing one atomic revision/change-set migration.
-- **Suggested commit subject:** `P7-12g add directional connection concealment`.
-- Before changing code or schema: inspect `git status --short --branch`, read this file, then read the P3-01 plan and applicable architecture invariants.
+- **Task completed:** P7-13 planning baseline only; implementation has not started.
+- **Files changed:** added `dungeon-output-refresh-plan.md`; added P7-13a..g and its phase gate to `dm-assistant-implementation-plan.md`; updated connection geometry, feature/DM-guide, renderer grammar, asset catalog, and guarded print decisions in `dm-assistant-technical-architecture.md`; updated this handoff. No code, tests, schema, or migration changed.
+- **Commands run:** latest screenshot helper and image inspection; targeted source/contract/template/test inspection; `git diff --check` (passed). No test suite was run because this handoff changes documentation only.
+- **Important current behavior:** print has been marked for centralized disabling in P7-13a, but the existing UI/service still creates PDF and Roll20 exports together. Do not claim print is disabled until tests and shared application policy prove it.
+- **Compatibility decision:** retained dungeon output now exists. P7-13 geometry, renderer, creative intent, package, and PDF changes receive new version pins/readers and never rewrite historical specifications or asset links.
+- **Working tree:** documentation changes listed above are uncommitted; no pre-existing uncommitted code was present when planning began.
+- **Single next recommended task:** P7-13a — Output quality baseline and print fail-closed switch. **First concrete action:** add the synthetic retained-output regression fixture and focused metric tests before splitting PDF/Roll20 export selection or changing behavior.
+- **Suggested commit subject:** `P7-13 plan dungeon output refresh`.
+- Before changing code or schema: inspect `git status --short --branch`, read this file, read P7-13a and `dungeon-output-refresh-plan.md`, then follow the applicable architecture invariants.
