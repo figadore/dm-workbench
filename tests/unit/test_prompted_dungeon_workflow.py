@@ -28,7 +28,9 @@ from dm_assistant.orchestration.dungeons import (
     DungeonWorkflowResult,
     PromptDungeonWorkflow,
 )
+from dm_assistant.orchestration.dungeons.application import _failure_code
 from dm_assistant.orchestration.dungeons.prompting import (
+    _v2_lineage,
     compile_layout_request,
     resolve_dungeon_prompt_profile,
     resolve_dungeon_v2_prompt_profile,
@@ -39,7 +41,11 @@ from dm_assistant.orchestration.dungeons.service import (
     _dm_notes_text,
     _dm_presentation_package,
 )
-from dm_assistant.orchestration.modeling import GatewayCompletion, GatewayToolSchema
+from dm_assistant.orchestration.modeling import (
+    GatewayCompletion,
+    GatewayToolSchema,
+    ModelRunAbstained,
+)
 from dm_dungeon import (
     RenderAudience,
     SvgRenderRequest,
@@ -59,6 +65,7 @@ class FakeGatewayClient:
     def __init__(self, completions: tuple[GatewayCompletion, ...]) -> None:
         self._completions = list(completions)
         self.tool_schemas: tuple[GatewayToolSchema, ...] = ()
+        self.messages: list[tuple[PromptMessage, ...]] = []
 
     def complete(
         self,
@@ -68,7 +75,8 @@ class FakeGatewayClient:
         allowed_tools: tuple[str, ...],
         tool_schemas: tuple[GatewayToolSchema, ...],
     ) -> GatewayCompletion:
-        del profile, messages, allowed_tools
+        del profile, allowed_tools
+        self.messages.append(messages)
         self.tool_schemas = tool_schemas
         if not self._completions:
             raise AssertionError("unexpected extra completion")
@@ -91,6 +99,18 @@ class RecordingDungeonStudio:
             generation_run_id=uuid.uuid4(),
             diagnostics=(),
         )
+
+
+def test_prompt_attempt_classifies_missing_usage_repair_without_abstention() -> None:
+    assert (
+        _failure_code(
+            ModelRunAbstained("model usage was unavailable; repair budget is unknown")
+        )
+        == "dungeon_prompt_repair_usage_unavailable"
+    )
+    assert _failure_code(ModelRunAbstained("model rejected the proposal")) == (
+        "dungeon_prompt_failed"
+    )
 
 
 def _intent(*, topology_connections: bool = True) -> DungeonGenerationIntentV1:
@@ -309,6 +329,65 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
     assert repaired.repaired is True
     assert len(repaired.model_runs) == 2
     assert repaired.compilation is not None and repaired.compilation.accepted
+    assert (
+        repaired.model_runs[0].output_payload != repaired.model_runs[1].output_payload
+    )
+    first_lineage, repaired_lineage = (_v2_lineage(run) for run in repaired.model_runs)
+    assert first_lineage.proposal_v2 is not None
+    assert first_lineage.proposal_v2 != repaired_lineage.proposal_v2
+
+    schema_invalid = deepcopy(proposal)
+    invalid_schema_design = schema_invalid["design"]
+    assert isinstance(invalid_schema_design, dict)
+    del invalid_schema_design["themes"]
+    schema_repair_gateway = FakeGatewayClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_intent_v2",
+                        call_id="submit-schema-invalid",
+                        arguments={"proposal": schema_invalid},
+                    ),
+                ),
+                input_tokens=10,
+                output_tokens=10,
+            ),
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_intent_v2",
+                        call_id="submit-schema-repair",
+                        arguments={"proposal": proposal},
+                    ),
+                ),
+                input_tokens=10,
+                output_tokens=10,
+            ),
+        )
+    )
+
+    schema_repaired = DungeonV2SubmissionService(schema_repair_gateway).submit(
+        profile=profile,
+        run_input=ModelRunInput(
+            messages=(PromptMessage(role="user", content="synthetic request"),)
+        ),
+        seed=1842,
+    )
+
+    assert schema_repaired.repaired is True
+    assert schema_repaired.compilation is not None
+    assert schema_repaired.compilation.accepted
+    assert schema_repaired.model_runs[0].status == "abstained"
+    assert schema_repaired.model_runs[0].output_payload is None
+    invalid_lineage, valid_lineage = (
+        _v2_lineage(run) for run in schema_repaired.model_runs
+    )
+    assert invalid_lineage.proposal_v2 is None
+    assert valid_lineage.proposal_v2 == schema_repaired.proposal
+    repair_message = schema_repair_gateway.messages[1][0].content
+    assert "submission.schema_invalid" in repair_message
+    assert "Salt Cellar" not in repair_message
 
 
 def test_failed_generation_regression_case_is_self_contained_and_replayable() -> None:

@@ -27,8 +27,16 @@ class PromptedDungeonModelLineage(WorkflowModel):
 
     @model_validator(mode="after")
     def require_one_model_result(self) -> PromptedDungeonModelLineage:
-        if (self.intent is None) == (self.proposal_v2 is None):
-            raise ValueError("lineage requires exactly one model result")
+        result_count = sum(
+            value is not None for value in (self.intent, self.proposal_v2)
+        )
+        if self.model_run.status == "abstained":
+            if result_count:
+                raise ValueError(
+                    "abstained lineage cannot claim a validated model result"
+                )
+        elif result_count != 1:
+            raise ValueError("successful lineage requires exactly one model result")
         return self
 
 

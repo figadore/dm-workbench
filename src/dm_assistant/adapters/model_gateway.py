@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -168,6 +169,7 @@ class PiGatewayClient:
         allowed_tools: tuple[str, ...],
         tool_schemas: tuple[GatewayToolSchema, ...],
         run_id: str | None = None,
+        debug: Callable[[str, dict[str, object]], None] | None = None,
     ) -> GatewayCompletion:
         if tuple(schema.name for schema in tool_schemas) != allowed_tools:
             raise ModelGatewayTransportError(
@@ -229,6 +231,8 @@ class PiGatewayClient:
             separators=(",", ":"),
             sort_keys=True,
         ).encode("utf-8")
+        if debug is not None:
+            debug("harness_request", json.loads(body))
         request = Request(
             f"{self.base_url.rstrip('/')}/v1/streams",
             data=body,
@@ -245,7 +249,7 @@ class PiGatewayClient:
                     raise ModelGatewayTransportError(
                         f"model gateway returned HTTP {response.status}"
                     )
-                return _decode_sse(response, deadline)
+                return _decode_sse(response, deadline, debug=debug)
         except HTTPError as error:
             raise ModelGatewayTransportError(
                 f"model gateway returned HTTP {error.code}"
@@ -317,7 +321,12 @@ class PiGatewayClient:
             ) from error
 
 
-def _decode_sse(response: Any, deadline: float) -> GatewayCompletion:
+def _decode_sse(
+    response: Any,
+    deadline: float,
+    *,
+    debug: Callable[[str, dict[str, object]], None] | None = None,
+) -> GatewayCompletion:
     content: list[str] = []
     tool_calls: list[ToolCall] = []
     input_tokens: int | None = None
@@ -333,6 +342,8 @@ def _decode_sse(response: Any, deadline: float) -> GatewayCompletion:
         if not line:
             if event_name is not None:
                 payload = _event_payload(event_name, data_lines)
+                if debug is not None:
+                    debug("gateway_event", {"event": event_name, "data": payload})
                 if event_name == "text_delta":
                     delta = payload.get("delta")
                     if not isinstance(delta, str):

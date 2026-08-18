@@ -55,8 +55,16 @@ make dev-gateway
 ```
 
 `make dev-api` enables Uvicorn reload. Unit tests and most focused tests do not
-need Compose; `make check` runs the disposable containerized quality gate.
-The Makefile auto-selects Docker when `docker` is installed and otherwise uses Podman; `CONTAINER_ENGINE=...` remains an explicit override.
+need Compose. `make test-integration` starts an isolated pgvector PostgreSQL on
+an automatically assigned loopback port, runs the integration suite, and removes
+the container even on failure. It does not use or modify the persistent development
+database. Pass a focused pytest path with, for example,
+`make test-integration PYTEST_ARGS=tests/integration/test_dungeon_studio_web_prompt.py`.
+All repository tests ignore the developer-local `.env` and provide synthetic
+settings explicitly, so an enabled native gateway cannot change test behavior.
+`make check` runs the larger disposable containerized quality gate. The Makefile
+auto-selects Docker when `docker` is installed and otherwise uses Podman;
+`CONTAINER_ENGINE=...` remains an explicit override.
 
 Use the same repository to test the complete deployable topology locally and to install it on a Proxmox VM. On a Mac with Docker Desktop, first run is:
 
@@ -231,10 +239,44 @@ uv run --frozen dm dungeon prompt \
   "A flooded archive beneath a lighthouse"
 ```
 
+Add `--debug` to stream the complete request, normalized gateway events, model
+submissions, and deterministic harness tool results as JSON Lines on stderr in
+real time. This explicit terminal-only transcript is not logged or persisted;
+treat it as sensitive because it includes the model context and response.
+
 The first OAuth flow prints device-code instructions and resumes the original
 prompt after login completes. Provider/model/effort, campaign, seed, and title
 flags remain inspectable reproducibility overrides. Campaign roots can be
 created and switched without copying UUIDs into every command:
+
+### Dungeon intent V2 evaluation and rollback
+
+V2 accepts one compact `submit_dungeon_intent_v2` proposal only. Models supply
+relative rooms, connections, objectives, and dependencies; deterministic code
+owns IDs, seed, geometry, visibility, validation, rendering, persistence, and
+approval. Run inspection remains body-free:
+
+```bash
+uv run --frozen dm dungeon run inspect <attempt-run-id>
+```
+
+The frozen provider-free V2 suite is synthetic and safe for CI:
+
+```bash
+uv run --frozen pytest -q tests/evals/test_dungeon_evals.py
+```
+
+Use the inspectable `dungeon-intent-v2-eval` policy only for an explicit,
+non-persisting V1/V2 comparison. Execute each version separately, retain only
+body-free observation hashes/metrics (tool/schema/compile/repair/semantics,
+package/secrecy, tokens, latency, and optional DM edits), and never pass either
+provider response to the other run. Live small-model runs are opt-in and occur
+only after faux contract coverage passes; they must not be added to CI. The
+current rollout decision retains V1 readers/replay compatibility and does not
+retire V1 orchestration until the documented eval, CLI/web, cancellation,
+publication, logging, and replay gates have recorded passing evidence. Roll
+back a candidate by selecting the prior saved task-profile policy; do not
+rewrite historical artifacts or lineage.
 
 ```bash
 uv run --frozen dm campaign create "Main Campaign"

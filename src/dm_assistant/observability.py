@@ -20,6 +20,7 @@ _CONTEXT_FIELDS = (
     "ingestion_run_id",
     "embedding_run_id",
     "model_run_id",
+    "attempt_run_id",
     "generation_run_id",
     "change_set_id",
     "campaign_revision_id",

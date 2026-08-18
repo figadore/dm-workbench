@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
+from collections.abc import Callable
 from typing import Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, JsonValue
@@ -48,6 +49,7 @@ from dm_assistant.orchestration.modeling import (
     ModelRunAbstained,
     ModelTaskRunner,
     ServerTool,
+    StructuredSubmissionRejected,
     StructuredSubmissionRunner,
     StructuredSubmissionTool,
 )
@@ -236,8 +238,14 @@ def resolve_dungeon_v2_prompt_profile(
 class DungeonV2SubmissionService:
     """One compact V2 submit call followed by pure compile and preflight only."""
 
-    def __init__(self, gateway_client: GatewayClient) -> None:
+    def __init__(
+        self,
+        gateway_client: GatewayClient,
+        *,
+        debug: Callable[[str, dict[str, object]], None] | None = None,
+    ) -> None:
         self._gateway_client = gateway_client
+        self._debug = debug
 
     def submit(
         self,
@@ -292,7 +300,7 @@ class DungeonV2SubmissionService:
                 },
             )
 
-        runner = StructuredSubmissionRunner(self._gateway_client)
+        runner = StructuredSubmissionRunner(self._gateway_client, debug=self._debug)
         tool = StructuredSubmissionTool(
             name=_SUBMIT_DUNGEON_INTENT_V2_TOOL,
             description=(
@@ -302,47 +310,32 @@ class DungeonV2SubmissionService:
             input_schema=SubmitDungeonIntentV2Input,
         )
         deadline = time.monotonic() + profile.time_budget_seconds
-        submitted, record = runner.run(
-            profile=profile,
-            run_input=run_input,
-            tool=tool,
-            handler=handle,
-            deadline_monotonic=deadline,
-        )
-        assert isinstance(submitted, SubmitDungeonIntentV2Input)
-        runs = [record]
-        repaired = False
-        result_payload = record.tool_invocations[0].result.payload
-        if (
-            submitted.proposal.abstention is None
-            and result_payload.get("accepted") is False
-        ):
-            safe_diagnostics = result_payload.get("diagnostics", [])
-            if not isinstance(safe_diagnostics, list):
-                safe_diagnostics = []
-            repair_input = ModelRunInput(
-                messages=(
-                    PromptMessage(
-                        role="user",
-                        content=_canonical_message(
-                            {
-                                "task": _DUNGEON_V2_SCHEMA_NAME,
-                                "instruction": "Submit one complete corrected replacement proposal.",
-                                "previous_proposal": submitted.proposal.model_dump(
-                                    mode="json"
-                                ),
-                                "diagnostics": safe_diagnostics[:8],
-                            }
-                        ),
-                    ),
-                )
+        try:
+            submitted, record = runner.run(
+                profile=profile,
+                run_input=run_input,
+                tool=tool,
+                handler=handle,
+                deadline_monotonic=deadline,
             )
-            compiled = None
-            request = None
+        except StructuredSubmissionRejected as rejected:
+            record = rejected.record
+            runs = [record]
+            repair_document: dict[str, object] = {
+                "task": _DUNGEON_V2_SCHEMA_NAME,
+                "instruction": "Submit one complete corrected replacement proposal.",
+                "diagnostics": list(rejected.diagnostics),
+            }
             repaired_profile = _remaining_submission_profile(profile, record)
             submitted, record = runner.run(
                 profile=repaired_profile,
-                run_input=repair_input,
+                run_input=ModelRunInput(
+                    messages=(
+                        PromptMessage(
+                            role="user", content=_canonical_message(repair_document)
+                        ),
+                    )
+                ),
                 tool=tool,
                 handler=handle,
                 deadline_monotonic=deadline,
@@ -350,6 +343,48 @@ class DungeonV2SubmissionService:
             assert isinstance(submitted, SubmitDungeonIntentV2Input)
             runs.append(record)
             repaired = True
+        else:
+            assert isinstance(submitted, SubmitDungeonIntentV2Input)
+            runs = [record]
+            repaired = False
+            result_payload = record.tool_invocations[0].result.payload
+            if (
+                submitted.proposal.abstention is None
+                and result_payload.get("accepted") is False
+            ):
+                safe_diagnostics = result_payload.get("diagnostics", [])
+                if not isinstance(safe_diagnostics, list):
+                    safe_diagnostics = []
+                repair_input = ModelRunInput(
+                    messages=(
+                        PromptMessage(
+                            role="user",
+                            content=_canonical_message(
+                                {
+                                    "task": _DUNGEON_V2_SCHEMA_NAME,
+                                    "instruction": "Submit one complete corrected replacement proposal.",
+                                    "previous_proposal": submitted.proposal.model_dump(
+                                        mode="json"
+                                    ),
+                                    "diagnostics": safe_diagnostics[:8],
+                                }
+                            ),
+                        ),
+                    )
+                )
+                compiled = None
+                request = None
+                repaired_profile = _remaining_submission_profile(profile, record)
+                submitted, record = runner.run(
+                    profile=repaired_profile,
+                    run_input=repair_input,
+                    tool=tool,
+                    handler=handle,
+                    deadline_monotonic=deadline,
+                )
+                assert isinstance(submitted, SubmitDungeonIntentV2Input)
+                runs.append(record)
+                repaired = True
         return DungeonV2SubmissionResult(
             proposal=submitted.proposal,
             compilation=compiled,
@@ -376,6 +411,7 @@ class DungeonPromptService:
         command: PromptDungeonWorkflow,
         profile: ResolvedModelRunProfile,
         stream_run_id: str | None = None,
+        debug: Callable[[str, dict[str, object]], None] | None = None,
     ) -> DungeonWorkflowResult:
         """Submit compact V2 intent then publish through the existing atomic Studio path."""
         context = _build_standalone_context(command)
@@ -384,19 +420,17 @@ class DungeonPromptService:
             if stream_run_id is not None
             else self._gateway_client
         )
-        submitted = DungeonV2SubmissionService(gateway).submit(
+        submitted = DungeonV2SubmissionService(gateway, debug=debug).submit(
             profile=profile,
             run_input=_initial_v2_model_input(command, context),
             seed=command.seed,
         )
-        if submitted.proposal.abstention is not None or submitted.layout_request is None:
+        if (
+            submitted.proposal.abstention is not None
+            or submitted.layout_request is None
+        ):
             raise ModelRunAbstained("dungeon proposal was not accepted")
-        lineage = tuple(
-            PromptedDungeonModelLineage(
-                model_run_id=uuid.uuid4(), model_run=run, proposal_v2=submitted.proposal
-            )
-            for run in submitted.model_runs
-        )
+        lineage = tuple(_v2_lineage(run) for run in submitted.model_runs)
         return self._dungeon_studio.create_prompted(
             CreatePromptedDungeonWorkflow(
                 campaign_id=command.campaign_id,
@@ -513,6 +547,7 @@ class _RunBoundGatewayClient:
         messages: tuple[PromptMessage, ...],
         allowed_tools: tuple[str, ...],
         tool_schemas: tuple[GatewayToolSchema, ...],
+        debug: Callable[[str, dict[str, object]], None] | None = None,
     ) -> GatewayCompletion:
         if isinstance(self._client, PiGatewayClient):
             return self._client.complete(
@@ -521,6 +556,15 @@ class _RunBoundGatewayClient:
                 allowed_tools=allowed_tools,
                 tool_schemas=tool_schemas,
                 run_id=self._run_id,
+                debug=debug,
+            )
+        if debug is not None:
+            return self._client.complete(  # type: ignore[call-arg]
+                profile=profile,
+                messages=messages,
+                allowed_tools=allowed_tools,
+                tool_schemas=tool_schemas,
+                debug=debug,
             )
         return self._client.complete(
             profile=profile,
@@ -617,12 +661,21 @@ def _initial_v2_model_input(
     command: PromptDungeonWorkflow,
     context: GenerationContextPin,
 ) -> ModelRunInput:
-    return ModelRunInput(messages=(PromptMessage(role="user", content=_canonical_message({
-        "task": _DUNGEON_V2_SCHEMA_NAME,
-        "instruction": "Use submit_dungeon_intent_v2 exactly once. Submit compact creative intent only; the server owns IDs, seed, geometry, visibility, validation, persistence, and approval.",
-        "prompt": command.prompt,
-        "context": context.envelope,
-    })),))
+    return ModelRunInput(
+        messages=(
+            PromptMessage(
+                role="user",
+                content=_canonical_message(
+                    {
+                        "task": _DUNGEON_V2_SCHEMA_NAME,
+                        "instruction": "Use submit_dungeon_intent_v2 exactly once. Submit compact creative intent only; the server owns IDs, seed, geometry, visibility, validation, persistence, and approval.",
+                        "prompt": command.prompt,
+                        "context": context.envelope,
+                    }
+                ),
+            ),
+        )
+    )
 
 
 def _initial_model_input(
@@ -958,6 +1011,17 @@ def _diagnostics(values: tuple[BaseModel, ...]) -> tuple[dict[str, JsonValue], .
         }
         documents.append(allowed)
     return tuple(documents)
+
+
+def _v2_lineage(record: ModelRunRecord) -> PromptedDungeonModelLineage:
+    proposal: DungeonGenerationProposalV2 | None = None
+    if record.output_payload is not None:
+        proposal = SubmitDungeonIntentV2Input.model_validate(
+            record.output_payload
+        ).proposal
+    return PromptedDungeonModelLineage(
+        model_run_id=uuid.uuid4(), model_run=record, proposal_v2=proposal
+    )
 
 
 def _lineage(

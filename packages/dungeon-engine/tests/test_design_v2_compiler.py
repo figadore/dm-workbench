@@ -63,6 +63,7 @@ def test_compiler_generates_exact_kernel_intent_without_model_ids_or_counts() ->
     result = compile_dungeon_design_v2(_spec(_minimal_design()))
 
     assert result.accepted is True
+    assert result.compiler_version == "dungeon-design-v2-compiler-2"
     assert result.brief is not None
     assert result.topology is not None
     assert result.brief.floor_count == 1
@@ -108,6 +109,49 @@ def test_compiler_rejects_duplicate_local_refs_with_bounded_path_diagnostic() ->
     assert result.diagnostics[0].path == "/floors/0/rooms/1/local_ref"
 
 
+def test_compiler_hides_rooms_reachable_only_through_secret_access() -> None:
+    payload = _minimal_design()
+    floor = payload["floors"][0]
+    assert isinstance(floor, dict)
+    rooms = floor["rooms"]
+    assert isinstance(rooms, list)
+    rooms.insert(
+        1,
+        {
+            "local_ref": "hidden",
+            "name": "Hidden Annex",
+            "role": "exploration",
+            "optional": True,
+        },
+    )
+    connections = payload["connections"]
+    assert isinstance(connections, list)
+    connections.append(
+        {
+            "local_ref": "entry-hidden",
+            "from_ref": "entry",
+            "to_ref": "hidden",
+            "passage": "door",
+            "concealment": "secret",
+        }
+    )
+
+    result = compile_dungeon_design_v2(_spec(payload))
+
+    assert result.accepted and result.topology is not None
+    rooms_by_name = {room.name: room for room in result.topology.rooms}
+    assert rooms_by_name["Hidden Annex"].visibility.value == "dm_only"
+    assert rooms_by_name["Ledger Vault"].visibility.value == "player_safe"
+    secret = next(
+        connection
+        for connection in result.topology.connections
+        if connection.id.startswith("v2-connection-")
+        and connection.visibility.value == "dm_only"
+    )
+    assert secret.visibility.value == "dm_only"
+    assert validate_topology(result.topology).valid is True
+
+
 def test_compiler_derives_dm_only_gate_and_key_from_relative_intent() -> None:
     payload = _minimal_design()
     connection = payload["connections"][0]
@@ -128,6 +172,33 @@ def test_compiler_derives_dm_only_gate_and_key_from_relative_intent() -> None:
     assert result.accepted and result.topology is not None
     assert result.topology.gates[0].visibility.value == "dm_only"
     assert result.topology.keys[0].visibility.value == "dm_only"
+
+
+def test_compiler_rejects_multiple_dependencies_for_one_barrier() -> None:
+    payload = _minimal_design()
+    connection = payload["connections"][0]
+    assert isinstance(connection, dict)
+    connection["barrier"] = "locked"
+    payload["dependencies"] = [
+        {
+            "local_ref": local_ref,
+            "kind": "key",
+            "connection_ref": "entry-vault",
+            "located_in_room_ref": "entry",
+            "name": name,
+        }
+        for local_ref, name in (
+            ("first-key", "First Key"),
+            ("second-key", "Second Key"),
+        )
+    ]
+
+    result = compile_dungeon_design_v2(_spec(payload))
+
+    assert result.accepted is False
+    assert any(
+        item.code == "design.duplicate_dependency_target" for item in result.diagnostics
+    )
 
 
 def test_design_schema_round_trip_and_unknown_version_fail() -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
@@ -21,8 +22,18 @@ from dm_assistant.orchestration.dungeons.contracts import (
     PromptDungeonWorkflow,
 )
 from dm_assistant.orchestration.dungeons.prompting import DungeonPromptService
+from dm_assistant.orchestration.modeling import ModelRunAbstained
 
 logger = get_logger(__name__)
+
+_REPAIR_USAGE_UNAVAILABLE = "model usage was unavailable; repair budget is unknown"
+
+
+def _failure_code(error: Exception) -> str:
+    """Classify known safe prompt failures without exposing model/provider text."""
+    if isinstance(error, ModelRunAbstained) and str(error) == _REPAIR_USAGE_UNAVAILABLE:
+        return "dungeon_prompt_repair_usage_unavailable"
+    return "dungeon_prompt_failed"
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,19 +73,19 @@ class DungeonPromptApplicationService:
         *,
         surface: str,
         attempt_run_id: uuid.UUID | None = None,
+        debug: Callable[[str, dict[str, object]], None] | None = None,
     ) -> DungeonPromptAttemptResult:
         attempt_id = attempt_run_id or self.begin_attempt(command, surface=surface)
         with bind_log_context(attempt_run_id=str(attempt_id)):
             try:
                 result = self._prompts.create_v2(
-                    command, profile, stream_run_id=str(attempt_id)
+                    command, profile, stream_run_id=str(attempt_id), debug=debug
                 )
             except Exception as error:
-                code = (
-                    "dungeon_prompt_cancelled"
-                    if error.__class__.__name__ == "ModelRunAbstained"
-                    else "dungeon_prompt_failed"
+                cancelled = isinstance(error, ModelRunAbstained) and (
+                    "cancel" in str(error).lower()
                 )
+                code = "dungeon_prompt_cancelled" if cancelled else _failure_code(error)
                 logger.warning(
                     "dungeon prompt attempt stopped",
                     extra={
@@ -88,7 +99,9 @@ class DungeonPromptApplicationService:
                 self._finish(
                     command.campaign_id,
                     attempt_id,
-                    GenerationStatus.FAILED,
+                    GenerationStatus.CANCELLED
+                    if cancelled
+                    else GenerationStatus.FAILED,
                     {"stage": "model_submission", "code": code},
                 )
                 return DungeonPromptAttemptResult(attempt_id, None, code)

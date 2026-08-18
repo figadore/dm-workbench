@@ -457,6 +457,13 @@ def dungeon_prompt(
     title: Annotated[str | None, typer.Option("--title")] = None,
     effort: Annotated[ReasoningEffort | None, typer.Option("--effort")] = None,
     constraint: Annotated[list[str] | None, typer.Option("--constraint")] = None,
+    debug: Annotated[
+        bool,
+        typer.Option(
+            "--debug",
+            help="Stream the model/harness exchange to stderr; it is not persisted.",
+        ),
+    ] = False,
     created_by: Annotated[str, typer.Option("--created-by")] = "dm",
 ) -> None:
     """Generate a standalone draft with active campaign and model defaults."""
@@ -521,6 +528,7 @@ def dungeon_prompt(
                     ),
                     profile,
                     surface="cli",
+                    debug=_emit_debug_event if debug else None,
                 )
                 if attempt.result is None:
                     raise ModelRunAbstained(attempt.public_code)
@@ -564,21 +572,32 @@ def dungeon_prompt(
 
 @run_app.command("inspect")
 def dungeon_run_inspect(
-    attempt_run_id: Annotated[UUID, typer.Argument(help="Durable prompt attempt UUID.")],
+    attempt_run_id: Annotated[
+        UUID, typer.Argument(help="Durable prompt attempt UUID.")
+    ],
     campaign_id: Annotated[UUID | None, typer.Option("--campaign")] = None,
 ) -> None:
     """Show safe attempt metadata without prompt, provider, or context bodies."""
     with _render_domain_errors():
         with workbench_runtime() as runtime:
-            resolved_campaign_id = campaign_id or runtime.campaigns.ensure_active_campaign().id
-            run = runtime.preparation.get_generation_run(resolved_campaign_id, attempt_run_id)
-            _emit_document({
-                "attempt_run_id": str(run.id), "status": run.status.value,
-                "generation_kind": run.generation_kind, "seed": run.seed,
-                "input_scope": run.input_scope, "schema_versions": run.schema_versions,
-                "generator_versions": run.generator_versions,
-                "validation_report": run.validation_report,
-            })
+            resolved_campaign_id = (
+                campaign_id or runtime.campaigns.ensure_active_campaign().id
+            )
+            run = runtime.preparation.get_generation_run(
+                resolved_campaign_id, attempt_run_id
+            )
+            _emit_document(
+                {
+                    "attempt_run_id": str(run.id),
+                    "status": run.status.value,
+                    "generation_kind": run.generation_kind,
+                    "seed": run.seed,
+                    "input_scope": run.input_scope,
+                    "schema_versions": run.schema_versions,
+                    "generator_versions": run.generator_versions,
+                    "validation_report": run.validation_report,
+                }
+            )
 
 
 @dungeon_app.command("generate")
@@ -1013,6 +1032,20 @@ def _render_login_event(
         typer.echo(event.message, err=True)
 
 
+def _emit_debug_event(kind: str, data: dict[str, object]) -> None:
+    """Print an explicit, transient transcript without contaminating ordinary logs."""
+    typer.echo(
+        json.dumps(
+            {"debug": kind, "data": data},
+            allow_nan=False,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ),
+        err=True,
+    )
+
+
 def _emit_dungeon_failure_summary(
     diagnostics: tuple[dict[str, JsonValue], ...],
 ) -> None:
@@ -1115,6 +1148,12 @@ def _model_run_rejected_error(error: ModelRunAbstained) -> ModelRunRejectedError
             "The generated dungeon did not pass deterministic validation within the "
             "repair budget. No draft was saved; try again or use the hand-authored "
             "Dungeon Studio workflow."
+        ),
+        "dungeon_prompt_repair_usage_unavailable": (
+            "The generated dungeon did not pass deterministic validation, and the "
+            "model gateway did not report token usage, so the safe automatic repair "
+            "could not run. No draft was saved; retry after gateway usage reporting "
+            "is available or use the hand-authored Dungeon Studio workflow."
         ),
         "dungeon intent did not include a brief and topology": (
             "The selected model did not return a complete dungeon brief and topology. "

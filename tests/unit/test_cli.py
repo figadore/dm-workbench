@@ -14,6 +14,7 @@ from dm_assistant.adapters.model_gateway import (
 from dm_assistant.cli.main import (
     _default_login_provider,
     _default_model,
+    _emit_debug_event,
     _emit_dungeon_failure_summary,
     _model_run_rejected_error,
     _prompt_execution_error,
@@ -26,6 +27,14 @@ from dm_assistant.modules.modeling import ReasoningEffort
 from dm_assistant.orchestration.modeling import ModelRunAbstained
 
 runner = CliRunner()
+
+
+def test_debug_event_is_json_on_stderr(capsys: pytest.CaptureFixture[str]) -> None:
+    _emit_debug_event("gateway_event", {"event": "text_delta", "data": {"delta": "x"}})
+
+    assert capsys.readouterr().err == (
+        '{"data":{"data":{"delta":"x"},"event":"text_delta"},"debug":"gateway_event"}\n'
+    )
 
 
 class _LoginGateway:
@@ -258,6 +267,10 @@ def test_first_login_offers_subscription_provider_choice(
         (
             "model output failed schema validation within the repair budget",
             "did not match the required schema after a repair attempt",
+        ),
+        (
+            "dungeon_prompt_repair_usage_unavailable",
+            "gateway did not report token usage, so the safe automatic repair could not run",
         ),
         (
             "a provider supplied response that must not be shown",

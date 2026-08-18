@@ -10,7 +10,6 @@ from sqlalchemy import Engine, text
 from typer.testing import CliRunner
 
 from dm_assistant.cli.main import app
-from dm_assistant.modules.modeling import DungeonGenerationIntentV1
 from dm_dungeon import LayoutRequest, read_dungeon_package, to_canonical_json
 
 pytestmark = pytest.mark.integration
@@ -40,10 +39,17 @@ class _JsonResponse:
 class _SseResponse:
     status = 200
 
-    def __init__(self, content: str) -> None:
-        payload = json.dumps({"delta": content}, separators=(",", ":"))
+    def __init__(self, proposal: dict[str, object]) -> None:
+        payload = json.dumps(
+            {
+                "name": "submit_dungeon_intent_v2",
+                "id": "submit-cli-v2",
+                "arguments": {"proposal": proposal},
+            },
+            separators=(",", ":"),
+        )
         self._lines = (
-            b"event: text_delta\n",
+            b"event: tool_call\n",
             f"data: {payload}\n".encode(),
             b"\n",
             b"event: usage\n",
@@ -65,6 +71,17 @@ class _SseResponse:
 
     def __iter__(self) -> Iterator[bytes]:
         return iter(self._lines)
+
+
+def _output_document(output: str) -> dict[str, object]:
+    for line in reversed(output.splitlines()):
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            return value
+    raise AssertionError("CLI output did not contain a JSON document")
 
 
 def test_cli_generate_inspect_and_approve_use_shared_workflow(
@@ -131,7 +148,7 @@ def test_cli_generate_inspect_and_approve_use_shared_workflow(
     )
 
     assert generated.exit_code == 0, generated.output
-    result = json.loads(generated.output)
+    result = _output_document(generated.output)
     artifact_id = result["artifact_id"]
     version_id = result["artifact_version_id"]
     inspected = runner.invoke(
@@ -145,7 +162,7 @@ def test_cli_generate_inspect_and_approve_use_shared_workflow(
         ],
     )
     assert inspected.exit_code == 0, inspected.output
-    assert json.loads(inspected.output)["versions"] == [version_id]
+    assert _output_document(inspected.output)["versions"] == [version_id]
 
     approved = runner.invoke(
         app,
@@ -161,7 +178,7 @@ def test_cli_generate_inspect_and_approve_use_shared_workflow(
         ],
     )
     assert approved.exit_code == 0, approved.output
-    assert json.loads(approved.output)["lifecycle"] == "approved_for_play"
+    assert _output_document(approved.output)["lifecycle"] == "approved_for_play"
 
 
 def test_cli_prompt_uses_private_gateway_and_persists_package(
@@ -171,13 +188,35 @@ def test_cli_prompt_uses_private_gateway_and_persists_package(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     package = read_dungeon_package(FIXTURE_PATH)
-    intent = DungeonGenerationIntentV1(
-        schema_version="1.0.0",
-        intent="Generate a synthetic flooded archive.",
-        brief=package.brief,
-        topology=package.topology,
-        requested_constraints=("flooded",),
-    )
+    proposal: dict[str, object] = {
+        "proposal_version": "2",
+        "design": {
+            "schema_version": "2.0.0",
+            "title": package.brief.title,
+            "premise": "A synthetic flooded archive lies beneath a lighthouse.",
+            "themes": ["flooded archive"],
+            "floors": [
+                {
+                    "local_ref": "archive",
+                    "name": "Archive",
+                    "rooms": [
+                        {"local_ref": "entry", "name": "Entry", "role": "entrance"},
+                        {"local_ref": "vault", "name": "Vault", "role": "objective"},
+                    ],
+                }
+            ],
+            "connections": [
+                {
+                    "local_ref": "entry-vault",
+                    "from_ref": "entry",
+                    "to_ref": "vault",
+                    "passage": "door",
+                }
+            ],
+            "objectives": [{"room_ref": "vault", "kind": "final_objective"}],
+            "dependencies": [],
+        },
+    }
     source_root = tmp_path / "prompt-sources"
     source_root.mkdir()
     environment = {
@@ -221,7 +260,7 @@ def test_cli_prompt_uses_private_gateway_and_persists_package(
                 }
             )
         if request.full_url.endswith("/v1/streams"):
-            return _SseResponse(intent.model_dump_json())
+            return _SseResponse(proposal)
         raise AssertionError(f"unexpected gateway URL: {request.full_url}")
 
     monkeypatch.setattr("dm_assistant.adapters.model_gateway.urlopen", fake_urlopen)
@@ -237,7 +276,7 @@ def test_cli_prompt_uses_private_gateway_and_persists_package(
     )
 
     assert prompted.exit_code == 0, prompted.output
-    result = json.loads(prompted.output)
+    result = _output_document(prompted.output)
     assert result["success"] is True
     assert result["resolved"]["provider"] == "faux"
     assert result["resolved"]["model"] == "faux-deterministic-v1"
@@ -260,7 +299,7 @@ def test_cli_prompt_uses_private_gateway_and_persists_package(
         ],
     )
     assert inspected.exit_code == 0, inspected.output
-    detail = json.loads(inspected.output)
+    detail = _output_document(inspected.output)
     assert detail["versions"] == [result["artifact_version_id"]]
     assert detail["title"] == package.brief.title
     with db_engine.connect() as connection:

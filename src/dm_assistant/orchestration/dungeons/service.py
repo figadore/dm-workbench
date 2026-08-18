@@ -291,6 +291,10 @@ class DungeonStudioService:
             "dungeon_package": "1.0.0",
             "dungeon_studio": _STUDIO_SCHEMA_VERSION,
         }
+        generator_versions = {
+            "dungeon_kernel": dm_dungeon.__version__,
+            "layout": request.generator_version,
+        }
         if model_lineage:
             input_scope["model_lineage_sha256"] = canonical_json_sha256(
                 {
@@ -306,6 +310,9 @@ class DungeonStudioService:
                 )
             else:
                 schema_versions["dungeon_generation_proposal"] = "2.0.0"
+                generator_versions["design_compiler"] = (
+                    dm_dungeon.DUNGEON_DESIGN_COMPILER_VERSION
+                )
             schema_versions["model_run"] = "1.0.0"
         run = self._preparation.start_generation_run(
             StartGenerationRun(
@@ -315,10 +322,7 @@ class DungeonStudioService:
                 input_scope=input_scope,
                 context=context,
                 schema_versions=schema_versions,
-                generator_versions={
-                    "dungeon_kernel": dm_dungeon.__version__,
-                    "layout": request.generator_version,
-                },
+                generator_versions=generator_versions,
                 renderer_versions={
                     "svg": "svg-v1",
                     "png": "png-v1",

@@ -8,9 +8,9 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TypeVar, cast
+from typing import Literal, TypeVar, cast
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, JsonValue, ValidationError
 
 from dm_assistant.modules.modeling import (
     ModelRunInput,
@@ -46,6 +46,21 @@ class StructuredSubmissionTool:
         )
 
 
+class StructuredSubmissionRejected(ModelRunAbstained):
+    """One schema-invalid call that may consume the workflow's repair budget."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        record: ModelRunRecord,
+        diagnostics: tuple[dict[str, JsonValue], ...],
+    ) -> None:
+        super().__init__(message)
+        self.record = record
+        self.diagnostics = diagnostics
+
+
 class StructuredSubmissionRunner:
     """Accept exactly one valid submit call; never request a duplicate final answer."""
 
@@ -55,10 +70,12 @@ class StructuredSubmissionRunner:
         *,
         monotonic_clock: Callable[[], float] = time.monotonic,
         is_cancelled: Callable[[], bool] = lambda: False,
+        debug: Callable[[str, dict[str, object]], None] | None = None,
     ) -> None:
         self._client = client
         self._monotonic_clock = monotonic_clock
         self._is_cancelled = is_cancelled
+        self._debug = debug
 
     def run(
         self,
@@ -83,14 +100,24 @@ class StructuredSubmissionRunner:
         remaining_seconds = math.ceil(deadline - self._monotonic_clock())
         if remaining_seconds < 1:
             raise ModelRunAbstained("time budget exhausted before submission")
-        completion = self._client.complete(
-            profile=profile.model_copy(
-                update={"time_budget_seconds": remaining_seconds}
-            ),
-            messages=run_input.messages,
-            allowed_tools=(tool.name,),
-            tool_schemas=(tool.gateway_schema(),),
+        request_profile = profile.model_copy(
+            update={"time_budget_seconds": remaining_seconds}
         )
+        if self._debug is None:
+            completion = self._client.complete(
+                profile=request_profile,
+                messages=run_input.messages,
+                allowed_tools=(tool.name,),
+                tool_schemas=(tool.gateway_schema(),),
+            )
+        else:
+            completion = self._client.complete(  # type: ignore[call-arg]
+                profile=request_profile,
+                messages=run_input.messages,
+                allowed_tools=(tool.name,),
+                tool_schemas=(tool.gateway_schema(),),
+                debug=self._debug,
+            )
         if self._is_cancelled() or self._monotonic_clock() >= deadline:
             raise ModelRunAbstained(
                 "model run cancelled or timed out during submission"
@@ -107,11 +134,45 @@ class StructuredSubmissionRunner:
                 json.dumps(call.arguments, separators=(",", ":"), sort_keys=True)
             )
         except ValidationError as error:
-            raise ModelRunAbstained(
-                "model submission failed schema validation"
+            diagnostic_values: list[dict[str, JsonValue]] = []
+            for detail in error.errors(include_url=False, include_context=False)[:8]:
+                diagnostic: dict[str, JsonValue] = {
+                    "code": "submission.schema_invalid",
+                    "path": "/" + "/".join(str(item) for item in detail["loc"]),
+                    "affected_refs": [],
+                    "repair": "provide a value matching the submitted tool schema",
+                }
+                diagnostic_values.append(diagnostic)
+            diagnostics = tuple(diagnostic_values)
+            result = ToolResult(
+                tool_name=tool.name,
+                call_id=call.call_id,
+                payload={"accepted": False, "diagnostics": list(diagnostics)},
+            )
+            if self._debug is not None:
+                self._debug("harness_tool_rejected", result.model_dump(mode="json"))
+            record = _record(
+                started_at=started_at,
+                profile=profile,
+                run_input=run_input,
+                completion=completion,
+                call=call,
+                result=result,
+                output=None,
+                status="abstained",
+                abstain_reason="model submission failed schema validation",
+            )
+            raise StructuredSubmissionRejected(
+                "model submission failed schema validation",
+                record=record,
+                diagnostics=diagnostics,
             ) from error
         typed_submission = cast(SubmissionModel, submission)
+        if self._debug is not None:
+            self._debug("harness_tool_call", call.model_dump(mode="json"))
         result = handler(typed_submission)
+        if self._debug is not None:
+            self._debug("harness_tool_result", result.model_dump(mode="json"))
         record = _record(
             started_at=started_at,
             profile=profile,
@@ -120,6 +181,7 @@ class StructuredSubmissionRunner:
             call=call,
             result=result,
             output=typed_submission,
+            status="succeeded",
         )
         return typed_submission, record
 
@@ -132,7 +194,9 @@ def _record(
     completion: GatewayCompletion,
     call: ToolCall,
     result: ToolResult,
-    output: BaseModel,
+    output: BaseModel | None,
+    status: Literal["succeeded", "abstained"],
+    abstain_reason: str | None = None,
 ) -> ModelRunRecord:
     completed_at = datetime.now(UTC)
     measured = (
@@ -145,8 +209,9 @@ def _record(
         turn_count=1,
         resolved_profile=profile,
         run_input=run_input,
-        output_payload=output.model_dump(mode="json"),
-        status="succeeded",
+        output_payload=output.model_dump(mode="json") if output is not None else None,
+        status=status,
+        abstain_reason=abstain_reason,
         usage_input_tokens=completion.input_tokens,
         usage_output_tokens=completion.output_tokens,
         usage_measured=measured,

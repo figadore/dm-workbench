@@ -32,6 +32,7 @@ from dm_assistant.modules.preparation import (
     PreparationService,
 )
 from dm_assistant.modules.scope import TaskType, resolve_task_scope
+from dm_assistant.observability import get_logger
 from dm_assistant.orchestration.dungeons.application import (
     DungeonPromptApplicationService,
 )
@@ -47,6 +48,7 @@ from dm_assistant.orchestration.modeling import ModelRunAbstained
 
 _TASK_NAME = "dungeon_generation_intent_v1"
 _POLICY = "dungeon-task-baseline-v2"
+logger = get_logger(__name__)
 
 
 class DungeonPromptEvent(BaseModel):
@@ -272,6 +274,7 @@ class DungeonPromptWorkbenchService:
                     message="Resolving model and generating typed dungeon intent.",
                 )
             )
+        stage = "model_resolution"
         try:
             provider, model, resolved_effort = self._resolve(
                 provider_id, model_id, effort
@@ -284,6 +287,7 @@ class DungeonPromptWorkbenchService:
                 state.effort, state.seed = resolved_effort, resolved_seed
                 if state.cancelled.is_set():
                     return
+            stage = "profile_resolution"
             profile = resolve_dungeon_v2_prompt_profile(
                 provider_id=provider.id,
                 model_id=model.id,
@@ -292,6 +296,7 @@ class DungeonPromptWorkbenchService:
                 output_token_limit=model.max_output_tokens,
                 requested_effort=resolved_effort,
             )
+            stage = "command_resolution"
             command = self._command(
                 campaign_id=self.get(run_id).campaign_id,
                 prompt=self.get(run_id).prompt,
@@ -299,14 +304,25 @@ class DungeonPromptWorkbenchService:
                 title=title,
                 constraints=constraints,
             )
+            stage = "application_execution"
             attempt = self._applications.execute(  # type: ignore[union-attr]
                 command, profile, surface="web", attempt_run_id=run_id
             )
             if attempt.result is None:
-                self._fail(run_id, attempt.public_code)
+                self._fail(run_id, attempt.public_code, finish_durable=False)
                 return
             result = attempt.result
-        except (ModelRunAbstained, ValueError, RuntimeError):
+        except (ModelRunAbstained, ValueError, RuntimeError) as error:
+            logger.warning(
+                "web dungeon prompt worker stopped",
+                extra={
+                    "event_data": {
+                        "stage": stage,
+                        "code": "dungeon_prompt_failed",
+                        "exception_class": error.__class__.__name__,
+                    }
+                },
+            )
             self._fail(run_id, "dungeon_prompt_failed")
             return
         with self._lock:
@@ -316,7 +332,6 @@ class DungeonPromptWorkbenchService:
             state.result = result
             if result.success:
                 state.status = "completed"
-                self._finish_durable(state, GenerationStatus.SUCCEEDED)
                 state.events.append(
                     DungeonPromptEvent(
                         type="completed", message="Dungeon draft created."
@@ -325,7 +340,6 @@ class DungeonPromptWorkbenchService:
             else:
                 state.status = "failed"
                 state.error_code = "dungeon_validation_failed"
-                self._finish_durable(state, GenerationStatus.FAILED)
                 state.events.append(
                     DungeonPromptEvent(
                         type="failed",
@@ -428,16 +442,31 @@ class DungeonPromptWorkbenchService:
             raise InvalidInputError("The selected provider or model is unavailable.")
         return provider, model
 
-    def _fail(self, run_id: uuid.UUID, code: str) -> None:
+    def _fail(
+        self, run_id: uuid.UUID, code: str, *, finish_durable: bool = True
+    ) -> None:
         with self._lock:
             state = self._state(run_id)
             if state.cancelled.is_set():
                 return
-            state.status, state.error_code = "failed", code
-            self._finish_durable(state, GenerationStatus.FAILED)
+            cancelled = code == "dungeon_prompt_cancelled"
+            state.status = "cancelled" if cancelled else "failed"
+            state.error_code = code
+            if finish_durable:
+                self._finish_durable(
+                    state,
+                    GenerationStatus.CANCELLED
+                    if cancelled
+                    else GenerationStatus.FAILED,
+                )
             state.events.append(
                 DungeonPromptEvent(
-                    type="failed", message="Dungeon prompt did not complete."
+                    type="cancelled" if cancelled else "failed",
+                    message=(
+                        "Dungeon prompt cancelled."
+                        if cancelled
+                        else "Dungeon prompt did not complete."
+                    ),
                 )
             )
 

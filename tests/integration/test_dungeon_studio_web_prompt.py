@@ -15,15 +15,9 @@ from sqlalchemy import Engine
 from dm_assistant.api import create_app
 from dm_assistant.config import ModelGatewayPolicy, RuntimeEnvironment, Settings
 from dm_assistant.db import Campaign, build_session_factory, transactional_session
-from dm_assistant.modules.modeling import DungeonGenerationIntentV1
-from dm_dungeon import read_dungeon_package
 
 pytestmark = pytest.mark.integration
 TOKEN = "web-prompt-token-000000000000000"
-FIXTURE_PATH = (
-    Path(__file__).parents[2]
-    / "packages/dungeon-engine/tests/fixtures/sunken_archive.v1.json"
-)
 
 
 class _Response:
@@ -53,13 +47,35 @@ def test_browser_prompt_faux_gateway_persists_draft(
     campaign_id = uuid.uuid4()
     with transactional_session(build_session_factory(db_engine)) as session:
         session.add(Campaign(id=campaign_id, name="Synthetic Browser Prompt"))
-    package = read_dungeon_package(FIXTURE_PATH)
-    intent = DungeonGenerationIntentV1(
-        schema_version="1.0.0",
-        intent="Synthetic archive",
-        brief=package.brief,
-        topology=package.topology,
-    )
+    proposal = {
+        "proposal_version": "2",
+        "design": {
+            "schema_version": "2.0.0",
+            "title": "Synthetic Archive",
+            "premise": "A synthetic archive contains a sealed ledger.",
+            "themes": ["salt"],
+            "floors": [
+                {
+                    "local_ref": "archive",
+                    "name": "Archive",
+                    "rooms": [
+                        {"local_ref": "entry", "name": "Entry", "role": "entrance"},
+                        {"local_ref": "vault", "name": "Vault", "role": "objective"},
+                    ],
+                }
+            ],
+            "connections": [
+                {
+                    "local_ref": "entry-vault",
+                    "from_ref": "entry",
+                    "to_ref": "vault",
+                    "passage": "door",
+                }
+            ],
+            "objectives": [{"room_ref": "vault", "kind": "final_objective"}],
+            "dependencies": [],
+        },
+    }
 
     def fake_urlopen(request: Request, *, timeout: int) -> _Response:
         del timeout
@@ -93,8 +109,17 @@ def test_browser_prompt_faux_gateway_persists_draft(
                 ).encode()
             )
         if request.full_url.endswith("/v1/streams"):
+            tool_call = {
+                "name": "submit_dungeon_intent_v2",
+                "id": "submit-browser-v2",
+                "arguments": {"proposal": proposal},
+            }
             return _Response(
-                f'event: text_delta\ndata: {{"delta":{json.dumps(intent.model_dump_json())}}}\n\nevent: completion\ndata: {{}}\n\n'.encode()
+                (
+                    f"event: tool_call\ndata: {json.dumps(tool_call)}\n\n"
+                    'event: usage\ndata: {"inputTokens":10,"outputTokens":10}\n\n'
+                    "event: completion\ndata: {}\n\n"
+                ).encode()
             )
         raise AssertionError(request.full_url)
 
@@ -131,9 +156,19 @@ def test_browser_prompt_faux_gateway_persists_draft(
                 },
             )
             assert started.status_code == 303
-            await asyncio.sleep(0.5)
             result = await client.get(started.headers["location"])
-            assert "Dungeon draft created." in result.text
+            for _ in range(100):
+                if (
+                    "Inspect generated draft" in result.text
+                    or "Safe result:" in result.text
+                ):
+                    break
+                await asyncio.sleep(0.05)
+                result = await client.get(started.headers["location"])
+            safe_result = re.search(r"Safe result:\s*<code>([^<]+)</code>", result.text)
+            assert "Dungeon draft created." in result.text, (
+                safe_result.group(1) if safe_result else "prompt remained nonterminal"
+            )
             assert "Inspect generated draft" in result.text
 
     asyncio.run(flow())

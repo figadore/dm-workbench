@@ -1,6 +1,7 @@
 """Typed environment configuration with secret-safe loading failures."""
 
 import ipaddress
+import os
 import re
 from enum import StrEnum
 from pathlib import Path
@@ -20,6 +21,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from dm_assistant.errors import ConfigurationError
 
+_DEFAULT_ENV_FILE: str | None = (
+    None if os.environ.get("DM_DISABLE_DOTENV") == "1" else ".env"
+)
 _TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9._~-]{32,256}$")
 _POSTGRES_DSN_ADAPTER = TypeAdapter(PostgresDsn)
 
@@ -71,7 +75,7 @@ class DatabaseSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="DM_",
-        env_file=".env",
+        env_file=_DEFAULT_ENV_FILE,
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -249,7 +253,10 @@ def load_database_settings(*, env_file: str | Path | None = ".env") -> DatabaseS
         raise _safe_configuration_error(error) from None
 
 
-def load_settings(*, env_file: str | Path | None = ".env") -> Settings:
+def load_settings(
+    *,
+    env_file: str | Path | None = _DEFAULT_ENV_FILE,
+) -> Settings:
     """Load settings while replacing Pydantic's value-rich error with field names."""
     try:
         return Settings(_env_file=env_file)  # type: ignore[call-arg]

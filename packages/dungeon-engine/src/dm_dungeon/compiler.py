@@ -47,8 +47,8 @@ from dm_dungeon.contracts.topology import (
 )
 from dm_dungeon.layout.contracts import FloorLayoutBounds
 
-DUNGEON_DESIGN_COMPILER_VERSION: Literal["dungeon-design-v2-compiler-1"] = (
-    "dungeon-design-v2-compiler-1"
+DUNGEON_DESIGN_COMPILER_VERSION: Literal["dungeon-design-v2-compiler-2"] = (
+    "dungeon-design-v2-compiler-2"
 )
 
 
@@ -65,7 +65,7 @@ class DungeonDesignCompileResult(ContractModel):
     """A complete exact intent or a bounded set of compiler diagnostics."""
 
     accepted: bool
-    compiler_version: Literal["dungeon-design-v2-compiler-1"]
+    compiler_version: Literal["dungeon-design-v2-compiler-2"]
     input_hash: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
     output_hash: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")] | None = None
     brief: DungeonBrief | None = None
@@ -143,6 +143,7 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
         for objective in spec.objectives
         if objective.kind.value == "final_objective"
     }
+    player_visible_room_refs = _player_visible_room_refs(spec)
     rooms = tuple(
         TopologyRoom(
             id=room_ids[room.local_ref],
@@ -157,7 +158,11 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
             required=not room.optional,
             size=_size_constraints(room.room_size),
             capacity=_capacity(room.occupancy),
-            visibility=Visibility.PLAYER_SAFE,
+            visibility=(
+                Visibility.PLAYER_SAFE
+                if room.local_ref in player_visible_room_refs
+                else Visibility.DM_ONLY
+            ),
         )
         for floor in sorted(spec.floors, key=lambda value: value.local_ref)
         for room in sorted(floor.rooms, key=lambda value: value.local_ref)
@@ -175,6 +180,8 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
             Visibility.DM_ONLY
             if connection.concealment is Concealment.SECRET
             or connection.hazard is HazardIntent.TRAPPED
+            or connection.from_ref not in player_visible_room_refs
+            or connection.to_ref not in player_visible_room_refs
             else Visibility.PLAYER_SAFE
         )
         gate_id: str | None = None
@@ -338,6 +345,37 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
         floor_bounds=floor_bounds,
         diagnostics=(),
     )
+
+
+def _player_visible_room_refs(spec: DungeonDesignSpecV2) -> set[str]:
+    """Return rooms discoverable without traversing a secret connection.
+
+    Traps and barriers stay DM-only mechanics, but do not hide the room geometry
+    beyond them. A room reachable only through secret access remains absent from
+    clean player output until a later explicit reveal workflow publishes it.
+    """
+    entrance = next(
+        room.local_ref
+        for floor in spec.floors
+        for room in floor.rooms
+        if room.role is RoomRole.ENTRANCE
+    )
+    neighbors: dict[str, set[str]] = {
+        room.local_ref: set() for floor in spec.floors for room in floor.rooms
+    }
+    for connection in spec.connections:
+        if connection.concealment is Concealment.SECRET:
+            continue
+        neighbors[connection.from_ref].add(connection.to_ref)
+        neighbors[connection.to_ref].add(connection.from_ref)
+    visible = {entrance}
+    pending = [entrance]
+    while pending:
+        current = pending.pop()
+        for neighbor in sorted(neighbors[current] - visible):
+            visible.add(neighbor)
+            pending.append(neighbor)
+    return visible
 
 
 def _validate_design(spec: DungeonDesignSpecV2) -> list[DungeonDesignCompileDiagnostic]:
@@ -571,6 +609,18 @@ def _validate_design(spec: DungeonDesignSpecV2) -> list[DungeonDesignCompileDiag
                 "dependencies may target only locked or puzzle connections",
             )
         )
+    dependency_targets: set[str] = set()
+    for index, dependency in enumerate(spec.dependencies):
+        if dependency.connection_ref in dependency_targets:
+            diagnostics.append(
+                _diagnostic(
+                    "design.duplicate_dependency_target",
+                    f"/dependencies/{index}/connection_ref",
+                    (dependency.connection_ref,),
+                    "provide exactly one dependency for each barred connection",
+                )
+            )
+        dependency_targets.add(dependency.connection_ref)
     return diagnostics
 
 

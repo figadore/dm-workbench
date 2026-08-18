@@ -1432,6 +1432,22 @@ Fix persistence correctness before routing another profile through it.
 - Existing V1 artifacts remain readable and immutable, and gateway-disabled hand-authored Studio workflows remain green.
 - Objective V2 evals justify any default-model/profile change; model names alone do not.
 
+#### Deferred follow-up — Complete the compact V2 creative contract
+
+The implemented `DungeonDesignSpecV2` covers the essential map structure, but it
+currently omits several creative-intent fields named by the P7-12 target boundary:
+overall tones, room tags, bounded room-specific preparation prose, explicit
+branch/loop requirements, and encounter-slot intent. Connections can incidentally
+form branches or loops today, but there is no separate requested-property contract
+for deterministic validation, and generated room notes remain mostly mechanical.
+
+Do not add these fields to or reinterpret stored `2.0.0` proposals. Introduce a new
+design/schema/compiler version, preserve existing readers and exact compiled
+lineage, and add synthetic small-model coverage for omission/default behavior,
+semantic preservation, compiler derivation, bounded prose, encounter-anchor
+ownership, and deterministic branch/loop validation. Keep prose in the Workbench
+preparation layer and stable IDs/geometry/encounter anchors in deterministic code.
+
 **Phase gate P7**
 
 - The independently runnable `dm_dungeon` package turns a constrained brief into a connected, non-overlapping, multi-floor practical grid with reproducible seed behavior and passes dependency-isolation tests.

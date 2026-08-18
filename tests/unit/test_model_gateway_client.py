@@ -139,14 +139,31 @@ def test_private_gateway_client_sends_only_policy_bound_input_and_decodes_sse(
         parameters={"type": "object"},
     )
 
+    events: list[tuple[str, dict[str, object]]] = []
     completion = client.complete(
         profile=_profile(),
         messages=(PromptMessage(role="user", content="Create a synthetic dungeon."),),
         allowed_tools=("validate_dungeon_intent",),
         tool_schemas=(schema,),
+        debug=lambda kind, data: events.append((kind, data)),
     )
 
     assert completion.content == '{"intent":"synthetic"}'
+    assert events[0][0] == "harness_request"
+    assert events[0][1]["messages"] == [
+        {"role": "user", "content": "Create a synthetic dungeon."}
+    ]
+    assert [kind for kind, _ in events[1:]] == [
+        "gateway_event",
+        "gateway_event",
+        "gateway_event",
+        "gateway_event",
+        "gateway_event",
+    ]
+    assert events[1][1] == {
+        "event": "text_delta",
+        "data": {"delta": '{"intent":"synthetic"}'},
+    }
     assert completion.tool_calls[0].tool_name == "validate_dungeon_intent"
     assert completion.input_tokens == 12
     assert completion.output_tokens == 7

@@ -43,6 +43,7 @@ def test_json_formatter_emits_all_bound_correlation_ids() -> None:
         "ingestion_run_id": "ing-1",
         "embedding_run_id": "emb-1",
         "model_run_id": "model-1",
+        "attempt_run_id": "attempt-1",
         "generation_run_id": "generation-1",
         "change_set_id": "change-1",
         "campaign_revision_id": "revision-1",

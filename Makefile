@@ -1,7 +1,7 @@
 CONTAINER_ENGINE ?= $(shell if command -v docker >/dev/null 2>&1; then echo docker; else echo podman; fi)
 COMPOSE := $(CONTAINER_ENGINE) compose
 
-.PHONY: bootstrap dev-db dev-api dev-gateway stack-up stack-down stack-logs stack-smoke stack-token import-campaign-sources import-rules-sources check
+.PHONY: bootstrap dev-db dev-api dev-gateway stack-up stack-down stack-logs stack-smoke stack-token import-campaign-sources import-rules-sources test-integration check
 
 bootstrap:
 	./scripts/bootstrap-local-env.sh
@@ -45,6 +45,9 @@ import-campaign-sources:
 import-rules-sources:
 	@test -n "$(SOURCE)" || (echo "usage: make import-rules-sources SOURCE=/absolute/path" >&2; exit 2)
 	CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/import-sources.sh rules "$(SOURCE)"
+
+test-integration:
+	CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/test-integration.sh $(PYTEST_ARGS)
 
 check:
 	./scripts/check-container.sh
