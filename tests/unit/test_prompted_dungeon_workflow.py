@@ -239,7 +239,8 @@ def test_v2_prompt_explains_connection_constraints() -> None:
 
     assert "use passage or door only between rooms on one floor" in message
     assert "use stairs or ladder only between different floors" in message
-    assert "same-floor secret door into a hidden transition room" in message
+    assert "from_hidden and to_hidden independently" in message
+    assert "from_hidden true and to_hidden false" in message
 
 
 def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:

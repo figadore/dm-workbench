@@ -156,6 +156,8 @@ class ConnectionBase(VisibleContract):
     id: OpaqueId
     from_room_id: OpaqueId
     to_room_id: OpaqueId
+    from_hidden: bool = False
+    to_hidden: bool = False
 
 
 class CorridorConnection(ConnectionBase):

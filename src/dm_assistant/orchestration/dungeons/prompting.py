@@ -86,10 +86,10 @@ _DUNGEON_TOOL_NAMES = (
 _MAX_REPAIR_DIAGNOSTICS = 16
 _V2_CONNECTION_GUIDANCE = (
     "Connection rules for design 2.0.0: use passage or door only between rooms on "
-    "one floor; use stairs or ladder only between different floors. Secret, locked, "
-    "puzzle, and trapped intent currently requires a door. To make a hidden descent, "
-    "use a same-floor secret door into a hidden transition room, then an open stair "
-    "or ladder from that room to the lower floor."
+    "one floor; use stairs or ladder only between different floors. Use from_hidden "
+    "and to_hidden independently for doors, stairs, or ladders; for example, a "
+    "ladder hidden under an upper-floor rug has from_hidden true and to_hidden false. "
+    "Locked, puzzle, and trapped intent still requires a door."
 )
 logger = get_logger(__name__)
 

@@ -483,8 +483,10 @@ def _render_transitions(
     group = ET.SubElement(root, "g", {"id": "transitions"})
     rendered_stair_ids: set[str] = set()
     for stair in package.stairs:
-        if stair.floor_id != floor_id or not _layered_visible(
-            stair, layers, request.audience
+        if (
+            stair.floor_id != floor_id
+            or (request.audience is RenderAudience.PLAYER and stair.hidden)
+            or not _layered_visible(stair, layers, request.audience)
         ):
             continue
         component = _component_group(group, stair, "stair", rendered_ids)
@@ -503,6 +505,7 @@ def _render_transitions(
             (index, endpoint)
             for index, endpoint in enumerate(link.endpoints)
             if endpoint.floor_id == floor_id
+            and not (request.audience is RenderAudience.PLAYER and endpoint.hidden)
             and (
                 endpoint.stair_id is None or endpoint.stair_id not in rendered_stair_ids
             )

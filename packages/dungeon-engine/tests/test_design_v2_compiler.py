@@ -152,6 +152,38 @@ def test_compiler_hides_rooms_reachable_only_through_secret_access() -> None:
     assert validate_topology(result.topology).valid is True
 
 
+def test_compiler_preserves_one_sided_hidden_ladder_intent() -> None:
+    payload = _minimal_design()
+    payload["floors"].append(
+        {
+            "local_ref": "lower",
+            "name": "Lower Archive",
+            "rooms": [
+                {"local_ref": "landing", "name": "Landing", "role": "exploration"}
+            ],
+        }
+    )
+    connections = payload["connections"]
+    assert isinstance(connections, list)
+    connections.append(
+        {
+            "local_ref": "hidden-ladder",
+            "from_ref": "entry",
+            "to_ref": "landing",
+            "passage": "ladder",
+            "from_hidden": True,
+            "to_hidden": False,
+        }
+    )
+
+    result = compile_dungeon_design_v2(_spec(payload))
+
+    assert result.accepted and result.topology is not None
+    ladder = next(item for item in result.topology.connections if item.from_hidden)
+    assert ladder.from_hidden is True
+    assert ladder.to_hidden is False
+
+
 def test_compiler_derives_dm_only_gate_and_key_from_relative_intent() -> None:
     payload = _minimal_design()
     connection = payload["connections"][0]

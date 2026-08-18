@@ -673,6 +673,7 @@ def _generate_floor_transitions(
                 position=from_position,
                 direction=connection.direction,
                 vertical_link_id=connection.id,
+                hidden=connection.from_hidden,
                 visibility=connection.visibility,
             )
             to_stair = locked_stairs.get(to_stair_id) or StairLayout(
@@ -682,6 +683,7 @@ def _generate_floor_transitions(
                 position=to_position,
                 direction=_opposite_direction(connection.direction),
                 vertical_link_id=connection.id,
+                hidden=connection.to_hidden,
                 visibility=connection.visibility,
             )
             stairs.extend((from_stair, to_stair))
@@ -695,11 +697,13 @@ def _generate_floor_transitions(
                             floor_id=connection.from_floor_id,
                             position=from_stair.position,
                             stair_id=from_stair.id,
+                            hidden=connection.from_hidden,
                         ),
                         VerticalEndpoint(
                             floor_id=connection.to_floor_id,
                             position=to_stair.position,
                             stair_id=to_stair.id,
+                            hidden=connection.to_hidden,
                         ),
                     ),
                     visibility=connection.visibility,
@@ -716,11 +720,13 @@ def _generate_floor_transitions(
                             floor_id=connection.from_floor_id,
                             position=_center_point(room_rects[connection.from_room_id]),
                             stair_id=None,
+                            hidden=connection.from_hidden,
                         ),
                         VerticalEndpoint(
                             floor_id=connection.to_floor_id,
                             position=_center_point(room_rects[connection.to_room_id]),
                             stair_id=None,
+                            hidden=connection.to_hidden,
                         ),
                     ),
                     visibility=connection.visibility,

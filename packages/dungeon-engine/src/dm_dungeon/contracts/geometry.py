@@ -202,6 +202,7 @@ class StairLayout(FloorBoundMapElement):
     position: GridPoint
     direction: StairDirection
     vertical_link_id: OpaqueId
+    hidden: bool = False
 
 
 class VerticalEndpoint(ContractModel):
@@ -210,6 +211,7 @@ class VerticalEndpoint(ContractModel):
     floor_id: OpaqueId
     position: GridPoint
     stair_id: OpaqueId | None = None
+    hidden: bool = False
 
 
 class VerticalLinkLayout(VisibleContract):

@@ -178,7 +178,7 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
         from_id, to_id = room_ids[connection.from_ref], room_ids[connection.to_ref]
         visibility = (
             Visibility.DM_ONLY
-            if connection.concealment is Concealment.SECRET
+            if _hidden_at_either_end(connection)
             or connection.hazard is HazardIntent.TRAPPED
             or connection.from_ref not in player_visible_room_refs
             or connection.to_ref not in player_visible_room_refs
@@ -246,13 +246,15 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
                     id=connection_id,
                     from_room_id=from_id,
                     to_room_id=to_id,
+                    from_hidden=_hidden_from(connection),
+                    to_hidden=_hidden_to(connection),
                     visibility=visibility,
                 )
             )
         elif connection.passage is PassageType.DOOR:
             door_type = (
                 DoorType.SECRET
-                if connection.concealment is Concealment.SECRET
+                if _hidden_at_either_end(connection)
                 else (
                     DoorType.TRAPPED
                     if trap_id
@@ -268,6 +270,8 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
                     door_type=door_type,
                     gate_id=gate_id if door_type is DoorType.LOCKED else None,
                     trap_id=trap_id if door_type is DoorType.TRAPPED else None,
+                    from_hidden=_hidden_from(connection),
+                    to_hidden=_hidden_to(connection),
                     visibility=visibility,
                 )
             )
@@ -280,6 +284,8 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
                     to_room_id=to_id,
                     from_floor_id=floor_ids[room_floor_ref[connection.from_ref]],
                     to_floor_id=floor_ids[room_floor_ref[connection.to_ref]],
+                    from_hidden=_hidden_from(connection),
+                    to_hidden=_hidden_to(connection),
                     visibility=visibility,
                 )
             )
@@ -293,6 +299,8 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
                     from_floor_id=floor_ids[room_floor_ref[connection.from_ref]],
                     to_floor_id=floor_ids[room_floor_ref[connection.to_ref]],
                     link_type=VerticalLinkKind.LADDER,
+                    from_hidden=_hidden_from(connection),
+                    to_hidden=_hidden_to(connection),
                     visibility=visibility,
                 )
             )
@@ -347,6 +355,22 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
     )
 
 
+def _hidden_from(connection: object) -> bool:
+    return bool(getattr(connection, "from_hidden", False)) or (
+        getattr(connection, "concealment", Concealment.OPEN) is Concealment.SECRET
+    )
+
+
+def _hidden_to(connection: object) -> bool:
+    return bool(getattr(connection, "to_hidden", False)) or (
+        getattr(connection, "concealment", Concealment.OPEN) is Concealment.SECRET
+    )
+
+
+def _hidden_at_either_end(connection: object) -> bool:
+    return _hidden_from(connection) or _hidden_to(connection)
+
+
 def _player_visible_room_refs(spec: DungeonDesignSpecV2) -> set[str]:
     """Return rooms discoverable without traversing a secret connection.
 
@@ -364,10 +388,10 @@ def _player_visible_room_refs(spec: DungeonDesignSpecV2) -> set[str]:
         room.local_ref: set() for floor in spec.floors for room in floor.rooms
     }
     for connection in spec.connections:
-        if connection.concealment is Concealment.SECRET:
-            continue
-        neighbors[connection.from_ref].add(connection.to_ref)
-        neighbors[connection.to_ref].add(connection.from_ref)
+        if not _hidden_from(connection):
+            neighbors[connection.from_ref].add(connection.to_ref)
+        if not _hidden_to(connection):
+            neighbors[connection.to_ref].add(connection.from_ref)
     visible = {entrance}
     pending = [entrance]
     while pending:
@@ -482,8 +506,7 @@ def _validate_design(spec: DungeonDesignSpecV2) -> list[DungeonDesignCompileDiag
                     )
                 )
         if connection.passage is not PassageType.DOOR and (
-            connection.concealment is Concealment.SECRET
-            or connection.hazard is HazardIntent.TRAPPED
+            connection.hazard is HazardIntent.TRAPPED
             or connection.barrier is not BarrierIntent.NONE
         ):
             diagnostics.append(
@@ -494,7 +517,7 @@ def _validate_design(spec: DungeonDesignSpecV2) -> list[DungeonDesignCompileDiag
                     "use a door for secret, barrier, or trapped intent",
                 )
             )
-        if connection.concealment is Concealment.SECRET and (
+        if _hidden_at_either_end(connection) and (
             connection.hazard is HazardIntent.TRAPPED
             or connection.barrier is not BarrierIntent.NONE
         ):

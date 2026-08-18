@@ -99,7 +99,11 @@ class DesignConnectionV2(ContractModel):
     from_ref: LocalRef
     to_ref: LocalRef
     passage: PassageType = PassageType.PASSAGE
+    # `concealment` is retained only for existing local fixtures; new intent is
+    # directional, so a connection can be hidden independently at either end.
     concealment: Concealment = Concealment.OPEN
+    from_hidden: bool = False
+    to_hidden: bool = False
     barrier: BarrierIntent = BarrierIntent.NONE
     hazard: HazardIntent = HazardIntent.NONE
 
