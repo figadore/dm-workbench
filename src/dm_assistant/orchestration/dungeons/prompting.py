@@ -84,6 +84,13 @@ _DUNGEON_TOOL_NAMES = (
     _REGENERATE_LAYOUT_TOOL,
 )
 _MAX_REPAIR_DIAGNOSTICS = 16
+_V2_CONNECTION_GUIDANCE = (
+    "Connection rules for design 2.0.0: use passage or door only between rooms on "
+    "one floor; use stairs or ladder only between different floors. Secret, locked, "
+    "puzzle, and trapped intent currently requires a door. To make a hidden descent, "
+    "use a same-floor secret door into a hidden transition room, then an open stair "
+    "or ladder from that room to the lower floor."
+)
 logger = get_logger(__name__)
 
 
@@ -225,7 +232,7 @@ def resolve_dungeon_v2_prompt_profile(
             "task_profile_id": uuid.UUID("77777777-7777-7777-7777-777777777712"),
             "task_profile_version": "2.0.0",
             "prompt_version": "prompt-2",
-            "instruction_version": "instructions-1",
+            "instruction_version": "instructions-2",
             "output_schema_name": _DUNGEON_V2_SCHEMA_NAME,
             "output_schema_version": _DUNGEON_V2_SCHEMA_VERSION,
             "allowed_tools": (_SUBMIT_DUNGEON_INTENT_V2_TOOL,),
@@ -668,7 +675,12 @@ def _initial_v2_model_input(
                 content=_canonical_message(
                     {
                         "task": _DUNGEON_V2_SCHEMA_NAME,
-                        "instruction": "Use submit_dungeon_intent_v2 exactly once. Submit compact creative intent only; the server owns IDs, seed, geometry, visibility, validation, persistence, and approval.",
+                        "instruction": (
+                            "Use submit_dungeon_intent_v2 exactly once. Submit compact "
+                            "creative intent only; the server owns IDs, seed, geometry, "
+                            "visibility, validation, persistence, and approval. "
+                            f"{_V2_CONNECTION_GUIDANCE}"
+                        ),
                         "prompt": command.prompt,
                         "context": context.envelope,
                     }

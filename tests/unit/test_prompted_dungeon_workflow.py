@@ -30,6 +30,8 @@ from dm_assistant.orchestration.dungeons import (
 )
 from dm_assistant.orchestration.dungeons.application import _failure_code
 from dm_assistant.orchestration.dungeons.prompting import (
+    _build_standalone_context,
+    _initial_v2_model_input,
     _v2_lineage,
     compile_layout_request,
     resolve_dungeon_prompt_profile,
@@ -214,6 +216,30 @@ def test_live_gateway_catalog_resolves_hyphenated_dungeon_profile() -> None:
     assert profile.tool_budget == len(profile.allowed_tools) == 5
     assert profile.token_budget == 128_000
     assert "generate_dungeon_layout" in profile.allowed_tools
+
+
+def test_v2_prompt_explains_connection_constraints() -> None:
+    command = PromptDungeonWorkflow(
+        campaign_id=uuid.UUID("10000000-0000-0000-0000-000000000001"),
+        prompt="Synthetic hidden lower level.",
+        seed=1842,
+        created_by="dm",
+        scope=resolve_task_scope(
+            dm_principal_id="dm",
+            campaign_owner_id="dm",
+            task_type=TaskType.STANDALONE_DUNGEON,
+        ),
+    )
+
+    message = (
+        _initial_v2_model_input(command, _build_standalone_context(command))
+        .messages[0]
+        .content
+    )
+
+    assert "use passage or door only between rooms on one floor" in message
+    assert "use stairs or ladder only between different floors" in message
+    assert "same-floor secret door into a hidden transition room" in message
 
 
 def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:

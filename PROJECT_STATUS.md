@@ -8,7 +8,7 @@
 
 - **Last updated:** 2026-08-17
 - **Branch:** `fast-track-prompt-to-dungeon` — ahead of `origin/fast-track-prompt-to-dungeon` by 14 commits.
-- **Working tree:** pre-existing P7-12g eval/docs work plus the P7 V2 review repairs listed below are uncommitted. An uncommitted CLI `dm dungeon prompt --debug` transcript enhancement now adds transient stderr-only request/gateway/harness event output, plus a user-directed V2 repair-usage diagnostic in the application/CLI and focused tests; `PROJECT_HISTORY.md` remains untracked; no migration changes.
+- **Working tree:** only the user-directed V2 connection-validity prompt guidance is uncommitted: `PROJECT_STATUS.md`, `src/dm_assistant/orchestration/dungeons/prompting.py`, and `tests/unit/test_prompted_dungeon_workflow.py`. Earlier debug logging, repair diagnostics, V2 review, and eval work were committed as `9497431` (`debug logging, fix some doors`); no migration changes.
 - **Current phase:** P3 — Canonical Revisions, Review, and Change Logging.
 - **Last completed task:** P7-12g plus post-completion P7 V2 correctness review.
 - **Current task:** **P3-01 — Campaign revision and change-set schema** (not started).
@@ -59,6 +59,13 @@ User-directed repair-usage diagnostic verification:
 - `uv run ruff check` and `uv run ruff format --check` over the changed application/CLI/tests → passed.
 - `uv run mypy --strict src/dm_assistant/orchestration/dungeons/application.py src/dm_assistant/cli/main.py` → passed.
 
+User-directed V2 connection-guidance verification:
+
+- `uv run pytest -q tests/unit/test_prompted_dungeon_workflow.py tests/unit/test_cli.py` → `30 passed`.
+- `uv run ruff check` and `uv run ruff format --check src/dm_assistant/orchestration/dungeons/prompting.py tests/unit/test_prompted_dungeon_workflow.py` → passed.
+- `uv run mypy --strict src/dm_assistant/orchestration/dungeons/prompting.py` → passed.
+- `git diff --check` → passed.
+
 The frozen suite contains ten synthetic compact V2 cases: one/two floor, secret lower level, actual branch plus loop, clue gate, trap, optional hidden area, final relic, invalid-reference repair, and safe impossible-request abstention. It now enforces the declared first-pass outcomes and requested semantics, compiler/layout validity, deterministic replay, and omission of all compiler-classified DM-only components from player SVG. A body-free comparison contract records independent V1/V2 observations for tool/schema/compile/repair/semantic/package/secrecy, token, latency, and optional DM-edit metrics; it cannot accept provider response bodies or pass one response into the other run. `dungeon-intent-v2-eval` is explicitly documented as an opt-in comparison policy.
 
 **P7-12g rollout decision:** retain the existing V2 new-generation path and V1 immutable readers/replay compatibility, but do **not** retire V1 orchestration or make an additional default/profile change. No opt-in live small-model comparison has been recorded; the synthetic suite alone cannot supply that evidence. Live calls remain excluded from CI.
@@ -89,7 +96,7 @@ Deferred review notes (do not fold into P3-01 opportunistically):
 - [ ] **Add directional endpoint concealment/discovery semantics** for connections, so an endpoint can be hidden from one room/floor and visible from the other. Design this with fail-closed player maps and explicit reveal/publication state; current V2 only has one connection-wide concealment value.
 - [x] **Bounded fresh V2 repair exists.** It remains one fresh request containing the prior compact proposal and safe diagnostics, subject to cumulative time/token budgets.
 - [ ] **Make bounded repair usable with unavailable provider usage.** Requires an explicit architecture/budget-policy decision; do not treat unknown usage as zero.
-- [ ] **Add compact connection-validity guidance/example to the initial V2 prompt.**
+- [x] **Add compact connection-validity guidance/example to the initial V2 prompt.** The versioned V2 instruction now distinguishes same-floor passage/door links from cross-floor stairs/ladders and shows the valid `2.0.0` hidden-descent pattern: a same-floor secret door into a hidden transition room followed by an open vertical link. Instruction lineage is now `instructions-2`; focused prompt-content coverage is present.
 
 ## P7-12g Guardrails
 
@@ -100,8 +107,8 @@ Deferred review notes (do not fold into P3-01 opportunistically):
 
 ## Handoff
 
-- **Files changed in this handoff:** CLI debug transcript work in `src/dm_assistant/cli/main.py`, `src/dm_assistant/adapters/model_gateway.py`, `src/dm_assistant/orchestration/modeling/submission.py`, `src/dm_assistant/orchestration/dungeons/prompting.py`, `src/dm_assistant/orchestration/dungeons/application.py`, `tests/unit/test_cli.py`, `tests/unit/test_model_gateway_client.py`, and `README.md`; the user-directed repair-usage diagnostic adds `src/dm_assistant/orchestration/dungeons/application.py`, `src/dm_assistant/cli/main.py`, `tests/unit/test_prompted_dungeon_workflow.py`, and `tests/unit/test_cli.py`; plus the pre-existing P7-12g files (`src/dm_assistant/orchestration/dungeons/evals.py`, `tests/evals/golden/dungeon_intent_v2.json`, `tests/evals/test_dungeon_evals.py`, `README.md`) plus V2 review repairs in `packages/dungeon-engine/src/dm_dungeon/compiler.py`, its compiler tests, dungeon application/contracts/prompting/web adapters, structured submission orchestration, prompted-workflow and PostgreSQL CLI/browser fixtures, logging/config test isolation, `scripts/test-integration.sh`, `Makefile`, the deferred V2 creative-contract note in `dm-assistant-implementation-plan.md`, and this file; pre-existing `PROJECT_HISTORY.md` remains untracked.
+- **Files changed in this handoff:** uncommitted user-directed connection guidance in `src/dm_assistant/orchestration/dungeons/prompting.py`, focused coverage in `tests/unit/test_prompted_dungeon_workflow.py`, and this handoff. Earlier debug logging, repair diagnostics, V2 review, and eval work are committed in `9497431`; no migration changed.
 - **P7-12g and review are complete:** V2 rollout behavior is unchanged; V1 is retained for immutable readers/replay and not retired. The documented opt-in live comparison remains an operator action, not CI. No migration changed.
 - **Single next recommended task:** P3-01 — Campaign revision and change-set schema. **First concrete action:** read P3-01 plus the canonical-write architecture sections, then inspect `migrations/`, `src/dm_assistant/db/models.py`, and the preparation schema before designing one atomic revision/change-set migration.
-- **Suggested commit subject:** `P7-12g harden V2 evaluation, repair, and secrecy`.
+- **Suggested commit subject:** `P7-12g add V2 connection-validity prompt guidance`.
 - Before changing code or schema: inspect `git status --short --branch`, read this file, then read the P3-01 plan and applicable architecture invariants.
