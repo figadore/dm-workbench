@@ -67,7 +67,8 @@ test("health, catalog, and streams require the internal caller token", async (t)
   assert.match(events, /event: text_delta/);
   assert.match(events, /event: tool_call/);
   assert.match(events, /"id":"call_synthetic"/);
-  assert.doesNotMatch(events, /event: usage/);
+  assert.match(events, /event: usage/);
+  assert.match(events, /"input_tokens":\d+,"output_tokens":\d+/);
   assert.match(events, /event: done/);
 });
 

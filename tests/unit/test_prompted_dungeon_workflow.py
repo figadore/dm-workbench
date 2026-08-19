@@ -14,6 +14,7 @@ from dm_assistant.modules.modeling import (
     PromptMessage,
     ReasoningEffort,
     ReasoningLevel,
+    ResolvedModelRunProfile,
     TaskProfile,
     ToolCall,
     resolve_run_profile,
@@ -68,6 +69,7 @@ class FakeGatewayClient:
         self._completions = list(completions)
         self.tool_schemas: tuple[GatewayToolSchema, ...] = ()
         self.messages: list[tuple[PromptMessage, ...]] = []
+        self.profiles: list[ResolvedModelRunProfile] = []
 
     def complete(
         self,
@@ -77,7 +79,9 @@ class FakeGatewayClient:
         allowed_tools: tuple[str, ...],
         tool_schemas: tuple[GatewayToolSchema, ...],
     ) -> GatewayCompletion:
-        del profile, allowed_tools
+        del allowed_tools
+        assert isinstance(profile, ResolvedModelRunProfile)
+        self.profiles.append(profile)
         self.messages.append(messages)
         self.tool_schemas = tool_schemas
         if not self._completions:
@@ -356,6 +360,12 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
     assert repaired.repaired is True
     assert len(repaired.model_runs) == 2
     assert repaired.compilation is not None and repaired.compilation.accepted
+    assert len(repair_gateway.profiles) == 2
+    assert repair_gateway.profiles[1].token_budget == profile.token_budget - 20
+    assert (
+        repair_gateway.profiles[1].token_budget
+        < repair_gateway.profiles[0].token_budget
+    )
     assert (
         repaired.model_runs[0].output_payload != repaired.model_runs[1].output_payload
     )

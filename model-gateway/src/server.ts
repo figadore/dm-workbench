@@ -1,6 +1,8 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 
+import { type Usage } from "@earendil-works/pi-ai";
+
 import { GatewayRequestError, parseStreamRequest } from "./contracts.js";
 import { LoginCoordinator } from "./login.js";
 import { GatewayRuntimeError, type GatewayRuntime } from "./runtime.js";
@@ -279,11 +281,13 @@ function normalizeUsage(value: unknown): { input_tokens: number; output_tokens: 
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return undefined;
   }
-  const usage = value as Record<string, unknown>;
-  const input = usage.inputTokens ?? usage.input_tokens;
-  const output = usage.outputTokens ?? usage.output_tokens;
-  if (!isNonNegativeInteger(input) || !isNonNegativeInteger(output)) return undefined;
-  return { input_tokens: input, output_tokens: output };
+  // `pi-ai` normalizes every provider's final message to this pinned contract.
+  // Do not inspect provider-native usage field names at the gateway boundary.
+  const usage = value as Partial<Usage>;
+  if (!isNonNegativeInteger(usage.input) || !isNonNegativeInteger(usage.output)) {
+    return undefined;
+  }
+  return { input_tokens: usage.input, output_tokens: usage.output };
 }
 
 function isNonNegativeInteger(value: unknown): value is number {
