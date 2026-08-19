@@ -151,6 +151,36 @@ def test_cli_generate_inspect_and_approve_use_shared_workflow(
     result = _output_document(generated.output)
     artifact_id = result["artifact_id"]
     version_id = result["artifact_version_id"]
+    print_export = runner.invoke(
+        app,
+        [
+            "dungeon",
+            "export",
+            version_id,
+            "--format",
+            "pdf",
+            "--campaign",
+            campaign_id,
+        ],
+    )
+    assert print_export.exit_code == 1
+    assert "dungeon_print_export_disabled" in print_export.output
+
+    roll20_export = runner.invoke(
+        app,
+        [
+            "dungeon",
+            "export",
+            version_id,
+            "--format",
+            "roll20",
+            "--campaign",
+            campaign_id,
+        ],
+    )
+    assert roll20_export.exit_code == 0, roll20_export.output
+    assert len(_output_document(roll20_export.output)["asset_ids"]) == 8
+
     inspected = runner.invoke(
         app,
         [

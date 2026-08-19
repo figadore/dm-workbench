@@ -1,0 +1,1298 @@
+{
+  "schema_version": "1.1.0",
+  "id": "pkg_output_quality_baseline",
+  "brief": {
+    "schema_version": "1.0.0",
+    "id": "brief_output_quality_baseline",
+    "title": "Output Quality Baseline",
+    "purpose": "ruin",
+    "summary": "A flooded archive seals a synthetic clockwork guardian below ground.",
+    "visibility": "dm_only",
+    "themes": [
+      "lost records",
+      "rising water"
+    ],
+    "tones": [
+      "mysterious",
+      "tense"
+    ],
+    "inhabitants": [
+      {
+        "id": "brief_inhabitant_guardians",
+        "text": "Synthetic clockwork guardians",
+        "visibility": "dm_only"
+      }
+    ],
+    "floor_count": 2,
+    "target_room_count": 7,
+    "pacing": "exploration_heavy",
+    "party_scale": {
+      "schema_version": "1.0.0",
+      "minimum_characters": 3,
+      "maximum_characters": 6,
+      "minimum_level": 2,
+      "maximum_level": 5
+    },
+    "constraints": [
+      {
+        "id": "brief_constraint_dry_route",
+        "text": "Include one dry route between floors.",
+        "visibility": "dm_only"
+      }
+    ],
+    "campaign_hooks": [
+      {
+        "id": "brief_hook_missing_index",
+        "text": "Recover the synthetic index crystal.",
+        "visibility": "dm_only"
+      }
+    ],
+    "tags": [
+      "synthetic",
+      "archive"
+    ]
+  },
+  "topology": {
+    "schema_version": "1.1.0",
+    "id": "topology_sunken_archive",
+    "visibility": "dm_only",
+    "floors": [
+      {
+        "id": "floor_upper",
+        "name": "Upper Archive",
+        "level_index": 0,
+        "target_room_count": 3,
+        "visibility": "player_safe"
+      },
+      {
+        "id": "floor_lower",
+        "name": "Lower Vaults",
+        "level_index": -1,
+        "target_room_count": 4,
+        "visibility": "player_safe"
+      }
+    ],
+    "rooms": [
+      {
+        "id": "room_entrance",
+        "name": "Entrance",
+        "floor_id": "floor_upper",
+        "role": "entrance",
+        "required": true,
+        "size": {
+          "minimum_width_cells": 3,
+          "maximum_width_cells": 5,
+          "minimum_height_cells": 3,
+          "maximum_height_cells": 5,
+          "minimum_area_cells": 9,
+          "maximum_area_cells": 25
+        },
+        "capacity": {
+          "minimum_occupants": 0,
+          "comfortable_occupants": 4,
+          "maximum_occupants": 8
+        },
+        "tags": [
+          "entry"
+        ],
+        "visibility": "player_safe"
+      },
+      {
+        "id": "room_hall",
+        "name": "Archive Hall",
+        "floor_id": "floor_upper",
+        "role": "hub",
+        "required": true,
+        "size": {
+          "minimum_width_cells": 5,
+          "maximum_width_cells": 7,
+          "minimum_height_cells": 5,
+          "maximum_height_cells": 7,
+          "minimum_area_cells": 25,
+          "maximum_area_cells": 49
+        },
+        "capacity": {
+          "minimum_occupants": 2,
+          "comfortable_occupants": 8,
+          "maximum_occupants": 14
+        },
+        "tags": [
+          "junction"
+        ],
+        "visibility": "player_safe"
+      },
+      {
+        "id": "room_vault",
+        "name": "Secret Index Vault",
+        "floor_id": "floor_upper",
+        "role": "treasure",
+        "required": false,
+        "size": {
+          "minimum_width_cells": 3,
+          "maximum_width_cells": 5,
+          "minimum_height_cells": 3,
+          "maximum_height_cells": 5,
+          "minimum_area_cells": 9,
+          "maximum_area_cells": 25
+        },
+        "capacity": {
+          "minimum_occupants": 0,
+          "comfortable_occupants": 3,
+          "maximum_occupants": 6
+        },
+        "tags": [
+          "secret"
+        ],
+        "visibility": "dm_only"
+      },
+      {
+        "id": "room_crypt",
+        "name": "Drowned Crypt",
+        "floor_id": "floor_lower",
+        "role": "puzzle",
+        "required": true,
+        "size": {
+          "minimum_width_cells": 4,
+          "maximum_width_cells": 6,
+          "minimum_height_cells": 4,
+          "maximum_height_cells": 6,
+          "minimum_area_cells": 16,
+          "maximum_area_cells": 36
+        },
+        "capacity": {
+          "minimum_occupants": 1,
+          "comfortable_occupants": 6,
+          "maximum_occupants": 10
+        },
+        "tags": [
+          "clue"
+        ],
+        "visibility": "player_safe"
+      },
+      {
+        "id": "room_antechamber",
+        "name": "Flooded Antechamber",
+        "floor_id": "floor_lower",
+        "role": "transition",
+        "required": true,
+        "size": {
+          "minimum_width_cells": 3,
+          "maximum_width_cells": 5,
+          "minimum_height_cells": 3,
+          "maximum_height_cells": 5,
+          "minimum_area_cells": 9,
+          "maximum_area_cells": 25
+        },
+        "capacity": {
+          "minimum_occupants": 1,
+          "comfortable_occupants": 4,
+          "maximum_occupants": 8
+        },
+        "tags": [
+          "trapped"
+        ],
+        "visibility": "player_safe"
+      },
+      {
+        "id": "room_sanctum",
+        "name": "Guardian Sanctum",
+        "floor_id": "floor_lower",
+        "role": "boss",
+        "required": true,
+        "size": {
+          "minimum_width_cells": 6,
+          "maximum_width_cells": 8,
+          "minimum_height_cells": 6,
+          "maximum_height_cells": 8,
+          "minimum_area_cells": 36,
+          "maximum_area_cells": 64
+        },
+        "capacity": {
+          "minimum_occupants": 4,
+          "comfortable_occupants": 10,
+          "maximum_occupants": 18
+        },
+        "tags": [
+          "guardian"
+        ],
+        "visibility": "player_safe"
+      },
+      {
+        "id": "room_exit",
+        "name": "Dry Exit",
+        "floor_id": "floor_lower",
+        "role": "exit",
+        "required": true,
+        "size": {
+          "minimum_width_cells": 3,
+          "maximum_width_cells": 5,
+          "minimum_height_cells": 3,
+          "maximum_height_cells": 5,
+          "minimum_area_cells": 9,
+          "maximum_area_cells": 25
+        },
+        "capacity": {
+          "minimum_occupants": 0,
+          "comfortable_occupants": 4,
+          "maximum_occupants": 8
+        },
+        "tags": [
+          "egress"
+        ],
+        "visibility": "player_safe"
+      }
+    ],
+    "connections": [
+      {
+        "kind": "corridor",
+        "id": "connection_entry_corridor",
+        "from_room_id": "room_entrance",
+        "to_room_id": "room_hall",
+        "from_hidden": false,
+        "to_hidden": false,
+        "minimum_width_cells": 1,
+        "visibility": "player_safe"
+      },
+      {
+        "kind": "door",
+        "id": "connection_entry_door",
+        "from_room_id": "room_entrance",
+        "to_room_id": "room_hall",
+        "from_hidden": false,
+        "to_hidden": false,
+        "door_type": "normal",
+        "gate_id": null,
+        "trap_id": null,
+        "visibility": "player_safe"
+      },
+      {
+        "kind": "door",
+        "id": "connection_vault_secret",
+        "from_room_id": "room_hall",
+        "to_room_id": "room_vault",
+        "from_hidden": true,
+        "to_hidden": true,
+        "door_type": "secret",
+        "gate_id": null,
+        "trap_id": null,
+        "visibility": "dm_only"
+      },
+      {
+        "kind": "stairs",
+        "id": "connection_archive_stairs",
+        "from_room_id": "room_hall",
+        "to_room_id": "room_crypt",
+        "from_hidden": false,
+        "to_hidden": false,
+        "from_floor_id": "floor_upper",
+        "to_floor_id": "floor_lower",
+        "direction": "both",
+        "visibility": "player_safe"
+      },
+      {
+        "kind": "door",
+        "id": "connection_crypt_trap",
+        "from_room_id": "room_crypt",
+        "to_room_id": "room_antechamber",
+        "from_hidden": false,
+        "to_hidden": false,
+        "door_type": "trapped",
+        "gate_id": null,
+        "trap_id": "hazard_needle_lock",
+        "visibility": "dm_only"
+      },
+      {
+        "kind": "door",
+        "id": "connection_sanctum_lock",
+        "from_room_id": "room_antechamber",
+        "to_room_id": "room_sanctum",
+        "from_hidden": false,
+        "to_hidden": false,
+        "door_type": "locked",
+        "gate_id": "gate_sanctum",
+        "trap_id": null,
+        "visibility": "player_safe"
+      },
+      {
+        "kind": "vertical_link",
+        "id": "connection_secret_ladder",
+        "from_room_id": "room_vault",
+        "to_room_id": "room_sanctum",
+        "from_hidden": true,
+        "to_hidden": true,
+        "from_floor_id": "floor_upper",
+        "to_floor_id": "floor_lower",
+        "link_type": "ladder",
+        "visibility": "dm_only"
+      },
+      {
+        "kind": "corridor",
+        "id": "connection_sanctum_exit",
+        "from_room_id": "room_sanctum",
+        "to_room_id": "room_exit",
+        "from_hidden": false,
+        "to_hidden": false,
+        "minimum_width_cells": 1,
+        "visibility": "player_safe"
+      }
+    ],
+    "gates": [
+      {
+        "id": "gate_sanctum",
+        "name": "Synthetic index lock",
+        "kind": "lock",
+        "blocks_connection_ids": [
+          "connection_sanctum_lock"
+        ],
+        "requires_all": [
+          {
+            "kind": "key",
+            "target_id": "key_index_crystal"
+          },
+          {
+            "kind": "clue",
+            "target_id": "clue_tide_sequence"
+          }
+        ],
+        "visibility": "dm_only"
+      }
+    ],
+    "keys": [
+      {
+        "id": "key_index_crystal",
+        "name": "Synthetic index crystal",
+        "located_in_room_id": "room_vault",
+        "opens_gate_ids": [
+          "gate_sanctum"
+        ],
+        "visibility": "dm_only"
+      }
+    ],
+    "clues": [
+      {
+        "id": "clue_tide_sequence",
+        "name": "Tide sequence",
+        "text": "A synthetic four-symbol sequence is etched into a dry plinth.",
+        "located_in_room_id": "room_crypt",
+        "supports_gate_ids": [
+          "gate_sanctum"
+        ],
+        "visibility": "dm_only"
+      }
+    ],
+    "loops": [
+      {
+        "id": "loop_archive_vaults",
+        "room_ids": [
+          "room_hall",
+          "room_vault",
+          "room_sanctum",
+          "room_antechamber",
+          "room_crypt"
+        ],
+        "visibility": "dm_only"
+      }
+    ],
+    "branches": [
+      {
+        "id": "branch_upper_archive",
+        "junction_room_id": "room_hall",
+        "branch_room_ids": [
+          "room_vault",
+          "room_crypt"
+        ],
+        "visibility": "dm_only"
+      }
+    ],
+    "chokepoints": [
+      {
+        "id": "chokepoint_final_exit",
+        "component_kind": "connection",
+        "component_id": "connection_sanctum_exit",
+        "separates_room_ids": [
+          "room_sanctum",
+          "room_exit"
+        ],
+        "visibility": "dm_only"
+      }
+    ],
+    "secret_bypasses": [
+      {
+        "id": "bypass_secret_ladder",
+        "entry_room_id": "room_vault",
+        "exit_room_id": "room_sanctum",
+        "connection_ids": [
+          "connection_secret_ladder"
+        ],
+        "bypassed_gate_ids": [
+          "gate_sanctum"
+        ],
+        "visibility": "dm_only"
+      }
+    ]
+  },
+  "metadata": {
+    "generator_name": "retained-output-baseline",
+    "generator_version": "1.0.0",
+    "seed": 314159,
+    "component_id_strategy": "input",
+    "parent_package_id": null,
+    "locked_component_ids": []
+  },
+  "grid": {
+    "grid_type": "square",
+    "cell_scale_feet": 5,
+    "orthogonal": true
+  },
+  "layers": [
+    {
+      "id": "layer_base",
+      "name": "Base geometry",
+      "kind": "base",
+      "z_index": 0,
+      "include_in_dm_export": true,
+      "include_in_player_export": true,
+      "visibility": "player_safe"
+    },
+    {
+      "id": "layer_terrain",
+      "name": "Terrain",
+      "kind": "terrain",
+      "z_index": 10,
+      "include_in_dm_export": true,
+      "include_in_player_export": true,
+      "visibility": "player_safe"
+    },
+    {
+      "id": "layer_features",
+      "name": "Features",
+      "kind": "features",
+      "z_index": 20,
+      "include_in_dm_export": true,
+      "include_in_player_export": true,
+      "visibility": "player_safe"
+    },
+    {
+      "id": "layer_labels",
+      "name": "Player labels",
+      "kind": "labels",
+      "z_index": 30,
+      "include_in_dm_export": true,
+      "include_in_player_export": true,
+      "visibility": "player_safe"
+    },
+    {
+      "id": "layer_dm_secrets",
+      "name": "DM secrets",
+      "kind": "dm_secrets",
+      "z_index": 40,
+      "include_in_dm_export": true,
+      "include_in_player_export": false,
+      "visibility": "dm_only"
+    },
+    {
+      "id": "layer_dm_annotations",
+      "name": "DM annotations",
+      "kind": "dm_annotations",
+      "z_index": 50,
+      "include_in_dm_export": true,
+      "include_in_player_export": false,
+      "visibility": "dm_only"
+    }
+  ],
+  "floors": [
+    {
+      "id": "floor_upper",
+      "layer_id": "layer_base",
+      "name": "Upper Archive",
+      "level_index": 0,
+      "bounds": {
+        "kind": "rectangle",
+        "origin": {
+          "x": 0,
+          "y": 0
+        },
+        "width_cells": 56,
+        "height_cells": 56
+      },
+      "visibility": "player_safe"
+    },
+    {
+      "id": "floor_lower",
+      "layer_id": "layer_base",
+      "name": "Lower Vaults",
+      "level_index": -1,
+      "bounds": {
+        "kind": "rectangle",
+        "origin": {
+          "x": 0,
+          "y": 0
+        },
+        "width_cells": 30,
+        "height_cells": 12
+      },
+      "visibility": "player_safe"
+    }
+  ],
+  "rooms": [
+    {
+      "id": "room_entrance",
+      "layer_id": "layer_base",
+      "floor_id": "floor_upper",
+      "role": "entrance",
+      "boundary": {
+        "kind": "polygon",
+        "points": [
+          {
+            "x": 1,
+            "y": 4
+          },
+          {
+            "x": 5,
+            "y": 4
+          },
+          {
+            "x": 5,
+            "y": 8
+          },
+          {
+            "x": 1,
+            "y": 8
+          }
+        ]
+      },
+      "capacity": {
+        "minimum_occupants": 0,
+        "comfortable_occupants": 4,
+        "maximum_occupants": 8
+      },
+      "tags": [
+        "entry"
+      ],
+      "visibility": "player_safe"
+    },
+    {
+      "id": "room_hall",
+      "layer_id": "layer_base",
+      "floor_id": "floor_upper",
+      "role": "hub",
+      "boundary": {
+        "kind": "polygon",
+        "points": [
+          {
+            "x": 5,
+            "y": 3
+          },
+          {
+            "x": 11,
+            "y": 3
+          },
+          {
+            "x": 11,
+            "y": 9
+          },
+          {
+            "x": 5,
+            "y": 9
+          }
+        ]
+      },
+      "capacity": {
+        "minimum_occupants": 2,
+        "comfortable_occupants": 8,
+        "maximum_occupants": 14
+      },
+      "tags": [
+        "junction"
+      ],
+      "visibility": "player_safe"
+    },
+    {
+      "id": "room_vault",
+      "layer_id": "layer_dm_secrets",
+      "floor_id": "floor_upper",
+      "role": "treasure",
+      "boundary": {
+        "kind": "polygon",
+        "points": [
+          {
+            "x": 15,
+            "y": 4
+          },
+          {
+            "x": 19,
+            "y": 4
+          },
+          {
+            "x": 19,
+            "y": 8
+          },
+          {
+            "x": 15,
+            "y": 8
+          }
+        ]
+      },
+      "capacity": {
+        "minimum_occupants": 0,
+        "comfortable_occupants": 3,
+        "maximum_occupants": 6
+      },
+      "tags": [
+        "secret"
+      ],
+      "visibility": "dm_only"
+    },
+    {
+      "id": "room_crypt",
+      "layer_id": "layer_base",
+      "floor_id": "floor_lower",
+      "role": "puzzle",
+      "boundary": {
+        "kind": "polygon",
+        "points": [
+          {
+            "x": 2,
+            "y": 3
+          },
+          {
+            "x": 7,
+            "y": 3
+          },
+          {
+            "x": 7,
+            "y": 8
+          },
+          {
+            "x": 2,
+            "y": 8
+          }
+        ]
+      },
+      "capacity": {
+        "minimum_occupants": 1,
+        "comfortable_occupants": 6,
+        "maximum_occupants": 10
+      },
+      "tags": [
+        "clue"
+      ],
+      "visibility": "player_safe"
+    },
+    {
+      "id": "room_antechamber",
+      "layer_id": "layer_base",
+      "floor_id": "floor_lower",
+      "role": "transition",
+      "boundary": {
+        "kind": "polygon",
+        "points": [
+          {
+            "x": 9,
+            "y": 4
+          },
+          {
+            "x": 13,
+            "y": 4
+          },
+          {
+            "x": 13,
+            "y": 8
+          },
+          {
+            "x": 9,
+            "y": 8
+          }
+        ]
+      },
+      "capacity": {
+        "minimum_occupants": 1,
+        "comfortable_occupants": 4,
+        "maximum_occupants": 8
+      },
+      "tags": [
+        "trapped"
+      ],
+      "visibility": "player_safe"
+    },
+    {
+      "id": "room_sanctum",
+      "layer_id": "layer_base",
+      "floor_id": "floor_lower",
+      "role": "boss",
+      "boundary": {
+        "kind": "polygon",
+        "points": [
+          {
+            "x": 15,
+            "y": 2
+          },
+          {
+            "x": 22,
+            "y": 2
+          },
+          {
+            "x": 22,
+            "y": 9
+          },
+          {
+            "x": 15,
+            "y": 9
+          }
+        ]
+      },
+      "capacity": {
+        "minimum_occupants": 4,
+        "comfortable_occupants": 10,
+        "maximum_occupants": 18
+      },
+      "tags": [
+        "guardian"
+      ],
+      "visibility": "player_safe"
+    },
+    {
+      "id": "room_exit",
+      "layer_id": "layer_base",
+      "floor_id": "floor_lower",
+      "role": "exit",
+      "boundary": {
+        "kind": "polygon",
+        "points": [
+          {
+            "x": 24,
+            "y": 4
+          },
+          {
+            "x": 28,
+            "y": 4
+          },
+          {
+            "x": 28,
+            "y": 8
+          },
+          {
+            "x": 24,
+            "y": 8
+          }
+        ]
+      },
+      "capacity": {
+        "minimum_occupants": 0,
+        "comfortable_occupants": 4,
+        "maximum_occupants": 8
+      },
+      "tags": [
+        "egress"
+      ],
+      "visibility": "player_safe"
+    }
+  ],
+  "corridors": [
+    {
+      "id": "connection_entry_corridor",
+      "layer_id": "layer_base",
+      "floor_id": "floor_upper",
+      "path": {
+        "kind": "polyline",
+        "points": [
+          {
+            "x": 5,
+            "y": 6
+          },
+          {
+            "x": 7,
+            "y": 6
+          }
+        ]
+      },
+      "width_cells": 1,
+      "connects_room_ids": [
+        "room_entrance",
+        "room_hall"
+      ],
+      "visibility": "player_safe"
+    },
+    {
+      "id": "corridor_vault_secret",
+      "layer_id": "layer_dm_secrets",
+      "floor_id": "floor_upper",
+      "path": {
+        "kind": "polyline",
+        "points": [
+          {
+            "x": 11,
+            "y": 6
+          },
+          {
+            "x": 12,
+            "y": 6
+          },
+          {
+            "x": 12,
+            "y": 8
+          },
+          {
+            "x": 15,
+            "y": 8
+          }
+        ]
+      },
+      "width_cells": 1,
+      "connects_room_ids": [
+        "room_hall",
+        "room_vault"
+      ],
+      "visibility": "dm_only"
+    },
+    {
+      "id": "corridor_crypt_trap",
+      "layer_id": "layer_dm_secrets",
+      "floor_id": "floor_lower",
+      "path": {
+        "kind": "polyline",
+        "points": [
+          {
+            "x": 7,
+            "y": 6
+          },
+          {
+            "x": 9,
+            "y": 6
+          }
+        ]
+      },
+      "width_cells": 1,
+      "connects_room_ids": [
+        "room_crypt",
+        "room_antechamber"
+      ],
+      "visibility": "dm_only"
+    },
+    {
+      "id": "corridor_sanctum_lock",
+      "layer_id": "layer_base",
+      "floor_id": "floor_lower",
+      "path": {
+        "kind": "polyline",
+        "points": [
+          {
+            "x": 13,
+            "y": 6
+          },
+          {
+            "x": 15,
+            "y": 6
+          }
+        ]
+      },
+      "width_cells": 1,
+      "connects_room_ids": [
+        "room_antechamber",
+        "room_sanctum"
+      ],
+      "visibility": "player_safe"
+    },
+    {
+      "id": "connection_sanctum_exit",
+      "layer_id": "layer_base",
+      "floor_id": "floor_lower",
+      "path": {
+        "kind": "polyline",
+        "points": [
+          {
+            "x": 22,
+            "y": 6
+          },
+          {
+            "x": 24,
+            "y": 6
+          }
+        ]
+      },
+      "width_cells": 1,
+      "connects_room_ids": [
+        "room_sanctum",
+        "room_exit"
+      ],
+      "visibility": "player_safe"
+    }
+  ],
+  "doors": [
+    {
+      "id": "connection_entry_door",
+      "layer_id": "layer_base",
+      "floor_id": "floor_upper",
+      "door_type": "normal",
+      "segment": {
+        "start": {
+          "x": 5,
+          "y": 5
+        },
+        "end": {
+          "x": 5,
+          "y": 7
+        }
+      },
+      "connects_room_ids": [
+        "room_entrance",
+        "room_hall"
+      ],
+      "from_hidden": false,
+      "to_hidden": false,
+      "gate_id": null,
+      "hazard_id": null,
+      "visibility": "player_safe"
+    },
+    {
+      "id": "connection_vault_secret",
+      "layer_id": "layer_dm_secrets",
+      "floor_id": "floor_upper",
+      "door_type": "secret",
+      "segment": {
+        "start": {
+          "x": 11,
+          "y": 5
+        },
+        "end": {
+          "x": 11,
+          "y": 7
+        }
+      },
+      "connects_room_ids": [
+        "room_hall",
+        "room_vault"
+      ],
+      "from_hidden": true,
+      "to_hidden": true,
+      "gate_id": null,
+      "hazard_id": null,
+      "visibility": "dm_only"
+    },
+    {
+      "id": "connection_crypt_trap",
+      "layer_id": "layer_dm_secrets",
+      "floor_id": "floor_lower",
+      "door_type": "trapped",
+      "segment": {
+        "start": {
+          "x": 7,
+          "y": 5
+        },
+        "end": {
+          "x": 7,
+          "y": 7
+        }
+      },
+      "connects_room_ids": [
+        "room_crypt",
+        "room_antechamber"
+      ],
+      "from_hidden": false,
+      "to_hidden": false,
+      "gate_id": null,
+      "hazard_id": "hazard_needle_lock",
+      "visibility": "dm_only"
+    },
+    {
+      "id": "connection_sanctum_lock",
+      "layer_id": "layer_base",
+      "floor_id": "floor_lower",
+      "door_type": "locked",
+      "segment": {
+        "start": {
+          "x": 13,
+          "y": 5
+        },
+        "end": {
+          "x": 13,
+          "y": 7
+        }
+      },
+      "connects_room_ids": [
+        "room_antechamber",
+        "room_sanctum"
+      ],
+      "from_hidden": false,
+      "to_hidden": false,
+      "gate_id": "gate_sanctum",
+      "hazard_id": null,
+      "visibility": "player_safe"
+    }
+  ],
+  "stairs": [
+    {
+      "id": "stair_upper_archive",
+      "layer_id": "layer_base",
+      "floor_id": "floor_upper",
+      "position": {
+        "x": 10,
+        "y": 7
+      },
+      "direction": "down",
+      "vertical_link_id": "connection_archive_stairs",
+      "visibility": "player_safe"
+    },
+    {
+      "id": "stair_lower_archive",
+      "layer_id": "layer_base",
+      "floor_id": "floor_lower",
+      "position": {
+        "x": 4,
+        "y": 6
+      },
+      "direction": "up",
+      "vertical_link_id": "connection_archive_stairs",
+      "visibility": "player_safe"
+    }
+  ],
+  "vertical_links": [
+    {
+      "id": "connection_archive_stairs",
+      "link_type": "stairs",
+      "endpoints": [
+        {
+          "floor_id": "floor_upper",
+          "position": {
+            "x": 10,
+            "y": 7
+          },
+          "visibility": "player_safe",
+          "stair_id": "stair_upper_archive"
+        },
+        {
+          "floor_id": "floor_lower",
+          "position": {
+            "x": 4,
+            "y": 6
+          },
+          "visibility": "player_safe",
+          "stair_id": "stair_lower_archive"
+        }
+      ],
+      "visibility": "player_safe"
+    },
+    {
+      "id": "connection_secret_ladder",
+      "link_type": "ladder",
+      "endpoints": [
+        {
+          "floor_id": "floor_upper",
+          "position": {
+            "x": 17,
+            "y": 6
+          },
+          "visibility": "dm_only",
+          "stair_id": null
+        },
+        {
+          "floor_id": "floor_lower",
+          "position": {
+            "x": 19,
+            "y": 4
+          },
+          "visibility": "dm_only",
+          "stair_id": null
+        }
+      ],
+      "visibility": "dm_only"
+    }
+  ],
+  "features": [
+    {
+      "id": "feature_route_pillar",
+      "layer_id": "layer_features",
+      "floor_id": "floor_upper",
+      "room_id": null,
+      "kind": "pillar",
+      "name": "Route-blocking pillar",
+      "geometry": {
+        "kind": "point",
+        "point": {
+          "x": 13,
+          "y": 6
+        }
+      },
+      "details": null,
+      "visibility": "player_safe"
+    },
+    {
+      "id": "feature_sanctum_pillar",
+      "layer_id": "layer_features",
+      "floor_id": "floor_lower",
+      "room_id": "room_sanctum",
+      "kind": "pillar",
+      "name": "Central pillar",
+      "geometry": {
+        "kind": "point",
+        "point": {
+          "x": 18,
+          "y": 5
+        }
+      },
+      "details": null,
+      "visibility": "player_safe"
+    }
+  ],
+  "terrain": [
+    {
+      "id": "terrain_crypt_rubble",
+      "layer_id": "layer_terrain",
+      "floor_id": "floor_lower",
+      "room_id": "room_crypt",
+      "kind": "rubble",
+      "area": {
+        "kind": "polygon",
+        "points": [
+          {
+            "x": 3,
+            "y": 4
+          },
+          {
+            "x": 5,
+            "y": 4
+          },
+          {
+            "x": 5,
+            "y": 6
+          },
+          {
+            "x": 3,
+            "y": 6
+          }
+        ]
+      },
+      "movement_cost_multiplier": 2,
+      "blocks_movement": false,
+      "visibility": "player_safe"
+    }
+  ],
+  "hazards": [
+    {
+      "id": "hazard_needle_lock",
+      "layer_id": "layer_dm_secrets",
+      "floor_id": "floor_lower",
+      "room_id": "room_antechamber",
+      "kind": "trap",
+      "name": "Synthetic needle latch",
+      "geometry": {
+        "kind": "point",
+        "point": {
+          "x": 8,
+          "y": 6
+        }
+      },
+      "trigger": "Opening the marked latch without the release pin.",
+      "effect": "A harmless synthetic dye needle marks the opener.",
+      "detection_difficulty": 12,
+      "disable_difficulty": 10,
+      "visibility": "dm_only"
+    }
+  ],
+  "zones": [
+    {
+      "id": "zone_sanctum_encounter",
+      "layer_id": "layer_dm_annotations",
+      "floor_id": "floor_lower",
+      "room_id": "room_sanctum",
+      "kind": "encounter",
+      "name": "Guardian arena",
+      "geometry": {
+        "kind": "rectangle",
+        "origin": {
+          "x": 16,
+          "y": 3
+        },
+        "width_cells": 5,
+        "height_cells": 5
+      },
+      "visibility": "dm_only"
+    }
+  ],
+  "labels": [
+    {
+      "id": "label_archive_entrance",
+      "layer_id": "layer_labels",
+      "floor_id": "floor_upper",
+      "text": "Archive Entrance",
+      "position": {
+        "x": 2,
+        "y": 6
+      },
+      "rotation_degrees": 0,
+      "visibility": "player_safe"
+    },
+    {
+      "id": "label_secret_vault",
+      "layer_id": "layer_dm_annotations",
+      "floor_id": "floor_upper",
+      "text": "Secret Index Vault",
+      "position": {
+        "x": 16,
+        "y": 6
+      },
+      "rotation_degrees": 0,
+      "visibility": "dm_only"
+    }
+  ],
+  "encounter_slots": [
+    {
+      "id": "encounter_slot_guardian",
+      "layer_id": "layer_dm_annotations",
+      "floor_id": "floor_lower",
+      "room_id": "room_sanctum",
+      "zone_id": "zone_sanctum_encounter",
+      "anchor_ids": [
+        "anchor_guardian_start"
+      ],
+      "minimum_creatures": 1,
+      "maximum_creatures": 6,
+      "tags": [
+        "boss",
+        "construct"
+      ],
+      "visibility": "dm_only"
+    }
+  ],
+  "position_anchors": [
+    {
+      "id": "anchor_archive_entrance",
+      "layer_id": "layer_base",
+      "floor_id": "floor_upper",
+      "room_id": "room_entrance",
+      "kind": "entrance",
+      "position": {
+        "x": 2,
+        "y": 6
+      },
+      "name": "Party entrance",
+      "visibility": "player_safe"
+    },
+    {
+      "id": "anchor_guardian_start",
+      "layer_id": "layer_dm_annotations",
+      "floor_id": "floor_lower",
+      "room_id": "room_sanctum",
+      "kind": "creature_start",
+      "position": {
+        "x": 18,
+        "y": 6
+      },
+      "name": "Guardian start",
+      "visibility": "dm_only"
+    },
+    {
+      "id": "anchor_archive_exit",
+      "layer_id": "layer_base",
+      "floor_id": "floor_lower",
+      "room_id": "room_exit",
+      "kind": "exit",
+      "position": {
+        "x": 27,
+        "y": 6
+      },
+      "name": "Archive exit",
+      "visibility": "player_safe"
+    }
+  ]
+}

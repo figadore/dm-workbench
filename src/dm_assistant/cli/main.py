@@ -6,7 +6,7 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
 import typer
@@ -698,15 +698,20 @@ def dungeon_regenerate(
 @dungeon_app.command("export")
 def dungeon_export(
     artifact_version_id: UUID,
+    export_format: Annotated[
+        Literal["roll20", "pdf"],
+        typer.Option("--format", help="Export family: roll20 or pdf."),
+    ] = "roll20",
     campaign_id: Annotated[UUID | None, typer.Option("--campaign")] = None,
 ) -> None:
-    """Create exact-scale PDF and Roll20 assets for the current draft."""
+    """Create one selected export family for the current draft."""
     with _render_domain_errors():
         with workbench_runtime() as runtime:
             asset_ids = runtime.dungeons.export(
                 ExportDungeonWorkflow(
                     campaign_id=_active_campaign_id(runtime.campaigns, campaign_id),
                     artifact_version_id=artifact_version_id,
+                    export_format=export_format,
                 )
             )
             typer.echo(

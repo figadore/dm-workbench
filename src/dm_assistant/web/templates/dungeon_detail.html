@@ -31,9 +31,10 @@
   {% endfor %}
   </div>
   {% if version.id == detail.current_version_id and detail.lifecycle == "draft" %}
+  <p><strong>Print:</strong> Exact-scale print maps are temporarily disabled while sparse-page output is redesigned. Historical PDF assets remain available.</p>
   <form method="post" action="/dungeons/{{ detail.artifact_id }}/export">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="campaign_id" value="{{ campaign_id }}"><input type="hidden" name="artifact_version_id" value="{{ version.id }}">
-    <button type="submit">Create PDF and Roll20 exports</button>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="campaign_id" value="{{ campaign_id }}"><input type="hidden" name="artifact_version_id" value="{{ version.id }}"><input type="hidden" name="export_format" value="roll20">
+    <button type="submit">Create Roll20 exports</button>
   </form>
   <form method="post" action="/dungeons/{{ detail.artifact_id }}/regenerate">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="campaign_id" value="{{ campaign_id }}"><input type="hidden" name="parent_version_id" value="{{ version.id }}">

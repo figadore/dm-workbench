@@ -9,7 +9,7 @@ from sqlalchemy import Engine, select
 
 from dm_assistant.adapters.assets import LocalAssetStore
 from dm_assistant.db import Campaign, build_session_factory, transactional_session
-from dm_assistant.errors import ConflictError
+from dm_assistant.errors import ConflictError, DungeonPrintExportDisabledError
 from dm_assistant.modules.modeling import (
     DungeonGenerationIntentV1,
     GatewayModelCatalogEntry,
@@ -327,25 +327,36 @@ def test_provider_free_dungeon_workflow_persists_previews_exports_and_approval(
     assert set(locked_ids) <= set(comparison.unchanged_component_ids)
     assert comparison.changed_component_ids
 
+    assert dungeon_studio.print_capability.status == "disabled"
+    with pytest.raises(DungeonPrintExportDisabledError) as disabled:
+        dungeon_studio.export(
+            ExportDungeonWorkflow(
+                campaign_id=campaign_id,
+                artifact_version_id=second_version.id,
+                export_format="pdf",
+            )
+        )
+    assert disabled.value.code.value == "dungeon_print_export_disabled"
+
     exported_asset_ids = dungeon_studio.export(
         ExportDungeonWorkflow(
             campaign_id=campaign_id,
             artifact_version_id=second_version.id,
+            export_format="roll20",
         )
     )
-    assert len(exported_asset_ids) == 16
+    assert len(exported_asset_ids) == 8
     all_assets = preparation.list_assets(campaign_id, second_version.id)
     assert {item.role for item in all_assets} >= {
-        ArtifactAssetRole.DM_PRINT_PDF,
-        ArtifactAssetRole.PLAYER_PRINT_PDF,
         ArtifactAssetRole.DM_ROLL20_BUNDLE,
         ArtifactAssetRole.PLAYER_ROLL20_BUNDLE,
     }
+    assert not {
+        ArtifactAssetRole.DM_PRINT_PDF,
+        ArtifactAssetRole.PLAYER_PRINT_PDF,
+    } & {item.role for item in all_assets}
     for asset in all_assets:
-        if asset.role in {
-            ArtifactAssetRole.PLAYER_PRINT_PDF,
-            ArtifactAssetRole.PLAYER_ROLL20_BUNDLE,
-        }:
+        if asset.role is ArtifactAssetRole.PLAYER_ROLL20_BUNDLE:
             _, data = preparation.read_asset(campaign_id, asset.asset_id)
             assert b"room_vault" not in data
             assert b"connection_vault_secret" not in data
@@ -365,5 +376,6 @@ def test_provider_free_dungeon_workflow_persists_previews_exports_and_approval(
             ExportDungeonWorkflow(
                 campaign_id=campaign_id,
                 artifact_version_id=second_version.id,
+                export_format="roll20",
             )
         )

@@ -14,6 +14,7 @@ class ErrorCode(StrEnum):
     FORBIDDEN = "forbidden"
     ASSET_STORAGE_UNAVAILABLE = "asset_storage_unavailable"
     DUNGEON_EXECUTION_FAILED = "dungeon_execution_failed"
+    DUNGEON_PRINT_EXPORT_DISABLED = "dungeon_print_export_disabled"
     INVALID_INPUT = "invalid_input"
     MODEL_RUN_REJECTED = "model_run_rejected"
     NOT_FOUND = "not_found"
@@ -90,6 +91,17 @@ class DungeonExecutionFailedError(DomainError):
 
     def __init__(self, message: str) -> None:
         super().__init__(ErrorCode.DUNGEON_EXECUTION_FAILED, message, status_code=500)
+
+
+class DungeonPrintExportDisabledError(DomainError):
+    """New exact-scale print output is intentionally unavailable."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            ErrorCode.DUNGEON_PRINT_EXPORT_DISABLED,
+            "Exact-scale print maps are temporarily disabled while sparse-page output is redesigned.",
+            status_code=409,
+        )
 
 
 class ModelRunRejectedError(DomainError):

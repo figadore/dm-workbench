@@ -8,11 +8,11 @@
 
 - **Last updated:** 2026-08-18
 - **Branch:** `fast-track-prompt-to-dungeon` — ahead of `origin/fast-track-prompt-to-dungeon` by 18 commits.
-- **Working tree:** documentation-only user-directed dungeon-output refresh plan: `dungeon-output-refresh-plan.md`, P7-13 task slices in the implementation plan, architecture decisions, and this handoff. No code or migration changed.
+- **Working tree:** user-directed P7-13 planning documentation plus uncommitted completed P7-13a implementation, retained-output fixture/golden, and focused tests. No migration changed.
 - **Current phase:** P7-13 — Dungeon output, map readability, asset UX, and print refresh (user-directed priority; P3 remains deferred, not partially started).
-- **Last completed task:** P7-13 planning baseline.
-- **Current task:** **P7-13a — Output quality baseline and print fail-closed switch** (not started).
-- **First action:** add the synthetic retained-output regression fixture and focused tests that measure current connector geometry, raw/colliding labels, missing keyed features, sparse print pages, and raw asset presentation before changing behavior.
+- **Last completed task:** **P7-13a — Output quality baseline and print fail-closed switch.**
+- **Current task:** P7-13b — Connection semantics, compact placement, and geometry validation (not started).
+- **First action:** read the P7-13b plan and freeze its new package/generator contract before changing placement/routing behavior.
 - **Schema head:** `0008_workbench_defaults`.
 
 ## Current Implementation State
@@ -122,7 +122,7 @@ Deferred review notes (do not fold into P3-01 opportunistically):
 - There is no universal five-foot room gap: direct-door rooms share a wall, passage links use explicit corridor cells, and unrelated rooms retain one cell of rock clearance.
 - Default maps use short keyed callouts and one grayscale-safe feature grammar. Opaque IDs remain in lineage/developer inspection only.
 - New feature intent and composable door mechanics require retained-artifact-safe versioned contracts. Geometry/marker IDs stay in `dm_dungeon`; prose-heavy DM guide content stays in the Workbench.
-- Print is planned to fail closed in P7-13a. **Current code still generates PDFs** until that slice is implemented. Historical PDFs must remain readable.
+- P7-13a centrally disables new print generation. Historical PDFs remain readable; print re-enable requires the new PDF request/exporter version and P7-13f preflight gates.
 - The redesigned print feature separates bounded reference maps from selected-region exact-scale tactical tiles and rejects excessive/sparse jobs during preflight.
 
 ## P7-12g Guardrails
@@ -134,12 +134,11 @@ Deferred review notes (do not fold into P3-01 opportunistically):
 
 ## Handoff
 
-- **Task completed:** P7-13 planning baseline only; implementation has not started.
-- **Files changed:** added `dungeon-output-refresh-plan.md`; added P7-13a..g and its phase gate to `dm-assistant-implementation-plan.md`; updated connection geometry, feature/DM-guide, renderer grammar, asset catalog, and guarded print decisions in `dm-assistant-technical-architecture.md`; updated this handoff. No code, tests, schema, or migration changed.
-- **Commands run:** latest screenshot helper and image inspection; targeted source/contract/template/test inspection; `git diff --check` (passed). No test suite was run because this handoff changes documentation only.
-- **Important current behavior:** print has been marked for centralized disabling in P7-13a, but the existing UI/service still creates PDF and Roll20 exports together. Do not claim print is disabled until tests and shared application policy prove it.
-- **Compatibility decision:** retained dungeon output now exists. P7-13 geometry, renderer, creative intent, package, and PDF changes receive new version pins/readers and never rewrite historical specifications or asset links.
-- **Working tree:** documentation changes listed above are uncommitted; no pre-existing uncommitted code was present when planning began.
-- **Single next recommended task:** P7-13a — Output quality baseline and print fail-closed switch. **First concrete action:** add the synthetic retained-output regression fixture and focused metric tests before splitting PDF/Roll20 export selection or changing behavior.
-- **Suggested commit subject:** `P7-13 plan dungeon output refresh`.
+- **Task completed:** P7-13a — Output quality baseline and print fail-closed switch.
+- **Files changed:** `src/dm_assistant/errors.py`; `src/dm_assistant/orchestration/dungeons/{contracts,service}.py`; `src/dm_assistant/cli/main.py`; `src/dm_assistant/web/{routes.py,templates/dungeon_detail.html}`; `packages/dungeon-engine/tests/fixtures/output_quality_baseline.v1.json`; `packages/dungeon-engine/tests/golden/output_quality_baseline.upper.dm.svg`; `packages/dungeon-engine/tests/test_output_quality_baseline.py`; focused Dungeon Studio CLI/web/workflow integration tests; plus the pre-existing uncommitted P7-13 planning documentation.
+- **Implemented behavior:** `ExportDungeonWorkflow` now selects exactly one format. The centralized `DungeonStudioService` policy rejects `pdf` before reading/generating anything with stable `dungeon_print_export_disabled`; `roll20` creates only Roll20 bundles/manifests. CLI has `--format roll20|pdf`; the web only offers Roll20 and explains print is disabled; API/web/CLI tests exercise the same PDF rejection. Existing PDF asset reads/routes were untouched. The frozen synthetic retained-output fixture includes shared-wall direct-door intent, straight and deliberately one-bend connector geometry, secret/locked/trapped doors, a trap, puzzle room, clue/key, stairs, feature, and a sparse 56x56 upper floor. Its golden/metrics record 3 raw opaque IDs, 3 text collisions, 1 endpoint-clearance bend, 6 corridor/room interior-overlap cells, 3 missing keyed mechanics, and 73 PDF pages with 66/72 blank tiles.
+- **Commands/tests run:** `uv run pytest -q packages/dungeon-engine/tests` → `124 passed`; `uv run pytest -q tests/unit/test_cli.py tests/integration/test_dungeon_studio_workflow.py tests/integration/test_dungeon_studio_cli.py tests/integration/test_dungeon_studio_web.py` → `18 passed, 6 skipped`; focused Ruff lint/format and strict mypy → passed; `make test-integration PYTEST_ARGS='tests/integration/test_dungeon_studio_workflow.py tests/integration/test_dungeon_studio_cli.py tests/integration/test_dungeon_studio_web.py'` → `6 passed`; `git diff --check` → passed.
+- **Working tree:** uncommitted documentation and code/test changes listed above; no migration changed.
+- **Single next recommended task:** **P7-13b — Connection semantics, compact placement, and geometry validation.** **First concrete action:** freeze the new package/generator contract with explicit endpoint openings and approach direction; do not reinterpret the P7-13a retained baseline fixture or historical artifacts.
+- **Suggested commit subject:** `P7-13a baseline output quality and disable print exports`.
 - Before changing code or schema: inspect `git status --short --branch`, read this file, read P7-13a and `dungeon-output-refresh-plan.md`, then follow the applicable architecture invariants.

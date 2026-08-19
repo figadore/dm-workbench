@@ -8,7 +8,7 @@ from typing import Literal
 from pydantic import JsonValue, ValidationError
 
 import dm_dungeon
-from dm_assistant.errors import ConflictError
+from dm_assistant.errors import ConflictError, DungeonPrintExportDisabledError
 from dm_assistant.modules.preparation import (
     ArtifactAssetRole,
     ArtifactLifecycle,
@@ -34,6 +34,7 @@ from dm_assistant.orchestration.dungeons.contracts import (
     CreatePromptedDungeonWorkflow,
     DungeonDmNotes,
     DungeonGenerationRegressionCase,
+    DungeonPrintCapability,
     DungeonRoomDmNote,
     DungeonStudioDetail,
     DungeonStudioSpecification,
@@ -47,12 +48,10 @@ from dm_dungeon import (
     DungeonPackage,
     LayoutRequest,
     LockedLayoutComponents,
-    PdfExportRequest,
     PngExportRequest,
     RenderAudience,
     SvgRenderRequest,
     SvgThemeName,
-    export_pdf,
     export_png,
     generate_layout,
     render_svg,
@@ -70,7 +69,6 @@ from dm_dungeon.contracts import (
 )
 from dm_dungeon.export import (
     ROLL20_EXPORTER_VERSION,
-    PdfArtifact,
     Roll20Artifact,
     Roll20ExportRequest,
     export_roll20_bundle,
@@ -161,14 +159,24 @@ class DungeonStudioService:
             dm_notes=_resolved_dm_notes(specification),
         )
 
+    @property
+    def print_capability(self) -> DungeonPrintCapability:
+        """The sole application policy for new exact-scale print generation."""
+
+        return DungeonPrintCapability()
+
     def export(self, command: ExportDungeonWorkflow) -> tuple[uuid.UUID, ...]:
+        if command.export_format == "pdf":
+            raise DungeonPrintExportDisabledError()
         snapshot = self._preparation.get_version(
             command.campaign_id,
             command.artifact_version_id,
         )
         specification = _load_specification(snapshot.specification)
         assets = _export_assets(
-            specification.package, _resolved_dm_notes(specification)
+            specification.package,
+            _resolved_dm_notes(specification),
+            export_format=command.export_format,
         )
         records = tuple(
             self._preparation.attach_asset(
@@ -806,7 +814,10 @@ def _preview_assets(
 
 
 def _export_assets(
-    package: DungeonPackage, dm_notes: DungeonDmNotes
+    package: DungeonPackage,
+    dm_notes: DungeonDmNotes,
+    *,
+    export_format: Literal["roll20"],
 ) -> tuple[_PendingAsset, ...]:
     assets: list[_PendingAsset] = []
     for floor_index, floor in enumerate(package.floors):
@@ -817,17 +828,6 @@ def _export_assets(
                 if audience is RenderAudience.DM
                 else package
             )
-            pdf = export_pdf(
-                rendered_package,
-                PdfExportRequest(
-                    schema_version="1.0.0",
-                    package_id=package.id,
-                    floor_id=floor.id,
-                    audience=audience,
-                    maximum_ink_coverage_basis_points=5000,
-                ),
-            )
-            _append_pdf_assets(assets, pdf, floor_index, audience, audience_ordinal)
             roll20 = export_roll20_bundle(
                 rendered_package,
                 Roll20ExportRequest(
@@ -847,33 +847,6 @@ def _export_assets(
                 audience_ordinal,
             )
     return tuple(assets)
-
-
-def _append_pdf_assets(
-    assets: list[_PendingAsset],
-    pdf: PdfArtifact,
-    floor_index: int,
-    audience: RenderAudience,
-    audience_ordinal: int,
-) -> None:
-    if not pdf.result.success or pdf.data is None or pdf.result.manifest is None:
-        raise ConflictError("Dungeon PDF export failed.")
-    role = (
-        ArtifactAssetRole.DM_PRINT_PDF
-        if audience is RenderAudience.DM
-        else ArtifactAssetRole.PLAYER_PRINT_PDF
-    )
-    assets.extend(
-        (
-            _PendingAsset(role, floor_index, "application/pdf", pdf.data),
-            _PendingAsset(
-                ArtifactAssetRole.MANIFEST,
-                1000 + audience_ordinal,
-                "application/json",
-                to_canonical_json(pdf.result.manifest).encode(),
-            ),
-        )
-    )
 
 
 def _append_roll20_assets(

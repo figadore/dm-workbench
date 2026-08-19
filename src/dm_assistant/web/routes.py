@@ -3,7 +3,7 @@
 import uuid
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
@@ -620,13 +620,15 @@ def create_web_router(
         artifact_id: uuid.UUID,
         campaign_id: Annotated[uuid.UUID, Form()],
         artifact_version_id: Annotated[uuid.UUID, Form()],
-        csrf_token: Annotated[str, Form()],
+        export_format: Annotated[Literal["roll20", "pdf"], Form()] = "roll20",
+        csrf_token: Annotated[str, Form()] = "",
     ) -> RedirectResponse:
         _require_csrf(request, csrf_token)
         dungeons.export(
             ExportDungeonWorkflow(
                 campaign_id=campaign_id,
                 artifact_version_id=artifact_version_id,
+                export_format=export_format,
             )
         )
         return RedirectResponse(

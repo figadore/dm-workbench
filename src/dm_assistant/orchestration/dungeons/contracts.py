@@ -180,9 +180,19 @@ class RegenerateDungeonWorkflow(WorkflowModel):
     created_by: str = Field(min_length=1, max_length=200)
 
 
+class DungeonPrintCapability(WorkflowModel):
+    """Centralized availability state for new print exports."""
+
+    status: Literal["disabled"] = "disabled"
+    reason: str = "Exact-scale print maps are temporarily disabled while sparse-page output is redesigned."
+
+
 class ExportDungeonWorkflow(WorkflowModel):
+    """Request exactly one export family; PDF is guarded by capability policy."""
+
     campaign_id: UUID
     artifact_version_id: UUID
+    export_format: Literal["roll20", "pdf"]
 
 
 class ApproveDungeonWorkflow(WorkflowModel):
