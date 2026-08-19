@@ -1,6 +1,10 @@
 """Exact geometry, walkability, alignment, and capacity tests."""
 
-from dm_dungeon.contracts import DungeonPackage
+from dm_dungeon.contracts import (
+    DungeonPackage,
+    DungeonPackageV2,
+    PassageApproachDirection,
+)
 from dm_dungeon.contracts.geometry import (
     GridPoint,
     GridSegment,
@@ -9,6 +13,7 @@ from dm_dungeon.contracts.geometry import (
     PolygonGeometry,
     PolylineGeometry,
 )
+from dm_dungeon.layout import LayoutRequest, generate_layout
 from dm_dungeon.validation import GeometryDiagnosticCode, validate_geometry
 
 
@@ -28,6 +33,77 @@ def test_hand_authored_and_generated_packages_have_valid_geometry(
     assert hand_report.walkable_cell_count > 0
     assert generated_report.valid is True
     assert generated_report.diagnostics == ()
+
+
+def test_v3_geometry_rejects_undeclared_openings_and_endpoint_doglegs(
+    layout_request: LayoutRequest,
+) -> None:
+    topology = layout_request.topology.model_copy(
+        update={
+            "connections": tuple(
+                connection
+                for connection in layout_request.topology.connections
+                if connection.id != "connection_entry_corridor"
+            )
+        }
+    )
+    result = generate_layout(
+        layout_request.model_copy(
+            update={"generator_version": "orthogonal-v3", "topology": topology}
+        )
+    )
+    assert result.package is not None
+    assert isinstance(result.package, DungeonPackageV2)
+    package = result.package
+    corridor = package.corridors[0]
+    opening = next(
+        item
+        for item in package.passage_openings
+        if item.room_id == corridor.connects_room_ids[0]
+    )
+    wrong_point = _wrong_first_step(corridor.path.points[0], opening.approach_direction)
+    dogleg = corridor.model_copy(
+        update={
+            "path": PolylineGeometry(
+                kind="polyline",
+                points=(corridor.path.points[0], wrong_point, corridor.path.points[-1]),
+            )
+        }
+    )
+    broken_dogleg = package.model_copy(
+        update={"corridors": (dogleg, *package.corridors[1:])}
+    )
+    moved_opening = opening.model_copy(
+        update={
+            "segment": GridSegment(start=GridPoint(x=0, y=0), end=GridPoint(x=1, y=0))
+        }
+    )
+    broken_opening = package.model_copy(
+        update={
+            "passage_openings": tuple(
+                moved_opening if item.id == opening.id else item
+                for item in package.passage_openings
+            )
+        }
+    )
+    missing_direct_door = package.model_copy(update={"doors": package.doors[1:]})
+
+    assert GeometryDiagnosticCode.PASSAGE_ENDPOINT_APPROACH_INVALID in codes(
+        broken_dogleg
+    )
+    assert GeometryDiagnosticCode.PASSAGE_OPENING_INVALID in codes(broken_opening)
+    assert GeometryDiagnosticCode.DIRECT_DOOR_NOT_SHARED_WALL in codes(
+        missing_direct_door
+    )
+
+
+def _wrong_first_step(
+    point: GridPoint,
+    direction: PassageApproachDirection,
+) -> GridPoint:
+    if direction in {PassageApproachDirection.NORTH, PassageApproachDirection.SOUTH}:
+        return GridPoint(x=point.x + 1, y=point.y)
+    return GridPoint(x=point.x, y=point.y + 1)
 
 
 def test_overlapping_rooms_are_reported(generated_package: DungeonPackage) -> None:

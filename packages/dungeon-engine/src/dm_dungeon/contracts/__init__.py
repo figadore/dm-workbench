@@ -66,6 +66,12 @@ from dm_dungeon.contracts.package import (
     DungeonPackage,
     PackageMetadata,
 )
+from dm_dungeon.contracts.package_v2 import (
+    DUNGEON_PACKAGE_V2_SCHEMA_VERSION,
+    DungeonPackageV2,
+    PassageApproachDirection,
+    PassageOpening,
+)
 from dm_dungeon.contracts.topology import (
     DUNGEON_TOPOLOGY_SCHEMA_VERSION,
     BranchRequirement,
@@ -98,6 +104,7 @@ from dm_dungeon.contracts.topology import (
 __all__ = [
     "DUNGEON_BRIEF_SCHEMA_VERSION",
     "DUNGEON_PACKAGE_SCHEMA_VERSION",
+    "DUNGEON_PACKAGE_V2_SCHEMA_VERSION",
     "DUNGEON_DESIGN_V2_SCHEMA_VERSION",
     "DUNGEON_TOPOLOGY_SCHEMA_VERSION",
     "BarrierIntent",
@@ -122,6 +129,7 @@ __all__ = [
     "DungeonBrief",
     "DungeonDesignSpecV2",
     "DungeonPackage",
+    "DungeonPackageV2",
     "DungeonPurpose",
     "DungeonTopology",
     "EncounterSlot",
@@ -150,6 +158,8 @@ __all__ = [
     "PassageType",
     "PackageMetadata",
     "PacingStyle",
+    "PassageApproachDirection",
+    "PassageOpening",
     "PartyScale",
     "PointGeometry",
     "PolygonGeometry",

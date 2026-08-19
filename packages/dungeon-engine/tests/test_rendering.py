@@ -8,7 +8,8 @@ import pytest
 from pydantic import ValidationError
 
 from dm_dungeon import DungeonPackage
-from dm_dungeon.contracts import Visibility
+from dm_dungeon.contracts import DungeonPackageV2, Visibility
+from dm_dungeon.layout import LayoutRequest, generate_layout
 from dm_dungeon.rendering import (
     RenderAudience,
     SvgRenderDiagnosticCode,
@@ -77,6 +78,51 @@ def test_upper_floor_svg_matches_golden_snapshot(
         encoding="utf-8"
     )
     assert result.svg == golden
+
+
+def test_v3_renderer_clips_room_walls_at_explicit_passage_openings(
+    layout_request: LayoutRequest,
+) -> None:
+    topology = layout_request.topology.model_copy(
+        update={
+            "connections": tuple(
+                connection
+                for connection in layout_request.topology.connections
+                if connection.id != "connection_entry_corridor"
+            )
+        }
+    )
+    result = generate_layout(
+        layout_request.model_copy(
+            update={"generator_version": "orthogonal-v3", "topology": topology}
+        )
+    )
+    assert isinstance(result.package, DungeonPackageV2)
+    package = result.package
+    floor_id = package.corridors[0].floor_id
+
+    rendered = render_svg(package, render_request(package, RenderAudience.DM, floor_id))
+
+    assert rendered.success is True
+    assert rendered.svg is not None
+    root = ET.fromstring(rendered.svg)
+    opening_lines = [
+        element
+        for element in root.iter()
+        if element.attrib.get("class") == "passage-opening"
+    ]
+    assert len(opening_lines) == len(
+        [
+            item
+            for item in package.passage_openings
+            if item.corridor_id
+            in {
+                corridor.id
+                for corridor in package.corridors
+                if corridor.floor_id == floor_id
+            }
+        ]
+    )
 
 
 def test_corridor_rendering_uses_the_validated_cell_footprint(

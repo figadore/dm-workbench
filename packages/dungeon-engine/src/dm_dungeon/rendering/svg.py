@@ -9,6 +9,7 @@ from dm_dungeon.contracts.common import Visibility
 from dm_dungeon.contracts.geometry import (
     CorridorLayout,
     GridPoint,
+    GridSegment,
     LayeredMapElement,
     MapGeometry,
     PointGeometry,
@@ -20,6 +21,7 @@ from dm_dungeon.contracts.geometry import (
     VerticalLinkLayout,
 )
 from dm_dungeon.contracts.package import DungeonPackage
+from dm_dungeon.contracts.package_v2 import DungeonPackageV2
 from dm_dungeon.contracts.topology import DoorType, StairDirection
 from dm_dungeon.rendering.contracts import (
     SVG_RENDER_RESULT_SCHEMA_VERSION,
@@ -29,6 +31,7 @@ from dm_dungeon.rendering.contracts import (
     SvgRenderDiagnosticCode,
     SvgRenderRequest,
     SvgRenderResult,
+    SvgThemeName,
 )
 from dm_dungeon.rendering.themes import get_theme
 from dm_dungeon.validation import DiagnosticSeverity, validate_geometry
@@ -169,6 +172,14 @@ def render_svg(package: DungeonPackage, request: SvgRenderRequest) -> SvgRenderR
         scale,
         rendered_ids,
     )
+    _render_passage_openings(
+        root,
+        package,
+        floor.id,
+        layers,
+        request,
+        scale,
+    )
     _render_doors(
         root,
         package,
@@ -307,7 +318,20 @@ def _render_corridors(
         ):
             continue
         component = _component_group(group, corridor, "corridor", rendered_ids)
-        fill_path, outline_path = _corridor_footprint_paths(corridor, scale)
+        opening_segments = (
+            tuple(
+                opening.segment
+                for opening in package.passage_openings
+                if opening.corridor_id == corridor.id
+            )
+            if isinstance(package, DungeonPackageV2)
+            else ()
+        )
+        fill_path, outline_path = _corridor_footprint_paths(
+            corridor,
+            scale,
+            opening_segments,
+        )
         ET.SubElement(
             component,
             "path",
@@ -327,7 +351,11 @@ def _render_corridors(
         )
 
 
-def _corridor_footprint_paths(corridor: CorridorLayout, scale: int) -> tuple[str, str]:
+def _corridor_footprint_paths(
+    corridor: CorridorLayout,
+    scale: int,
+    opening_segments: tuple[GridSegment, ...] = (),
+) -> tuple[str, str]:
     """Render the validator's exact raster footprint, never a stroked centerline.
 
     A stroke centered on a grid-line spills into a room on one side (especially for
@@ -336,6 +364,13 @@ def _corridor_footprint_paths(corridor: CorridorLayout, scale: int) -> tuple[str
     keeps the visual map aligned with validated walkable geometry.
     """
     cells = cells_for_corridor(corridor.path, corridor.width_cells)
+    opening_edges = {
+        _segment_key_points(
+            (segment.start.x * scale, segment.start.y * scale),
+            (segment.end.x * scale, segment.end.y * scale),
+        )
+        for segment in opening_segments
+    }
     ordered_cells = sorted(cells, key=lambda cell: (cell[1], cell[0]))
     fill_parts: list[str] = []
     outline_parts: list[str] = []
@@ -351,7 +386,10 @@ def _corridor_footprint_paths(corridor: CorridorLayout, scale: int) -> tuple[str
             ((x, y + 1), (right, bottom), (left, bottom)),
             ((x - 1, y), (left, bottom), (left, top)),
         ):
-            if neighbor not in cells:
+            if (
+                neighbor not in cells
+                and _segment_key_points(start, end) not in opening_edges
+            ):
                 outline_parts.append(f"M{start[0]},{start[1]}L{end[0]},{end[1]}")
     return "".join(fill_parts), "".join(outline_parts)
 
@@ -394,6 +432,41 @@ def _render_rooms(
                 },
             )
             annotation.text = room.id
+
+
+def _render_passage_openings(
+    root: ET.Element,
+    package: DungeonPackage,
+    floor_id: str,
+    layers: dict[str, RenderLayer],
+    request: SvgRenderRequest,
+    scale: int,
+) -> None:
+    """Erase room-wall strokes at validated P7-13 passage openings."""
+    if not isinstance(package, DungeonPackageV2):
+        return
+    corridors = {corridor.id: corridor for corridor in package.corridors}
+    group = ET.SubElement(root, "g", {"id": "passage-openings"})
+    for opening in package.passage_openings:
+        corridor = corridors[opening.corridor_id]
+        if corridor.floor_id != floor_id or not _layered_visible(
+            corridor, layers, request.audience
+        ):
+            continue
+        ET.SubElement(
+            group,
+            "line",
+            {
+                "class": "passage-opening",
+                "stroke": "#fff",
+                "stroke-width": "4" if request.theme is SvgThemeName.LOW_INK else "3",
+                "vector-effect": "non-scaling-stroke",
+                "x1": str(opening.segment.start.x * scale),
+                "y1": str(opening.segment.start.y * scale),
+                "x2": str(opening.segment.end.x * scale),
+                "y2": str(opening.segment.end.y * scale),
+            },
+        )
 
 
 def _render_doors(
@@ -781,6 +854,14 @@ def _polygon_center(polygon: PolygonGeometry) -> tuple[float, float]:
 
 def _segment_midpoint(first: GridPoint, second: GridPoint) -> tuple[float, float]:
     return ((first.x + second.x) / 2, (first.y + second.y) / 2)
+
+
+def _segment_key_points(
+    start: tuple[int, int],
+    end: tuple[int, int],
+) -> tuple[int, int, int, int]:
+    first, second = sorted((start, end))
+    return (*first, *second)
 
 
 def _xml_id(component_id: str) -> str:

@@ -1,13 +1,27 @@
 """Deterministic orthogonal connection routing between placed rooms."""
 
 from collections import deque
+from dataclasses import dataclass
 
 from dm_dungeon.contracts.geometry import GridPoint, GridSegment, PolylineGeometry
+from dm_dungeon.contracts.package_v2 import PassageApproachDirection
 from dm_dungeon.layout.contracts import FloorLayoutBounds
 from dm_dungeon.layout.placement import Rect
 from dm_dungeon.layout.random_source import DeterministicRandom
 
 _UNRELATED_ROOM_CLEARANCE_CELLS = 1
+_ENDPOINT_LEAD_CELLS = 1
+
+
+@dataclass(frozen=True, slots=True)
+class PassageRoute:
+    """A routed passage plus its two explicit room-wall opening records."""
+
+    path: PolylineGeometry
+    from_segment: GridSegment
+    from_direction: PassageApproachDirection
+    to_segment: GridSegment
+    to_direction: PassageApproachDirection
 
 
 def route_between_rooms(
@@ -44,6 +58,257 @@ def route_between_rooms(
                 kind="polyline",
                 points=tuple(GridPoint(x=x, y=y) for x, y in _compress_path(path)),
             )
+    return None
+
+
+def route_passage_between_rooms(
+    source: Rect,
+    target: Rect,
+    all_rooms: tuple[Rect, ...],
+    bounds: FloorLayoutBounds,
+    width_cells: int,
+    random_source: DeterministicRandom,
+) -> PassageRoute | None:
+    """Route a P7-13 passage with explicit perpendicular endpoint leads.
+
+    Each candidate starts in the exterior cell immediately beyond a one-cell room
+    opening, then takes one additional cell in the declared outward direction.
+    That lead makes a turn at a doorway or its first exterior cell impossible.
+    All candidates are scored rather than accepting the first BFS result.
+    """
+    endpoints = tuple(_passage_endpoints(source))
+    target_endpoints = tuple(_passage_endpoints(target))
+    candidates = [
+        (from_endpoint, to_endpoint)
+        for from_endpoint in endpoints
+        for to_endpoint in target_endpoints
+    ]
+    random_source.shuffle(candidates)
+    directions = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+    random_source.shuffle(directions)
+    routes: list[tuple[tuple[int, int, int, int], PassageRoute]] = []
+
+    for tie_break, (from_endpoint, to_endpoint) in enumerate(candidates):
+        start, start_lead = _endpoint_cells(from_endpoint)
+        end, end_lead = _endpoint_cells(to_endpoint)
+        endpoint_cells = (start, start_lead, end, end_lead)
+        if not all(_cell_in_bounds(cell, bounds) for cell in endpoint_cells):
+            continue
+        if any(cell in _room_interior_cells(all_rooms) for cell in endpoint_cells):
+            continue
+        unrelated_rooms = tuple(
+            rect for rect in all_rooms if rect not in {source, target}
+        )
+        if any(
+            cell in _blocked_passage_points(unrelated_rooms, width_cells)
+            for cell in endpoint_cells
+        ):
+            continue
+        blocked = _blocked_passage_points(all_rooms, width_cells)
+        blocked.difference_update((start, start_lead, end, end_lead))
+        middle = _breadth_first_route(
+            start_lead,
+            end_lead,
+            blocked,
+            bounds,
+            directions,
+        )
+        if middle is None:
+            continue
+        path = _join_passage_path(start, start_lead, middle, end_lead, end)
+        compressed = _compress_path(path)
+        route = PassageRoute(
+            path=PolylineGeometry(
+                kind="polyline",
+                points=tuple(GridPoint(x=x, y=y) for x, y in compressed),
+            ),
+            from_segment=from_endpoint.segment,
+            from_direction=from_endpoint.direction,
+            to_segment=to_endpoint.segment,
+            to_direction=to_endpoint.direction,
+        )
+        routes.append(
+            (
+                (
+                    _bend_count(compressed),
+                    len(path) - 1,
+                    -_unrelated_clearance(path, source, target, all_rooms),
+                    tie_break,
+                ),
+                route,
+            )
+        )
+    if not routes:
+        return None
+    return min(routes, key=lambda item: item[0])[1]
+
+
+@dataclass(frozen=True, slots=True)
+class _PassageEndpoint:
+    segment: GridSegment
+    direction: PassageApproachDirection
+
+
+def passage_endpoint_at_exterior_cell(
+    rect: Rect,
+    cell: GridPoint,
+) -> tuple[GridSegment, PassageApproachDirection] | None:
+    """Recover a declared opening from a locked corridor endpoint cell."""
+    for endpoint in _passage_endpoints(rect):
+        exterior, _lead = _endpoint_cells(endpoint)
+        if exterior == (cell.x, cell.y):
+            return endpoint.segment, endpoint.direction
+    return None
+
+
+def _passage_endpoints(rect: Rect) -> tuple[_PassageEndpoint, ...]:
+    endpoints: list[_PassageEndpoint] = []
+    for y in range(rect.y, rect.bottom):
+        endpoints.extend(
+            (
+                _PassageEndpoint(
+                    GridSegment(
+                        start=GridPoint(x=rect.x, y=y),
+                        end=GridPoint(x=rect.x, y=y + 1),
+                    ),
+                    PassageApproachDirection.WEST,
+                ),
+                _PassageEndpoint(
+                    GridSegment(
+                        start=GridPoint(x=rect.right, y=y),
+                        end=GridPoint(x=rect.right, y=y + 1),
+                    ),
+                    PassageApproachDirection.EAST,
+                ),
+            )
+        )
+    for x in range(rect.x, rect.right):
+        endpoints.extend(
+            (
+                _PassageEndpoint(
+                    GridSegment(
+                        start=GridPoint(x=x, y=rect.y),
+                        end=GridPoint(x=x + 1, y=rect.y),
+                    ),
+                    PassageApproachDirection.NORTH,
+                ),
+                _PassageEndpoint(
+                    GridSegment(
+                        start=GridPoint(x=x, y=rect.bottom),
+                        end=GridPoint(x=x + 1, y=rect.bottom),
+                    ),
+                    PassageApproachDirection.SOUTH,
+                ),
+            )
+        )
+    return tuple(endpoints)
+
+
+def _endpoint_cells(
+    endpoint: _PassageEndpoint,
+) -> tuple[tuple[int, int], tuple[int, int]]:
+    segment = endpoint.segment
+    if endpoint.direction is PassageApproachDirection.NORTH:
+        cell = (segment.start.x, segment.start.y - 1)
+        return cell, (cell[0], cell[1] - _ENDPOINT_LEAD_CELLS)
+    if endpoint.direction is PassageApproachDirection.EAST:
+        cell = (segment.start.x, segment.start.y)
+        return cell, (cell[0] + _ENDPOINT_LEAD_CELLS, cell[1])
+    if endpoint.direction is PassageApproachDirection.SOUTH:
+        cell = (segment.start.x, segment.start.y)
+        return cell, (cell[0], cell[1] + _ENDPOINT_LEAD_CELLS)
+    cell = (segment.start.x - 1, segment.start.y)
+    return cell, (cell[0] - _ENDPOINT_LEAD_CELLS, cell[1])
+
+
+def _room_interior_cells(rectangles: tuple[Rect, ...]) -> set[tuple[int, int]]:
+    return {
+        (x, y)
+        for rect in rectangles
+        for x in range(rect.x, rect.right)
+        for y in range(rect.y, rect.bottom)
+    }
+
+
+def _blocked_passage_points(
+    rectangles: tuple[Rect, ...], width_cells: int
+) -> set[tuple[int, int]]:
+    """Block room interiors and wall-adjacent cells except declared endpoints."""
+    reach = _UNRELATED_ROOM_CLEARANCE_CELLS + width_cells // 2
+    return {
+        (x, y)
+        for rect in rectangles
+        for x in range(rect.x - reach, rect.right + reach)
+        for y in range(rect.y - reach, rect.bottom + reach)
+    }
+
+
+def _cell_in_bounds(cell: tuple[int, int], bounds: FloorLayoutBounds) -> bool:
+    return 0 <= cell[0] < bounds.width_cells and 0 <= cell[1] < bounds.height_cells
+
+
+def _join_passage_path(
+    start: tuple[int, int],
+    start_lead: tuple[int, int],
+    middle: tuple[tuple[int, int], ...],
+    end_lead: tuple[int, int],
+    end: tuple[int, int],
+) -> tuple[tuple[int, int], ...]:
+    points = (start, start_lead, *middle, end_lead, end)
+    return tuple(
+        point
+        for index, point in enumerate(points)
+        if index == 0 or point != points[index - 1]
+    )
+
+
+def _bend_count(path: tuple[tuple[int, int], ...]) -> int:
+    return max(0, len(_compress_path(path)) - 2)
+
+
+def _unrelated_clearance(
+    path: tuple[tuple[int, int], ...],
+    source: Rect,
+    target: Rect,
+    all_rooms: tuple[Rect, ...],
+) -> int:
+    unrelated = tuple(rect for rect in all_rooms if rect not in {source, target})
+    if not unrelated:
+        return 0
+    return min(
+        abs(x - room_x) + abs(y - room_y)
+        for x, y in path
+        for rect in unrelated
+        for room_x in range(rect.x, rect.right)
+        for room_y in range(rect.y, rect.bottom)
+    )
+
+
+def door_segment_between_rects(source: Rect, target: Rect) -> GridSegment | None:
+    """Return the centered one-cell opening on a shared room wall."""
+
+    if source.right == target.x or target.right == source.x:
+        wall_x = source.right if source.right == target.x else target.right
+        start = max(source.y, target.y)
+        end = min(source.bottom, target.bottom)
+        if end - start < 1:
+            return None
+        y = start + (end - start - 1) // 2
+        return GridSegment(
+            start=GridPoint(x=wall_x, y=y),
+            end=GridPoint(x=wall_x, y=y + 1),
+        )
+    if source.bottom == target.y or target.bottom == source.y:
+        wall_y = source.bottom if source.bottom == target.y else target.bottom
+        start = max(source.x, target.x)
+        end = min(source.right, target.right)
+        if end - start < 1:
+            return None
+        x = start + (end - start - 1) // 2
+        return GridSegment(
+            start=GridPoint(x=x, y=wall_y),
+            end=GridPoint(x=x + 1, y=wall_y),
+        )
     return None
 
 

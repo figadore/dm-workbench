@@ -5,8 +5,8 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from dm_dungeon import to_canonical_json
-from dm_dungeon.contracts import ComponentIdStrategy, DungeonPackage
+from dm_dungeon import load_dungeon_package_json, to_canonical_json
+from dm_dungeon.contracts import ComponentIdStrategy, DungeonPackage, DungeonPackageV2
 from dm_dungeon.layout import (
     FloorLayoutBounds,
     LayoutDiagnosticCode,
@@ -53,6 +53,68 @@ def test_layout_emits_every_supported_topology_component(
     assert len(package.doors) == 4
     assert len(package.stairs) == 2
     assert len(package.vertical_links) == 2
+
+
+def test_v3_direct_doors_share_walls_without_synthetic_corridors(
+    layout_request: LayoutRequest,
+) -> None:
+    topology = layout_request.topology.model_copy(
+        update={
+            "connections": tuple(
+                connection
+                for connection in layout_request.topology.connections
+                if connection.id != "connection_entry_corridor"
+            )
+        }
+    )
+    request = layout_request.model_copy(
+        update={"generator_version": "orthogonal-v3", "topology": topology}
+    )
+
+    result = generate_layout(request)
+
+    assert result.success is True
+    assert result.package is not None
+    package = result.package
+    assert isinstance(package, DungeonPackageV2)
+    assert package.schema_version == "1.2.0"
+    assert len(package.passage_openings) == 2 * len(package.corridors)
+    assert load_dungeon_package_json(to_canonical_json(package)) == package
+    direct_ids = {
+        connection.id
+        for connection in topology.connections
+        if connection.kind == "door"
+    }
+    assert direct_ids == {door.id for door in package.doors}
+    assert not {
+        "connection_entry_door",
+        "connection_vault_secret",
+        "connection_crypt_trap",
+        "connection_sanctum_lock",
+    } & {corridor.id for corridor in package.corridors}
+    rooms = {room.id: room for room in package.rooms}
+    for door in package.doors:
+        first, second = (rooms[room_id] for room_id in door.connects_room_ids)
+        first_x = [point.x for point in first.boundary.points]
+        first_y = [point.y for point in first.boundary.points]
+        second_x = [point.x for point in second.boundary.points]
+        second_y = [point.y for point in second.boundary.points]
+        shared_vertical = max(first_x) == min(second_x) or max(second_x) == min(first_x)
+        shared_horizontal = max(first_y) == min(second_y) or max(second_y) == min(
+            first_y
+        )
+        assert shared_vertical or shared_horizontal
+    openings_by_corridor = {
+        opening.corridor_id: [] for opening in package.passage_openings
+    }
+    for opening in package.passage_openings:
+        openings_by_corridor[opening.corridor_id].append(opening)
+    for corridor in package.corridors:
+        openings = openings_by_corridor[corridor.id]
+        assert {opening.room_id for opening in openings} == set(
+            corridor.connects_room_ids
+        )
+        assert openings[0].segment != openings[1].segment
 
 
 def test_different_seeds_produce_valid_alternatives_with_stable_room_ids(

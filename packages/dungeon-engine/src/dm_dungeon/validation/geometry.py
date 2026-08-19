@@ -10,8 +10,14 @@ from dm_dungeon.contracts.geometry import (
     RectangleGeometry,
 )
 from dm_dungeon.contracts.package import DungeonPackage
+from dm_dungeon.contracts.package_v2 import (
+    DungeonPackageV2,
+    PassageApproachDirection,
+    PassageOpening,
+)
 from dm_dungeon.contracts.topology import (
     CorridorConnection,
+    DoorConnection,
     StairConnection,
     VerticalConnection,
 )
@@ -39,6 +45,9 @@ def validate_geometry(package: DungeonPackage) -> GeometryValidationReport:
     _validate_grid_scale(package, diagnostics)
     _validate_room_geometry(package, grid, diagnostics)
     _validate_corridors(package, grid, diagnostics)
+    if isinstance(package, DungeonPackageV2):
+        _validate_v2_passage_geometry(package, grid, diagnostics)
+        _validate_v2_direct_doors(package, diagnostics)
     _validate_doors(package, diagnostics)
     _validate_floor_transitions(package, grid, diagnostics)
     _validate_other_geometry_bounds(package, grid, diagnostics)
@@ -297,6 +306,212 @@ def _validate_corridors(
             )
 
 
+def _validate_v2_passage_geometry(
+    package: DungeonPackageV2,
+    grid: WalkableGrid,
+    diagnostics: list[GeometryDiagnostic],
+) -> None:
+    """Enforce P7-13 openings, endpoint leads, and room-clear passages."""
+    rooms = {room.id: room for room in package.rooms}
+    openings_by_corridor: dict[str, dict[str, PassageOpening]] = {}
+    for opening in package.passage_openings:
+        room = rooms[opening.room_id]
+        if not _segment_on_polygon_boundary(opening.segment, room.boundary):
+            diagnostics.append(
+                _diagnostic(
+                    GeometryDiagnosticCode.PASSAGE_OPENING_INVALID,
+                    (opening.id, opening.room_id),
+                    f"Passage opening {opening.id!r} is not on its declared room wall.",
+                    "Place the opening on the connected room boundary.",
+                )
+            )
+        exterior = _opening_exterior_cell(opening)
+        if exterior is None or not _opening_faces_room(
+            opening, grid.room_cells[room.id]
+        ):
+            diagnostics.append(
+                _diagnostic(
+                    GeometryDiagnosticCode.PASSAGE_OPENING_INVALID,
+                    (opening.id, opening.room_id),
+                    f"Passage opening {opening.id!r} does not face outward from its room.",
+                    "Align its direction with the room wall and exterior corridor cell.",
+                )
+            )
+        openings_by_corridor.setdefault(opening.corridor_id, {})[opening.room_id] = (
+            opening
+        )
+
+    for corridor in package.corridors:
+        corridor_cells = grid.corridor_cells[corridor.id]
+        overlapping_rooms = tuple(
+            room.id
+            for room in package.rooms
+            if room.floor_id == corridor.floor_id
+            and corridor_cells & grid.room_cells[room.id]
+        )
+        if overlapping_rooms:
+            diagnostics.append(
+                _diagnostic(
+                    GeometryDiagnosticCode.CORRIDOR_ROOM_INTERIOR_OVERLAP,
+                    (corridor.id, *overlapping_rooms),
+                    f"Corridor {corridor.id!r} enters room interior cells.",
+                    "End the passage in exterior cells and use declared wall openings.",
+                )
+            )
+
+        openings = openings_by_corridor.get(corridor.id, {})
+        first_room_id, last_room_id = corridor.connects_room_ids
+        first = openings.get(first_room_id)
+        last = openings.get(last_room_id)
+        if first is None or last is None:
+            continue
+        first_cell = _opening_exterior_cell(first)
+        last_cell = _opening_exterior_cell(last)
+        if first_cell is None or last_cell is None:
+            continue
+        path = corridor.path.points
+        endpoint_ok = (path[0].x, path[0].y) == first_cell and (
+            path[-1].x,
+            path[-1].y,
+        ) == last_cell
+        lead_ok = len(path) >= 2 and (
+            _direction_between(path[0], path[1]) is first.approach_direction
+            and _direction_between(path[-1], path[-2]) is last.approach_direction
+        )
+        if not endpoint_ok:
+            diagnostics.append(
+                _diagnostic(
+                    GeometryDiagnosticCode.PASSAGE_OPENING_INVALID,
+                    (corridor.id, first.id, last.id),
+                    f"Corridor {corridor.id!r} does not terminate at its declared openings.",
+                    "Make both endpoint cells match their explicit room-wall openings.",
+                )
+            )
+        if not lead_ok:
+            diagnostics.append(
+                _diagnostic(
+                    GeometryDiagnosticCode.PASSAGE_ENDPOINT_APPROACH_INVALID,
+                    (corridor.id, first.id, last.id),
+                    f"Corridor {corridor.id!r} bends in an endpoint clearance zone.",
+                    "Route straight outward from each opening before any bend.",
+                )
+            )
+
+        allowed_contacts = {
+            cell for cell in (first_cell, last_cell) if cell is not None
+        }
+        undeclared_contacts = tuple(
+            sorted(
+                cell
+                for cell in corridor_cells
+                if cell not in allowed_contacts
+                and any(
+                    abs(cell[0] - room_cell[0]) + abs(cell[1] - room_cell[1]) == 1
+                    for room in package.rooms
+                    if room.floor_id == corridor.floor_id
+                    for room_cell in grid.room_cells[room.id]
+                )
+            )
+        )
+        if undeclared_contacts:
+            diagnostics.append(
+                _diagnostic(
+                    GeometryDiagnosticCode.CORRIDOR_UNDECLARED_WALL_CONTACT,
+                    (corridor.id,),
+                    f"Corridor {corridor.id!r} touches a room wall away from a declared opening.",
+                    "Keep corridor cells clear of room walls except at endpoint openings.",
+                )
+            )
+
+
+def _validate_v2_direct_doors(
+    package: DungeonPackageV2,
+    diagnostics: list[GeometryDiagnostic],
+) -> None:
+    """Require every P7-13 door to be a corridor-free shared-wall opening."""
+    rooms = {room.id: room for room in package.rooms}
+    corridors_by_rooms = {
+        frozenset(item.connects_room_ids) for item in package.corridors
+    }
+    doors_by_id = {door.id: door for door in package.doors}
+    for connection in package.topology.connections:
+        if not isinstance(connection, DoorConnection):
+            continue
+        door = doors_by_id.get(connection.id)
+        if door is None or door.connects_room_ids != (
+            connection.from_room_id,
+            connection.to_room_id,
+        ):
+            diagnostics.append(
+                _diagnostic(
+                    GeometryDiagnosticCode.DIRECT_DOOR_NOT_SHARED_WALL,
+                    (connection.id, connection.from_room_id, connection.to_room_id),
+                    f"Direct-door connection {connection.id!r} has no matching exact door.",
+                    "Emit one shared-wall door for every direct-door connection.",
+                )
+            )
+    for door in package.doors:
+        connected = tuple(rooms[room_id] for room_id in door.connects_room_ids)
+        shared_wall = all(
+            _segment_on_polygon_boundary(door.segment, room.boundary)
+            for room in connected
+        )
+        if not shared_wall or frozenset(door.connects_room_ids) in corridors_by_rooms:
+            diagnostics.append(
+                _diagnostic(
+                    GeometryDiagnosticCode.DIRECT_DOOR_NOT_SHARED_WALL,
+                    (door.id, *door.connects_room_ids),
+                    f"Direct door {door.id!r} is not one corridor-free shared-wall opening.",
+                    "Place adjacent rooms on a shared wall and remove any synthetic corridor.",
+                )
+            )
+
+
+def _opening_exterior_cell(opening: PassageOpening) -> Cell | None:
+    segment = opening.segment
+    if opening.approach_direction is PassageApproachDirection.NORTH:
+        return (segment.start.x, segment.start.y - 1)
+    if opening.approach_direction is PassageApproachDirection.EAST:
+        return (segment.start.x, segment.start.y)
+    if opening.approach_direction is PassageApproachDirection.SOUTH:
+        return (segment.start.x, segment.start.y)
+    if opening.approach_direction is PassageApproachDirection.WEST:
+        return (segment.start.x - 1, segment.start.y)
+    return None
+
+
+def _opening_faces_room(opening: PassageOpening, room_cells: set[Cell]) -> bool:
+    exterior = _opening_exterior_cell(opening)
+    if exterior is None:
+        return False
+    x, y = exterior
+    direction = opening.approach_direction
+    interior = {
+        PassageApproachDirection.NORTH: (x, y + 1),
+        PassageApproachDirection.EAST: (x - 1, y),
+        PassageApproachDirection.SOUTH: (x, y - 1),
+        PassageApproachDirection.WEST: (x + 1, y),
+    }[direction]
+    return interior in room_cells
+
+
+def _direction_between(
+    first: GridPoint,
+    second: GridPoint,
+) -> PassageApproachDirection | None:
+    if first.x == second.x:
+        if second.y < first.y:
+            return PassageApproachDirection.NORTH
+        if second.y > first.y:
+            return PassageApproachDirection.SOUTH
+    if first.y == second.y:
+        if second.x > first.x:
+            return PassageApproachDirection.EAST
+        if second.x < first.x:
+            return PassageApproachDirection.WEST
+    return None
+
+
 def _validate_doors(
     package: DungeonPackage,
     diagnostics: list[GeometryDiagnostic],
@@ -360,7 +575,11 @@ def _validate_doors(
             if corridor.floor_id == door.floor_id
             and set(corridor.connects_room_ids) == set(door.connects_room_ids)
         ]
-        if not any(
+        is_shared_wall_opening = all(
+            _segment_on_polygon_boundary(segment, room.boundary)
+            for room in connected_rooms
+        )
+        if not is_shared_wall_opening and not any(
             _point_on_segment(corridor.path.points[0], segment)
             or _point_on_segment(corridor.path.points[-1], segment)
             for corridor in matching_corridors

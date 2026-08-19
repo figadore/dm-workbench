@@ -112,6 +112,8 @@ def place_floor_rooms(
     locked_rooms: tuple[RoomLayout, ...],
     random_source: DeterministicRandom,
     maximum_attempts: int,
+    *,
+    direct_door_pairs: frozenset[frozenset[str]] = frozenset(),
 ) -> tuple[dict[str, Rect] | None, str | None]:
     """Place one floor's rooms with bounded deterministic retries."""
     locked_rects: dict[str, Rect] = {}
@@ -128,7 +130,14 @@ def place_floor_rooms(
         if not _size_satisfies(rect, room.size):
             return None, f"Locked room {locked_room.id!r} violates size constraints."
         if any(
-            _rects_conflict(rect, other, padding=1) for other in locked_rects.values()
+            _rects_conflict(
+                rect,
+                other,
+                padding=0
+                if frozenset((locked_room.id, other_id)) in direct_door_pairs
+                else 1,
+            )
+            for other_id, other in locked_rects.items()
         ):
             return None, f"Locked room {locked_room.id!r} overlaps another lock."
         locked_rects[locked_room.id] = rect
@@ -148,6 +157,7 @@ def place_floor_rooms(
                 placed,
                 topology,
                 random_source,
+                direct_door_pairs,
             )
             if candidate is None:
                 attempt_failed = True
@@ -211,10 +221,11 @@ def _choose_room_candidate(
     placed: dict[str, Rect],
     topology: DungeonTopology,
     random_source: DeterministicRandom,
+    direct_door_pairs: frozenset[frozenset[str]],
 ) -> Rect | None:
     size_options = _size_options(room.size, bounds)
     random_source.shuffle(size_options)
-    candidates: list[tuple[int, int, int, int, int, Rect]] = []
+    candidates: list[tuple[int, int, int, int, int, int, Rect]] = []
     connected_placed_ids = {
         other_id
         for connection in topology.connections
@@ -231,8 +242,24 @@ def _choose_room_candidate(
             for x in range(bounds.margin_cells, max_x + 1):
                 candidate = Rect(x, y, width, height)
                 if any(
-                    _rects_conflict(candidate, existing, padding=1)
-                    for existing in placed.values()
+                    _rects_conflict(
+                        candidate,
+                        existing,
+                        padding=0
+                        if frozenset((room.id, existing_id)) in direct_door_pairs
+                        else 1,
+                    )
+                    for existing_id, existing in placed.items()
+                ):
+                    continue
+                direct_neighbors = tuple(
+                    existing
+                    for existing_id, existing in placed.items()
+                    if frozenset((room.id, existing_id)) in direct_door_pairs
+                )
+                if direct_neighbors and not all(
+                    _shared_wall_length(candidate, existing) >= 1
+                    for existing in direct_neighbors
                 ):
                     continue
                 score = _placement_score(
@@ -241,13 +268,13 @@ def _choose_room_candidate(
                     placed,
                     bounds,
                 )
-                candidates.append((score, y, x, width, height, candidate))
+                candidates.append((*score, y, x, width, height, candidate))
 
     if not candidates:
         return None
-    candidates.sort(key=lambda item: item[:5])
+    candidates.sort(key=lambda item: item[:6])
     window = candidates[: min(24, len(candidates))]
-    return random_source.choice(window)[5]
+    return random_source.choice(window)[6]
 
 
 def _other_endpoint(
@@ -265,17 +292,31 @@ def _placement_score(
     connected_room_ids: set[str],
     placed: dict[str, Rect],
     bounds: FloorLayoutBounds,
-) -> int:
+) -> tuple[int, int]:
+    """Rank compact occupied bounds before local graph distance.
+
+    A bounded random choice among the best candidates still gives seeded variety,
+    but it cannot spread a sparse graph across its whole floor band merely because
+    every candidate has a similar connection distance.
+    """
+    occupied = (*placed.values(), candidate)
+    compact_area = (
+        max(rect.right for rect in occupied) - min(rect.x for rect in occupied)
+    ) * (max(rect.bottom for rect in occupied) - min(rect.y for rect in occupied))
     candidate_x, candidate_y = candidate.center
     if connected_room_ids:
-        return sum(
+        connection_distance = sum(
             abs(candidate_x - placed[room_id].center[0])
             + abs(candidate_y - placed[room_id].center[1])
             for room_id in sorted(connected_room_ids)
         )
-    floor_center_x = bounds.width_cells // 2
-    floor_center_y = bounds.height_cells // 2
-    return abs(candidate_x - floor_center_x) + abs(candidate_y - floor_center_y)
+    else:
+        floor_center_x = bounds.width_cells // 2
+        floor_center_y = bounds.height_cells // 2
+        connection_distance = abs(candidate_x - floor_center_x) + abs(
+            candidate_y - floor_center_y
+        )
+    return compact_area, connection_distance
 
 
 def _size_options(
@@ -337,6 +378,16 @@ def _size_satisfies(rect: Rect, constraints: RoomSizeConstraints) -> bool:
             or area <= constraints.maximum_area_cells
         )
     )
+
+
+def _shared_wall_length(first: Rect, second: Rect) -> int:
+    """Return a positive overlap only when rectangles share one wall."""
+
+    if first.right == second.x or second.right == first.x:
+        return max(0, min(first.bottom, second.bottom) - max(first.y, second.y))
+    if first.bottom == second.y or second.bottom == first.y:
+        return max(0, min(first.right, second.right) - max(first.x, second.x))
+    return 0
 
 
 def _rects_conflict(first: Rect, second: Rect, padding: int) -> bool:

@@ -10,6 +10,7 @@ from dm_dungeon.contracts import (
     DungeonBrief,
     DungeonDesignSpecV2,
     DungeonPackage,
+    DungeonPackageV2,
     DungeonTopology,
 )
 from dm_dungeon.export import (
@@ -44,6 +45,7 @@ from dm_dungeon.rendering import (
 from dm_dungeon.serialization import (
     dungeon_design_v2_json_schema,
     dungeon_package_json_schema,
+    dungeon_package_v2_json_schema,
     load_dungeon_design_v2_json,
     load_dungeon_package_json,
     read_dungeon_design_v2,
@@ -73,6 +75,7 @@ __all__ = [
     "DungeonDesignCompileResult",
     "DungeonDesignSpecV2",
     "DungeonPackage",
+    "DungeonPackageV2",
     "AssemblyMode",
     "DungeonTopology",
     "EncounterFitQuery",
@@ -97,6 +100,7 @@ __all__ = [
     "compile_dungeon_design_v2",
     "dungeon_design_v2_json_schema",
     "dungeon_package_json_schema",
+    "dungeon_package_v2_json_schema",
     "evaluate_encounter_fit",
     "export_pdf",
     "export_png",

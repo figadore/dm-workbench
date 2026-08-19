@@ -1,6 +1,7 @@
 """Seeded graph-guided orthogonal dungeon layout engine."""
 
 from collections.abc import Iterable
+from typing import Any
 
 from dm_dungeon.contracts.common import Visibility
 from dm_dungeon.contracts.geometry import (
@@ -8,6 +9,7 @@ from dm_dungeon.contracts.geometry import (
     DoorLayout,
     FloorLayout,
     GridPoint,
+    PolylineGeometry,
     PositionAnchor,
     PositionAnchorKind,
     RenderLayer,
@@ -22,6 +24,7 @@ from dm_dungeon.contracts.package import (
     DungeonPackage,
     PackageMetadata,
 )
+from dm_dungeon.contracts.package_v2 import DungeonPackageV2, PassageOpening
 from dm_dungeon.contracts.topology import (
     CorridorConnection,
     DoorConnection,
@@ -47,7 +50,14 @@ from dm_dungeon.layout.placement import (
     rectangle_from_floor_bounds,
 )
 from dm_dungeon.layout.random_source import DeterministicRandom
-from dm_dungeon.layout.routing import door_segment_at_anchor, route_between_rooms
+from dm_dungeon.layout.routing import (
+    PassageRoute,
+    door_segment_at_anchor,
+    door_segment_between_rects,
+    passage_endpoint_at_exterior_cell,
+    route_between_rooms,
+    route_passage_between_rooms,
+)
 from dm_dungeon.validation import (
     DiagnosticSeverity,
     validate_geometry,
@@ -133,6 +143,7 @@ def generate_layout(request: LayoutRequest) -> LayoutResult:
             floor_locked_rooms,
             random_source,
             request.maximum_placement_attempts,
+            direct_door_pairs=_direct_door_pairs(request, topology_floor.id),
         )
         if placed is None:
             code = (
@@ -173,7 +184,7 @@ def generate_layout(request: LayoutRequest) -> LayoutResult:
     if diagnostics:
         return _failed_result(request, random_source, diagnostics)
 
-    corridors, doors = _generate_same_floor_connections(
+    corridors, doors, passage_openings = _generate_same_floor_connections(
         request,
         room_rects,
         floor_bounds,
@@ -197,8 +208,15 @@ def generate_layout(request: LayoutRequest) -> LayoutResult:
     )
 
     try:
-        package = DungeonPackage(
-            schema_version="1.1.0",
+        package_type: Any = (
+            DungeonPackageV2
+            if request.generator_version == "orthogonal-v3"
+            else DungeonPackage
+        )
+        package: DungeonPackage | DungeonPackageV2 = package_type(
+            schema_version=(
+                "1.2.0" if request.generator_version == "orthogonal-v3" else "1.1.0"
+            ),
             id=request.package_id,
             brief=request.brief,
             topology=request.topology,
@@ -227,6 +245,11 @@ def generate_layout(request: LayoutRequest) -> LayoutResult:
             labels=(),
             encounter_slots=(),
             position_anchors=position_anchors,
+            **(
+                {"passage_openings": tuple(passage_openings)}
+                if request.generator_version == "orthogonal-v3"
+                else {}
+            ),
         )
     except ValueError as error:
         diagnostics.append(
@@ -332,7 +355,8 @@ def _validate_locked_component_ids(
         if isinstance(connection, CorridorConnection):
             corridor_ids.add(connection.id)
         elif isinstance(connection, DoorConnection):
-            corridor_ids.add(_door_corridor_id(request, connection.id))
+            if request.generator_version != "orthogonal-v3":
+                corridor_ids.add(_door_corridor_id(request, connection.id))
             door_ids.add(connection.id)
         elif isinstance(connection, StairConnection):
             stair_ids.update(_stair_ids(request, connection.id))
@@ -510,6 +534,30 @@ def _resolve_floor_bounds(
     return resolved
 
 
+def _required_route(route: PolylineGeometry | None) -> PolylineGeometry:
+    """Narrow a guarded corridor route without accepting a partial direct door."""
+
+    assert route is not None
+    return route
+
+
+def _direct_door_pairs(
+    request: LayoutRequest,
+    floor_id: str,
+) -> frozenset[frozenset[str]]:
+    """Pairs that must share one wall under the v3 connection contract."""
+
+    if request.generator_version != "orthogonal-v3":
+        return frozenset()
+    rooms = {room.id: room for room in request.topology.rooms}
+    return frozenset(
+        frozenset((connection.from_room_id, connection.to_room_id))
+        for connection in request.topology.connections
+        if isinstance(connection, DoorConnection)
+        and rooms[connection.from_room_id].floor_id == floor_id
+    )
+
+
 def _endpoint_visibility(hidden: bool, room_visibility: Visibility) -> Visibility:
     if hidden or room_visibility is Visibility.DM_ONLY:
         return Visibility.DM_ONLY
@@ -562,12 +610,13 @@ def _generate_same_floor_connections(
     layer_by_visibility: dict[Visibility, str],
     random_source: DeterministicRandom,
     diagnostics: list[LayoutDiagnostic],
-) -> tuple[list[CorridorLayout], list[DoorLayout]]:
+) -> tuple[list[CorridorLayout], list[DoorLayout], list[PassageOpening]]:
     topology_rooms = {room.id: room for room in request.topology.rooms}
     locked_corridors = {item.id: item for item in request.locked.corridors}
     locked_doors = {item.id: item for item in request.locked.doors}
     corridors: list[CorridorLayout] = []
     doors: list[DoorLayout] = []
+    passage_openings: list[PassageOpening] = []
 
     for connection in request.topology.connections:
         if not isinstance(connection, CorridorConnection | DoorConnection):
@@ -582,6 +631,10 @@ def _generate_same_floor_connections(
             source_room.visibility,
             target_room.visibility,
         )
+        is_direct_door = (
+            isinstance(connection, DoorConnection)
+            and request.generator_version == "orthogonal-v3"
+        )
         corridor_id = (
             connection.id
             if isinstance(connection, CorridorConnection)
@@ -593,8 +646,13 @@ def _generate_same_floor_connections(
             if isinstance(connection, DoorConnection)
             else None
         )
-        if locked_corridor is not None and (
-            not isinstance(connection, DoorConnection) or locked_door is not None
+        if (
+            locked_corridor is not None
+            and not (
+                request.generator_version == "orthogonal-v3"
+                and isinstance(connection, CorridorConnection)
+            )
+            and (not isinstance(connection, DoorConnection) or locked_door is not None)
         ):
             corridors.append(locked_corridor)
             if locked_door is not None:
@@ -606,19 +664,38 @@ def _generate_same_floor_connections(
             for room in request.topology.rooms
             if room.floor_id == floor_id
         )
-        route = route_between_rooms(
-            room_rects[connection.from_room_id],
-            room_rects[connection.to_room_id],
-            floor_rectangles,
-            floor_bounds[floor_id],
-            (
-                connection.minimum_width_cells
-                if isinstance(connection, CorridorConnection)
-                else 1
-            ),
-            random_source,
+        passage_route = (
+            route_passage_between_rooms(
+                room_rects[connection.from_room_id],
+                room_rects[connection.to_room_id],
+                floor_rectangles,
+                floor_bounds[floor_id],
+                connection.minimum_width_cells,
+                random_source,
+            )
+            if isinstance(connection, CorridorConnection)
+            and request.generator_version == "orthogonal-v3"
+            else None
         )
-        if route is None:
+        route = (
+            None
+            if is_direct_door
+            else (
+                passage_route.path
+                if passage_route is not None
+                else route_between_rooms(
+                    room_rects[connection.from_room_id],
+                    room_rects[connection.to_room_id],
+                    floor_rectangles,
+                    floor_bounds[floor_id],
+                    connection.minimum_width_cells
+                    if isinstance(connection, CorridorConnection)
+                    else 1,
+                    random_source,
+                )
+            )
+        )
+        if route is None and not is_direct_door:
             diagnostics.append(
                 _diagnostic(
                     LayoutDiagnosticCode.CONNECTION_ROUTING_FAILED,
@@ -633,10 +710,31 @@ def _generate_same_floor_connections(
                 )
             )
             continue
+        if not is_direct_door:
+            assert route is not None
 
         if locked_corridor is not None:
             corridors.append(locked_corridor)
-        else:
+            if request.generator_version == "orthogonal-v3":
+                passage_route = _locked_passage_route(
+                    locked_corridor,
+                    room_rects[connection.from_room_id],
+                    room_rects[connection.to_room_id],
+                )
+                if passage_route is None:
+                    diagnostics.append(
+                        _diagnostic(
+                            LayoutDiagnosticCode.LOCKED_COMPONENT_CONFLICT,
+                            (locked_corridor.id,),
+                            f"Locked corridor {locked_corridor.id!r} lacks valid P7-13 "
+                            "endpoint openings.",
+                            "Unlock the corridor or use a lock from the same generator "
+                            "contract.",
+                        )
+                    )
+                    continue
+        elif not is_direct_door:
+            assert route is not None
             width = (
                 connection.minimum_width_cells
                 if isinstance(connection, CorridorConnection)
@@ -657,13 +755,28 @@ def _generate_same_floor_connections(
                 )
             )
 
+        if request.generator_version == "orthogonal-v3" and isinstance(
+            connection, CorridorConnection
+        ):
+            assert passage_route is not None
+            passage_openings.extend(
+                _passage_openings_for_connection(request, connection.id, passage_route)
+            )
+
         if isinstance(connection, DoorConnection):
             if locked_door is not None:
                 doors.append(locked_door)
                 continue
-            segment = door_segment_at_anchor(
-                room_rects[connection.from_room_id],
-                route.points[0],
+            segment = (
+                door_segment_between_rects(
+                    room_rects[connection.from_room_id],
+                    room_rects[connection.to_room_id],
+                )
+                if is_direct_door
+                else door_segment_at_anchor(
+                    room_rects[connection.from_room_id],
+                    _required_route(route).points[0],
+                )
             )
             if segment is None:
                 diagnostics.append(
@@ -693,7 +806,71 @@ def _generate_same_floor_connections(
                     visibility=layout_visibility,
                 )
             )
-    return corridors, doors
+    return corridors, doors, passage_openings
+
+
+def _passage_openings_for_connection(
+    request: LayoutRequest,
+    connection_id: str,
+    passage_route: PassageRoute,
+) -> tuple[PassageOpening, PassageOpening]:
+    """Create stable package openings from a validated internal passage route."""
+    # The narrow attributes are shared by generated and lock-recovered routes.
+    from_segment = passage_route.from_segment
+    from_direction = passage_route.from_direction
+    to_segment = passage_route.to_segment
+    to_direction = passage_route.to_direction
+    connection = next(
+        item for item in request.topology.connections if item.id == connection_id
+    )
+    assert isinstance(connection, CorridorConnection)
+    return (
+        PassageOpening(
+            id=derive_component_id(
+                "passage-opening",
+                request.package_id,
+                request.generator_version,
+                f"{connection_id}:from",
+            ),
+            corridor_id=connection_id,
+            room_id=connection.from_room_id,
+            segment=from_segment,
+            approach_direction=from_direction,
+        ),
+        PassageOpening(
+            id=derive_component_id(
+                "passage-opening",
+                request.package_id,
+                request.generator_version,
+                f"{connection_id}:to",
+            ),
+            corridor_id=connection_id,
+            room_id=connection.to_room_id,
+            segment=to_segment,
+            approach_direction=to_direction,
+        ),
+    )
+
+
+def _locked_passage_route(
+    corridor: CorridorLayout,
+    source: Rect,
+    target: Rect,
+) -> PassageRoute | None:
+    """Recover explicit endpoint records while preserving a locked path verbatim."""
+    source_endpoint = passage_endpoint_at_exterior_cell(source, corridor.path.points[0])
+    target_endpoint = passage_endpoint_at_exterior_cell(
+        target, corridor.path.points[-1]
+    )
+    if source_endpoint is None or target_endpoint is None:
+        return None
+    return PassageRoute(
+        path=corridor.path,
+        from_segment=source_endpoint[0],
+        from_direction=source_endpoint[1],
+        to_segment=target_endpoint[0],
+        to_direction=target_endpoint[1],
+    )
 
 
 def _generate_floor_transitions(

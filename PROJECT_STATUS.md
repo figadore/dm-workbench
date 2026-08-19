@@ -7,12 +7,12 @@
 ## Current Snapshot
 
 - **Last updated:** 2026-08-18
-- **Branch:** `fast-track-prompt-to-dungeon` — ahead of `origin/fast-track-prompt-to-dungeon` by 18 commits.
-- **Working tree:** user-directed P7-13 planning documentation plus uncommitted completed P7-13a implementation, retained-output fixture/golden, and focused tests. No migration changed.
+- **Branch:** `fast-track-prompt-to-dungeon` — ahead of `origin/fast-track-prompt-to-dungeon` by 20 commits.
+- **Working tree:** uncommitted completed P7-13b pure dungeon-engine changes, the prior P7-13a work, and P7-13 planning documentation. No migration changed.
 - **Current phase:** P7-13 — Dungeon output, map readability, asset UX, and print refresh (user-directed priority; P3 remains deferred, not partially started).
-- **Last completed task:** **P7-13a — Output quality baseline and print fail-closed switch.**
-- **Current task:** P7-13b — Connection semantics, compact placement, and geometry validation (not started).
-- **First action:** read the P7-13b plan and freeze its new package/generator contract before changing placement/routing behavior.
+- **Last completed task:** **P7-13b — Connection semantics, compact placement, and geometry validation.**
+- **Current task:** P7-13c — Renderer visual grammar and collision-free annotation (not started).
+- **First action:** read the P7-13c plan and freeze its annotation/callout renderer contract; retain the new `1.2.0` package reader and the immutable `1.1.0` reader unchanged.
 - **Schema head:** `0008_workbench_defaults`.
 
 ## Current Implementation State
@@ -134,11 +134,13 @@ Deferred review notes (do not fold into P3-01 opportunistically):
 
 ## Handoff
 
-- **Task completed:** P7-13a — Output quality baseline and print fail-closed switch.
-- **Files changed:** `src/dm_assistant/errors.py`; `src/dm_assistant/orchestration/dungeons/{contracts,service}.py`; `src/dm_assistant/cli/main.py`; `src/dm_assistant/web/{routes.py,templates/dungeon_detail.html}`; `packages/dungeon-engine/tests/fixtures/output_quality_baseline.v1.json`; `packages/dungeon-engine/tests/golden/output_quality_baseline.upper.dm.svg`; `packages/dungeon-engine/tests/test_output_quality_baseline.py`; focused Dungeon Studio CLI/web/workflow integration tests; plus the pre-existing uncommitted P7-13 planning documentation.
+- **Task completed:** P7-13b — Connection semantics, compact placement, and geometry validation.
+- **Implemented behavior:** `orthogonal-v3` uses the retained-artifact-safe `DungeonPackageV2` root schema `1.2.0`; its `PassageOpening` records pin each corridor's room-wall segment and outward approach direction. The reader dispatches `1.1.0` to the original model (legacy JSON still round-trips exactly) and `1.2.0` to the new model. V3 direct-door pairs share a wall, emit no synthetic corridor, and validate as corridor-free shared-wall openings. Passage routing enumerates valid exterior openings, reserves endpoint leads, ranks bends, length, unrelated-room clearance, and seeded ties, and emits two stable opening IDs per corridor. Compact placement ranks occupied bounds before local graph distance while unrelated rooms retain rock clearance. V3 geometry rejects room-interior corridors, invalid/missing openings, wrong endpoint approach, undeclared room-wall contact, and non-shared direct doors. SVG clips corridor outlines and erases room-wall strokes only at explicit V3 openings, leaving retained legacy SVG bytes/goldens unchanged. Locked V3 corridor paths recover/pin their opening records.
+- **Files changed:** P7-13a files listed below remain uncommitted, plus `packages/dungeon-engine/src/dm_dungeon/{__init__.py,serialization.py,contracts/{__init__.py,package_v2.py},layout/{contracts,engine,placement,routing}.py,rendering/svg.py,validation/{geometry,geometry_contracts}.py}` and `packages/dungeon-engine/tests/{test_layout,test_routing,test_geometry_validation,test_rendering}.py`; no migration changed.
 - **Implemented behavior:** `ExportDungeonWorkflow` now selects exactly one format. The centralized `DungeonStudioService` policy rejects `pdf` before reading/generating anything with stable `dungeon_print_export_disabled`; `roll20` creates only Roll20 bundles/manifests. CLI has `--format roll20|pdf`; the web only offers Roll20 and explains print is disabled; API/web/CLI tests exercise the same PDF rejection. Existing PDF asset reads/routes were untouched. The frozen synthetic retained-output fixture includes shared-wall direct-door intent, straight and deliberately one-bend connector geometry, secret/locked/trapped doors, a trap, puzzle room, clue/key, stairs, feature, and a sparse 56x56 upper floor. Its golden/metrics record 3 raw opaque IDs, 3 text collisions, 1 endpoint-clearance bend, 6 corridor/room interior-overlap cells, 3 missing keyed mechanics, and 73 PDF pages with 66/72 blank tiles.
 - **Commands/tests run:** `uv run pytest -q packages/dungeon-engine/tests` → `124 passed`; `uv run pytest -q tests/unit/test_cli.py tests/integration/test_dungeon_studio_workflow.py tests/integration/test_dungeon_studio_cli.py tests/integration/test_dungeon_studio_web.py` → `18 passed, 6 skipped`; focused Ruff lint/format and strict mypy → passed; `make test-integration PYTEST_ARGS='tests/integration/test_dungeon_studio_workflow.py tests/integration/test_dungeon_studio_cli.py tests/integration/test_dungeon_studio_web.py'` → `6 passed`; `git diff --check` → passed.
-- **Working tree:** uncommitted documentation and code/test changes listed above; no migration changed.
-- **Single next recommended task:** **P7-13b — Connection semantics, compact placement, and geometry validation.** **First concrete action:** freeze the new package/generator contract with explicit endpoint openings and approach direction; do not reinterpret the P7-13a retained baseline fixture or historical artifacts.
-- **Suggested commit subject:** `P7-13a baseline output quality and disable print exports`.
+- **Commands/tests run for P7-13b:** `uv run pytest -q packages/dungeon-engine/tests` → `128 passed`; `uv run ruff check packages/dungeon-engine/src/dm_dungeon packages/dungeon-engine/tests` → passed; `uv run ruff format --check packages/dungeon-engine/src/dm_dungeon packages/dungeon-engine/tests` → passed; `uv run mypy --strict packages/dungeon-engine/src/dm_dungeon` → passed; `git diff --check` → passed.
+- **Working tree:** uncommitted P7-13a/P7-13b code, tests, status, and planning changes; no migration changed.
+- **Single next recommended task:** **P7-13c — Renderer visual grammar and collision-free annotation.** **First concrete action:** define a versioned short-callout/DM-key projection and annotation mode contract, then remove default opaque room-ID rendering without changing retained `1.1.0` output behavior.
+- **Suggested commit subject:** `P7-13b direct door geometry and passage openings`.
 - Before changing code or schema: inspect `git status --short --branch`, read this file, read P7-13a and `dungeon-output-refresh-plan.md`, then follow the applicable architecture invariants.
