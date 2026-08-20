@@ -35,6 +35,14 @@ class SvgThemeName(StrEnum):
     DRAFT = "draft"
 
 
+class SvgAnnotationMode(StrEnum):
+    """Explicit trusted annotation projections, never model-authored map text."""
+
+    NONE = "none"
+    CALLOUTS = "callouts"
+    DEVELOPER_IDS = "developer_ids"
+
+
 class SvgRenderDiagnosticCode(StrEnum):
     """Stable render failure codes."""
 
@@ -67,6 +75,9 @@ class SvgRenderRequest(VersionedContract):
     pixels_per_cell: PixelsPerCell = 64
     show_grid: bool = True
     show_labels: bool = True
+    annotation_mode: SvgAnnotationMode = SvgAnnotationMode.CALLOUTS
+    # Compatibility switch for historical callers. New production callers must use
+    # annotation_mode; opaque IDs are never the default presentation.
     show_room_ids: bool = False
     show_markers: bool = True
     theme: SvgThemeName = SvgThemeName.LOW_INK

@@ -23,6 +23,7 @@ from dm_dungeon.export import (
 from dm_dungeon.layout import generate_layout, read_layout_request
 from dm_dungeon.rendering import (
     RenderAudience,
+    SvgAnnotationMode,
     SvgRenderRequest,
     SvgThemeName,
     render_svg,
@@ -76,7 +77,12 @@ def build_parser() -> argparse.ArgumentParser:
     render.add_argument("--pixels-per-cell", type=int, default=64)
     render.add_argument("--no-grid", action="store_false", dest="show_grid")
     render.add_argument("--no-labels", action="store_false", dest="show_labels")
-    render.add_argument("--show-room-ids", action="store_true")
+    render.add_argument(
+        "--annotations",
+        choices=[item.value for item in SvgAnnotationMode],
+        default=SvgAnnotationMode.CALLOUTS.value,
+        help="trusted map annotation projection (developer_ids is inspection-only)",
+    )
     render.add_argument("--no-markers", action="store_false", dest="show_markers")
     render.add_argument(
         "--theme",
@@ -210,7 +216,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 pixels_per_cell=arguments.pixels_per_cell,
                 show_grid=arguments.show_grid,
                 show_labels=arguments.show_labels,
-                show_room_ids=arguments.show_room_ids,
+                annotation_mode=SvgAnnotationMode(arguments.annotations),
                 show_markers=arguments.show_markers,
                 theme=SvgThemeName(arguments.theme),
             )

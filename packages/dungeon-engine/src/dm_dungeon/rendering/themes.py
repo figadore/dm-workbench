@@ -15,6 +15,7 @@ class SvgTheme:
     wall_stroke: str
     secret_stroke: str
     annotation_stroke: str
+    callout_css: str
 
 
 LOW_INK_THEME = SvgTheme(
@@ -39,6 +40,13 @@ LOW_INK_THEME = SvgTheme(
     wall_stroke="#111",
     secret_stroke="#555",
     annotation_stroke="#777",
+    callout_css=(
+        ".room-callout,.component-callout{fill:#fff;stroke:#111;stroke-width:1.5;vector-effect:non-scaling-stroke}"
+        ".hazard-callout{fill:#fff;stroke:#111;stroke-width:1.5;vector-effect:non-scaling-stroke}"
+        ".feature-callout{fill:#fff;stroke:#111;stroke-width:1.5;vector-effect:non-scaling-stroke}"
+        ".callout-text,.callout-badge{fill:#111;font-family:system-ui,sans-serif;font-size:10px;font-weight:bold}"
+        ".callout-leader{stroke:#777;stroke-width:1;vector-effect:non-scaling-stroke}"
+    ),
 )
 
 DRAFT_THEME = SvgTheme(
@@ -60,6 +68,11 @@ DRAFT_THEME = SvgTheme(
     wall_stroke="#444",
     secret_stroke="#666",
     annotation_stroke="#aaa",
+    callout_css=(
+        ".room-callout,.component-callout,.hazard-callout,.feature-callout{fill:#fff;stroke:#555;stroke-width:1;vector-effect:non-scaling-stroke}"
+        ".callout-text,.callout-badge{fill:#333;font-family:system-ui,sans-serif;font-size:9px;font-weight:bold}"
+        ".callout-leader{stroke:#999;stroke-width:1;vector-effect:non-scaling-stroke}"
+    ),
 )
 
 THEMES = {

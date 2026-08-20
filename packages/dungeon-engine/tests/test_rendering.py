@@ -12,9 +12,11 @@ from dm_dungeon.contracts import DungeonPackageV2, Visibility
 from dm_dungeon.layout import LayoutRequest, generate_layout
 from dm_dungeon.rendering import (
     RenderAudience,
+    SvgAnnotationMode,
     SvgRenderDiagnosticCode,
     SvgRenderRequest,
     SvgThemeName,
+    build_map_key,
     render_svg,
     write_svg,
 )
@@ -78,6 +80,67 @@ def test_upper_floor_svg_matches_golden_snapshot(
         encoding="utf-8"
     )
     assert result.svg == golden
+
+
+def test_v3_default_callouts_are_short_bijective_and_collision_free(
+    layout_request: LayoutRequest,
+) -> None:
+    topology = layout_request.topology.model_copy(
+        update={
+            "connections": tuple(
+                connection
+                for connection in layout_request.topology.connections
+                if connection.id != "connection_entry_corridor"
+            )
+        }
+    )
+    result = generate_layout(
+        layout_request.model_copy(
+            update={"generator_version": "orthogonal-v3", "topology": topology}
+        )
+    )
+    assert isinstance(result.package, DungeonPackageV2)
+    package = result.package
+    floor_id = package.floors[0].id
+
+    rendered = render_svg(
+        package,
+        SvgRenderRequest(
+            schema_version="1.0.0",
+            package_id=package.id,
+            floor_id=floor_id,
+            audience=RenderAudience.DM,
+            pixels_per_cell=20,
+            annotation_mode=SvgAnnotationMode.CALLOUTS,
+        ),
+    )
+    assert rendered.svg is not None
+    root = ET.fromstring(rendered.svg)
+    callout_text = [
+        element.text for element in root.iter() if "data-callout" in element.attrib
+    ]
+    assert callout_text
+    assert all(text is not None and not text.startswith("v2-") for text in callout_text)
+
+    key = build_map_key(package, floor_id, RenderAudience.DM, scale=20)
+    assert {entry.token for entry in key.entries} == set(callout_text)
+    boxes = [
+        (
+            entry.label_x - entry.width / 2,
+            entry.label_y - entry.height / 2,
+            entry.label_x + entry.width / 2,
+            entry.label_y + entry.height / 2,
+        )
+        for entry in key.entries
+    ]
+    for index, first in enumerate(boxes):
+        for second in boxes[index + 1 :]:
+            assert (
+                first[2] <= second[0]
+                or second[2] <= first[0]
+                or first[3] <= second[1]
+                or second[3] <= first[1]
+            )
 
 
 def test_v3_renderer_clips_room_walls_at_explicit_passage_openings(

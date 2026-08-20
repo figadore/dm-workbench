@@ -751,7 +751,6 @@ def _preview_assets(
                     pixels_per_cell=64,
                     show_grid=True,
                     show_labels=True,
-                    show_room_ids=audience is RenderAudience.DM,
                     show_markers=True,
                     theme=SvgThemeName.LOW_INK,
                 ),

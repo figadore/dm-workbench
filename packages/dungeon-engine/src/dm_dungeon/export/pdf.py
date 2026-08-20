@@ -51,7 +51,6 @@ def export_pdf(package: DungeonPackage, request: PdfExportRequest) -> PdfArtifac
             pixels_per_cell=PRINT_CELL_POINTS,
             show_grid=request.include_grid,
             show_labels=request.show_labels,
-            show_room_ids=request.audience.value == "dm",
             show_markers=request.show_markers,
             theme=request.theme,
         ),

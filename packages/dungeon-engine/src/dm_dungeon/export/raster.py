@@ -155,9 +155,16 @@ def _shape_style(css_classes: set[str]) -> tuple[str | None, str | None, int]:
         return "#eeeeee", "#777777", 1
     if "zone" in css_classes:
         return None, "#777777", 1
-    if css_classes & {"feature", "marker", "stair"}:
+    if css_classes & {
+        "feature",
+        "marker",
+        "stair",
+        "room-callout",
+        "component-callout",
+        "feature-callout",
+    }:
         return "#ffffff", "#111111", 2
-    if "hazard" in css_classes:
+    if "hazard" in css_classes or "hazard-callout" in css_classes:
         return None, "#111111", 2
     return None, "#111111", 1
 

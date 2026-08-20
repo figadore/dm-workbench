@@ -23,10 +23,12 @@ from dm_dungeon.contracts.geometry import (
 from dm_dungeon.contracts.package import DungeonPackage
 from dm_dungeon.contracts.package_v2 import DungeonPackageV2
 from dm_dungeon.contracts.topology import DoorType, StairDirection
+from dm_dungeon.rendering.annotations import MapCalloutKind, build_map_key
 from dm_dungeon.rendering.contracts import (
     SVG_RENDER_RESULT_SCHEMA_VERSION,
     SVG_RENDERER_VERSION,
     RenderAudience,
+    SvgAnnotationMode,
     SvgRenderDiagnostic,
     SvgRenderDiagnosticCode,
     SvgRenderRequest,
@@ -128,7 +130,12 @@ def render_svg(package: DungeonPackage, request: SvgRenderRequest) -> SvgRenderR
     title = ET.SubElement(root, "title")
     title.text = f"{request.audience.value.title()} dungeon map"
     style = ET.SubElement(root, "style", {"type": "text/css"})
-    style.text = get_theme(request.theme).css
+    theme = get_theme(request.theme)
+    style.text = theme.css + (
+        theme.callout_css
+        if _annotation_mode(package, request) is SvgAnnotationMode.CALLOUTS
+        else ""
+    )
     ET.SubElement(
         root,
         "rect",
@@ -207,6 +214,8 @@ def render_svg(package: DungeonPackage, request: SvgRenderRequest) -> SvgRenderR
         scale,
         rendered_ids,
     )
+    if _annotation_mode(package, request) is SvgAnnotationMode.CALLOUTS:
+        _render_callouts(root, package, floor.id, request, scale)
     if request.show_labels:
         _render_labels(
             root,
@@ -418,7 +427,10 @@ def _render_rooms(
                 "points": _points(room.boundary.points, scale),
             },
         )
-        if request.show_room_ids and request.audience is RenderAudience.DM:
+        if (
+            _annotation_mode(package, request) is SvgAnnotationMode.DEVELOPER_IDS
+            and request.audience is RenderAudience.DM
+        ):
             center = _polygon_center(room.boundary)
             annotation = ET.SubElement(
                 component,
@@ -508,7 +520,13 @@ def _render_doors(
                 "y2": str(door.segment.end.y * scale),
             },
         )
-        if rendered_door_type in {DoorType.SECRET, DoorType.TRAPPED}:
+        if (
+            not isinstance(package, DungeonPackageV2)
+            or _annotation_mode(package, request) is SvgAnnotationMode.DEVELOPER_IDS
+        ) and rendered_door_type in {
+            DoorType.SECRET,
+            DoorType.TRAPPED,
+        }:
             midpoint = _segment_midpoint(door.segment.start, door.segment.end)
             symbol = ET.SubElement(
                 component,
@@ -610,6 +628,123 @@ def _render_transitions(
                 link.link_type.value,
                 scale,
             )
+
+
+def _render_callouts(
+    root: ET.Element,
+    package: DungeonPackage,
+    floor_id: str,
+    request: SvgRenderRequest,
+    scale: int,
+) -> None:
+    """Draw the same short key projection used by raster/export consumers."""
+    group = ET.SubElement(root, "g", {"id": "callouts", "data-kind": "callouts"})
+    for entry in build_map_key(
+        package, floor_id, request.audience, scale=scale
+    ).entries:
+        if entry.leader_required:
+            ET.SubElement(
+                group,
+                "line",
+                {
+                    "class": "callout-leader",
+                    "x1": _number(entry.anchor.x * scale),
+                    "y1": _number(entry.anchor.y * scale),
+                    "x2": _number(entry.label_x),
+                    "y2": _number(entry.label_y),
+                },
+            )
+        if entry.kind is MapCalloutKind.ROOM:
+            ET.SubElement(
+                group,
+                "circle",
+                {
+                    "class": "room-callout",
+                    "cx": _number(entry.label_x),
+                    "cy": _number(entry.label_y),
+                    "r": _number(max(entry.width, entry.height) * 0.58),
+                },
+            )
+        elif entry.kind is MapCalloutKind.HAZARD:
+            half = max(entry.width, entry.height) * 0.55
+            ET.SubElement(
+                group,
+                "polygon",
+                {
+                    "class": "hazard-callout",
+                    "points": f"{entry.label_x},{entry.label_y - half} {entry.label_x + half},{entry.label_y + half} {entry.label_x - half},{entry.label_y + half}",
+                },
+            )
+        elif entry.kind is MapCalloutKind.FEATURE:
+            half = max(entry.width, entry.height) * 0.45
+            ET.SubElement(
+                group,
+                "rect",
+                {
+                    "class": "feature-callout",
+                    "x": _number(entry.label_x - half),
+                    "y": _number(entry.label_y - half),
+                    "width": _number(half * 2),
+                    "height": _number(half * 2),
+                },
+            )
+        else:
+            ET.SubElement(
+                group,
+                "circle",
+                {
+                    "class": "component-callout",
+                    "cx": _number(entry.label_x),
+                    "cy": _number(entry.label_y),
+                    "r": _number(max(entry.width, entry.height) * 0.58),
+                },
+            )
+        text = ET.SubElement(
+            group,
+            "text",
+            {
+                "class": "callout-text",
+                "x": _number(entry.label_x),
+                "y": _number(entry.label_y + entry.height * 0.28),
+                "text-anchor": "middle",
+                "data-callout": entry.token,
+                "data-component-id": entry.component_id,
+                "data-kind": entry.kind.value,
+            },
+        )
+        text.text = entry.token
+        if request.audience is RenderAudience.DM:
+            for index, badge in enumerate(entry.badges):
+                badge_text = ET.SubElement(
+                    group,
+                    "text",
+                    {
+                        "class": "callout-badge",
+                        "x": _number(
+                            entry.label_x + entry.width * (0.52 + index * 0.28)
+                        ),
+                        "y": _number(entry.label_y - entry.height * 0.38),
+                        "text-anchor": "middle",
+                        "data-badge": badge,
+                    },
+                )
+                badge_text.text = badge
+
+
+def _annotation_mode(
+    package: DungeonPackage, request: SvgRenderRequest
+) -> SvgAnnotationMode:
+    """Preserve legacy artifacts and explicit developer inspection."""
+    if request.show_room_ids:
+        return SvgAnnotationMode.DEVELOPER_IDS
+    # Old exact-package artifacts retain their original unannotated output. New
+    # 1.2.0 packages receive the callout grammar by default.
+    if (
+        not isinstance(package, DungeonPackageV2)
+        and request.annotation_mode is SvgAnnotationMode.CALLOUTS
+    ):
+        return SvgAnnotationMode.NONE
+    return request.annotation_mode
 
 
 def _render_labels(

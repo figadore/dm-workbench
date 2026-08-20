@@ -35,10 +35,15 @@ from dm_dungeon.layout import (
     write_layout_result,
 )
 from dm_dungeon.rendering import (
+    MapCallout,
+    MapCalloutKind,
+    MapKey,
     RenderAudience,
+    SvgAnnotationMode,
     SvgRenderRequest,
     SvgRenderResult,
     SvgThemeName,
+    build_map_key,
     render_svg,
     write_svg,
 )
@@ -91,7 +96,12 @@ __all__ = [
     "PdfExportRequest",
     "PngArtifact",
     "PngExportRequest",
+    "MapCallout",
+    "MapCalloutKind",
+    "MapKey",
     "RenderAudience",
+    "SvgAnnotationMode",
+    "build_map_key",
     "SvgRenderRequest",
     "SvgRenderResult",
     "SvgThemeName",
