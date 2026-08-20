@@ -273,6 +273,10 @@ def test_first_login_offers_subscription_provider_choice(
             "gateway did not report token usage, so the safe automatic repair could not run",
         ),
         (
+            "dungeon_prompt_rejected_after_repair",
+            "This was not a model abstention.",
+        ),
+        (
             "a provider supplied response that must not be shown",
             "The selected model explicitly abstained instead of providing a usable dungeon intent.",
         ),

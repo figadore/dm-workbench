@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Mapping
 from hashlib import sha256
 from typing import Annotated, Literal
 
@@ -17,15 +18,32 @@ from dm_dungeon.contracts.common import (
 )
 from dm_dungeon.contracts.design_v2 import (
     BarrierIntent,
-    Concealment,
+    ChallengeBand,
     DependencyKind,
     DesignConnectionV2,
+    DesignDependencyV2,
+    DesignFeatureV2,
+    DesignPuzzleV2,
+    DesignRoomV2,
+    DesignTrapV2,
     DungeonDesignSpecV2,
+    EndpointDoorKind,
     HazardIntent,
+    ObjectiveKind,
     PassageType,
     RoomSizeBand,
+    VerticalEndpointSide,
+)
+from dm_dungeon.contracts.mechanics_v2 import (
+    DUNGEON_MECHANICS_POLICY_VERSION,
+    CompiledDoorMechanicsV2,
+    CompiledRoomFeatureV2,
+    CompiledRoomPuzzleV2,
+    CompiledRoomTrapV2,
+    DungeonMechanicsPlanV2,
 )
 from dm_dungeon.contracts.topology import (
+    BranchRequirement,
     CluePlacement,
     CorridorConnection,
     DoorConnection,
@@ -36,6 +54,7 @@ from dm_dungeon.contracts.topology import (
     GateDependencyKind,
     GateKind,
     KeyPlacement,
+    LoopRequirement,
     RoomCapacity,
     RoomRole,
     RoomSizeConstraints,
@@ -48,8 +67,8 @@ from dm_dungeon.contracts.topology import (
 )
 from dm_dungeon.layout.contracts import FloorLayoutBounds
 
-DUNGEON_DESIGN_COMPILER_VERSION: Literal["dungeon-design-v2-compiler-3"] = (
-    "dungeon-design-v2-compiler-3"
+DUNGEON_DESIGN_COMPILER_VERSION: Literal["dungeon-design-v2-compiler-4"] = (
+    "dungeon-design-v2-compiler-4"
 )
 
 
@@ -66,9 +85,10 @@ class DungeonDesignCompileResult(ContractModel):
     """A complete exact intent or a bounded set of compiler diagnostics."""
 
     accepted: bool
-    compiler_version: Literal["dungeon-design-v2-compiler-3"]
+    compiler_version: Literal["dungeon-design-v2-compiler-4"]
     input_hash: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
     output_hash: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")] | None = None
+    mechanics_plan: DungeonMechanicsPlanV2 | None = None
     brief: DungeonBrief | None = None
     topology: DungeonTopology | None = None
     floor_bounds: tuple[FloorLayoutBounds, ...] = ()
@@ -81,6 +101,7 @@ class DungeonDesignCompileResult(ContractModel):
             if (
                 self.brief is None
                 or self.topology is None
+                or self.mechanics_plan is None
                 or self.output_hash is None
                 or not self.floor_bounds
             ):
@@ -92,6 +113,7 @@ class DungeonDesignCompileResult(ContractModel):
         elif (
             self.brief is not None
             or self.topology is not None
+            or self.mechanics_plan is not None
             or self.output_hash is not None
             or self.floor_bounds
         ):
@@ -159,6 +181,7 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
             required=not room.optional,
             size=_size_constraints(room.room_size),
             capacity=_capacity(room.occupancy),
+            tags=room.tags,
             visibility=(
                 Visibility.PLAYER_SAFE
                 if room.local_ref in player_visible_room_refs
@@ -169,77 +192,104 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
         for room in sorted(floor.rooms, key=lambda value: value.local_ref)
     )
 
-    dependency_by_connection = {item.connection_ref: item for item in spec.dependencies}
+    dependency_by_target = {item.target_ref: item for item in spec.dependencies}
+    mechanics_plan = _compile_mechanics_plan(
+        spec,
+        room_ids=room_ids,
+        connection_ids=connection_ids,
+        dependencies=dependency_by_target,
+    )
+    same_floor_mechanics = {
+        item.connection_id: item
+        for item in mechanics_plan.door_mechanics
+        if item.endpoint is None
+    }
     gates: list[Gate] = []
     keys: list[KeyPlacement] = []
     clues: list[CluePlacement] = []
+    mechanics_by_target_ref: dict[str, CompiledDoorMechanicsV2] = {}
+    for connection in sorted(spec.connections, key=lambda value: value.local_ref):
+        if connection.passage is PassageType.DOOR:
+            mechanics = same_floor_mechanics.get(connection_ids[connection.local_ref])
+            if mechanics is not None:
+                mechanics_by_target_ref[connection.local_ref] = mechanics
+        else:
+            for endpoint_door in connection.endpoint_doors:
+                mechanics = next(
+                    (
+                        item
+                        for item in mechanics_plan.door_mechanics
+                        if item.connection_id == connection_ids[connection.local_ref]
+                        and item.endpoint == endpoint_door.endpoint
+                    ),
+                    None,
+                )
+                if mechanics is not None:
+                    mechanics_by_target_ref[endpoint_door.local_ref] = mechanics
+    for target_ref, mechanics in sorted(mechanics_by_target_ref.items()):
+        if mechanics.gate_id is None:
+            continue
+        dependency = dependency_by_target[target_ref]
+        dependency_id = _component_id("dependency", dependency.local_ref)
+        gates.append(
+            Gate(
+                id=mechanics.gate_id,
+                name=f"Gate {target_ref}",
+                kind=(
+                    GateKind.LOCK
+                    if mechanics.gate_kind is BarrierIntent.LOCKED
+                    else GateKind.PUZZLE
+                ),
+                blocks_connection_ids=(mechanics.connection_id,),
+                requires_all=(
+                    GateDependency(
+                        kind=(
+                            GateDependencyKind.KEY
+                            if dependency.kind is DependencyKind.KEY
+                            else GateDependencyKind.CLUE
+                        ),
+                        target_id=dependency_id,
+                    ),
+                ),
+                visibility=Visibility.DM_ONLY,
+            )
+        )
+        if dependency.kind is DependencyKind.KEY:
+            keys.append(
+                KeyPlacement(
+                    id=dependency_id,
+                    name=dependency.name,
+                    located_in_room_id=room_ids[dependency.located_in_room_ref],
+                    opens_gate_ids=(mechanics.gate_id,),
+                    visibility=Visibility.DM_ONLY,
+                )
+            )
+        else:
+            clues.append(
+                CluePlacement(
+                    id=dependency_id,
+                    name=dependency.name,
+                    text=dependency.name,
+                    located_in_room_id=room_ids[dependency.located_in_room_ref],
+                    supports_gate_ids=(mechanics.gate_id,),
+                    visibility=Visibility.DM_ONLY,
+                )
+            )
     connections: list[TopologyConnection] = []
     for connection in sorted(spec.connections, key=lambda value: value.local_ref):
         connection_id = connection_ids[connection.local_ref]
         from_id, to_id = room_ids[connection.from_ref], room_ids[connection.to_ref]
+        mechanics = same_floor_mechanics.get(connection_id)
         visibility = (
             Visibility.DM_ONLY
             if _hidden_at_either_end(connection)
-            or connection.hazard is HazardIntent.TRAPPED
+            or (mechanics is not None and mechanics.trap_id is not None)
             or connection.from_ref not in player_visible_room_refs
             or connection.to_ref not in player_visible_room_refs
             else Visibility.PLAYER_SAFE
         )
-        gate_id: str | None = None
-        trap_id: str | None = None
-        dependency = dependency_by_connection.get(connection.local_ref)
-        if connection.barrier is not BarrierIntent.NONE:
-            # _validate_design() rejects a barred connection without its dependency.
-            assert dependency is not None
-            gate_id = _component_id("gate", connection.local_ref)
-            dependency_id = _component_id("dependency", dependency.local_ref)
-            gates.append(
-                Gate(
-                    id=gate_id,
-                    name=f"Gate {connection.local_ref}",
-                    kind=(
-                        GateKind.LOCK
-                        if connection.barrier is BarrierIntent.LOCKED
-                        else GateKind.PUZZLE
-                    ),
-                    blocks_connection_ids=(connection_id,),
-                    requires_all=(
-                        GateDependency(
-                            kind=(
-                                GateDependencyKind.KEY
-                                if dependency.kind is DependencyKind.KEY
-                                else GateDependencyKind.CLUE
-                            ),
-                            target_id=dependency_id,
-                        ),
-                    ),
-                    visibility=Visibility.DM_ONLY,
-                )
-            )
-            if dependency.kind is DependencyKind.KEY:
-                keys.append(
-                    KeyPlacement(
-                        id=dependency_id,
-                        name=dependency.name,
-                        located_in_room_id=room_ids[dependency.located_in_room_ref],
-                        opens_gate_ids=(gate_id,),
-                        visibility=Visibility.DM_ONLY,
-                    )
-                )
-            else:
-                clues.append(
-                    CluePlacement(
-                        id=dependency_id,
-                        name=dependency.name,
-                        text=dependency.name,
-                        located_in_room_id=room_ids[dependency.located_in_room_ref],
-                        supports_gate_ids=(gate_id,),
-                        visibility=Visibility.DM_ONLY,
-                    )
-                )
-        if connection.hazard is HazardIntent.TRAPPED:
-            trap_id = _component_id("trap", connection.local_ref)
-
+        gate_id = None if mechanics is None else mechanics.gate_id
+        trap_id = None if mechanics is None else mechanics.trap_id
         if connection.passage is PassageType.PASSAGE:
             connections.append(
                 CorridorConnection(
@@ -247,19 +297,20 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
                     id=connection_id,
                     from_room_id=from_id,
                     to_room_id=to_id,
-                    from_hidden=_hidden_from(connection),
-                    to_hidden=_hidden_to(connection),
                     visibility=visibility,
                 )
             )
         elif connection.passage is PassageType.DOOR:
+            # The retained topology is still an exclusive legacy projection. The
+            # mechanics plan above is authoritative until the P7-13d package
+            # contracts carry every independent mechanic to exact geometry.
             door_type = (
                 DoorType.SECRET
                 if _hidden_at_either_end(connection)
                 else (
-                    DoorType.TRAPPED
-                    if trap_id
-                    else (DoorType.LOCKED if gate_id else DoorType.NORMAL)
+                    DoorType.LOCKED
+                    if gate_id is not None
+                    else (DoorType.TRAPPED if trap_id is not None else DoorType.NORMAL)
                 )
             )
             connections.append(
@@ -269,8 +320,8 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
                     from_room_id=from_id,
                     to_room_id=to_id,
                     door_type=door_type,
-                    gate_id=gate_id if door_type is DoorType.LOCKED else None,
-                    trap_id=trap_id if door_type is DoorType.TRAPPED else None,
+                    gate_id=gate_id,
+                    trap_id=trap_id,
                     from_hidden=_hidden_from(connection),
                     to_hidden=_hidden_to(connection),
                     visibility=visibility,
@@ -324,6 +375,25 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
         gates=tuple(gates),
         keys=tuple(keys),
         clues=tuple(clues),
+        loops=tuple(
+            LoopRequirement(
+                id=_component_id("loop", requirement.local_ref),
+                room_ids=tuple(room_ids[ref] for ref in requirement.room_refs),
+                visibility=Visibility.PLAYER_SAFE,
+            )
+            for requirement in sorted(spec.loops, key=lambda value: value.local_ref)
+        ),
+        branches=tuple(
+            BranchRequirement(
+                id=_component_id("branch", requirement.local_ref),
+                junction_room_id=room_ids[requirement.junction_room_ref],
+                branch_room_ids=tuple(
+                    room_ids[ref] for ref in requirement.branch_room_refs
+                ),
+                visibility=Visibility.PLAYER_SAFE,
+            )
+            for requirement in sorted(spec.branches, key=lambda value: value.local_ref)
+        ),
     )
     brief = DungeonBrief(
         schema_version="1.0.0",
@@ -341,6 +411,7 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
         {
             "brief": brief.model_dump(mode="json"),
             "topology": topology.model_dump(mode="json"),
+            "mechanics_plan": mechanics_plan.model_dump(mode="json"),
             "floor_bounds": [item.model_dump(mode="json") for item in floor_bounds],
         }
     )
@@ -349,6 +420,7 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
         compiler_version=DUNGEON_DESIGN_COMPILER_VERSION,
         input_hash=input_hash,
         output_hash=output_hash,
+        mechanics_plan=mechanics_plan,
         brief=brief,
         topology=topology,
         floor_bounds=floor_bounds,
@@ -356,12 +428,127 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
     )
 
 
+def _compile_mechanics_plan(
+    spec: DungeonDesignSpecV2,
+    *,
+    room_ids: dict[str, str],
+    connection_ids: dict[str, str],
+    dependencies: Mapping[str, DesignDependencyV2],
+) -> DungeonMechanicsPlanV2:
+    mechanics: list[CompiledDoorMechanicsV2] = []
+    for connection in sorted(spec.connections, key=lambda value: value.local_ref):
+        if connection.passage is PassageType.DOOR:
+            mechanics.append(
+                _compile_door_mechanics(
+                    identity=connection.local_ref,
+                    connection_id=connection_ids[connection.local_ref],
+                    endpoint=None,
+                    concealed=connection.door_mechanics.concealed,
+                    barrier=connection.door_mechanics.barrier,
+                    hazard=connection.door_mechanics.hazard,
+                    challenge=connection.door_mechanics.challenge,
+                    dependency=dependencies.get(connection.local_ref),
+                )
+            )
+        elif connection.passage in {PassageType.STAIRS, PassageType.LADDER}:
+            for endpoint_door in sorted(
+                connection.endpoint_doors, key=lambda value: value.endpoint.value
+            ):
+                mechanics.append(
+                    _compile_door_mechanics(
+                        identity=endpoint_door.local_ref,
+                        connection_id=connection_ids[connection.local_ref],
+                        endpoint=endpoint_door.endpoint,
+                        endpoint_kind=endpoint_door.kind,
+                        concealed=endpoint_door.mechanics.concealed,
+                        barrier=endpoint_door.mechanics.barrier,
+                        hazard=endpoint_door.mechanics.hazard,
+                        challenge=endpoint_door.mechanics.challenge,
+                        dependency=dependencies.get(endpoint_door.local_ref),
+                    )
+                )
+    return DungeonMechanicsPlanV2(
+        policy_version=DUNGEON_MECHANICS_POLICY_VERSION,
+        connection_ids=tuple(sorted(connection_ids.values())),
+        room_ids=tuple(sorted(room_ids.values())),
+        door_mechanics=tuple(mechanics),
+        room_traps=tuple(
+            CompiledRoomTrapV2(
+                id=_component_id("trap", trap.local_ref),
+                room_id=room_ids[trap.room_ref],
+                detection_difficulty=_difficulty(trap.challenge),
+                disable_difficulty=_difficulty(trap.challenge),
+            )
+            for trap in sorted(spec.traps, key=lambda value: value.local_ref)
+        ),
+        room_puzzles=tuple(
+            CompiledRoomPuzzleV2(
+                id=_component_id("puzzle", puzzle.local_ref),
+                room_id=room_ids[puzzle.room_ref],
+                difficulty=_difficulty(puzzle.challenge),
+            )
+            for puzzle in sorted(spec.puzzles, key=lambda value: value.local_ref)
+        ),
+        room_features=tuple(
+            CompiledRoomFeatureV2(
+                id=_component_id("feature", feature.local_ref),
+                room_id=room_ids[feature.room_ref],
+                kind=feature.kind,
+            )
+            for feature in sorted(spec.features, key=lambda value: value.local_ref)
+        ),
+    )
+
+
+def _compile_door_mechanics(
+    *,
+    identity: str,
+    connection_id: str,
+    endpoint: VerticalEndpointSide | None,
+    endpoint_kind: EndpointDoorKind | None = None,
+    concealed: bool,
+    barrier: BarrierIntent,
+    hazard: HazardIntent,
+    challenge: ChallengeBand | None,
+    dependency: object | None,
+) -> CompiledDoorMechanicsV2:
+    # Validation requires a dependency for every non-open barrier. The argument
+    # makes that contract explicit here even though stable IDs derive from the
+    # barrier, not the dependency prose or array order.
+    if barrier is not BarrierIntent.NONE:
+        assert dependency is not None
+    difficulty = None if challenge is None else _difficulty(challenge)
+    return CompiledDoorMechanicsV2(
+        id=_component_id("door-mechanics", identity),
+        connection_id=connection_id,
+        endpoint=endpoint,
+        endpoint_kind=endpoint_kind,
+        concealed=concealed,
+        gate_id=(
+            None if barrier is BarrierIntent.NONE else _component_id("gate", identity)
+        ),
+        gate_kind=barrier,
+        trap_id=(
+            None if hazard is HazardIntent.NONE else _component_id("trap", identity)
+        ),
+        discovery_difficulty=difficulty if concealed else None,
+        unlock_difficulty=difficulty if barrier is not BarrierIntent.NONE else None,
+        disable_difficulty=difficulty if hazard is HazardIntent.TRAPPED else None,
+    )
+
+
+def _difficulty(band: ChallengeBand) -> int:
+    return {ChallengeBand.LOW: 10, ChallengeBand.MODERATE: 13, ChallengeBand.HIGH: 16}[
+        band
+    ]
+
+
 def _hidden_from(connection: DesignConnectionV2) -> bool:
-    return connection.from_hidden or connection.concealment is Concealment.SECRET
+    return connection.from_hidden
 
 
 def _hidden_to(connection: DesignConnectionV2) -> bool:
-    return connection.to_hidden or connection.concealment is Concealment.SECRET
+    return connection.to_hidden
 
 
 def _hidden_at_either_end(connection: DesignConnectionV2) -> bool:
@@ -400,54 +587,46 @@ def _player_visible_room_refs(spec: DungeonDesignSpecV2) -> set[str]:
 
 
 def _validate_design(spec: DungeonDesignSpecV2) -> list[DungeonDesignCompileDiagnostic]:
+    """Validate local relation refs before deriving opaque component IDs."""
     diagnostics: list[DungeonDesignCompileDiagnostic] = []
-    seen: set[str] = set()
+    refs: dict[str, str] = {}
+
+    def add_ref(ref: str, path: str) -> None:
+        if ref in refs:
+            diagnostics.append(
+                _diagnostic(
+                    "design.duplicate_local_ref",
+                    path,
+                    (ref,),
+                    "use a unique local ref",
+                )
+            )
+        refs[ref] = path
+
+    room_floor: dict[str, str] = {}
+    rooms: dict[str, DesignRoomV2] = {}
     for floor_index, floor in enumerate(spec.floors):
-        if floor.local_ref in seen:
-            diagnostics.append(
-                _diagnostic(
-                    "design.duplicate_local_ref",
-                    f"/floors/{floor_index}/local_ref",
-                    (floor.local_ref,),
-                    "use a unique floor local ref",
-                )
-            )
-        seen.add(floor.local_ref)
+        add_ref(floor.local_ref, f"/floors/{floor_index}/local_ref")
         for room_index, room in enumerate(floor.rooms):
-            if room.local_ref in seen:
-                diagnostics.append(
-                    _diagnostic(
-                        "design.duplicate_local_ref",
-                        f"/floors/{floor_index}/rooms/{room_index}/local_ref",
-                        (room.local_ref,),
-                        "use a unique room local ref",
-                    )
-                )
-            seen.add(room.local_ref)
-    room_refs = {room.local_ref for floor in spec.floors for room in floor.rooms}
-    connection_refs: set[str] = set()
-    for index, connection in enumerate(spec.connections):
-        if connection.local_ref in seen or connection.local_ref in connection_refs:
-            diagnostics.append(
-                _diagnostic(
-                    "design.duplicate_local_ref",
-                    f"/connections/{index}/local_ref",
-                    (connection.local_ref,),
-                    "use a unique connection local ref",
-                )
+            add_ref(
+                room.local_ref, f"/floors/{floor_index}/rooms/{room_index}/local_ref"
             )
-        connection_refs.add(connection.local_ref)
+            room_floor[room.local_ref] = floor.local_ref
+            rooms[room.local_ref] = room
+
+    for index, connection in enumerate(spec.connections):
+        add_ref(connection.local_ref, f"/connections/{index}/local_ref")
         for field, ref in (
             ("from_ref", connection.from_ref),
             ("to_ref", connection.to_ref),
         ):
-            if ref not in room_refs:
+            if ref not in rooms:
                 diagnostics.append(
                     _diagnostic(
                         "design.unknown_room_ref",
                         f"/connections/{index}/{field}",
                         (ref,),
-                        "reference a declared room local ref",
+                        "reference a declared room",
                     )
                 )
         if connection.from_ref == connection.to_ref:
@@ -456,159 +635,57 @@ def _validate_design(spec: DungeonDesignSpecV2) -> list[DungeonDesignCompileDiag
                     "design.self_connection",
                     f"/connections/{index}",
                     (connection.from_ref,),
-                    "connect two distinct rooms",
+                    "connect distinct rooms",
                 )
             )
-        same_floor = (
-            room_refs
-            and connection.from_ref in room_refs
-            and connection.to_ref in room_refs
-        )
-        if (
-            same_floor
-            and connection.from_ref in room_refs
-            and connection.to_ref in room_refs
-        ):
-            # lookup is intentionally delayed until refs are known
-            floor_for = {
-                room.local_ref: floor.local_ref
-                for floor in spec.floors
-                for room in floor.rooms
-            }
+        elif connection.from_ref in room_floor and connection.to_ref in room_floor:
             crosses_floor = (
-                floor_for[connection.from_ref] != floor_for[connection.to_ref]
+                room_floor[connection.from_ref] != room_floor[connection.to_ref]
             )
-            if crosses_floor and connection.passage in {
-                PassageType.PASSAGE,
-                PassageType.DOOR,
-            }:
+            if crosses_floor != (
+                connection.passage in {PassageType.STAIRS, PassageType.LADDER}
+            ):
                 diagnostics.append(
                     _diagnostic(
-                        "design.cross_floor_passage",
+                        "design.connection_floor_mismatch",
                         f"/connections/{index}/passage",
                         (connection.local_ref,),
-                        "use stairs or ladder between floors",
+                        "use doors/passages on one floor and stairs/ladders across floors",
                     )
                 )
-            if not crosses_floor and connection.passage in {
-                PassageType.STAIRS,
-                PassageType.LADDER,
-            }:
-                diagnostics.append(
-                    _diagnostic(
-                        "design.same_floor_vertical",
-                        f"/connections/{index}/passage",
-                        (connection.local_ref,),
-                        "use passage or door on one floor",
-                    )
-                )
-        if connection.passage is PassageType.PASSAGE and _hidden_at_either_end(
-            connection
-        ):
-            diagnostics.append(
-                _diagnostic(
-                    "design.connection_intent_unsupported",
-                    f"/connections/{index}",
-                    (connection.local_ref,),
-                    "use a door, stair, or ladder for hidden endpoint intent",
-                )
+        for endpoint_index, endpoint_door in enumerate(connection.endpoint_doors):
+            add_ref(
+                endpoint_door.local_ref,
+                f"/connections/{index}/endpoint_doors/{endpoint_index}/local_ref",
             )
-        if connection.passage is not PassageType.DOOR and (
-            connection.hazard is HazardIntent.TRAPPED
-            or connection.barrier is not BarrierIntent.NONE
-        ):
-            diagnostics.append(
-                _diagnostic(
-                    "design.connection_intent_unsupported",
-                    f"/connections/{index}",
-                    (connection.local_ref,),
-                    "use a door for secret, barrier, or trapped intent",
-                )
-            )
-        if _hidden_at_either_end(connection) and (
-            connection.hazard is HazardIntent.TRAPPED
-            or connection.barrier is not BarrierIntent.NONE
-        ):
-            diagnostics.append(
-                _diagnostic(
-                    "design.connection_combination_unsupported",
-                    f"/connections/{index}",
-                    (connection.local_ref,),
-                    "split secret access from trapped or barred access",
-                )
-            )
+
+    target_barriers: set[str] = set()
+    for connection in spec.connections:
         if (
-            connection.hazard is HazardIntent.TRAPPED
-            and connection.barrier is not BarrierIntent.NONE
+            connection.passage is PassageType.DOOR
+            and connection.door_mechanics.barrier is not BarrierIntent.NONE
         ):
-            diagnostics.append(
-                _diagnostic(
-                    "design.connection_combination_unsupported",
-                    f"/connections/{index}",
-                    (connection.local_ref,),
-                    "split trapped access from barred access",
-                )
-            )
-    entrances = [
-        room
-        for floor in spec.floors
-        for room in floor.rooms
-        if room.role.value == "entrance"
-    ]
-    if len(entrances) != 1:
-        diagnostics.append(
-            _diagnostic(
-                "design.entrance_required",
-                "/floors",
-                (),
-                "declare exactly one room with role entrance",
-            )
-        )
-    final_objectives = [
-        item for item in spec.objectives if item.kind.value == "final_objective"
-    ]
-    if len(final_objectives) != 1:
-        diagnostics.append(
-            _diagnostic(
-                "design.final_objective_required",
-                "/objectives",
-                (),
-                "declare exactly one final_objective",
-            )
-        )
-    for index, objective in enumerate(spec.objectives):
-        if objective.room_ref not in room_refs:
-            diagnostics.append(
-                _diagnostic(
-                    "design.unknown_room_ref",
-                    f"/objectives/{index}/room_ref",
-                    (objective.room_ref,),
-                    "reference a declared room local ref",
-                )
-            )
-    seen.update(connection_refs)
+            target_barriers.add(connection.local_ref)
+        for endpoint_door in connection.endpoint_doors:
+            if endpoint_door.mechanics.barrier is not BarrierIntent.NONE:
+                target_barriers.add(endpoint_door.local_ref)
+
+    dependency_targets: list[str] = []
     dependency_refs: set[str] = set()
     for index, dependency in enumerate(spec.dependencies):
-        if dependency.local_ref in seen or dependency.local_ref in dependency_refs:
-            diagnostics.append(
-                _diagnostic(
-                    "design.duplicate_local_ref",
-                    f"/dependencies/{index}/local_ref",
-                    (dependency.local_ref,),
-                    "use a unique dependency local ref",
-                )
-            )
+        add_ref(dependency.local_ref, f"/dependencies/{index}/local_ref")
         dependency_refs.add(dependency.local_ref)
-        if dependency.connection_ref not in connection_refs:
+        dependency_targets.append(dependency.target_ref)
+        if dependency.target_ref not in target_barriers:
             diagnostics.append(
                 _diagnostic(
-                    "design.unknown_connection_ref",
-                    f"/dependencies/{index}/connection_ref",
-                    (dependency.connection_ref,),
-                    "reference a declared barred connection",
+                    "design.unneeded_dependency",
+                    f"/dependencies/{index}/target_ref",
+                    (dependency.target_ref,),
+                    "target one locked or puzzle door/hatch",
                 )
             )
-        if dependency.located_in_room_ref not in room_refs:
+        if dependency.located_in_room_ref not in rooms:
             diagnostics.append(
                 _diagnostic(
                     "design.unknown_room_ref",
@@ -617,42 +694,128 @@ def _validate_design(spec: DungeonDesignSpecV2) -> list[DungeonDesignCompileDiag
                     "place the dependency in a declared room",
                 )
             )
-    barred = {
-        item.local_ref
-        for item in spec.connections
-        if item.barrier is not BarrierIntent.NONE
-    }
-    for ref in sorted(barred - {item.connection_ref for item in spec.dependencies}):
+    for target in sorted(target_barriers - set(dependency_targets)):
         diagnostics.append(
             _diagnostic(
                 "design.missing_dependency",
                 "/dependencies",
-                (ref,),
-                "add one key or clue dependency for each barred connection",
+                (target,),
+                "add one key or clue dependency for each barrier",
             )
         )
-    for ref in sorted({item.connection_ref for item in spec.dependencies} - barred):
+    for target in sorted(
+        {item for item in dependency_targets if dependency_targets.count(item) > 1}
+    ):
         diagnostics.append(
             _diagnostic(
-                "design.unneeded_dependency",
+                "design.duplicate_dependency_target",
                 "/dependencies",
-                (ref,),
-                "dependencies may target only locked or puzzle connections",
+                (target,),
+                "provide exactly one dependency per barrier",
             )
         )
-    dependency_targets: set[str] = set()
-    for index, dependency in enumerate(spec.dependencies):
-        if dependency.connection_ref in dependency_targets:
+
+    entrances = [room for room in rooms.values() if room.role is RoomRole.ENTRANCE]
+    if len(entrances) != 1:
+        diagnostics.append(
+            _diagnostic(
+                "design.entrance_required",
+                "/floors",
+                (),
+                "declare exactly one entrance room",
+            )
+        )
+    final_objectives = [
+        item for item in spec.objectives if item.kind is ObjectiveKind.FINAL_OBJECTIVE
+    ]
+    if len(final_objectives) != 1:
+        diagnostics.append(
+            _diagnostic(
+                "design.final_objective_required",
+                "/objectives",
+                (),
+                "declare exactly one final objective",
+            )
+        )
+    for index, objective in enumerate(spec.objectives):
+        if objective.room_ref not in rooms:
             diagnostics.append(
                 _diagnostic(
-                    "design.duplicate_dependency_target",
-                    f"/dependencies/{index}/connection_ref",
-                    (dependency.connection_ref,),
-                    "provide exactly one dependency for each barred connection",
+                    "design.unknown_room_ref",
+                    f"/objectives/{index}/room_ref",
+                    (objective.room_ref,),
+                    "reference a declared room",
                 )
             )
-        dependency_targets.add(dependency.connection_ref)
+
+    _validate_room_local_refs("traps", spec.traps, rooms, add_ref, diagnostics)
+    _validate_room_local_refs("puzzles", spec.puzzles, rooms, add_ref, diagnostics)
+    _validate_room_local_refs("features", spec.features, rooms, add_ref, diagnostics)
+    for index, puzzle in enumerate(spec.puzzles):
+        for clue_index, clue_ref in enumerate(puzzle.clue_refs):
+            if clue_ref not in dependency_refs:
+                diagnostics.append(
+                    _diagnostic(
+                        "design.unknown_clue_ref",
+                        f"/puzzles/{index}/clue_refs/{clue_index}",
+                        (clue_ref,),
+                        "reference a declared key or clue local ref",
+                    )
+                )
+
+    for index, requirement in enumerate(spec.loops):
+        add_ref(requirement.local_ref, f"/loops/{index}/local_ref")
+        for room_index, room_ref in enumerate(requirement.room_refs):
+            if room_ref not in rooms:
+                diagnostics.append(
+                    _diagnostic(
+                        "design.unknown_room_ref",
+                        f"/loops/{index}/room_refs/{room_index}",
+                        (room_ref,),
+                        "reference a declared room",
+                    )
+                )
+    for index, branch_requirement in enumerate(spec.branches):
+        add_ref(branch_requirement.local_ref, f"/branches/{index}/local_ref")
+        for field, room_refs in (
+            ("junction_room_ref", (branch_requirement.junction_room_ref,)),
+            ("branch_room_refs", branch_requirement.branch_room_refs),
+        ):
+            for room_index, room_ref in enumerate(room_refs):
+                path = f"/branches/{index}/{field}"
+                if field == "branch_room_refs":
+                    path = f"{path}/{room_index}"
+                if room_ref not in rooms:
+                    diagnostics.append(
+                        _diagnostic(
+                            "design.unknown_room_ref",
+                            path,
+                            (room_ref,),
+                            "reference a declared room",
+                        )
+                    )
     return diagnostics
+
+
+def _validate_room_local_refs(
+    collection_name: str,
+    values: tuple[DesignTrapV2 | DesignPuzzleV2 | DesignFeatureV2, ...],
+    rooms: dict[str, DesignRoomV2],
+    add_ref: Callable[[str, str], None],
+    diagnostics: list[DungeonDesignCompileDiagnostic],
+) -> None:
+    """Validate room-local components while keeping duplicate paths stable."""
+    for index, item in enumerate(values):
+        add_ref(item.local_ref, f"/{collection_name}/{index}/local_ref")
+        if item.room_ref not in rooms:
+            diagnostics.append(
+                _diagnostic(
+                    "design.unknown_room_ref",
+                    f"/{collection_name}/{index}/room_ref",
+                    (item.room_ref,),
+                    "reference a declared room",
+                )
+            )
 
 
 def _diagnostic(

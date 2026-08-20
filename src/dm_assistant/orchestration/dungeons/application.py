@@ -21,7 +21,10 @@ from dm_assistant.orchestration.dungeons.contracts import (
     DungeonWorkflowResult,
     PromptDungeonWorkflow,
 )
-from dm_assistant.orchestration.dungeons.prompting import DungeonPromptService
+from dm_assistant.orchestration.dungeons.prompting import (
+    DungeonPromptService,
+    DungeonProposalRejectedAfterRepair,
+)
 from dm_assistant.orchestration.modeling import ModelRunAbstained
 
 logger = get_logger(__name__)
@@ -31,6 +34,8 @@ _REPAIR_USAGE_UNAVAILABLE = "model usage was unavailable; repair budget is unkno
 
 def _failure_code(error: Exception) -> str:
     """Classify known safe prompt failures without exposing model/provider text."""
+    if isinstance(error, DungeonProposalRejectedAfterRepair):
+        return "dungeon_prompt_rejected_after_repair"
     if isinstance(error, ModelRunAbstained) and str(error) == _REPAIR_USAGE_UNAVAILABLE:
         return "dungeon_prompt_repair_usage_unavailable"
     return "dungeon_prompt_failed"
@@ -62,7 +67,7 @@ class DungeonPromptApplicationService:
                 generation_kind="dungeon_prompt_v2",
                 seed=command.seed,
                 input_scope={"task_type": "standalone_dungeon", "surface": surface},
-                schema_versions={"dungeon_generation_proposal": "2.1.0"},
+                schema_versions={"dungeon_generation_proposal": "2.2.0"},
             )
         ).id
 

@@ -1160,6 +1160,11 @@ def _model_run_rejected_error(error: ModelRunAbstained) -> ModelRunRejectedError
             "could not run. No draft was saved; retry after gateway usage reporting "
             "is available or use the hand-authored Dungeon Studio workflow."
         ),
+        "dungeon_prompt_rejected_after_repair": (
+            "The generated dungeon did not pass deterministic validation after its "
+            "one automatic repair request. This was not a model abstention. No draft "
+            "was saved; try again or use the hand-authored Dungeon Studio workflow."
+        ),
         "dungeon intent did not include a brief and topology": (
             "The selected model did not return a complete dungeon brief and topology. "
             "No draft was saved; try again or select another model."

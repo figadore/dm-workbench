@@ -4,6 +4,7 @@ from collections.abc import Iterable
 
 from dm_dungeon.contracts.geometry import (
     CorridorLayout,
+    DoorLayout,
     GridPoint,
     GridSegment,
     PolygonGeometry,
@@ -11,9 +12,11 @@ from dm_dungeon.contracts.geometry import (
 )
 from dm_dungeon.contracts.package import DungeonPackage
 from dm_dungeon.contracts.package_v2 import (
+    DoorLayoutV2,
     DungeonPackageV2,
     PassageApproachDirection,
     PassageOpening,
+    RoomMechanicMarkerV2,
 )
 from dm_dungeon.contracts.topology import (
     CorridorConnection,
@@ -433,11 +436,20 @@ def _validate_v2_direct_doors(
     corridors_by_rooms = {
         frozenset(item.connects_room_ids) for item in package.corridors
     }
-    doors_by_id = {door.id: door for door in package.doors}
+    direct_doors: tuple[DoorLayoutV2 | DoorLayout, ...]
+    doors_by_connection_id: dict[str, DoorLayoutV2 | DoorLayout]
+    if package.composable_doors:
+        direct_doors = package.composable_doors
+        doors_by_connection_id = {
+            door.connection_id: door for door in package.composable_doors
+        }
+    else:
+        direct_doors = package.doors
+        doors_by_connection_id = {door.id: door for door in package.doors}
     for connection in package.topology.connections:
         if not isinstance(connection, DoorConnection):
             continue
-        door = doors_by_id.get(connection.id)
+        door = doors_by_connection_id.get(connection.id)
         if door is None or door.connects_room_ids != (
             connection.from_room_id,
             connection.to_room_id,
@@ -450,7 +462,7 @@ def _validate_v2_direct_doors(
                     "Emit one shared-wall door for every direct-door connection.",
                 )
             )
-    for door in package.doors:
+    for door in direct_doors:
         connected = tuple(rooms[room_id] for room_id in door.connects_room_ids)
         shared_wall = all(
             _segment_on_polygon_boundary(door.segment, room.boundary)
@@ -712,10 +724,14 @@ def _validate_other_geometry_bounds(
                 )
             )
 
+    room_markers: tuple[RoomMechanicMarkerV2, ...] = (
+        package.room_mechanic_markers if isinstance(package, DungeonPackageV2) else ()
+    )
     point_elements = (
         *((item.id, item.floor_id, item.position) for item in package.labels),
         *((item.id, item.floor_id, item.position) for item in package.position_anchors),
         *((item.id, item.floor_id, item.position) for item in package.stairs),
+        *((item.id, item.floor_id, item.position) for item in room_markers),
     )
     for component_id, floor_id, point in point_elements:
         if (point.x, point.y) not in cells_for_geometry(floors[floor_id].bounds):
@@ -738,6 +754,18 @@ def _validate_other_geometry_bounds(
                     (anchor.id,),
                     f"Anchor {anchor.id!r} is not on a walkable cell.",
                     "Move the anchor to unblocked room or corridor geometry.",
+                )
+            )
+    for marker in room_markers:
+        if (marker.position.x, marker.position.y) not in grid.room_cells[
+            marker.room_id
+        ]:
+            diagnostics.append(
+                _diagnostic(
+                    GeometryDiagnosticCode.ROOM_MECHANIC_MARKER_INVALID,
+                    (marker.id, marker.room_id),
+                    f"Room mechanic marker {marker.id!r} is not inside its room.",
+                    "Anchor the marker on an unblocked cell in its declared room.",
                 )
             )
 

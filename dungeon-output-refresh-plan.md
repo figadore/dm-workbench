@@ -1,9 +1,10 @@
 # Dungeon Output Refresh Plan
 
-> Status: proposed planning baseline for the next user-directed Dungeon Studio work.
-> This plan does not rewrite retained artifacts. New generation/render/export contracts
-> receive new version pins, while existing packages and assets remain readable and
-> downloadable.
+> Status: active planning baseline for the user-directed Dungeon Studio refresh.
+> No user dungeon or external dungeon consumer currently requires backward
+> compatibility. Until one exists, active V2 contracts may advance in place with new
+> version pins and updated synthetic fixtures; retained artifacts, once created, remain
+> immutable and readable under their pinned readers.
 
 ## 1. Problem statement and confirmed causes
 
@@ -150,17 +151,25 @@ pages.
 
 ## 3. Version and compatibility policy
 
-The screenshot represents retained output, so fixes must not reinterpret old JSONB or
-replace old assets in place.
+The screenshot is a generated quality baseline, not evidence of a retained user
+artifact. There are currently no user dungeons or external dungeon consumers that
+justify a parallel compatibility stack.
 
-- Keep existing V1 and V2 design/proposal readers and exact stored artifacts.
-- Introduce a new creative-design/proposal/compiler profile version for feature,
-  challenge, and composable door intent.
+- Advance the active V2 design/proposal/compiler/package contracts and their version
+  pins in place; update synthetic fixtures and tests rather than preserving unused
+  pre-P7-13d V2 readers.
+- Do not create parallel V3 design, topology, package, layout, renderer, or Workbench
+  paths solely for compatibility. The useful temporary V3 WIP is migration scaffolding:
+  port its intent shapes, mechanics policy, diagnostics, and tests into V2, then remove
+  the V3-only files and dispatch.
+- Preserve V1 orchestration only where its documented rollout/evaluation policy still
+  requires it, not as retained-dungeon compatibility. Do not add new historical-reader
+  branches without an artifact or consumer that needs them.
 - Introduce new package/generator/renderer pins for changed connection geometry and
   map symbols. Exact version numbers are frozen in P7-13b/P7-13d before code lands.
 - Introduce a new PDF request/exporter version before print is re-enabled.
-- Creating refreshed output creates a new immutable artifact version or a new artifact;
-  it never mutates an existing version’s role links.
+- Once an artifact exists, refreshing it creates a new immutable artifact version or a
+  new artifact; it never mutates an existing version’s role links.
 - Content-addressed blobs remain generic. Human filenames and grouping are a
   presentation projection over artifact-version links, not blob identity.
 
@@ -289,7 +298,12 @@ content.
 
 **Work**
 
-- Freeze a new strict compact design/proposal/compiler version; do not mutate V2.
+- Extend the active strict V2 design/proposal/compiler in place and advance its pins;
+  do not create a parallel V3 path or retain an unused pre-P7-13d V2 reader.
+- Continue from the committed scaffolding rather than resetting or reverting its
+  commit: port the useful V3-shaped contracts, mechanics compiler logic, and tests into
+  V2 first, then remove temporary V3-only modules/dispatch after equivalent V2 coverage
+  passes.
 - Add bounded creative intent for:
   - room tags and preparation notes;
   - physical features/objectives;
@@ -348,7 +362,8 @@ content.
   stairs/ladders, secret locked/puzzle doors, secret trapped doors, and endpoint
   locks/puzzles/traps on vertical links; every accepted combination retains all
   requested gate/trap mechanics through compilation.
-- Old V2 artifacts still inspect and download without reinterpretation.
+- The updated active V2 contract round-trips and the synthetic pre-P7-13d fixtures are
+  deliberately migrated; future retained artifacts remain pinned and immutable.
 
 ### P7-13e — Asset catalog, inline viewing, and meaningful filenames
 
@@ -432,7 +447,8 @@ new default.
   bend count, occupied-bounds density, callout collisions, key completeness, feature
   realization, print page/coverage limits, asset naming, and inline behavior.
 - Preserve existing semantic, deterministic replay, topology, geometry, secrecy,
-  atomic publication, cancellation, and V1/V2 reader gates.
+  atomic publication, cancellation, and reader gates for artifact formats that
+  actually exist; do not carry unused pre-P7-13d V2 compatibility.
 - Perform one manual DM review of the synthetic fixture and one opt-in live generated
   dungeon. Record remaining edits; never put provider responses or real campaign text
   in fixtures.
@@ -457,7 +473,7 @@ new default.
 
 | Boundary | Minimum coverage |
 | --- | --- |
-| Pure contracts/compiler | New-version round trip, unknown-version failure, stable IDs, composable door mechanics, challenge completeness, old V2 reader compatibility |
+| Pure contracts/compiler | Advanced V2 round trip, unknown-version failure, stable IDs, composable door mechanics, challenge completeness, and deliberate synthetic-fixture migration |
 | Placement/routing | direct shared-wall doors, straight-first routing, obstacle bend, endpoint lead, no room overlap, unrelated clearance, deterministic seed, locked regeneration |
 | Geometry/pathfinding | explicit openings, connected walkable cells, no undeclared openings, marker bounds/reachability, multi-floor endpoints |
 | Rendering | SVG goldens, raster equivalence, collision boxes, symbol grammar, no opaque IDs, grayscale, DM/player leakage |

@@ -8,7 +8,6 @@ from pathlib import Path
 
 from dm_dungeon.contracts.package import DungeonPackage
 from dm_dungeon.contracts.package_v2 import DungeonPackageV2
-from dm_dungeon.contracts.package_v3 import DungeonPackageV3
 from dm_dungeon.export import (
     AssemblyMode,
     PaperSize,
@@ -170,13 +169,9 @@ def _add_common_export_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def _require_renderable_package(
-    package: DungeonPackage | DungeonPackageV2 | DungeonPackageV3,
+    package: DungeonPackage | DungeonPackageV2,
 ) -> DungeonPackage | DungeonPackageV2:
-    """Fail closed until the V3 renderer/validator is implemented."""
-    if isinstance(package, DungeonPackageV3):
-        raise ValueError(
-            "DungeonPackage 1.3.0 mechanics are readable but not renderable yet"
-        )
+    """Narrow the reader result to packages supported by all CLI operations."""
     return package
 
 

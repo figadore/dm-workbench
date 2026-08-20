@@ -24,6 +24,7 @@ from dm_dungeon import (
     validate_geometry,
     validate_topology,
 )
+from dm_dungeon.layout import ORTHOGONAL_LAYOUT_GENERATOR_VERSION
 
 
 class _EvalModel(BaseModel):
@@ -372,7 +373,7 @@ def _preserves_expected_semantics(
     if len(design.floors) == 2:
         flags.add("two_floor")
     if any(
-        item.concealment.value == "secret" or item.from_hidden or item.to_hidden
+        item.from_hidden or item.to_hidden or item.door_mechanics.concealed
         for item in design.connections
     ):
         flags.add("secret")
@@ -382,9 +383,14 @@ def _preserves_expected_semantics(
         flags.add("loop")
     if any(item.kind.value == "clue" for item in design.dependencies):
         flags.add("clue")
-    if any(item.barrier.value != "none" for item in design.connections):
+    mechanics = [connection.door_mechanics for connection in design.connections] + [
+        endpoint.mechanics
+        for connection in design.connections
+        for endpoint in connection.endpoint_doors
+    ]
+    if any(item.barrier.value != "none" for item in mechanics):
         flags.add("gate")
-    if any(item.hazard.value == "trapped" for item in design.connections):
+    if any(item.hazard.value == "trapped" for item in mechanics) or design.traps:
         flags.add("trap")
     if any(room.optional for floor in design.floors for room in floor.rooms):
         flags.add("optional")
@@ -419,7 +425,13 @@ def _proposal_status(
 
 def _layout_request(result: DungeonDesignCompileResult, case_id: str) -> LayoutRequest:
     """Build a stable kernel request without treating fixture data as server input."""
-    assert result.accepted and result.output_hash and result.brief and result.topology
+    assert (
+        result.accepted
+        and result.output_hash
+        and result.brief
+        and result.topology
+        and result.mechanics_plan
+    )
     seed = int.from_bytes(sha256(case_id.encode()).digest()[:8], "big")
     return LayoutRequest(
         schema_version="1.0.0",
@@ -427,6 +439,7 @@ def _layout_request(result: DungeonDesignCompileResult, case_id: str) -> LayoutR
         brief=result.brief,
         topology=result.topology,
         seed=seed,
-        generator_version="orthogonal-v2",
+        generator_version=ORTHOGONAL_LAYOUT_GENERATOR_VERSION,
+        mechanics_plan=result.mechanics_plan,
         floor_bounds=result.floor_bounds,
     )

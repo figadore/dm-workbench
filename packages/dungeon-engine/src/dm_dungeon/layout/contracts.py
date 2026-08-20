@@ -22,6 +22,7 @@ from dm_dungeon.contracts.geometry import (
     StairLayout,
     VerticalLinkLayout,
 )
+from dm_dungeon.contracts.mechanics_v2 import DungeonMechanicsPlanV2
 from dm_dungeon.contracts.package import DungeonPackage
 from dm_dungeon.contracts.package_v2 import DungeonPackageV2
 from dm_dungeon.contracts.topology import DungeonTopology
@@ -29,7 +30,10 @@ from dm_dungeon.validation.diagnostics import DiagnosticSeverity
 
 LAYOUT_REQUEST_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 LAYOUT_RESULT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
-ORTHOGONAL_LAYOUT_GENERATOR_VERSION: Literal["orthogonal-v3"] = "orthogonal-v3"
+ORTHOGONAL_LAYOUT_GENERATOR_VERSION: Literal["orthogonal-v4"] = "orthogonal-v4"
+PRE_MECHANICS_ORTHOGONAL_LAYOUT_GENERATOR_VERSION: Literal["orthogonal-v3"] = (
+    "orthogonal-v3"
+)
 LEGACY_ORTHOGONAL_LAYOUT_GENERATOR_VERSION: Literal["orthogonal-v2"] = "orthogonal-v2"
 PositiveCells = Annotated[int, Field(ge=1)]
 NonNegativeCells = Annotated[int, Field(ge=0)]
@@ -47,6 +51,8 @@ class LayoutDiagnosticCode(StrEnum):
     INTERNAL_CONTRACT_FAILURE = "layout.internal_contract_failure"
     LOCKED_COMPONENT_CONFLICT = "layout.locked_component_conflict"
     LOCKED_COMPONENT_UNKNOWN = "layout.locked_component_unknown"
+    MECHANICS_PLAN_INVALID = "layout.mechanics_plan_invalid"
+    MECHANICS_MARKER_PLACEMENT_FAILED = "layout.mechanics_marker_placement_failed"
     ROOM_PLACEMENT_FAILED = "layout.room_placement_failed"
     TOPOLOGY_INVALID = "layout.topology_invalid"
     UNKNOWN_FLOOR_BOUNDS = "layout.unknown_floor_bounds"
@@ -122,7 +128,8 @@ class LayoutRequest(VersionedContract):
     brief: DungeonBrief
     topology: DungeonTopology
     seed: int
-    generator_version: Literal["orthogonal-v2", "orthogonal-v3"]
+    generator_version: Literal["orthogonal-v2", "orthogonal-v3", "orthogonal-v4"]
+    mechanics_plan: DungeonMechanicsPlanV2 | None = None
     grid: GridSpec = GridSpec()
     floor_bounds: tuple[FloorLayoutBounds, ...] = ()
     locked: LockedLayoutComponents = LockedLayoutComponents()
@@ -142,7 +149,7 @@ class LayoutResult(VersionedContract):
     supported_schema_version = LAYOUT_RESULT_SCHEMA_VERSION
 
     schema_version: Literal["1.0.0"]
-    generator_version: Literal["orthogonal-v2", "orthogonal-v3"]
+    generator_version: Literal["orthogonal-v2", "orthogonal-v3", "orthogonal-v4"]
     seed: int
     random_draw_count: NonNegativeCount
     success: bool

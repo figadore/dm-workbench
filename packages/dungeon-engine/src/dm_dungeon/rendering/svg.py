@@ -21,7 +21,11 @@ from dm_dungeon.contracts.geometry import (
     VerticalLinkLayout,
 )
 from dm_dungeon.contracts.package import DungeonPackage
-from dm_dungeon.contracts.package_v2 import DungeonPackageV2
+from dm_dungeon.contracts.package_v2 import (
+    DoorLayoutV2,
+    DungeonPackageV2,
+    RoomMechanicMarkerKindV2,
+)
 from dm_dungeon.contracts.topology import DoorType, StairDirection
 from dm_dungeon.rendering.annotations import MapCalloutKind, build_map_key
 from dm_dungeon.rendering.contracts import (
@@ -491,18 +495,52 @@ def _render_doors(
     rendered_ids: list[str],
 ) -> None:
     group = ET.SubElement(root, "g", {"id": "doors"})
-    for door in package.doors:
+    doors = (
+        package.composable_doors
+        if isinstance(package, DungeonPackageV2)
+        else package.doors
+    )
+    for door in doors:
         if door.floor_id != floor_id or not _layered_visible(
             door, layers, request.audience
         ):
             continue
         component = _component_group(group, door, "door", rendered_ids)
-        rendered_door_type = (
-            DoorType.NORMAL
-            if request.audience is RenderAudience.PLAYER
-            and door.door_type is DoorType.SECRET
-            else door.door_type
-        )
+        if isinstance(door, DoorLayoutV2):
+            rendered_door_type = (
+                DoorType.NORMAL
+                if request.audience is RenderAudience.PLAYER
+                else (
+                    DoorType.SECRET
+                    if door.mechanics.concealed
+                    else (
+                        DoorType.TRAPPED
+                        if door.mechanics.trap_id is not None
+                        else (
+                            DoorType.LOCKED
+                            if door.mechanics.gate_id is not None
+                            else DoorType.NORMAL
+                        )
+                    )
+                )
+            )
+            if request.audience is RenderAudience.DM:
+                component.set(
+                    "data-door-concealed", str(door.mechanics.concealed).lower()
+                )
+                component.set(
+                    "data-door-gated", str(door.mechanics.gate_id is not None).lower()
+                )
+                component.set(
+                    "data-door-trapped", str(door.mechanics.trap_id is not None).lower()
+                )
+        else:
+            rendered_door_type = (
+                DoorType.NORMAL
+                if request.audience is RenderAudience.PLAYER
+                and door.door_type is DoorType.SECRET
+                else door.door_type
+            )
         component.set("data-door-type", rendered_door_type.value)
         css_class = "door"
         if rendered_door_type is DoorType.SECRET:
@@ -566,6 +604,17 @@ def _render_features_and_hazards(
             component = _component_group(group, hazard, "hazard", rendered_ids)
             component.set("data-hazard-kind", hazard.kind.value)
             _append_geometry(component, hazard.geometry, scale, "hazard")
+    if isinstance(package, DungeonPackageV2):
+        for marker in package.room_mechanic_markers:
+            if marker.floor_id != floor_id or not _layered_visible(
+                marker, layers, request.audience
+            ):
+                continue
+            component = _component_group(
+                group, marker, "room-mechanic-marker", rendered_ids
+            )
+            component.set("data-mechanic-kind", marker.kind.value)
+            _append_room_mechanic_symbol(component, marker.position, marker.kind, scale)
 
 
 def _render_transitions(
@@ -673,6 +722,19 @@ def _render_callouts(
                 {
                     "class": "hazard-callout",
                     "points": f"{entry.label_x},{entry.label_y - half} {entry.label_x + half},{entry.label_y + half} {entry.label_x - half},{entry.label_y + half}",
+                },
+            )
+        elif entry.kind is MapCalloutKind.PUZZLE:
+            half = max(entry.width, entry.height) * 0.55
+            ET.SubElement(
+                group,
+                "polygon",
+                {
+                    "class": "component-callout",
+                    "points": f"{_number(entry.label_x)},{_number(entry.label_y - half)} "
+                    f"{_number(entry.label_x + half)},{_number(entry.label_y)} "
+                    f"{_number(entry.label_x)},{_number(entry.label_y + half)} "
+                    f"{_number(entry.label_x - half)},{_number(entry.label_y)}",
                 },
             )
         elif entry.kind is MapCalloutKind.FEATURE:
@@ -831,6 +893,53 @@ def _render_markers(
                 "class": "marker",
                 "x": _number(position.x * scale - half),
                 "y": _number(position.y * scale - half),
+                "width": _number(half * 2),
+                "height": _number(half * 2),
+            },
+        )
+
+
+def _append_room_mechanic_symbol(
+    parent: ET.Element,
+    point: GridPoint,
+    kind: RoomMechanicMarkerKindV2,
+    scale: int,
+) -> None:
+    """Render trusted, grayscale-safe symbols without prose-bearing metadata."""
+
+    x, y = point.x * scale, point.y * scale
+    half = scale * 0.23
+    if kind is RoomMechanicMarkerKindV2.TRAP:
+        ET.SubElement(
+            parent,
+            "polygon",
+            {
+                "class": "hazard",
+                "points": f"{_number(x)},{_number(y - half)} "
+                f"{_number(x + half)},{_number(y + half)} "
+                f"{_number(x - half)},{_number(y + half)}",
+            },
+        )
+    elif kind is RoomMechanicMarkerKindV2.PUZZLE:
+        ET.SubElement(
+            parent,
+            "polygon",
+            {
+                "class": "marker",
+                "points": f"{_number(x)},{_number(y - half)} "
+                f"{_number(x + half)},{_number(y)} "
+                f"{_number(x)},{_number(y + half)} "
+                f"{_number(x - half)},{_number(y)}",
+            },
+        )
+    else:
+        ET.SubElement(
+            parent,
+            "rect",
+            {
+                "class": "feature",
+                "x": _number(x - half),
+                "y": _number(y - half),
                 "width": _number(half * 2),
                 "height": _number(half * 2),
             },

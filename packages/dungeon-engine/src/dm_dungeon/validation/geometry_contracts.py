@@ -53,6 +53,7 @@ class GeometryDiagnosticCode(StrEnum):
     PATH_ANCHOR_UNKNOWN = "geometry.path_anchor_unknown"
     PATH_NOT_FOUND = "geometry.path_not_found"
     ROOM_CAPACITY_INSUFFICIENT = "geometry.room_capacity_insufficient"
+    ROOM_MECHANIC_MARKER_INVALID = "geometry.room_mechanic_marker_invalid"
     ROOM_OVERLAP = "geometry.room_overlap"
     ROOM_POLYGON_INVALID = "geometry.room_polygon_invalid"
     ROOM_SIZE_CONSTRAINT_VIOLATION = "geometry.room_size_constraint_violation"

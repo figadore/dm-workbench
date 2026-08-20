@@ -9,18 +9,21 @@ from pydantic import ValidationError
 from dm_dungeon import (
     DungeonDesignSpecV2,
     DungeonPackage,
+    DungeonPackageV2,
     compile_dungeon_design_v2,
     load_dungeon_design_v2_json,
     to_canonical_json,
+    validate_geometry,
     validate_topology,
 )
+from dm_dungeon.contracts import GridPoint
 from dm_dungeon.layout import LayoutRequest, generate_layout
 from dm_dungeon.rendering import RenderAudience, SvgRenderRequest, render_svg
 
 
 def _minimal_design() -> dict[str, object]:
     return {
-        "schema_version": "2.1.0",
+        "schema_version": "2.2.0",
         "title": "Salt Cellar",
         "premise": "A tide-worn cache protects a sealed ledger.",
         "themes": ["salt", "tide"],
@@ -101,7 +104,7 @@ def test_compiler_generates_exact_kernel_intent_without_model_ids_or_counts() ->
     result = compile_dungeon_design_v2(_spec(_minimal_design()))
 
     assert result.accepted is True
-    assert result.compiler_version == "dungeon-design-v2-compiler-3"
+    assert result.compiler_version == "dungeon-design-v2-compiler-4"
     assert result.brief is not None
     assert result.topology is not None
     assert result.brief.floor_count == 1
@@ -170,7 +173,9 @@ def test_compiler_hides_rooms_reachable_only_through_secret_access() -> None:
             "from_ref": "entry",
             "to_ref": "hidden",
             "passage": "door",
-            "concealment": "secret",
+            "from_hidden": True,
+            "to_hidden": True,
+            "door_mechanics": {"concealed": True, "challenge": "low"},
         }
     )
 
@@ -195,6 +200,7 @@ def test_one_sided_hidden_door_is_safe_and_visible_from_its_open_side() -> None:
     connection = payload["connections"][0]
     assert isinstance(connection, dict)
     connection["to_hidden"] = True
+    connection["door_mechanics"] = {"concealed": True, "challenge": "low"}
 
     package = _generate(payload)
 
@@ -289,12 +295,12 @@ def test_compiler_derives_dm_only_gate_and_key_from_relative_intent() -> None:
     payload = _minimal_design()
     connection = payload["connections"][0]
     assert isinstance(connection, dict)
-    connection["barrier"] = "locked"
+    connection["door_mechanics"] = {"barrier": "locked", "challenge": "low"}
     payload["dependencies"] = [
         {
             "local_ref": "vault-key",
             "kind": "key",
-            "connection_ref": "entry-vault",
+            "target_ref": "entry-vault",
             "located_in_room_ref": "entry",
             "name": "Salt Key",
         }
@@ -311,12 +317,12 @@ def test_compiler_rejects_multiple_dependencies_for_one_barrier() -> None:
     payload = _minimal_design()
     connection = payload["connections"][0]
     assert isinstance(connection, dict)
-    connection["barrier"] = "locked"
+    connection["door_mechanics"] = {"barrier": "locked", "challenge": "low"}
     payload["dependencies"] = [
         {
             "local_ref": local_ref,
             "kind": "key",
-            "connection_ref": "entry-vault",
+            "target_ref": "entry-vault",
             "located_in_room_ref": "entry",
             "name": name,
         }
@@ -332,6 +338,516 @@ def test_compiler_rejects_multiple_dependencies_for_one_barrier() -> None:
     assert any(
         item.code == "design.duplicate_dependency_target" for item in result.diagnostics
     )
+
+
+def test_compiler_preserves_composable_door_and_vertical_endpoint_mechanics() -> None:
+    payload = _minimal_design()
+    payload["tones"] = ["tense"]
+    floor = payload["floors"][0]
+    assert isinstance(floor, dict)
+    rooms = floor["rooms"]
+    assert isinstance(rooms, list)
+    rooms[0].update(
+        {
+            "tags": ["wet"],
+            "preparation_note": "The wind hides quiet movement.",
+            "encounter_slot": "ambush",
+        }
+    )
+    payload["floors"].append(
+        {
+            "local_ref": "lower",
+            "name": "Lower Vault",
+            "rooms": [{"local_ref": "lens", "name": "Lens", "role": "puzzle"}],
+        }
+    )
+    payload["connections"] = [
+        {
+            "local_ref": "study-door",
+            "from_ref": "entry",
+            "to_ref": "vault",
+            "passage": "door",
+            "from_hidden": True,
+            "door_mechanics": {
+                "concealed": True,
+                "barrier": "locked",
+                "hazard": "trapped",
+                "challenge": "moderate",
+            },
+        },
+        {
+            "local_ref": "vault-stairs",
+            "from_ref": "vault",
+            "to_ref": "lens",
+            "passage": "stairs",
+            "to_hidden": True,
+            "endpoint_doors": [
+                {
+                    "local_ref": "lens-hatch",
+                    "endpoint": "to",
+                    "kind": "hatch",
+                    "mechanics": {
+                        "concealed": True,
+                        "barrier": "puzzle",
+                        "hazard": "trapped",
+                        "challenge": "high",
+                    },
+                }
+            ],
+        },
+    ]
+    payload["objectives"] = [{"room_ref": "lens", "kind": "final_objective"}]
+    payload["dependencies"] = [
+        {
+            "local_ref": "study-key",
+            "kind": "key",
+            "target_ref": "study-door",
+            "located_in_room_ref": "entry",
+            "name": "Brass Key",
+        },
+        {
+            "local_ref": "lens-clue",
+            "kind": "clue",
+            "target_ref": "lens-hatch",
+            "located_in_room_ref": "vault",
+            "name": "Star Chart",
+        },
+    ]
+    payload["traps"] = [
+        {
+            "local_ref": "vault-glyph",
+            "room_ref": "vault",
+            "name": "Glyph",
+            "trigger": "Touching the lens.",
+            "effect": "A thunderous ward sounds.",
+            "challenge": "high",
+        }
+    ]
+    payload["puzzles"] = [
+        {
+            "local_ref": "star-dial",
+            "room_ref": "lens",
+            "name": "Star Dial",
+            "mechanism": "Three rotating rings.",
+            "clue_refs": ["lens-clue"],
+            "solution": "Align the summer constellation.",
+            "consequence": "The hatch releases.",
+            "challenge": "moderate",
+        }
+    ]
+    payload["features"] = [
+        {
+            "local_ref": "fallen-lens",
+            "room_ref": "lens",
+            "kind": "altar",
+            "name": "Fallen Lens",
+            "description": "A cracked brass lens fills the chamber.",
+        }
+    ]
+    payload["loops"] = []
+    payload["branches"] = []
+
+    result = compile_dungeon_design_v2(_spec(payload))
+
+    assert result.accepted and result.mechanics_plan is not None
+    mechanics = {item.endpoint: item for item in result.mechanics_plan.door_mechanics}
+    assert mechanics[None].gate_id and mechanics[None].trap_id
+    assert mechanics[None].discovery_difficulty == 13
+    vertical = mechanics[next(item for item in mechanics if item is not None)]
+    assert vertical.gate_id and vertical.trap_id
+    assert vertical.discovery_difficulty == vertical.unlock_difficulty == 16
+    assert vertical.disable_difficulty == 16
+    assert len(result.mechanics_plan.room_traps) == 1
+    assert len(result.mechanics_plan.room_puzzles) == 1
+    assert len(result.mechanics_plan.room_features) == 1
+
+    assert result.brief is not None and result.topology is not None
+    assert {item.id for item in result.topology.gates} == {
+        mechanics[None].gate_id,
+        vertical.gate_id,
+    }
+    assert result.topology.keys[0].opens_gate_ids == (mechanics[None].gate_id,)
+    assert result.topology.clues[0].supports_gate_ids == (vertical.gate_id,)
+    layout = generate_layout(
+        LayoutRequest(
+            schema_version="1.0.0",
+            package_id="mechanics-aware-v2",
+            brief=result.brief,
+            topology=result.topology,
+            seed=1042,
+            generator_version="orthogonal-v4",
+            mechanics_plan=result.mechanics_plan,
+            floor_bounds=result.floor_bounds,
+        )
+    )
+    assert layout.success is True
+    assert isinstance(layout.package, DungeonPackageV2)
+    package = layout.package
+    assert package.doors == ()
+    assert len(package.composable_doors) == 1
+    door = package.composable_doors[0]
+    assert door.id == mechanics[None].id
+    assert door.connection_id == mechanics[None].connection_id
+    assert door.mechanics.gate_id == mechanics[None].gate_id
+    assert door.mechanics.trap_id == mechanics[None].trap_id
+    assert len(package.vertical_endpoint_doors) == 1
+    assert {marker.id for marker in package.room_mechanic_markers} == {
+        item.id
+        for item in (
+            *result.mechanics_plan.room_traps,
+            *result.mechanics_plan.room_puzzles,
+            *result.mechanics_plan.room_features,
+        )
+    }
+    markers = {marker.kind.value: marker for marker in package.room_mechanic_markers}
+    assert markers["trap"].visibility.value == "dm_only"
+    # The lower room is reachable only through a hidden endpoint, so its
+    # otherwise physical puzzle/feature markers remain fail-closed too.
+    assert markers["puzzle"].visibility.value == "dm_only"
+    assert markers["feature"].visibility.value == "dm_only"
+    assert (
+        len(
+            {
+                (marker.room_id, marker.position.x, marker.position.y)
+                for marker in markers.values()
+            }
+        )
+        == 3
+    )
+    hatch = package.vertical_endpoint_doors[0]
+    assert hatch.id == vertical.id
+    assert hatch.kind.value == "hatch"
+    assert (
+        hatch.position
+        == next(
+            endpoint
+            for link in package.vertical_links
+            if link.id == vertical.connection_id
+            for endpoint in link.endpoints
+            if endpoint.floor_id == hatch.floor_id
+        ).position
+    )
+    dm_svg = _render(package, door.floor_id, RenderAudience.DM)
+    player_svg = _render(package, door.floor_id, RenderAudience.PLAYER)
+    assert f'data-component-id="{door.id}"' in dm_svg
+    assert 'data-door-concealed="true"' in dm_svg
+    assert 'data-door-gated="true"' in dm_svg
+    assert 'data-door-trapped="true"' in dm_svg
+    assert f'data-component-id="{door.id}"' not in player_svg
+    trap = markers["trap"]
+    puzzle = markers["puzzle"]
+    feature = markers["feature"]
+    assert f'data-component-id="{trap.id}"' in dm_svg
+    assert f'data-component-id="{trap.id}"' not in player_svg
+    assert f'data-component-id="{puzzle.id}"' not in player_svg
+    assert f'data-component-id="{feature.id}"' not in player_svg
+
+    invalid_marker = trap.model_copy(update={"position": GridPoint(x=0, y=0)})
+    invalid_package = package.model_copy(
+        update={
+            "room_mechanic_markers": (
+                invalid_marker,
+                *(
+                    marker
+                    for marker in package.room_mechanic_markers
+                    if marker.id != trap.id
+                ),
+            )
+        }
+    )
+    assert "geometry.room_mechanic_marker_invalid" in {
+        item.code.value for item in validate_geometry(invalid_package).diagnostics
+    }
+
+
+@pytest.mark.parametrize(
+    ("concealed", "barrier", "hazard"),
+    (
+        (False, "none", "none"),
+        (True, "none", "none"),
+        (False, "locked", "none"),
+        (False, "puzzle", "none"),
+        (False, "none", "trapped"),
+        (True, "locked", "none"),
+        (True, "puzzle", "none"),
+        (True, "none", "trapped"),
+        (False, "locked", "trapped"),
+        (False, "puzzle", "trapped"),
+        (True, "locked", "trapped"),
+        (True, "puzzle", "trapped"),
+    ),
+)
+def test_compiler_preserves_every_same_floor_door_mechanics_combination(
+    concealed: bool, barrier: str, hazard: str
+) -> None:
+    payload = _minimal_design()
+    connection = payload["connections"][0]
+    assert isinstance(connection, dict)
+    connection["from_hidden"] = concealed
+    connection["door_mechanics"] = {
+        "concealed": concealed,
+        "barrier": barrier,
+        "hazard": hazard,
+        **(
+            {"challenge": "moderate"}
+            if concealed or barrier != "none" or hazard != "none"
+            else {}
+        ),
+    }
+    if barrier != "none":
+        payload["dependencies"] = [
+            {
+                "local_ref": "door-dependency",
+                "kind": "key" if barrier == "locked" else "clue",
+                "target_ref": "entry-vault",
+                "located_in_room_ref": "entry",
+                "name": "Synthetic Dependency",
+            }
+        ]
+
+    result = compile_dungeon_design_v2(_spec(payload))
+
+    assert result.accepted and result.mechanics_plan is not None
+    mechanics = result.mechanics_plan.door_mechanics[0]
+    assert mechanics.endpoint is None
+    assert mechanics.concealed is concealed
+    assert (mechanics.gate_id is not None) is (barrier != "none")
+    assert mechanics.gate_kind.value == barrier
+    assert (mechanics.trap_id is not None) is (hazard == "trapped")
+    assert (mechanics.discovery_difficulty is not None) is concealed
+    assert (mechanics.unlock_difficulty is not None) is (barrier != "none")
+    assert (mechanics.disable_difficulty is not None) is (hazard == "trapped")
+
+
+@pytest.mark.parametrize("passage", ("stairs", "ladder"))
+@pytest.mark.parametrize("endpoint", ("from", "to"))
+@pytest.mark.parametrize(
+    ("concealed", "barrier", "hazard"),
+    (
+        (False, "none", "none"),
+        (True, "none", "none"),
+        (False, "locked", "none"),
+        (False, "puzzle", "none"),
+        (False, "none", "trapped"),
+        (True, "locked", "none"),
+        (True, "puzzle", "none"),
+        (True, "none", "trapped"),
+        (False, "locked", "trapped"),
+        (False, "puzzle", "trapped"),
+        (True, "locked", "trapped"),
+        (True, "puzzle", "trapped"),
+    ),
+)
+def test_compiler_preserves_every_vertical_endpoint_mechanics_combination(
+    passage: str, endpoint: str, concealed: bool, barrier: str, hazard: str
+) -> None:
+    payload = _minimal_design()
+    upper = payload["floors"][0]
+    assert isinstance(upper, dict)
+    upper["rooms"] = [{"local_ref": "entry", "name": "Wet Steps", "role": "entrance"}]
+    payload["floors"].append(
+        {
+            "local_ref": "lower",
+            "name": "Lower Vault",
+            "rooms": [{"local_ref": "vault", "name": "Vault", "role": "objective"}],
+        }
+    )
+    endpoint_mechanics = {
+        "concealed": concealed,
+        "barrier": barrier,
+        "hazard": hazard,
+        **(
+            {"challenge": "high"}
+            if concealed or barrier != "none" or hazard != "none"
+            else {}
+        ),
+    }
+    payload["connections"] = [
+        {
+            "local_ref": "descent",
+            "from_ref": "entry",
+            "to_ref": "vault",
+            "passage": passage,
+            f"{endpoint}_hidden": concealed,
+            "endpoint_doors": [
+                {
+                    "local_ref": "descent-hatch",
+                    "endpoint": endpoint,
+                    "kind": "hatch",
+                    "mechanics": endpoint_mechanics,
+                }
+            ],
+        }
+    ]
+    payload["objectives"] = [{"room_ref": "vault", "kind": "final_objective"}]
+    if barrier != "none":
+        payload["dependencies"] = [
+            {
+                "local_ref": "hatch-dependency",
+                "kind": "key" if barrier == "locked" else "clue",
+                "target_ref": "descent-hatch",
+                "located_in_room_ref": "entry",
+                "name": "Synthetic Dependency",
+            }
+        ]
+
+    result = compile_dungeon_design_v2(_spec(payload))
+
+    assert result.accepted and result.mechanics_plan is not None
+    mechanics = result.mechanics_plan.door_mechanics[0]
+    assert mechanics.endpoint is not None and mechanics.endpoint.value == endpoint
+    assert (
+        mechanics.endpoint_kind is not None and mechanics.endpoint_kind.value == "hatch"
+    )
+    assert mechanics.concealed is concealed
+    assert (mechanics.gate_id is not None) is (barrier != "none")
+    assert mechanics.gate_kind.value == barrier
+    assert (mechanics.trap_id is not None) is (hazard == "trapped")
+    assert (mechanics.discovery_difficulty is not None) is concealed
+    assert (mechanics.unlock_difficulty is not None) is (barrier != "none")
+    assert (mechanics.disable_difficulty is not None) is (hazard == "trapped")
+
+
+def test_mechanics_aware_layout_rejects_a_missing_compiler_plan() -> None:
+    result = compile_dungeon_design_v2(_spec(_minimal_design()))
+    assert result.accepted and result.brief is not None and result.topology is not None
+
+    layout = generate_layout(
+        LayoutRequest(
+            schema_version="1.0.0",
+            package_id="missing-mechanics-plan",
+            brief=result.brief,
+            topology=result.topology,
+            seed=1042,
+            generator_version="orthogonal-v4",
+            floor_bounds=result.floor_bounds,
+        )
+    )
+
+    assert layout.success is False
+    assert layout.diagnostics[0].code.value == "layout.mechanics_plan_invalid"
+
+
+def test_design_contract_rejects_unsupported_connection_mechanics_matrix() -> None:
+    payload = _minimal_design()
+    connection = payload["connections"][0]
+    assert isinstance(connection, dict)
+    connection["passage"] = "passage"
+    connection["door_mechanics"] = {"barrier": "locked", "challenge": "low"}
+
+    with pytest.raises(ValidationError, match="same-floor passages"):
+        _spec(payload)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    (
+        ("from_hidden", True),
+        ("door_mechanics", {"barrier": "locked", "challenge": "low"}),
+        (
+            "endpoint_doors",
+            [
+                {
+                    "local_ref": "invalid-endpoint",
+                    "endpoint": "from",
+                    "kind": "door",
+                }
+            ],
+        ),
+    ),
+)
+def test_design_contract_rejects_all_same_floor_passage_mechanics(
+    field: str, value: object
+) -> None:
+    payload = _minimal_design()
+    connection = payload["connections"][0]
+    assert isinstance(connection, dict)
+    connection["passage"] = "passage"
+    connection[field] = value
+
+    with pytest.raises(ValidationError, match="same-floor passages"):
+        _spec(payload)
+
+
+def test_design_contract_rejects_endpoint_doors_on_same_floor_doors() -> None:
+    payload = _minimal_design()
+    connection = payload["connections"][0]
+    assert isinstance(connection, dict)
+    connection["endpoint_doors"] = [
+        {
+            "local_ref": "invalid-endpoint",
+            "endpoint": "from",
+            "kind": "door",
+        }
+    ]
+
+    with pytest.raises(ValidationError, match="same-floor doors"):
+        _spec(payload)
+
+
+def test_design_contract_rejects_vertical_transition_mechanics_without_endpoint_door() -> (
+    None
+):
+    payload = _minimal_design()
+    upper = payload["floors"][0]
+    assert isinstance(upper, dict)
+    upper["rooms"] = [{"local_ref": "entry", "name": "Wet Steps", "role": "entrance"}]
+    payload["floors"].append(
+        {
+            "local_ref": "lower",
+            "name": "Lower Vault",
+            "rooms": [{"local_ref": "vault", "name": "Vault", "role": "objective"}],
+        }
+    )
+    payload["connections"] = [
+        {
+            "local_ref": "descent",
+            "from_ref": "entry",
+            "to_ref": "vault",
+            "passage": "stairs",
+            "door_mechanics": {"hazard": "trapped", "challenge": "high"},
+        }
+    ]
+    payload["objectives"] = [{"room_ref": "vault", "kind": "final_objective"}]
+
+    with pytest.raises(ValidationError, match="require explicit endpoint_doors"):
+        _spec(payload)
+
+
+def test_design_contract_rejects_concealed_vertical_hatch_without_hidden_endpoint() -> (
+    None
+):
+    payload = _minimal_design()
+    upper = payload["floors"][0]
+    assert isinstance(upper, dict)
+    upper["rooms"] = [{"local_ref": "entry", "name": "Wet Steps", "role": "entrance"}]
+    payload["floors"].append(
+        {
+            "local_ref": "lower",
+            "name": "Lower Vault",
+            "rooms": [{"local_ref": "vault", "name": "Vault", "role": "objective"}],
+        }
+    )
+    payload["connections"] = [
+        {
+            "local_ref": "descent",
+            "from_ref": "entry",
+            "to_ref": "vault",
+            "passage": "ladder",
+            "endpoint_doors": [
+                {
+                    "local_ref": "descent-hatch",
+                    "endpoint": "to",
+                    "kind": "hatch",
+                    "mechanics": {"concealed": True, "challenge": "high"},
+                }
+            ],
+        }
+    ]
+    payload["objectives"] = [{"room_ref": "vault", "kind": "final_objective"}]
+
+    with pytest.raises(ValidationError, match="requires its endpoint to be hidden"):
+        _spec(payload)
 
 
 def test_design_schema_round_trip_and_unknown_version_fail() -> None:

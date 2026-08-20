@@ -64,13 +64,16 @@ from dm_dungeon import (
     validate_geometry,
     validate_topology,
 )
-from dm_dungeon.layout import ORTHOGONAL_LAYOUT_GENERATOR_VERSION
+from dm_dungeon.layout import (
+    ORTHOGONAL_LAYOUT_GENERATOR_VERSION,
+    PRE_MECHANICS_ORTHOGONAL_LAYOUT_GENERATOR_VERSION,
+)
 
 _DUNGEON_CONTEXT_KIND = "dungeon_generation"
 _DUNGEON_INTENT_SCHEMA_NAME = "dungeon_generation_intent_v1"
 _DUNGEON_INTENT_SCHEMA_VERSION = "1.0.0"
 _DUNGEON_V2_SCHEMA_NAME = "dungeon_generation_proposal_v2"
-_DUNGEON_V2_SCHEMA_VERSION = "2.1.0"
+_DUNGEON_V2_SCHEMA_VERSION = "2.2.0"
 _SUBMIT_DUNGEON_INTENT_V2_TOOL = "submit_dungeon_intent_v2"
 _REVIEW_BRIEF_TOOL = "review_dungeon_brief"
 _REVIEW_TOPOLOGY_TOOL = "review_dungeon_topology"
@@ -88,9 +91,16 @@ _MAX_REPAIR_DIAGNOSTICS = 16
 _V2_CONNECTION_GUIDANCE = (
     "Connection rules: use passage or door only between rooms on one floor; use "
     "stairs or ladder only between different floors. Use from_hidden and to_hidden "
-    "independently for doors, stairs, or ladders; for example, a ladder hidden under "
-    "an upper-floor rug has from_hidden true and to_hidden false. Locked, puzzle, "
-    "and trapped intent still requires a door."
+    "independently; a ladder hidden under an upper-floor rug has from_hidden true "
+    "and to_hidden false. Same-floor passages have no hidden, barrier, or trap "
+    "mechanics. A same-floor door uses from_hidden/to_hidden "
+    "plus door_mechanics {concealed, barrier, hazard, challenge}; a lock or puzzle "
+    "also needs one dependency targeting the door local_ref. Stairs/ladders may have "
+    "hidden endpoints without a door. A vertical lock, puzzle, or trap instead needs "
+    "an explicit endpoint_doors item {local_ref, endpoint: from|to, kind: door|hatch, "
+    "mechanics}; target its local_ref with the dependency. A trap effect or puzzle "
+    "solution that is genuinely unknown must be exactly 'unknown'; it remains a DM "
+    "draft detail and prevents approval for play rather than being invented."
 )
 logger = get_logger(__name__)
 
@@ -231,7 +241,7 @@ def resolve_dungeon_v2_prompt_profile(
     return base.model_copy(
         update={
             "task_profile_id": uuid.UUID("77777777-7777-7777-7777-777777777712"),
-            "task_profile_version": "2.1.0",
+            "task_profile_version": "2.2.0",
             "prompt_version": "prompt-3",
             "instruction_version": "instructions-3",
             "output_schema_name": _DUNGEON_V2_SCHEMA_NAME,
@@ -241,6 +251,15 @@ def resolve_dungeon_v2_prompt_profile(
             "tool_budget": 1,
         }
     )
+
+
+class DungeonProposalRejectedAfterRepair(Exception):
+    """Both bounded V2 submissions were structurally valid but not acceptable.
+
+    This is deliberately distinct from a model abstention: deterministic compiler or
+    preflight diagnostics rejected the replacement proposal after the one permitted
+    fresh repair request.
+    """
 
 
 class DungeonV2SubmissionService:
@@ -335,19 +354,25 @@ class DungeonV2SubmissionService:
                 "diagnostics": list(rejected.diagnostics),
             }
             repaired_profile = _remaining_submission_profile(profile, record)
-            submitted, record = runner.run(
-                profile=repaired_profile,
-                run_input=ModelRunInput(
-                    messages=(
-                        PromptMessage(
-                            role="user", content=_canonical_message(repair_document)
-                        ),
-                    )
-                ),
-                tool=tool,
-                handler=handle,
-                deadline_monotonic=deadline,
-            )
+            try:
+                submitted, record = runner.run(
+                    profile=repaired_profile,
+                    run_input=ModelRunInput(
+                        messages=(
+                            PromptMessage(
+                                role="user",
+                                content=_canonical_message(repair_document),
+                            ),
+                        )
+                    ),
+                    tool=tool,
+                    handler=handle,
+                    deadline_monotonic=deadline,
+                )
+            except StructuredSubmissionRejected as error:
+                raise DungeonProposalRejectedAfterRepair(
+                    "dungeon proposal was rejected after its one repair request"
+                ) from error
             assert isinstance(submitted, SubmitDungeonIntentV2Input)
             runs.append(record)
             repaired = True
@@ -383,16 +408,25 @@ class DungeonV2SubmissionService:
                 compiled = None
                 request = None
                 repaired_profile = _remaining_submission_profile(profile, record)
-                submitted, record = runner.run(
-                    profile=repaired_profile,
-                    run_input=repair_input,
-                    tool=tool,
-                    handler=handle,
-                    deadline_monotonic=deadline,
-                )
+                try:
+                    submitted, record = runner.run(
+                        profile=repaired_profile,
+                        run_input=repair_input,
+                        tool=tool,
+                        handler=handle,
+                        deadline_monotonic=deadline,
+                    )
+                except StructuredSubmissionRejected as error:
+                    raise DungeonProposalRejectedAfterRepair(
+                        "dungeon proposal was rejected after its one repair request"
+                    ) from error
                 assert isinstance(submitted, SubmitDungeonIntentV2Input)
                 runs.append(record)
                 repaired = True
+        if repaired and submitted.proposal.abstention is None and request is None:
+            raise DungeonProposalRejectedAfterRepair(
+                "dungeon proposal was rejected after its one repair request"
+            )
         return DungeonV2SubmissionResult(
             proposal=submitted.proposal,
             compilation=compiled,
@@ -626,7 +660,7 @@ def compile_layout_request(
     source: dict[str, JsonValue] = {
         "intent": intent_document,
         "seed": seed,
-        "generator_version": ORTHOGONAL_LAYOUT_GENERATOR_VERSION,
+        "generator_version": PRE_MECHANICS_ORTHOGONAL_LAYOUT_GENERATOR_VERSION,
     }
     package_id = f"dungeon_{canonical_json_sha256(source)[:32]}"
     return LayoutRequest(
@@ -635,7 +669,7 @@ def compile_layout_request(
         brief=intent.brief,
         topology=intent.topology,
         seed=seed,
-        generator_version=ORTHOGONAL_LAYOUT_GENERATOR_VERSION,
+        generator_version=PRE_MECHANICS_ORTHOGONAL_LAYOUT_GENERATOR_VERSION,
     )
 
 
@@ -770,6 +804,7 @@ def _compile_v2_layout_request(
         compiled.accepted
         and compiled.brief is not None
         and compiled.topology is not None
+        and compiled.mechanics_plan is not None
     )
     assert compiled.output_hash is not None
     return LayoutRequest(
@@ -779,6 +814,7 @@ def _compile_v2_layout_request(
         topology=compiled.topology,
         seed=seed,
         generator_version=ORTHOGONAL_LAYOUT_GENERATOR_VERSION,
+        mechanics_plan=compiled.mechanics_plan,
         floor_bounds=compiled.floor_bounds,
     )
 
@@ -1144,7 +1180,7 @@ def _validate_v2_profile(profile: ResolvedModelRunProfile) -> None:
     if profile.output_schema_name != _DUNGEON_V2_SCHEMA_NAME:
         raise ValueError("V2 submission requires the dungeon V2 proposal schema")
     if profile.output_schema_version != _DUNGEON_V2_SCHEMA_VERSION:
-        raise ValueError("V2 submission requires proposal schema version 2.1.0")
+        raise ValueError("V2 submission requires proposal schema version 2.2.0")
     if profile.allowed_tools != (_SUBMIT_DUNGEON_INTENT_V2_TOOL,):
         raise ValueError("V2 submission exposes only submit_dungeon_intent_v2")
     if profile.turn_budget != 1 or profile.tool_budget != 1:

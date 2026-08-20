@@ -1,11 +1,14 @@
 """Synthetic P7-09 prompt-to-dungeon workflow coverage."""
 
+import json
 import uuid
 from copy import deepcopy
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from dm_assistant.errors import ConflictError
 from dm_assistant.modules.modeling import (
     DungeonGenerationIntentV1,
     GatewayModelCatalogEntry,
@@ -25,12 +28,15 @@ from dm_assistant.orchestration.dungeons import (
     CreatePromptedDungeonWorkflow,
     DungeonGenerationRegressionCase,
     DungeonPromptService,
+    DungeonStudioService,
+    DungeonStudioSpecification,
     DungeonV2SubmissionService,
     DungeonWorkflowResult,
     PromptDungeonWorkflow,
 )
 from dm_assistant.orchestration.dungeons.application import _failure_code
 from dm_assistant.orchestration.dungeons.prompting import (
+    DungeonProposalRejectedAfterRepair,
     _build_standalone_context,
     _initial_v2_model_input,
     _v2_lineage,
@@ -39,10 +45,14 @@ from dm_assistant.orchestration.dungeons.prompting import (
     resolve_dungeon_v2_prompt_profile,
 )
 from dm_assistant.orchestration.dungeons.service import (
+    _build_dm_guide,
     _build_dm_notes,
+    _build_preparation_readiness,
+    _dm_guide_text,
     _dm_notes_asset,
     _dm_notes_text,
     _dm_presentation_package,
+    _require_preparation_ready,
 )
 from dm_assistant.orchestration.modeling import (
     GatewayCompletion,
@@ -116,6 +126,9 @@ def test_prompt_attempt_classifies_missing_usage_repair_without_abstention() -> 
     )
     assert _failure_code(ModelRunAbstained("model rejected the proposal")) == (
         "dungeon_prompt_failed"
+    )
+    assert _failure_code(DungeonProposalRejectedAfterRepair()) == (
+        "dungeon_prompt_rejected_after_repair"
     )
 
 
@@ -245,13 +258,16 @@ def test_v2_prompt_explains_connection_constraints() -> None:
     assert "use stairs or ladder only between different floors" in message
     assert "from_hidden and to_hidden independently" in message
     assert "from_hidden true and to_hidden false" in message
+    assert "vertical lock, puzzle, or trap" in message
+    assert "explicit endpoint_doors item" in message
+    assert "target its local_ref with the dependency" in message
 
 
 def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
     proposal = {
         "proposal_version": "2",
         "design": {
-            "schema_version": "2.1.0",
+            "schema_version": "2.2.0",
             "title": "Salt Cellar",
             "premise": "A sealed ledger waits below the tide.",
             "themes": ["salt"],
@@ -319,11 +335,32 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
     assert tuple(schema.name for schema in gateway.tool_schemas) == (
         "submit_dungeon_intent_v2",
     )
+    layout = generate_layout(result.layout_request)
+    assert layout.success and layout.package is not None
+    guide = _build_dm_guide(
+        result.layout_request, layout.package, (_v2_lineage(result.model_run),)
+    )
+    assert guide is not None
+    assert {item.map_reference.token for item in guide.rooms} == {"1", "2"}
+    assert guide.connections[0].map_reference is not None
+    assert guide.connections[0].map_reference.token == "D1"
+    assert "# Salt Cellar — DM guide" in _dm_guide_text(guide)
+    assert "D1 — door." in _dm_guide_text(guide)
+    assert _dm_notes_asset(
+        result.layout_request, _build_dm_notes(result.layout_request, None), guide
+    ).data == _dm_guide_text(guide).encode("utf-8")
 
     invalid = deepcopy(proposal)
     invalid_design = invalid["design"]
     assert isinstance(invalid_design, dict)
-    invalid_design["objectives"] = []
+    invalid_connections = invalid_design["connections"]
+    assert isinstance(invalid_connections, list)
+    invalid_connection = invalid_connections[0]
+    assert isinstance(invalid_connection, dict)
+    invalid_connection["door_mechanics"] = {
+        "barrier": "locked",
+        "challenge": "low",
+    }
     repair_gateway = FakeGatewayClient(
         (
             GatewayCompletion(
@@ -372,6 +409,44 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
     first_lineage, repaired_lineage = (_v2_lineage(run) for run in repaired.model_runs)
     assert first_lineage.proposal_v2 is not None
     assert first_lineage.proposal_v2 != repaired_lineage.proposal_v2
+    repair_document = json.loads(repair_gateway.messages[1][0].content)
+    assert repair_document["diagnostics"][0]["code"] == "design.missing_dependency"
+
+    exhausted_repair_gateway = FakeGatewayClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_intent_v2",
+                        call_id="submit-invalid-again",
+                        arguments={"proposal": invalid},
+                    ),
+                ),
+                input_tokens=10,
+                output_tokens=10,
+            ),
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_intent_v2",
+                        call_id="submit-repair-invalid-again",
+                        arguments={"proposal": invalid},
+                    ),
+                ),
+                input_tokens=10,
+                output_tokens=10,
+            ),
+        )
+    )
+    with pytest.raises(DungeonProposalRejectedAfterRepair) as exhausted:
+        DungeonV2SubmissionService(exhausted_repair_gateway).submit(
+            profile=profile,
+            run_input=ModelRunInput(
+                messages=(PromptMessage(role="user", content="synthetic request"),)
+            ),
+            seed=1842,
+        )
+    assert not isinstance(exhausted.value, ModelRunAbstained)
 
     schema_invalid = deepcopy(proposal)
     invalid_schema_design = schema_invalid["design"]
@@ -425,6 +500,247 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
     repair_message = schema_repair_gateway.messages[1][0].content
     assert "submission.schema_invalid" in repair_message
     assert "Salt Cellar" not in repair_message
+
+
+def test_v2_dm_guide_retains_requested_mechanics_and_creative_details() -> None:
+    proposal = {
+        "proposal_version": "2",
+        "design": {
+            "schema_version": "2.2.0",
+            "title": "Star Vault",
+            "premise": "A drowned observatory seals its lens below a trapped door.",
+            "themes": ["salt"],
+            "floors": [
+                {
+                    "local_ref": "upper",
+                    "name": "Upper Archive",
+                    "rooms": [
+                        {
+                            "local_ref": "entry",
+                            "name": "Wet Steps",
+                            "role": "entrance",
+                            "tags": ["flooded"],
+                            "preparation_note": "Drips conceal soft footsteps.",
+                            "encounter_slot": "ambush",
+                        },
+                        {"local_ref": "vault", "name": "Chart Vault", "role": "puzzle"},
+                    ],
+                },
+                {
+                    "local_ref": "lower",
+                    "name": "Lower Lens",
+                    "rooms": [
+                        {
+                            "local_ref": "lens",
+                            "name": "Lens Chamber",
+                            "role": "objective",
+                        }
+                    ],
+                },
+            ],
+            "connections": [
+                {
+                    "local_ref": "vault-door",
+                    "from_ref": "entry",
+                    "to_ref": "vault",
+                    "passage": "door",
+                    "from_hidden": True,
+                    "door_mechanics": {
+                        "concealed": True,
+                        "barrier": "locked",
+                        "hazard": "trapped",
+                        "challenge": "moderate",
+                    },
+                },
+                {
+                    "local_ref": "vault-stairs",
+                    "from_ref": "vault",
+                    "to_ref": "lens",
+                    "passage": "stairs",
+                    "to_hidden": True,
+                    "endpoint_doors": [
+                        {
+                            "local_ref": "lens-hatch",
+                            "endpoint": "to",
+                            "kind": "hatch",
+                            "mechanics": {
+                                "concealed": True,
+                                "barrier": "puzzle",
+                                "hazard": "trapped",
+                                "challenge": "high",
+                            },
+                        }
+                    ],
+                },
+            ],
+            "objectives": [{"room_ref": "lens", "kind": "final_objective"}],
+            "dependencies": [
+                {
+                    "local_ref": "vault-key",
+                    "kind": "key",
+                    "target_ref": "vault-door",
+                    "located_in_room_ref": "entry",
+                    "name": "Brass Key",
+                },
+                {
+                    "local_ref": "lens-clue",
+                    "kind": "clue",
+                    "target_ref": "lens-hatch",
+                    "located_in_room_ref": "vault",
+                    "name": "Star Chart",
+                },
+            ],
+            "traps": [
+                {
+                    "local_ref": "vault-glyph",
+                    "room_ref": "vault",
+                    "name": "Thunder Glyph",
+                    "trigger": "Touch the star chart.",
+                    "effect": "A thunderous ward sounds.",
+                    "challenge": "high",
+                }
+            ],
+            "puzzles": [
+                {
+                    "local_ref": "star-dial",
+                    "room_ref": "lens",
+                    "name": "Star Dial",
+                    "mechanism": "Three rotating rings.",
+                    "clue_refs": ["lens-clue"],
+                    "solution": "Align the summer constellation.",
+                    "consequence": "The hatch releases.",
+                    "challenge": "moderate",
+                }
+            ],
+            "features": [
+                {
+                    "local_ref": "fallen-lens",
+                    "room_ref": "lens",
+                    "kind": "altar",
+                    "name": "Fallen Lens",
+                    "description": "A cracked brass lens fills the chamber.",
+                }
+            ],
+        },
+    }
+    gateway = FakeGatewayClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_intent_v2",
+                        call_id="submit-guide",
+                        arguments={"proposal": proposal},
+                    ),
+                ),
+                input_tokens=10,
+                output_tokens=10,
+            ),
+        )
+    )
+    profile = resolve_dungeon_v2_prompt_profile(
+        provider_id="faux",
+        model_id="faux_deterministic_v1",
+        capabilities=("text", "tool_calls"),
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+    )
+    result = DungeonV2SubmissionService(gateway).submit(
+        profile=profile,
+        run_input=ModelRunInput(
+            messages=(PromptMessage(role="user", content="synthetic request"),)
+        ),
+        seed=1842,
+    )
+    assert result.layout_request is not None
+    layout = generate_layout(result.layout_request)
+    assert layout.success and layout.package is not None
+
+    guide = _build_dm_guide(
+        result.layout_request, layout.package, (_v2_lineage(result.model_run),)
+    )
+
+    assert guide is not None
+    assert (
+        next(item for item in guide.rooms if item.name == "Wet Steps").preparation_note
+        == "Drips conceal soft footsteps."
+    )
+    door = next(item for item in guide.connections if item.passage == "door")
+    hatch = next(item for item in guide.connections if item.endpoint is not None)
+    assert door.concealed and door.gate_id and door.trap_id
+    assert (
+        door.discovery_difficulty
+        == door.unlock_difficulty
+        == door.disable_difficulty
+        == 13
+    )
+    assert hatch.endpoint_kind is not None and hatch.endpoint_kind.value == "hatch"
+    assert hatch.concealed and hatch.gate_id and hatch.trap_id
+    assert (
+        hatch.discovery_difficulty
+        == hatch.unlock_difficulty
+        == hatch.disable_difficulty
+        == 16
+    )
+    assert guide.dependencies[0].name == "Brass Key"
+    assert guide.traps[0].trigger == "Touch the star chart."
+    assert guide.traps[0].effect == "A thunderous ward sounds."
+    assert guide.puzzles[0].solution == "Align the summer constellation."
+    assert guide.features[0].description == "A cracked brass lens fills the chamber."
+    text = _dm_guide_text(guide)
+    assert "disable 13" in text
+    assert "Solution: Align the summer constellation." in text
+    assert "Effect: A thunderous ward sounds." in text
+    complete_readiness = _build_preparation_readiness(guide)
+    assert complete_readiness is not None
+    assert complete_readiness.ready
+
+    incomplete = guide.model_copy(
+        update={
+            "dependencies": (),
+            "traps": (guide.traps[0].model_copy(update={"effect": "unknown"}),),
+            "puzzles": (guide.puzzles[0].model_copy(update={"solution": "TBD"}),),
+        }
+    )
+    readiness = _build_preparation_readiness(incomplete)
+    assert readiness is not None
+    assert readiness.ready is False
+    assert [item.code for item in readiness.diagnostics] == [
+        "dungeon_preparation.lock_dependency_missing",
+        "dungeon_preparation.lock_dependency_missing",
+        "dungeon_preparation.trap_effect_unknown",
+        "dungeon_preparation.puzzle_solution_unknown",
+    ]
+    specification = DungeonStudioSpecification(
+        schema_version="1.0.0",
+        layout_request=result.layout_request,
+        package=layout.package,
+        dm_guide=incomplete,
+        preparation_readiness=readiness,
+        model_lineage=(_v2_lineage(result.model_run),),
+    )
+    with pytest.raises(ConflictError, match="preparation is incomplete"):
+        _require_preparation_ready(specification)
+
+    class IncompletePreparation:
+        def get_version(
+            self, campaign_id: uuid.UUID, artifact_version_id: uuid.UUID
+        ) -> SimpleNamespace:
+            del campaign_id, artifact_version_id
+            return SimpleNamespace(specification=specification.model_dump(mode="json"))
+
+        def transition_artifact(self, command: object) -> None:
+            del command
+            raise AssertionError("incomplete preparation must not be transitioned")
+
+    with pytest.raises(ConflictError, match="preparation is incomplete"):
+        DungeonStudioService(IncompletePreparation()).approve(
+            campaign_id=uuid.uuid4(),
+            artifact_id=uuid.uuid4(),
+            artifact_version_id=uuid.uuid4(),
+            actor="synthetic-dm",
+            reason="This must remain a draft.",
+        )
 
 
 def test_failed_generation_regression_case_is_self_contained_and_replayable() -> None:

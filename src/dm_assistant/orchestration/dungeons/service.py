@@ -2,6 +2,7 @@
 
 import json
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
@@ -32,8 +33,18 @@ from dm_assistant.observability import bind_log_context, get_logger
 from dm_assistant.orchestration.dungeons.contracts import (
     CreateDungeonWorkflow,
     CreatePromptedDungeonWorkflow,
+    DungeonDmGuide,
     DungeonDmNotes,
     DungeonGenerationRegressionCase,
+    DungeonGuideConnection,
+    DungeonGuideDependency,
+    DungeonGuideFeature,
+    DungeonGuideMapReference,
+    DungeonGuidePuzzle,
+    DungeonGuideRoom,
+    DungeonGuideTrap,
+    DungeonPreparationReadiness,
+    DungeonPreparationReadinessDiagnostic,
     DungeonPrintCapability,
     DungeonRoomDmNote,
     DungeonStudioDetail,
@@ -45,13 +56,22 @@ from dm_assistant.orchestration.dungeons.contracts import (
     RegenerateDungeonWorkflow,
 )
 from dm_dungeon import (
+    CompiledRoomFeatureV2,
+    CompiledRoomPuzzleV2,
+    CompiledRoomTrapV2,
+    ComposableDoorMechanicsV2,
+    DungeonDesignSpecV2,
     DungeonPackage,
+    DungeonPackageV2,
     LayoutRequest,
     LockedLayoutComponents,
     PngExportRequest,
     RenderAudience,
+    RoomMechanicMarkerV2,
     SvgRenderRequest,
     SvgThemeName,
+    build_map_key,
+    compile_dungeon_design_v2,
     export_png,
     generate_layout,
     render_svg,
@@ -61,10 +81,14 @@ from dm_dungeon import (
 )
 from dm_dungeon.contracts import (
     DUNGEON_PACKAGE_SCHEMA_VERSION,
+    EndpointDoorKind,
     GridPoint,
     Label,
+    PassageType,
     RenderLayer,
     RenderLayerKind,
+    RoomLayout,
+    VerticalEndpointSide,
     Visibility,
 )
 from dm_dungeon.export import (
@@ -202,6 +226,8 @@ class DungeonStudioService:
         actor: str,
         reason: str,
     ) -> DungeonStudioDetail:
+        version = self._preparation.get_version(campaign_id, artifact_version_id)
+        _require_preparation_ready(_load_specification(version.specification))
         self._preparation.transition_artifact(
             TransitionArtifact(
                 campaign_id=campaign_id,
@@ -221,6 +247,14 @@ class DungeonStudioService:
 
         version = self._preparation.get_version(campaign_id, artifact_version_id)
         return _resolved_dm_notes(_load_specification(version.specification))
+
+    def guide_for_version(
+        self, *, campaign_id: uuid.UUID, artifact_version_id: uuid.UUID
+    ) -> DungeonDmGuide | None:
+        """Return the immutable V2 DM-guide projection when the version has one."""
+
+        version = self._preparation.get_version(campaign_id, artifact_version_id)
+        return _load_specification(version.specification).dm_guide
 
     def inspect(
         self,
@@ -320,7 +354,7 @@ class DungeonStudioService:
                     latest_lineage.intent.schema_version
                 )
             else:
-                schema_versions["dungeon_generation_proposal"] = "2.1.0"
+                schema_versions["dungeon_generation_proposal"] = "2.2.0"
                 generator_versions["design_compiler"] = (
                     dm_dungeon.DUNGEON_DESIGN_COMPILER_VERSION
                 )
@@ -423,6 +457,8 @@ class DungeonStudioService:
             )
 
         try:
+            dm_guide = _build_dm_guide(request, package, model_lineage)
+            preparation_readiness = _build_preparation_readiness(dm_guide)
             resolved_dm_notes = dm_notes or _build_dm_notes(request, None, package)
             preview_assets = _preview_assets(package, resolved_dm_notes)
         except ConflictError as error:
@@ -471,11 +507,17 @@ class DungeonStudioService:
                     diagnostics=(render_diagnostic,),
                 ),
             )
+        if preparation_readiness is not None:
+            validation_report["preparation_readiness"] = (
+                preparation_readiness.model_dump(mode="json")
+            )
         specification = DungeonStudioSpecification(
             schema_version=_STUDIO_SCHEMA_VERSION,
             layout_request=request,
             package=package,
             dm_notes=resolved_dm_notes,
+            dm_guide=dm_guide,
+            preparation_readiness=preparation_readiness,
             model_lineage=model_lineage,
         )
         base_assets = (
@@ -491,7 +533,7 @@ class DungeonStudioService:
                 "application/json",
                 _canonical_json_bytes(validation_report),
             ),
-            _dm_notes_asset(request, resolved_dm_notes),
+            _dm_notes_asset(request, resolved_dm_notes, dm_guide),
         )
         try:
             published = self._preparation.publish_generated_package(
@@ -568,6 +610,515 @@ class DungeonStudioService:
         )
 
 
+def _require_preparation_ready(specification: DungeonStudioSpecification) -> None:
+    """Keep incomplete generated preparation in draft without changing canon."""
+
+    readiness = specification.preparation_readiness
+    if readiness is not None and not readiness.ready:
+        raise ConflictError(
+            "Dungeon preparation is incomplete and cannot be approved for play."
+        )
+
+
+def _is_unknown_preparation_text(value: str) -> bool:
+    """Reserve explicit, bounded unknown markers instead of guessing play details."""
+
+    return value.strip().casefold() in {
+        "unknown",
+        "unspecified",
+        "not specified",
+        "tbd",
+    }
+
+
+def _build_preparation_readiness(
+    guide: DungeonDmGuide | None,
+) -> DungeonPreparationReadiness | None:
+    """Derive stable DM-only approval diagnostics from the immutable guide.
+
+    Geometry may be valid while preparation remains incomplete.  The guide preserves
+    that explicit unknown for DM review, and this projection prevents approval rather
+    than inventing a bypass, trap effect, or puzzle solution.
+    """
+
+    if guide is None:
+        return None
+    diagnostics: list[DungeonPreparationReadinessDiagnostic] = []
+    dependency_gate_ids = {item.target_gate_id for item in guide.dependencies}
+    for connection in guide.connections:
+        if (
+            connection.gate_id is not None
+            and connection.gate_id not in dependency_gate_ids
+        ):
+            diagnostics.append(
+                DungeonPreparationReadinessDiagnostic(
+                    code="dungeon_preparation.lock_dependency_missing",
+                    component_id=connection.component_id,
+                    map_reference=connection.map_reference,
+                    message="A locked or puzzle barrier needs a key or clue dependency.",
+                )
+            )
+    for trap in guide.traps:
+        if _is_unknown_preparation_text(trap.effect):
+            diagnostics.append(
+                DungeonPreparationReadinessDiagnostic(
+                    code="dungeon_preparation.trap_effect_unknown",
+                    component_id=trap.marker_id,
+                    map_reference=trap.map_reference,
+                    message="This trap's effect is unknown and needs DM completion.",
+                )
+            )
+    for puzzle in guide.puzzles:
+        if _is_unknown_preparation_text(puzzle.solution):
+            diagnostics.append(
+                DungeonPreparationReadinessDiagnostic(
+                    code="dungeon_preparation.puzzle_solution_unknown",
+                    component_id=puzzle.marker_id,
+                    map_reference=puzzle.map_reference,
+                    message="This puzzle's solution is unknown and needs DM completion.",
+                )
+            )
+    return DungeonPreparationReadiness(
+        schema_version="1.0.0",
+        ready=not diagnostics,
+        diagnostics=tuple(diagnostics),
+    )
+
+
+def _build_dm_guide(
+    request: LayoutRequest,
+    package: DungeonPackage,
+    model_lineage: tuple[PromptedDungeonModelLineage, ...],
+) -> DungeonDmGuide | None:
+    """Project accepted V2 prose onto exact package IDs and shared DM callouts.
+
+    The pure package deliberately contains no creative prose or puzzle solution.
+    This Workbench projection is created only from the accepted proposal and verifies
+    that its recompiled deterministic plan is exactly the plan that produced the
+    package.  Thus a room, door, hatch, or marker cannot acquire a guessed ID/text.
+    """
+
+    design = next(
+        (
+            lineage.proposal_v2.design
+            for lineage in reversed(model_lineage)
+            if lineage.proposal_v2 is not None
+            and lineage.proposal_v2.design is not None
+        ),
+        None,
+    )
+    if design is None:
+        return None
+    if not isinstance(package, DungeonPackageV2):
+        raise ConflictError("A V2 proposal requires a mechanics-aware dungeon package.")
+    compiled = compile_dungeon_design_v2(design)
+    if (
+        not compiled.accepted
+        or compiled.topology is None
+        or compiled.mechanics_plan is None
+        or request.mechanics_plan != compiled.mechanics_plan
+        or package.topology != compiled.topology
+    ):
+        raise ConflictError(
+            "Accepted proposal does not match the generated dungeon plan."
+        )
+
+    map_callouts = tuple(
+        entry
+        for floor in package.floors
+        for entry in build_map_key(
+            package, floor.id, RenderAudience.DM, scale=64
+        ).entries
+    )
+
+    def map_reference(
+        component_id: str, floor_id: str
+    ) -> DungeonGuideMapReference | None:
+        entry = next(
+            (
+                item
+                for item in map_callouts
+                if item.component_id == component_id and item.floor_id == floor_id
+            ),
+            None,
+        )
+        if entry is None:
+            return None
+        return DungeonGuideMapReference(
+            component_id=entry.component_id, floor_id=entry.floor_id, token=entry.token
+        )
+
+    sorted_design_rooms = tuple(
+        room
+        for floor in sorted(design.floors, key=lambda item: item.local_ref)
+        for room in sorted(floor.rooms, key=lambda item: item.local_ref)
+    )
+    room_ids_by_ref = {
+        design_room.local_ref: topology_room.id
+        for design_room, topology_room in zip(
+            sorted_design_rooms, compiled.topology.rooms, strict=True
+        )
+    }
+    rooms_by_id = {item.id: item for item in package.rooms}
+    connection_ids_by_ref = {
+        design_connection.local_ref: topology_connection.id
+        for design_connection, topology_connection in zip(
+            sorted(design.connections, key=lambda item: item.local_ref),
+            compiled.topology.connections,
+            strict=True,
+        )
+    }
+    plan_by_connection = {
+        item.connection_id: item
+        for item in compiled.mechanics_plan.door_mechanics
+        if item.endpoint is None
+    }
+    endpoint_plan = {
+        (item.connection_id, item.endpoint): item
+        for item in compiled.mechanics_plan.door_mechanics
+        if item.endpoint is not None
+    }
+    door_by_connection = {item.connection_id: item for item in package.composable_doors}
+    endpoint_door_by_mechanics = {
+        item.id: item for item in package.vertical_endpoint_doors
+    }
+
+    guide_rooms: list[DungeonGuideRoom] = []
+    for design_room in sorted_design_rooms:
+        room_id = room_ids_by_ref[design_room.local_ref]
+        room = rooms_by_id[room_id]
+        reference = map_reference(room_id, room.floor_id)
+        if reference is None:
+            raise ConflictError("A DM-visible room is missing its map callout.")
+        guide_rooms.append(
+            DungeonGuideRoom(
+                room_id=room_id,
+                floor_id=room.floor_id,
+                map_reference=reference,
+                name=design_room.name,
+                role=room.role,
+                tags=design_room.tags,
+                preparation_note=design_room.preparation_note,
+                encounter_slot=design_room.encounter_slot,
+            )
+        )
+
+    guide_connections: list[DungeonGuideConnection] = []
+    for connection in package.topology.connections:
+        if connection.kind == "door":
+            plan = plan_by_connection.get(connection.id)
+            door = door_by_connection.get(connection.id)
+            if plan is None or door is None:
+                raise ConflictError(
+                    "A same-floor door is missing exact mechanics geometry."
+                )
+            guide_connections.append(
+                _guide_connection(
+                    component_id=door.id,
+                    connection_id=connection.id,
+                    map_reference=map_reference(door.id, door.floor_id),
+                    passage=connection.kind,
+                    from_room_id=connection.from_room_id,
+                    to_room_id=connection.to_room_id,
+                    endpoint=None,
+                    endpoint_kind=None,
+                    mechanics=door.mechanics,
+                )
+            )
+        elif connection.kind in {"stairs", "vertical_link"}:
+            link = next(
+                (item for item in package.vertical_links if item.id == connection.id),
+                None,
+            )
+            if link is None:
+                raise ConflictError(
+                    "A vertical connection is missing its exact link geometry."
+                )
+            # The transition itself is never implicitly a door/hatch.
+            endpoint = next(
+                (
+                    item
+                    for item in link.endpoints
+                    if item.floor_id == rooms_by_id[connection.from_room_id].floor_id
+                ),
+                None,
+            )
+            guide_connections.append(
+                DungeonGuideConnection(
+                    component_id=connection.id,
+                    connection_id=connection.id,
+                    map_reference=(
+                        None
+                        if endpoint is None
+                        else map_reference(connection.id, endpoint.floor_id)
+                    ),
+                    passage=connection.kind,
+                    from_room_id=connection.from_room_id,
+                    to_room_id=connection.to_room_id,
+                )
+            )
+            for side in (VerticalEndpointSide.FROM, VerticalEndpointSide.TO):
+                plan = endpoint_plan.get((connection.id, side))
+                if plan is None:
+                    continue
+                endpoint_door = endpoint_door_by_mechanics.get(plan.id)
+                if endpoint_door is None:
+                    raise ConflictError(
+                        "A vertical endpoint mechanic is missing hatch geometry."
+                    )
+                guide_connections.append(
+                    _guide_connection(
+                        component_id=endpoint_door.id,
+                        connection_id=connection.id,
+                        map_reference=map_reference(
+                            connection.id, endpoint_door.floor_id
+                        ),
+                        passage=connection.kind,
+                        from_room_id=connection.from_room_id,
+                        to_room_id=connection.to_room_id,
+                        endpoint=endpoint_door.endpoint,
+                        endpoint_kind=endpoint_door.kind,
+                        mechanics=endpoint_door.mechanics,
+                    )
+                )
+        else:
+            guide_connections.append(
+                DungeonGuideConnection(
+                    component_id=connection.id,
+                    connection_id=connection.id,
+                    map_reference=None,
+                    passage=connection.kind,
+                    from_room_id=connection.from_room_id,
+                    to_room_id=connection.to_room_id,
+                )
+            )
+
+    dependencies_by_target: dict[str, tuple[str, str]] = {}
+    for collection in (package.topology.keys, package.topology.clues):
+        for item in collection:
+            gate_id = (
+                item.opens_gate_ids[0]
+                if hasattr(item, "opens_gate_ids")
+                else item.supports_gate_ids[0]
+            )
+            dependencies_by_target[gate_id] = (item.id, item.name)
+    gate_by_target_ref: dict[str, str] = {}
+    for design_connection in sorted(
+        design.connections, key=lambda item: item.local_ref
+    ):
+        connection_id = connection_ids_by_ref[design_connection.local_ref]
+        if design_connection.passage is PassageType.DOOR:
+            plan = plan_by_connection.get(connection_id)
+            if plan is not None and plan.gate_id is not None:
+                gate_by_target_ref[design_connection.local_ref] = plan.gate_id
+        for endpoint_intent in design_connection.endpoint_doors:
+            plan = endpoint_plan.get((connection_id, endpoint_intent.endpoint))
+            if plan is not None and plan.gate_id is not None:
+                gate_by_target_ref[endpoint_intent.local_ref] = plan.gate_id
+    guide_dependencies: list[DungeonGuideDependency] = []
+    for dependency in design.dependencies:
+        gate_id = gate_by_target_ref.get(dependency.target_ref)
+        if gate_id is None or gate_id not in dependencies_by_target:
+            raise ConflictError(
+                "A compiled barrier is missing its key or clue dependency."
+            )
+        dependency_id, _ = dependencies_by_target[gate_id]
+        room_id = room_ids_by_ref[dependency.located_in_room_ref]
+        room = rooms_by_id[room_id]
+        reference = map_reference(room_id, room.floor_id)
+        if reference is None:
+            raise ConflictError("A dependency room is missing its map callout.")
+        guide_dependencies.append(
+            DungeonGuideDependency(
+                dependency_id=dependency_id,
+                target_gate_id=gate_id,
+                name=dependency.name,
+                kind=dependency.kind.value,
+                room_id=room_id,
+                room_map_reference=reference,
+            )
+        )
+
+    markers = {item.id: item for item in package.room_mechanic_markers}
+    guide_traps = _guide_traps(
+        design,
+        compiled.mechanics_plan.room_traps,
+        markers,
+        rooms_by_id,
+        map_reference,
+    )
+    # Puzzle clues use the exact dependency IDs above, never local refs in output.
+    dependency_ids_by_local = {
+        item.local_ref: next(
+            guide_item.dependency_id
+            for guide_item in guide_dependencies
+            if guide_item.target_gate_id == gate_by_target_ref[item.target_ref]
+        )
+        for item in design.dependencies
+    }
+    guide_puzzles = _guide_puzzles(
+        design,
+        compiled.mechanics_plan.room_puzzles,
+        markers,
+        rooms_by_id,
+        map_reference,
+        dependency_ids_by_local,
+    )
+    guide_features = _guide_features(
+        design,
+        compiled.mechanics_plan.room_features,
+        markers,
+        rooms_by_id,
+        map_reference,
+    )
+    return DungeonDmGuide(
+        schema_version="1.0.0",
+        title=design.title,
+        premise=design.premise,
+        map_callouts=map_callouts,
+        rooms=tuple(guide_rooms),
+        connections=tuple(guide_connections),
+        dependencies=tuple(guide_dependencies),
+        traps=tuple(guide_traps),
+        puzzles=tuple(guide_puzzles),
+        features=tuple(guide_features),
+    )
+
+
+def _guide_connection(
+    *,
+    component_id: str,
+    connection_id: str,
+    map_reference: DungeonGuideMapReference | None,
+    passage: str,
+    from_room_id: str,
+    to_room_id: str,
+    endpoint: VerticalEndpointSide | None,
+    endpoint_kind: EndpointDoorKind | None,
+    mechanics: ComposableDoorMechanicsV2,
+) -> DungeonGuideConnection:
+    return DungeonGuideConnection(
+        component_id=component_id,
+        connection_id=connection_id,
+        map_reference=map_reference,
+        passage=passage,
+        from_room_id=from_room_id,
+        to_room_id=to_room_id,
+        endpoint=endpoint,
+        endpoint_kind=endpoint_kind,
+        concealed=mechanics.concealed,
+        discovery_difficulty=mechanics.discovery_difficulty,
+        gate_id=mechanics.gate_id,
+        gate_kind=mechanics.gate_kind,
+        unlock_difficulty=mechanics.unlock_difficulty,
+        trap_id=mechanics.trap_id,
+        disable_difficulty=mechanics.disable_difficulty,
+    )
+
+
+def _guide_traps(
+    design: DungeonDesignSpecV2,
+    plans: tuple[CompiledRoomTrapV2, ...],
+    markers: dict[str, RoomMechanicMarkerV2],
+    rooms: dict[str, RoomLayout],
+    map_reference: Callable[[str, str], DungeonGuideMapReference | None],
+) -> list[DungeonGuideTrap]:
+    entries: list[DungeonGuideTrap] = []
+    for intent, plan in zip(
+        sorted(design.traps, key=lambda item: item.local_ref), plans, strict=True
+    ):
+        marker = markers.get(plan.id)
+        room = rooms.get(plan.room_id)
+        if marker is None or room is None or marker.room_id != plan.room_id:
+            raise ConflictError("A room trap is missing its exact marker geometry.")
+        reference = map_reference(plan.id, marker.floor_id)
+        if reference is None:
+            raise ConflictError("A room trap is missing its DM map callout.")
+        entries.append(
+            DungeonGuideTrap(
+                marker_id=plan.id,
+                room_id=plan.room_id,
+                map_reference=reference,
+                name=intent.name,
+                trigger=intent.trigger,
+                effect=intent.effect,
+                detection_difficulty=plan.detection_difficulty,
+                disable_difficulty=plan.disable_difficulty,
+            )
+        )
+    return entries
+
+
+def _guide_puzzles(
+    design: DungeonDesignSpecV2,
+    plans: tuple[CompiledRoomPuzzleV2, ...],
+    markers: dict[str, RoomMechanicMarkerV2],
+    rooms: dict[str, RoomLayout],
+    map_reference: Callable[[str, str], DungeonGuideMapReference | None],
+    dependency_ids_by_local: dict[str, str],
+) -> list[DungeonGuidePuzzle]:
+    entries: list[DungeonGuidePuzzle] = []
+    for intent, plan in zip(
+        sorted(design.puzzles, key=lambda item: item.local_ref), plans, strict=True
+    ):
+        marker = markers.get(plan.id)
+        room = rooms.get(plan.room_id)
+        if marker is None or room is None or marker.room_id != plan.room_id:
+            raise ConflictError("A room puzzle is missing its exact marker geometry.")
+        reference = map_reference(plan.id, marker.floor_id)
+        if reference is None:
+            raise ConflictError("A room puzzle is missing its DM map callout.")
+        entries.append(
+            DungeonGuidePuzzle(
+                marker_id=plan.id,
+                room_id=plan.room_id,
+                map_reference=reference,
+                name=intent.name,
+                mechanism=intent.mechanism,
+                clue_dependency_ids=tuple(
+                    dependency_ids_by_local[item] for item in intent.clue_refs
+                ),
+                solution=intent.solution,
+                consequence=intent.consequence,
+                difficulty=plan.difficulty,
+            )
+        )
+    return entries
+
+
+def _guide_features(
+    design: DungeonDesignSpecV2,
+    plans: tuple[CompiledRoomFeatureV2, ...],
+    markers: dict[str, RoomMechanicMarkerV2],
+    rooms: dict[str, RoomLayout],
+    map_reference: Callable[[str, str], DungeonGuideMapReference | None],
+) -> list[DungeonGuideFeature]:
+    entries: list[DungeonGuideFeature] = []
+    for intent, plan in zip(
+        sorted(design.features, key=lambda item: item.local_ref), plans, strict=True
+    ):
+        marker = markers.get(plan.id)
+        room = rooms.get(plan.room_id)
+        if marker is None or room is None or marker.room_id != plan.room_id:
+            raise ConflictError(
+                "A physical feature is missing its exact marker geometry."
+            )
+        reference = map_reference(plan.id, marker.floor_id)
+        if reference is None:
+            raise ConflictError("A physical feature is missing its DM map callout.")
+        entries.append(
+            DungeonGuideFeature(
+                marker_id=plan.id,
+                room_id=plan.room_id,
+                map_reference=reference,
+                kind=plan.kind,
+                name=intent.name,
+                description=intent.description,
+            )
+        )
+    return entries
+
+
 def _resolved_dm_notes(specification: DungeonStudioSpecification) -> DungeonDmNotes:
     if specification.dm_notes.room_notes:
         return specification.dm_notes
@@ -630,12 +1181,20 @@ def _humanize_id(value: str) -> str:
     return value.removeprefix("room_").replace("_", " ").replace("-", " ").title()
 
 
-def _dm_notes_asset(request: LayoutRequest, dm_notes: DungeonDmNotes) -> _PendingAsset:
+def _dm_notes_asset(
+    request: LayoutRequest,
+    dm_notes: DungeonDmNotes,
+    dm_guide: DungeonDmGuide | None = None,
+) -> _PendingAsset:
     return _PendingAsset(
         ArtifactAssetRole.OTHER,
         0,
         "text/plain",
-        _dm_notes_text(request, dm_notes).encode(),
+        (
+            _dm_guide_text(dm_guide)
+            if dm_guide is not None
+            else _dm_notes_text(request, dm_notes)
+        ).encode("utf-8"),
     )
 
 
@@ -664,12 +1223,89 @@ def _dm_notes_text(request: LayoutRequest, dm_notes: DungeonDmNotes) -> str:
     return "\n".join(sections) + "\n"
 
 
+def _dm_guide_text(guide: DungeonDmGuide) -> str:
+    """Render the versioned guide as a portable readable UTF-8 DM document."""
+
+    sections = [f"# {guide.title} — DM guide", "", guide.premise]
+    if guide.rooms:
+        sections.extend(("", "## Rooms"))
+        for room in guide.rooms:
+            details = [room.role.value.replace("_", " ")]
+            if room.tags:
+                details.append(f"tags: {', '.join(room.tags)}")
+            if room.encounter_slot is not None:
+                details.append(f"encounter: {room.encounter_slot.value}")
+            sections.append(
+                f"- {room.map_reference.token} — {room.name} ({'; '.join(details)})"
+            )
+            if room.preparation_note:
+                sections.append(f"  {room.preparation_note}")
+    if guide.connections:
+        sections.extend(("", "## Doors and transitions"))
+        for connection in guide.connections:
+            token = (
+                connection.map_reference.token
+                if connection.map_reference
+                else "Transition"
+            )
+            mechanics: list[str] = []
+            if connection.concealed:
+                mechanics.append(
+                    f"secret (discovery {connection.discovery_difficulty})"
+                )
+            if connection.gate_id:
+                mechanics.append(
+                    f"{connection.gate_kind.value} gate (unlock {connection.unlock_difficulty})"
+                )
+            if connection.trap_id:
+                mechanics.append(f"trapped (disable {connection.disable_difficulty})")
+            endpoint = (
+                f" {connection.endpoint.value} {connection.endpoint_kind.value}"
+                if connection.endpoint is not None
+                and connection.endpoint_kind is not None
+                else ""
+            )
+            sections.append(
+                f"- {token} — {connection.passage}{endpoint}"
+                + (f": {', '.join(mechanics)}" if mechanics else ".")
+            )
+    if guide.dependencies:
+        sections.extend(("", "## Keys and clues"))
+        for dependency in guide.dependencies:
+            sections.append(
+                f"- {dependency.room_map_reference.token} — {dependency.kind}: {dependency.name}"
+            )
+    if guide.traps:
+        sections.extend(("", "## Traps and hazards"))
+        for trap in guide.traps:
+            sections.append(
+                f"- {trap.map_reference.token} — {trap.name}: trigger {trap.trigger} "
+                f"Detection {trap.detection_difficulty}; disable {trap.disable_difficulty}. "
+                f"Effect: {trap.effect}"
+            )
+    if guide.puzzles:
+        sections.extend(("", "## Puzzles"))
+        for puzzle in guide.puzzles:
+            sections.append(
+                f"- {puzzle.map_reference.token} — {puzzle.name}: {puzzle.mechanism} "
+                f"Difficulty {puzzle.difficulty}. Solution: {puzzle.solution}. "
+                f"Consequence: {puzzle.consequence}"
+            )
+    if guide.features:
+        sections.extend(("", "## Features"))
+        for feature in guide.features:
+            sections.append(
+                f"- {feature.map_reference.token} — {feature.name}: {feature.description}"
+            )
+    return "\n".join(sections) + "\n"
+
+
 def _dm_presentation_package(
     package: DungeonPackage, dm_notes: DungeonDmNotes
 ) -> DungeonPackage:
     """Add DM-only numbered room callouts to a render-only package copy."""
 
-    if not dm_notes.room_notes:
+    if not dm_notes.room_notes or isinstance(package, DungeonPackageV2):
         return package
     layer_id = "dm_room_notes"
     layer = RenderLayer(

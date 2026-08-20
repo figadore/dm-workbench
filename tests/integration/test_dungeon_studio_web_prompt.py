@@ -50,7 +50,7 @@ def test_browser_prompt_faux_gateway_persists_draft(
     proposal = {
         "proposal_version": "2",
         "design": {
-            "schema_version": "2.1.0",
+            "schema_version": "2.2.0",
             "title": "Synthetic Archive",
             "premise": "A synthetic archive contains a sealed ledger.",
             "themes": ["salt"],

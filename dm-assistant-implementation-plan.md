@@ -1435,10 +1435,13 @@ Fix persistence correctness before routing another profile through it.
 ### P7-13 — Dungeon output, map readability, asset UX, and print refresh
 
 This user-directed post-P7-12 program is specified in detail in
-[`dungeon-output-refresh-plan.md`](dungeon-output-refresh-plan.md). The latest retained
+[`dungeon-output-refresh-plan.md`](dungeon-output-refresh-plan.md). The latest generated
 output exposed coupled geometry, renderer, feature-content, asset-presentation, and
-print failures. Complete these slices in order; do not fold them into P3 canonical
-revision work or reinterpret immutable V1/V2 artifacts.
+print failures. No user dungeon or external dungeon consumer currently requires
+backward compatibility, so advance the active V2 contracts and synthetic fixtures in
+place instead of creating a parallel V3 stack. Complete these slices in order; do not
+fold them into P3 canonical revision work. Once a dungeon is retained or an external
+consumer exists, the normal immutable reader/replay policy applies.
 
 #### P7-13a — Output quality baseline and print fail-closed switch
 
@@ -1468,11 +1471,16 @@ revision work or reinterpret immutable V1/V2 artifacts.
 
 #### P7-13d — Doors, traps, puzzles, features, and a usable DM guide
 
-- Introduce a new retained-artifact-safe creative/proposal/compiler contract rather
-  than mutating V2. Include tones, room tags/preparation prose, explicit branch/loop
-  requirements, encounter-slot intent, features, composable door mechanics, traps,
-  hazards, and puzzles.
-- Freeze and enforce a connection-mechanics capability matrix in the new contract:
+- Extend the active V2 creative/proposal/compiler contract in place. Advance its
+  schema/compiler pins and update synthetic fixtures rather than preserving an unused
+  pre-P7-13d V2 reader or creating parallel V3 classes. Include tones, room
+  tags/preparation prose, explicit branch/loop requirements, encounter-slot intent,
+  features, composable door mechanics, traps, hazards, and puzzles.
+- Continue from the committed P7-13d scaffolding rather than resetting or reverting
+  its commit: port its useful intent shapes, mechanics policy, diagnostics, and tests
+  into V2, then remove the temporary V3-only files and dispatch after equivalent V2
+  coverage passes. Do not discard completed P7-13a/P7-13b/P7-13c work.
+- Freeze and enforce a connection-mechanics capability matrix in the advanced V2 contract:
   same-floor passages carry no hidden, barrier, or trap mechanics; same-floor doors
   support independent concealment, lock/puzzle gate, and trap mechanics in documented
   combinations; cross-floor stairs/ladders support directional hidden endpoints and
@@ -1519,7 +1527,9 @@ revision work or reinterpret immutable V1/V2 artifacts.
 - Exercise prompt through floor preview, DM/player switch, keyed guide, VTT download,
   print preflight, and preparation review in one browser workflow.
 - Preserve topology/geometry validity, deterministic replay, secrecy, atomic
-  publication, cancellation, package isolation, and historical reader gates.
+  publication, cancellation, and package isolation. Keep reader gates for artifacts
+  that actually exist; update synthetic pre-P7-13d V2 fixtures in place rather than
+  carrying dormant compatibility branches.
 - Roll out new profile/generator/renderer pins only after synthetic metrics and manual
   DM review pass; retain rollback to the prior generation path. Add prompt/repair evals
   for hidden vertical access, secret locked/puzzle doors, secret trapped doors, and

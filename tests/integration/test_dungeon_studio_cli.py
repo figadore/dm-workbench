@@ -221,7 +221,7 @@ def test_cli_prompt_uses_private_gateway_and_persists_package(
     proposal: dict[str, object] = {
         "proposal_version": "2",
         "design": {
-            "schema_version": "2.1.0",
+            "schema_version": "2.2.0",
             "title": package.brief.title,
             "premise": "A synthetic flooded archive lies beneath a lighthouse.",
             "themes": ["flooded archive"],
