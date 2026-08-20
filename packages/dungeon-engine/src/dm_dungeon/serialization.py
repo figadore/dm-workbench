@@ -9,6 +9,10 @@ from dm_dungeon.contracts.design_v2 import (
     DUNGEON_DESIGN_V2_SCHEMA_VERSION,
     DungeonDesignSpecV2,
 )
+from dm_dungeon.contracts.design_v3 import (
+    DUNGEON_DESIGN_V3_SCHEMA_VERSION,
+    DungeonDesignSpecV3,
+)
 from dm_dungeon.contracts.package import (
     DUNGEON_PACKAGE_SCHEMA_VERSION,
     DungeonPackage,
@@ -16,6 +20,10 @@ from dm_dungeon.contracts.package import (
 from dm_dungeon.contracts.package_v2 import (
     DUNGEON_PACKAGE_V2_SCHEMA_VERSION,
     DungeonPackageV2,
+)
+from dm_dungeon.contracts.package_v3 import (
+    DUNGEON_PACKAGE_V3_SCHEMA_VERSION,
+    DungeonPackageV3,
 )
 
 
@@ -67,6 +75,30 @@ def load_dungeon_design_v2_json(
     return DungeonDesignSpecV2.model_validate_json(document)
 
 
+def dungeon_design_v3_json_schema() -> dict[str, Any]:
+    """Return the P7-13d compact design JSON Schema document."""
+    return DungeonDesignSpecV3.model_json_schema(mode="validation")
+
+
+def load_dungeon_design_v3_json(
+    document: str | bytes | bytearray,
+) -> DungeonDesignSpecV3:
+    """Validate serialized V3 design input without reinterpreting V2."""
+    payload = json.loads(document)
+    if not isinstance(payload, dict):
+        raise InvalidContractDocumentError(
+            "DungeonDesignSpecV3 document must be a JSON object"
+        )
+    actual_version = payload.get("schema_version")
+    if actual_version != DUNGEON_DESIGN_V3_SCHEMA_VERSION:
+        rendered = "<missing>" if actual_version is None else repr(actual_version)
+        raise UnsupportedSchemaVersionError(
+            f"Unsupported DungeonDesignSpecV3 schema version {rendered}; "
+            f"expected {DUNGEON_DESIGN_V3_SCHEMA_VERSION!r}"
+        )
+    return DungeonDesignSpecV3.model_validate_json(document)
+
+
 def dungeon_package_json_schema() -> dict[str, Any]:
     """Return the retained 1.1.0 DungeonPackage JSON Schema document."""
     return DungeonPackage.model_json_schema(mode="validation")
@@ -77,9 +109,14 @@ def dungeon_package_v2_json_schema() -> dict[str, Any]:
     return DungeonPackageV2.model_json_schema(mode="validation")
 
 
+def dungeon_package_v3_json_schema() -> dict[str, Any]:
+    """Return the P7-13d composable-mechanics package schema."""
+    return DungeonPackageV3.model_json_schema(mode="validation")
+
+
 def load_dungeon_package_json(
     document: str | bytes | bytearray,
-) -> DungeonPackage | DungeonPackageV2:
+) -> DungeonPackage | DungeonPackageV2 | DungeonPackageV3:
     """Validate a retained or P7-13 package, dispatching by root version first."""
     payload = json.loads(document)
     if not isinstance(payload, dict):
@@ -92,12 +129,15 @@ def load_dungeon_package_json(
         return DungeonPackage.model_validate_json(document)
     if actual_version == DUNGEON_PACKAGE_V2_SCHEMA_VERSION:
         return DungeonPackageV2.model_validate_json(document)
+    if actual_version == DUNGEON_PACKAGE_V3_SCHEMA_VERSION:
+        return DungeonPackageV3.model_validate_json(document)
 
     rendered = "<missing>" if actual_version is None else repr(actual_version)
     raise UnsupportedSchemaVersionError(
         f"Unsupported DungeonPackage schema version {rendered}; expected one of "
         f"{DUNGEON_PACKAGE_SCHEMA_VERSION!r}, "
-        f"{DUNGEON_PACKAGE_V2_SCHEMA_VERSION!r}"
+        f"{DUNGEON_PACKAGE_V2_SCHEMA_VERSION!r}, "
+        f"{DUNGEON_PACKAGE_V3_SCHEMA_VERSION!r}"
     )
 
 
@@ -106,14 +146,21 @@ def read_dungeon_design_v2(path: str | Path) -> DungeonDesignSpecV2:
     return load_dungeon_design_v2_json(Path(path).read_bytes())
 
 
-def read_dungeon_package(path: str | Path) -> DungeonPackage | DungeonPackageV2:
+def read_dungeon_design_v3(path: str | Path) -> DungeonDesignSpecV3:
+    """Read and validate a compact V3 design JSON file."""
+    return load_dungeon_design_v3_json(Path(path).read_bytes())
+
+
+def read_dungeon_package(
+    path: str | Path,
+) -> DungeonPackage | DungeonPackageV2 | DungeonPackageV3:
     """Read and validate a DungeonPackage JSON file."""
     return load_dungeon_package_json(Path(path).read_bytes())
 
 
 def write_dungeon_package(
     path: str | Path,
-    package: DungeonPackage | DungeonPackageV2,
+    package: DungeonPackage | DungeonPackageV2 | DungeonPackageV3,
 ) -> None:
     """Write canonical UTF-8 package JSON to a file."""
     Path(path).write_text(to_canonical_json(package), encoding="utf-8")

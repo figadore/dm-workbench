@@ -6,6 +6,9 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from dm_dungeon.contracts.package import DungeonPackage
+from dm_dungeon.contracts.package_v2 import DungeonPackageV2
+from dm_dungeon.contracts.package_v3 import DungeonPackageV3
 from dm_dungeon.export import (
     AssemblyMode,
     PaperSize,
@@ -166,6 +169,17 @@ def _add_common_export_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--maximum-ink-basis-points", type=int, default=3500)
 
 
+def _require_renderable_package(
+    package: DungeonPackage | DungeonPackageV2 | DungeonPackageV3,
+) -> DungeonPackage | DungeonPackageV2:
+    """Fail closed until the V3 renderer/validator is implemented."""
+    if isinstance(package, DungeonPackageV3):
+        raise ValueError(
+            "DungeonPackage 1.3.0 mechanics are readable but not renderable yet"
+        )
+    return package
+
+
 def _emit(document: str, output: Path | None) -> None:
     if output is None:
         sys.stdout.write(f"{document}\n")
@@ -180,7 +194,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         if arguments.command == "validate":
-            package = read_dungeon_package(arguments.input)
+            package = _require_renderable_package(read_dungeon_package(arguments.input))
             topology_report = validate_topology(package.topology)
             if not topology_report.valid:
                 sys.stderr.write(f"{to_canonical_json(topology_report)}\n")
@@ -196,8 +210,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
 
         if arguments.command == "canonicalize":
-            package = read_dungeon_package(arguments.input)
-            _emit(to_canonical_json(package), arguments.output)
+            canonical_package = read_dungeon_package(arguments.input)
+            _emit(to_canonical_json(canonical_package), arguments.output)
             return 0
 
         if arguments.command == "layout":
@@ -207,7 +221,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0 if layout_result.success else 1
 
         if arguments.command == "render-svg":
-            package = read_dungeon_package(arguments.input)
+            package = _require_renderable_package(read_dungeon_package(arguments.input))
             render_request = SvgRenderRequest(
                 schema_version="1.0.0",
                 package_id=package.id,
@@ -228,7 +242,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
 
         if arguments.command == "export-png":
-            package = read_dungeon_package(arguments.input)
+            package = _require_renderable_package(read_dungeon_package(arguments.input))
             png_request = PngExportRequest(
                 schema_version="1.0.0",
                 package_id=package.id,
@@ -254,7 +268,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
 
         if arguments.command == "export-pdf":
-            package = read_dungeon_package(arguments.input)
+            package = _require_renderable_package(read_dungeon_package(arguments.input))
             assembly_mode = AssemblyMode(arguments.assembly)
             overlap_points = arguments.overlap_points
             if overlap_points is None:
@@ -289,7 +303,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
 
         if arguments.command == "export-roll20":
-            package = read_dungeon_package(arguments.input)
+            package = _require_renderable_package(read_dungeon_package(arguments.input))
             roll20_request = Roll20ExportRequest(
                 schema_version="1.0.0",
                 package_id=package.id,
