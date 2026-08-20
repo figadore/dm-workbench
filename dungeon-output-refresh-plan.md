@@ -300,15 +300,32 @@ content.
     V2 follow-up.
 - Keep the model out of canonical IDs, exact coordinates, numeric dimensions,
   visibility policy, and trusted arithmetic.
+- Freeze a capability matrix in the new version: same-floor passages have no hidden,
+  barrier, or trap mechanics; same-floor doors support documented combinations of
+  concealment, lock/puzzle gate, and trap; cross-floor stairs/ladders may have
+  directional hidden endpoints and optional explicitly located source and/or destination
+  endpoint-door/hatch mechanics. Those endpoint mechanics support the same documented
+  concealment, lock/puzzle gate, and trap combinations; do not implicitly reinterpret
+  the vertical transition itself as a door.
+- Define the endpoint-door/hatch intent shape, deterministic endpoint anchor geometry,
+  directional traversal/unlock semantics, and dependency references. Reject ambiguous
+  placement, not a valid explicitly located cross-floor barrier or trap.
 - Add a pinned deterministic mechanics policy mapping relative challenge bands to
   displayed discovery/unlock/disable values. Persist the policy/version in lineage.
 - Evolve exact package contracts so door properties are composable rather than one
-  exclusive enum and marker geometry has stable IDs.
+  exclusive enum and marker geometry has stable IDs. Include endpoint-door/hatch
+  records for vertical links. Compile each supported mechanic independently;
+  concealment must never cause a requested gate or trap to be dropped.
+- Make the initial model instruction and bounded repair diagnostics capability-specific:
+  hidden vertical links are valid, and vertical locks/puzzles/traps require the explicit
+  endpoint-door/hatch shape. Diagnose omitted or ambiguous placement rather than reject
+  a valid vertical barrier; never generically say secret stairs/ladders require a door.
 - Deterministically place marker anchors inside the referenced room/zone or at the
   referenced connection endpoint; validate bounds, uniqueness, and reachability.
 - Expand Workbench DM notes into a versioned DM-guide model with room, connection,
   trap/hazard, puzzle, clue/key, and feature sections. Store prose here, keyed to exact
-  package IDs/callouts.
+  package IDs/callouts. Update the P7-13c symbol grammar as necessary so each compiled
+  secret, gate, and trap mechanic is distinct on DM maps and absent from player maps.
 - Fail preparation readiness when a requested lock lacks a bypass/key policy, a trap
   lacks an effect, or a puzzle lacks a solution. Report unknown rather than inventing.
 - Render the guide inline and produce a portable UTF-8 `.txt` download.
@@ -327,6 +344,10 @@ content.
   puzzle clues/solution, and feature descriptions are visible in the DM guide.
 - Stable map markers point to those entries.
 - Player assets contain none of the DM-only mechanics, solutions, or hidden markers.
+- Contract/compiler tests cover the entire capability matrix, including hidden
+  stairs/ladders, secret locked/puzzle doors, secret trapped doors, and endpoint
+  locks/puzzles/traps on vertical links; every accepted combination retains all
+  requested gate/trap mechanics through compilation.
 - Old V2 artifacts still inspect and download without reinterpretation.
 
 ### P7-13e — Asset catalog, inline viewing, and meaningful filenames
@@ -417,6 +438,12 @@ new default.
   in fixtures.
 - Change the active generation/profile/render pins only after the synthetic gate and
   manual review pass. Keep a documented rollback to the prior profile/generator.
+- Add prompt and bounded-repair evaluations for hidden vertical access, secret
+  locked/puzzle doors, secret trapped doors, and explicitly located locked/puzzle/
+  trapped endpoint doors or hatches on vertical links. Terminal public/durable outcomes must
+  distinguish explicit model abstention from exhaustion after rejected structured
+  submissions; the latter reports no accepted proposal after bounded repair with safe
+  diagnostics.
 
 **Done when**
 

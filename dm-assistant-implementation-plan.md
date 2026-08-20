@@ -1472,11 +1472,29 @@ revision work or reinterpret immutable V1/V2 artifacts.
   than mutating V2. Include tones, room tags/preparation prose, explicit branch/loop
   requirements, encounter-slot intent, features, composable door mechanics, traps,
   hazards, and puzzles.
+- Freeze and enforce a connection-mechanics capability matrix in the new contract:
+  same-floor passages carry no hidden, barrier, or trap mechanics; same-floor doors
+  support independent concealment, lock/puzzle gate, and trap mechanics in documented
+  combinations; cross-floor stairs/ladders support directional hidden endpoints and
+  optional, explicitly located source and/or destination endpoint-door/hatch mechanics.
+  Those endpoint mechanics may independently carry concealment, lock/puzzle gate, and
+  trap intent. Do not silently treat the vertical transition itself as a door.
+- Define the endpoint-door/hatch intent shape, deterministic source/destination anchor
+  geometry, directional traversal and unlock semantics, and dependency references for
+  cross-floor barriers/traps. Reject only ambiguous or unsupported endpoint placement,
+  never a valid explicitly located vertical barrier merely because it crosses floors.
 - Let the model propose bounded creative descriptions and relative challenge bands;
   deterministic pinned policy owns stable IDs, exact marker placement, visibility,
   numeric difficulty values, dependency validation, and completeness diagnostics.
+  Compile each supported door or vertical endpoint-door/hatch mechanic independently
+  so concealment never discards a requested gate or trap.
 - Keep geometry/markers in `dm_dungeon`; keep prose-heavy keyed notes in the Workbench.
   A missing trap effect or puzzle solution is unknown/incomplete, never invented.
+- Make initial prompt guidance and bounded repair diagnostics capability-specific:
+  say that hidden stairs/ladders are valid and show the explicit endpoint-door/hatch
+  shape for vertical locks, puzzles, and traps. Diagnose an omitted or ambiguous
+  endpoint rather than rejecting a valid cross-floor barrier merely for being vertical;
+  never claim that all secret vertical links require a door.
 
 #### P7-13e — Asset catalog, inline viewing, and meaningful filenames
 
@@ -1503,7 +1521,13 @@ revision work or reinterpret immutable V1/V2 artifacts.
 - Preserve topology/geometry validity, deterministic replay, secrecy, atomic
   publication, cancellation, package isolation, and historical reader gates.
 - Roll out new profile/generator/renderer pins only after synthetic metrics and manual
-  DM review pass; retain rollback to the prior generation path.
+  DM review pass; retain rollback to the prior generation path. Add prompt/repair evals
+  for hidden vertical access, secret locked/puzzle doors, secret trapped doors, and
+  locked/puzzle/trapped endpoint doors or hatches on cross-floor transitions.
+- Distinguish an explicit model abstention from exhaustion after rejected structured
+  submissions in CLI/API/web/public-safe errors and durable attempt records; report
+  the latter as no accepted proposal after bounded repair, with safe diagnostics rather
+  than saying the model abstained.
 
 **Phase gate P7-13**
 
