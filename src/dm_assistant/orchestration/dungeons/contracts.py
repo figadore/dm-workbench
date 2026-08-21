@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
-from dm_assistant.modules.modeling import DungeonGenerationIntentV1, ModelRunRecord
+from dm_assistant.modules.modeling import ModelRunRecord
 from dm_assistant.modules.preparation import GenerationContextPin, ToolRunPin
 from dm_assistant.modules.scope import TaskScope, TaskType
 from dm_dungeon import (
@@ -37,21 +37,17 @@ class PromptedDungeonModelLineage(WorkflowModel):
 
     model_run_id: UUID
     model_run: ModelRunRecord
-    intent: DungeonGenerationIntentV1 | None = None
     proposal_v2: DungeonGenerationProposalV2 | None = None
 
     @model_validator(mode="after")
-    def require_one_model_result(self) -> PromptedDungeonModelLineage:
-        result_count = sum(
-            value is not None for value in (self.intent, self.proposal_v2)
-        )
+    def require_model_result_for_success(self) -> PromptedDungeonModelLineage:
         if self.model_run.status == "abstained":
-            if result_count:
+            if self.proposal_v2 is not None:
                 raise ValueError(
                     "abstained lineage cannot claim a validated model result"
                 )
-        elif result_count != 1:
-            raise ValueError("successful lineage requires exactly one model result")
+        elif self.proposal_v2 is None:
+            raise ValueError("successful lineage requires one validated model result")
         return self
 
 

@@ -361,16 +361,10 @@ class DungeonStudioService:
                     ]
                 }
             )
-            latest_lineage = model_lineage[-1]
-            if latest_lineage.intent is not None:
-                schema_versions["dungeon_generation_intent"] = (
-                    latest_lineage.intent.schema_version
-                )
-            else:
-                schema_versions["dungeon_generation_proposal"] = "2.4.0"
-                generator_versions["design_compiler"] = (
-                    dm_dungeon.DUNGEON_DESIGN_COMPILER_VERSION
-                )
+            schema_versions["dungeon_generation_proposal"] = "2.4.0"
+            generator_versions["design_compiler"] = (
+                dm_dungeon.DUNGEON_DESIGN_COMPILER_VERSION
+            )
             schema_versions["model_run"] = "1.0.0"
         run = self._preparation.start_generation_run(
             StartGenerationRun(

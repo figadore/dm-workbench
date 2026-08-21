@@ -25,7 +25,6 @@ from dm_assistant.orchestration.dungeons.prompting import (
     DungeonV2SubmissionResult,
     DungeonV2SubmissionService,
     resolve_dungeon_prompt_profile,
-    resolve_dungeon_v2_prompt_profile,
 )
 from dm_assistant.orchestration.dungeons.service import DungeonStudioService
 from dm_assistant.orchestration.dungeons.web_prompt import (
@@ -59,5 +58,4 @@ __all__ = [
     "SubmitDungeonIntentV2Input",
     "RegenerateDungeonWorkflow",
     "resolve_dungeon_prompt_profile",
-    "resolve_dungeon_v2_prompt_profile",
 ]

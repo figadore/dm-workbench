@@ -42,7 +42,7 @@ from dm_assistant.orchestration.dungeons.contracts import (
 )
 from dm_assistant.orchestration.dungeons.prompting import (
     DungeonPromptService,
-    resolve_dungeon_v2_prompt_profile,
+    resolve_dungeon_prompt_profile,
 )
 from dm_assistant.orchestration.modeling import ModelRunAbstained
 
@@ -288,7 +288,7 @@ class DungeonPromptWorkbenchService:
                 if state.cancelled.is_set():
                     return
             stage = "profile_resolution"
-            profile = resolve_dungeon_v2_prompt_profile(
+            profile = resolve_dungeon_prompt_profile(
                 provider_id=provider.id,
                 model_id=model.id,
                 capabilities=model.capabilities,

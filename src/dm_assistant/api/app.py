@@ -24,7 +24,8 @@ from dm_assistant.modules.library.retrieval import LibraryLexicalSearchService
 from dm_assistant.modules.library.service import LibraryIngestionService
 from dm_assistant.modules.library.snapshots import CorpusSnapshotService
 from dm_assistant.modules.library.workflows import LibrarySourceWorkflow
-from dm_assistant.modules.modeling import ModelTaskSelectionStore, ModelWorkbenchService
+from dm_assistant.modules.modeling import ModelTaskSelectionStore
+from dm_assistant.modules.modeling.workbench import ModelWorkbenchService
 from dm_assistant.modules.preparation import PreparationService
 from dm_assistant.observability import configure_logging
 from dm_assistant.orchestration.dungeons import (

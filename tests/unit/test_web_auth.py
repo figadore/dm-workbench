@@ -112,6 +112,7 @@ async def browser_flow(
             json={
                 "campaign_id": str(campaign_id),
                 "artifact_version_id": str(uuid.uuid4()),
+                "export_format": "roll20",
             },
         )
         assert no_csrf.status_code == 403
@@ -123,6 +124,7 @@ async def browser_flow(
             json={
                 "campaign_id": str(campaign_id),
                 "artifact_version_id": str(uuid.uuid4()),
+                "export_format": "roll20",
             },
             headers={"X-CSRF-Token": csrf_token},
         )
@@ -362,6 +364,7 @@ async def bearer_api_flow(application: FastAPI, campaign_id: uuid.UUID) -> None:
             json={
                 "campaign_id": str(campaign_id),
                 "artifact_version_id": str(uuid.uuid4()),
+                "export_format": "roll20",
             },
             headers={"Authorization": f"Bearer {TEST_API_TOKEN}"},
         )

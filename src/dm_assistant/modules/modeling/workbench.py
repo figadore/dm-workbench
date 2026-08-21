@@ -9,7 +9,7 @@ import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Literal, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -47,6 +47,13 @@ class WorkbenchModelSummary(BaseModel):
     model_id: str
     name: str
     capabilities: tuple[str, ...] = ()
+
+
+class _ProviderState(TypedDict):
+    name: str
+    authenticated: bool
+    auth_modes: tuple[str, ...]
+    models: tuple[WorkbenchModelSummary, ...]
 
 
 class WorkbenchProviderSummary(BaseModel):
@@ -181,7 +188,7 @@ class ModelWorkbenchService:
     def __init__(self, *, asset_store: AssetStore | None = None) -> None:
         self._lock = threading.Lock()
         self._asset_store = asset_store
-        self._providers = {
+        self._providers: dict[str, _ProviderState] = {
             "faux": {
                 "name": "Faux provider",
                 "authenticated": False,

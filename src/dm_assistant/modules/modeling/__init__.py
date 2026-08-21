@@ -2,7 +2,6 @@
 
 from dm_assistant.modules.modeling.contracts import (
     AskResponseV1,
-    DungeonGenerationIntentV1,
     DungeonIntentV1,
     GatewayModelCatalogEntry,
     GatewayModelKey,
@@ -26,20 +25,9 @@ from dm_assistant.modules.modeling.selections import (
     ModelTaskSelectionStore,
     TaskModelSelection,
 )
-from dm_assistant.modules.modeling.workbench import (
-    LoginEvent,
-    LoginSession,
-    ModelWorkbenchService,
-    RunEvent,
-    RunSnapshot,
-    SelectionSnapshot,
-    WorkbenchModelSummary,
-    WorkbenchProviderSummary,
-)
 
 __all__ = [
     "AskResponseV1",
-    "DungeonGenerationIntentV1",
     "DungeonIntentV1",
     "GatewayModelCatalogEntry",
     "GatewayModelKey",
@@ -57,14 +45,6 @@ __all__ = [
     "ToolCall",
     "ToolInvocationRecord",
     "ToolResult",
-    "LoginEvent",
-    "LoginSession",
-    "ModelWorkbenchService",
-    "RunEvent",
-    "RunSnapshot",
-    "SelectionSnapshot",
-    "WorkbenchModelSummary",
-    "WorkbenchProviderSummary",
     "resolve_reasoning_level",
     "resolve_run_profile",
     "supported_from_reasoning",

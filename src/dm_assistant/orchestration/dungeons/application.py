@@ -83,7 +83,7 @@ class DungeonPromptApplicationService:
         attempt_id = attempt_run_id or self.begin_attempt(command, surface=surface)
         with bind_log_context(attempt_run_id=str(attempt_id)):
             try:
-                result = self._prompts.create_v2(
+                result = self._prompts.create(
                     command, profile, stream_run_id=str(attempt_id), debug=debug
                 )
             except Exception as error:

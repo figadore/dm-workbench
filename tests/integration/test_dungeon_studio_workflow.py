@@ -10,33 +10,19 @@ from sqlalchemy import Engine, select
 from dm_assistant.adapters.assets import LocalAssetStore
 from dm_assistant.db import Campaign, build_session_factory, transactional_session
 from dm_assistant.errors import ConflictError, DungeonPrintExportDisabledError
-from dm_assistant.modules.modeling import (
-    DungeonGenerationIntentV1,
-    GatewayModelCatalogEntry,
-    ModelEndpointProfile,
-    PromptMessage,
-    ReasoningEffort,
-    ReasoningLevel,
-    TaskProfile,
-    resolve_run_profile,
-)
 from dm_assistant.modules.preparation import (
     ArtifactAssetRole,
     ArtifactLifecycle,
     PreparationService,
 )
 from dm_assistant.modules.preparation.models import GenerationRun
-from dm_assistant.modules.scope import TaskType, resolve_task_scope
 from dm_assistant.orchestration.dungeons import (
     CreateDungeonWorkflow,
-    DungeonPromptService,
     DungeonStudioService,
     DungeonStudioSpecification,
     ExportDungeonWorkflow,
-    PromptDungeonWorkflow,
     RegenerateDungeonWorkflow,
 )
-from dm_assistant.orchestration.modeling import GatewayCompletion
 from dm_dungeon import LayoutRequest, read_dungeon_package
 
 pytestmark = pytest.mark.integration
@@ -73,130 +59,6 @@ def request_fixture() -> LayoutRequest:
         seed=424242,
         generator_version="orthogonal-v2",
     )
-
-
-class FakeGatewayClient:
-    def __init__(self, completion: GatewayCompletion) -> None:
-        self._completion = completion
-
-    def complete(
-        self,
-        *,
-        profile: object,
-        messages: tuple[PromptMessage, ...],
-        allowed_tools: tuple[str, ...],
-        tool_schemas: tuple[object, ...],
-    ) -> GatewayCompletion:
-        del profile, messages, allowed_tools, tool_schemas
-        completion = self._completion
-        self._completion = GatewayCompletion()
-        if completion.content is None:
-            raise AssertionError("unexpected extra gateway completion")
-        return completion
-
-
-def prompted_profile():
-    endpoint = ModelEndpointProfile(
-        profile_id=uuid.uuid4(),
-        profile_version="1.0.0",
-        runtime_adapter="pi_ai",
-        provider_id="faux",
-        model_id="faux_deterministic_v1",
-        supported_efforts=(ReasoningEffort.STANDARD,),
-        context_window_tokens=16_384,
-        output_token_limit=4_096,
-    )
-    task = TaskProfile(
-        profile_id=uuid.uuid4(),
-        profile_version="1.0.0",
-        task_name="dungeon_generation_intent_v1",
-        prompt_version="prompt-1",
-        instruction_version="instructions-1",
-        output_schema_name="dungeon_generation_intent_v1",
-        output_schema_version="1.0.0",
-        allowed_tools=(
-            "review_dungeon_brief",
-            "review_dungeon_topology",
-            "generate_dungeon_layout",
-            "validate_dungeon_intent",
-            "regenerate_dungeon_layout",
-        ),
-        turn_budget=2,
-        tool_budget=1,
-        time_budget_seconds=30,
-        token_budget=4_096,
-        require_citation_ids=False,
-        require_authorized_citations=False,
-    )
-    catalog = GatewayModelCatalogEntry(
-        provider_id="faux",
-        model_id="faux_deterministic_v1",
-        runtime_adapter="pi_ai",
-        observed_capabilities=("text", "tool_calls"),
-        supported_reasoning_levels=(ReasoningLevel.MEDIUM,),
-        context_window_tokens=16_384,
-        output_token_limit=4_096,
-    )
-    return resolve_run_profile(
-        endpoint_profile=endpoint,
-        task_profile=task,
-        catalog_entry=catalog,
-    )
-
-
-def test_prompted_dungeon_persists_context_and_model_lineage(
-    db_engine: Engine,
-    tmp_path: Path,
-) -> None:
-    campaign_id = create_campaign(db_engine)
-    dungeon_studio, preparation = studio(db_engine, tmp_path)
-    layout_request = request_fixture()
-    intent = DungeonGenerationIntentV1(
-        schema_version="1.0.0",
-        intent="Generate a synthetic flooded archive.",
-        brief=layout_request.brief,
-        topology=layout_request.topology,
-        requested_constraints=("flooded",),
-    )
-    prompted = DungeonPromptService(
-        dungeon_studio,
-        FakeGatewayClient(
-            GatewayCompletion(content=intent.model_dump_json(), input_tokens=10)
-        ),
-    )
-
-    result = prompted.create(
-        PromptDungeonWorkflow(
-            campaign_id=campaign_id,
-            title="Prompted Synthetic Archive",
-            prompt="A flooded archive beneath a lighthouse.",
-            seed=1842,
-            created_by="synthetic-dm",
-            scope=resolve_task_scope(
-                dm_principal_id="dm",
-                campaign_owner_id="dm",
-                task_type=TaskType.STANDALONE_DUNGEON,
-            ),
-            requested_constraints=("flooded",),
-        ),
-        prompted_profile(),
-    )
-
-    assert result.success is True
-    assert result.artifact_version_id is not None
-    run = preparation.get_generation_run(campaign_id, result.generation_run_id)
-    assert run.generation_kind == "prompted_dungeon_layout"
-    assert run.context_envelope_kind == "dungeon_generation"
-    assert run.context_payload_version == "1.0.0"
-    assert run.model_task_profile_id is not None
-    assert len(run.model_run_ids) == 1
-    version = preparation.get_version(campaign_id, result.artifact_version_id)
-    specification = DungeonStudioSpecification.model_validate_json(
-        json.dumps(version.specification)
-    )
-    assert specification.layout_request.seed == 1842
-    assert len(specification.model_lineage) == 1
-    assert specification.model_lineage[0].intent == intent
 
 
 def test_failed_layout_retains_diagnostics_run_without_partial_version(

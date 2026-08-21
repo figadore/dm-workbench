@@ -67,7 +67,7 @@ from dm_assistant.orchestration.dungeons import (
     ExportDungeonWorkflow,
     PromptDungeonWorkflow,
     RegenerateDungeonWorkflow,
-    resolve_dungeon_v2_prompt_profile,
+    resolve_dungeon_prompt_profile,
 )
 from dm_assistant.orchestration.modeling import ModelRunAbstained
 from dm_assistant.paths import resolve_allowlisted_file
@@ -504,7 +504,7 @@ def dungeon_prompt(
             )
             resolved_seed = seed if seed is not None else secrets.randbits(63)
             try:
-                profile = resolve_dungeon_v2_prompt_profile(
+                profile = resolve_dungeon_prompt_profile(
                     provider_id=selected_provider.id,
                     model_id=selected_model.id,
                     capabilities=selected_model.capabilities,

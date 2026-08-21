@@ -5,9 +5,6 @@ from pathlib import Path
 
 import pytest
 
-# Initialize the shared model contracts before the orchestration facade, matching
-# normal Workbench composition order.
-import dm_assistant.modules.modeling  # noqa: F401
 from dm_assistant.orchestration.dungeons.evals import (
     DUNGEON_INTENT_V2_EVAL_POLICY,
     DungeonIntentComparisonObservation,

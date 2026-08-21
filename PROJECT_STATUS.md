@@ -7,9 +7,10 @@
 ## Current Snapshot
 
 - **Last updated:** 2026-08-21
-- **Branch:** `fast-track-prompt-to-dungeon`, synchronized with its origin before this WIP.
-- **Current task:** **P7-14a — Dungeon generation alpha reset, characterization, and green baseline.**
-- **Task state:** architecture/reset decision and first safety/deletion slice complete but uncommitted.
+- **Branch:** `fast-track-prompt-to-dungeon`, one commit ahead of origin before this WIP.
+- **Current task:** **P7-14b — One alpha V1 and dead-code deletion.**
+- **Task state:** first model-orchestration deletion/circular-import slice complete but
+  uncommitted; pure package/contract/generator collapse remains.
 - **Schema head:** `0008_workbench_defaults`; no migration changed.
 - **Live providers:** no call was made. Do not resume the stopped live suite during P7-14a/b.
 
@@ -43,7 +44,11 @@ There are no retained user dungeons or external dungeon consumers. Collapse appl
 contract/generator history to one clean V1 and delete old generation/readers/fixtures.
 This does **not** authorize rewriting or force-pushing Git history.
 
-## P7-14a Work Completed in This WIP
+## P7-14a Work Completed
+
+The architecture/reset, topology-math guide, active-path safety fixes, characterization,
+and known-bad output-baseline deletion were committed at `25c031e` before the current
+P7-14b WIP.
 
 ### Planning and architecture
 
@@ -92,54 +97,94 @@ Deleted the obsolete known-bad output baseline:
 Those files existed to preserve/count defects including raw IDs, overlaps, missing
 mechanics, and 73 mostly blank PDF pages. No retained user artifact required them.
 
+## P7-14b Work Completed in This WIP
+
+### Old arbitrary-topology prompt path removed
+
+- Deleted `DungeonPromptService.create`'s obsolete direct `DungeonGenerationIntentV1`
+  workflow and made the active one-submission workflow the sole `create` method.
+- Deleted the five old model tools: `review_dungeon_brief`,
+  `review_dungeon_topology`, `generate_dungeon_layout`, `validate_dungeon_intent`, and
+  `regenerate_dungeon_layout`, including their private input contracts, handlers,
+  prompts, repair path, preflight path, and targeted-regeneration preview.
+- Deleted `DungeonGenerationIntentV1` from the modeling contracts/barrel and removed
+  the legacy `PromptedDungeonModelLineage.intent` branch. Active lineage now has one
+  model-result shape.
+- Removed the obsolete profile resolver and renamed the active resolver to
+  `resolve_dungeon_prompt_profile`; CLI/web and application orchestration now use only
+  the one-submission path.
+- Removed associated obsolete unit/integration tests while retaining active compact-
+  submission, guide, CLI, web, package, and eval coverage.
+
+### Modeling import cycle removed
+
+- Stopped `modules.modeling.__init__` from eagerly importing the Workbench service,
+  which itself depends on orchestration modeling. `GatewayCompletion` can now be
+  imported directly in a fresh process without import-order priming.
+- Updated the API composition root to import `ModelWorkbenchService` from its owning
+  module and removed the eval-suite import-order workaround.
+- Added a typed provider-state mapping in `modules/modeling/workbench.py`, restoring
+  strict mypy over the touched modeling/orchestration surface.
+- Updated stale browser-auth export payloads with their required explicit
+  `export_format`, restoring the full root unit suite.
+
+This slice removes 1,100+ lines and leaves exactly one prompted dungeon orchestration
+path. It does **not** yet rename the active V2 proposal/design/package classes or remove
+`orthogonal-v2/v3/v4` package dispatch; those are the next P7-14b slice.
+
 ## Verification
 
-- `uv run pytest -q packages/dungeon-engine/tests/test_routing.py packages/dungeon-engine/tests/test_design_v2_compiler.py` → `90 passed` before the property rewrite.
-- Focused active property/compiler/routing gate → `92 passed`.
+Current P7-14b WIP:
+
+- Fresh-process direct imports of `GatewayCompletion` and `ModelWorkbenchService` →
+  passed without import-order priming.
+- Focused modeling/prompt/eval tests → `23 passed`.
+- `uv run pytest -q tests/unit` → **`169 passed`**.
+- `uv run pytest -q tests/evals` → **`5 passed`**.
 - `uv run pytest -q packages/dungeon-engine/tests` → **`206 passed`**.
-- `uv run ruff check packages/dungeon-engine/src/dm_dungeon packages/dungeon-engine/tests` → passed.
-- `uv run ruff format --check packages/dungeon-engine/src/dm_dungeon packages/dungeon-engine/tests` → passed.
-- `uv run mypy --strict packages/dungeon-engine/src/dm_dungeon` → passed.
-- `uv run pytest -q packages/dungeon-engine/tests/test_topology_validation.py packages/dungeon-engine/tests/test_topology_properties.py` → `11 passed`.
-- Focused Ruff check/format over `validation/topology.py` → passed.
-- `git diff --check` → passed.
-- Root unit/integration suites were not run; the Workbench/model contract was not changed in this slice.
+- Focused CLI/web prompt integration files → `3 skipped` because the integration
+  database gate was unavailable; no failure.
+- Strict mypy over touched modeling/dungeon/API/CLI source → passed.
+- Focused Ruff check and format over all touched Python files → passed.
+- `git diff --check` → passed before the final status edit.
+
+A broad `ruff check src tests/unit tests/evals` also exposed six unrelated baseline
+violations in untouched Library/scope files (`modules/library/__init__.py`,
+`modules/library/retrieval.py`, `modules/scope.py`, and
+`tests/unit/test_library_contracts.py`). They are not part of this dungeon slice and
+remain unresolved.
 
 ## Working Tree
 
-Uncommitted P7-14a changes:
+Uncommitted P7-14b changes:
 
-- `dungeon-generation-recovery-plan.md` (new)
-- `dm-assistant-implementation-plan.md`
-- `dm-assistant-technical-architecture.md`
+- `src/dm_assistant/api/app.py`
+- `src/dm_assistant/cli/main.py`
+- `src/dm_assistant/modules/modeling/{__init__,contracts,workbench}.py`
+- `src/dm_assistant/orchestration/dungeons/{__init__,application,contracts,prompting,service,web_prompt}.py`
+- `tests/evals/test_dungeon_evals.py`
+- `tests/integration/test_dungeon_studio_workflow.py`
+- `tests/unit/{test_prompted_dungeon_workflow,test_web_auth}.py`
 - `PROJECT_STATUS.md`
-- `packages/dungeon-engine/README.md`
-- `packages/dungeon-engine/src/dm_dungeon/layout/{engine,routing}.py`
-- `packages/dungeon-engine/src/dm_dungeon/validation/{topology.py,TOPOLOGY_MATH.md}`
-- `packages/dungeon-engine/tests/{test_design_v2_compiler,test_layout_properties,test_routing}.py`
-- the three deleted output-baseline files listed above
 
-No migration, provider response, real campaign content, credential, or live-provider state changed.
+No migration, provider response, real campaign content, credential, live-provider call,
+or package schema changed in this WIP.
 
 ## Single Next Recommended Task
 
-**P7-14b — collapse model generation and exact package/layout dispatch to one alpha V1.**
+**Continue P7-14b — collapse the pure package and active contracts to one V1.**
 
-**First concrete action:** remove the unused `DungeonPromptService.create` V1 arbitrary-
-topology workflow, its five old model tools, `DungeonGenerationIntentV1`, legacy lineage
-field, and their tests. Keep the currently active single-submission workflow working while
-renaming it toward `submit_dungeon_plan`; do not leave both old and replacement paths
-half-supported.
+**First concrete action:** inventory every test/fixture still read through the retained
+`DungeonPackage` 1.1 versus active `DungeonPackageV2` 1.3 dispatch, then make the active
+mechanics-aware package the sole `DungeonPackage` schema `1.0.0`. Delete the retained
+reader and regenerate only fixtures still exercising useful behavior.
 
-Then, in the same ordered slice:
+Then rename active design/mechanics/compiler/proposal/submission public names without
+numeric suffixes, pin them to V1, replace `submit_dungeon_intent_v2` with the sole
+`submit_dungeon_plan` name, and remove `orthogonal-v2/v3/v4` layout branching in favor
+of one generator pin. Re-run package, root unit/eval, strict mypy, focused PostgreSQL
+integration, Ruff, and `git diff --check` before P7-14c.
 
-1. break the `modules.modeling` ↔ `orchestration.modeling` circular import;
-2. collapse active design/proposal/package/mechanics names and schema pins to V1;
-3. delete `orthogonal-v2/v3/v4` dispatch and keep one current generator pin;
-4. regenerate or delete remaining synthetic legacy fixtures;
-5. restore green package, root unit/eval, strict mypy, Ruff, and integration focus before
-   starting the new topology certificate.
+Suggested commit subject when all P7-14b work is complete:
 
-Suggested commit subject for the completed current slice:
-
-`P7-14a reset dungeon generation architecture and baseline`
+`P7-14b collapse dungeon generation to one alpha V1`
