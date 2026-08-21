@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, JsonValue
@@ -73,7 +73,7 @@ _DUNGEON_CONTEXT_KIND = "dungeon_generation"
 _DUNGEON_INTENT_SCHEMA_NAME = "dungeon_generation_intent_v1"
 _DUNGEON_INTENT_SCHEMA_VERSION = "1.0.0"
 _DUNGEON_V2_SCHEMA_NAME = "dungeon_generation_proposal_v2"
-_DUNGEON_V2_SCHEMA_VERSION = "2.3.0"
+_DUNGEON_V2_SCHEMA_VERSION = "2.4.0"
 _SUBMIT_DUNGEON_INTENT_V2_TOOL = "submit_dungeon_intent_v2"
 _REVIEW_BRIEF_TOOL = "review_dungeon_brief"
 _REVIEW_TOPOLOGY_TOOL = "review_dungeon_topology"
@@ -88,20 +88,24 @@ _DUNGEON_TOOL_NAMES = (
     _REGENERATE_LAYOUT_TOOL,
 )
 _MAX_REPAIR_DIAGNOSTICS = 16
+_MAX_V2_REPAIR_ARGUMENT_CHARACTERS = 12_000
+_V2_OUTPUT_TOKEN_LIMIT = 4_096
+_V2_CUMULATIVE_TOKEN_BUDGET = 12_000
 _V2_CONNECTION_GUIDANCE = (
     "Connection rules: use passage or door only between rooms on one floor; use "
     "stairs or ladder only between different floors. Use from_hidden and to_hidden "
     "independently; a ladder hidden under an upper-floor rug has from_hidden true "
     "and to_hidden false. Same-floor passages have no hidden, barrier, or trap "
     "mechanics. A same-floor door uses from_hidden/to_hidden "
-    "plus door_mechanics {concealed, barrier, hazard, challenge, trap_trigger, "
-    "trap_effect}; trapped doors/hatches require both trap details. A lock or puzzle "
-    "also needs one dependency targeting the door local_ref. Stairs/ladders may have "
-    "hidden endpoints without a door. A vertical lock, puzzle, or trap instead needs "
-    "an explicit endpoint_doors item {local_ref, endpoint: from|to, kind: door|hatch, "
-    "mechanics}; target its local_ref with the dependency. A trap effect or puzzle "
-    "solution that is genuinely unknown must be exactly 'unknown'; it remains a DM "
-    "draft detail and prevents approval for play rather than being invented."
+    "plus door_mechanics {barrier, hazard, challenge, trap_trigger, trap_effect}; "
+    "a door's physical concealment is derived from its hidden endpoints. Omit an "
+    "unneeded challenge (active mechanics default to moderate). A lock or puzzle may "
+    "include one dependency targeting the door local_ref; if its dependency or trap/"
+    "puzzle play prose is genuinely unknown, omit it or say exactly 'unknown' so the "
+    "draft remains blocked for DM completion. Stairs/ladders may have hidden endpoints "
+    "without a door. A vertical lock, puzzle, or trap instead needs an explicit "
+    "endpoint_doors item {local_ref, endpoint: from|to, kind: door|hatch, mechanics}; "
+    "target its local_ref with the dependency when one is supplied."
 )
 logger = get_logger(__name__)
 
@@ -242,14 +246,19 @@ def resolve_dungeon_v2_prompt_profile(
     return base.model_copy(
         update={
             "task_profile_id": uuid.UUID("77777777-7777-7777-7777-777777777712"),
-            "task_profile_version": "2.3.0",
-            "prompt_version": "prompt-3",
-            "instruction_version": "instructions-3",
+            "task_profile_version": "2.4.0",
+            "prompt_version": "prompt-4",
+            "instruction_version": "instructions-4",
             "output_schema_name": _DUNGEON_V2_SCHEMA_NAME,
             "output_schema_version": _DUNGEON_V2_SCHEMA_VERSION,
             "allowed_tools": (_SUBMIT_DUNGEON_INTENT_V2_TOOL,),
             "turn_budget": 1,
             "tool_budget": 1,
+            "token_budget": min(base.token_budget, _V2_CUMULATIVE_TOKEN_BUDGET),
+            "override_notes": {
+                **base.override_notes,
+                "output_token_limit": _V2_OUTPUT_TOKEN_LIMIT,
+            },
         }
     )
 
@@ -349,22 +358,14 @@ class DungeonV2SubmissionService:
         except StructuredSubmissionRejected as rejected:
             record = rejected.record
             runs = [record]
-            repair_document: dict[str, object] = {
-                "task": _DUNGEON_V2_SCHEMA_NAME,
-                "instruction": "Submit one complete corrected replacement proposal.",
-                "diagnostics": list(rejected.diagnostics),
-            }
             repaired_profile = _remaining_submission_profile(profile, record)
             try:
                 submitted, record = runner.run(
                     profile=repaired_profile,
-                    run_input=ModelRunInput(
-                        messages=(
-                            PromptMessage(
-                                role="user",
-                                content=_canonical_message(repair_document),
-                            ),
-                        )
+                    run_input=_v2_repair_model_input(
+                        command=run_input,
+                        prior_arguments=record.tool_invocations[0].arguments,
+                        diagnostics=rejected.diagnostics,
                     ),
                     tool=tool,
                     handler=handle,
@@ -389,22 +390,12 @@ class DungeonV2SubmissionService:
                 safe_diagnostics = result_payload.get("diagnostics", [])
                 if not isinstance(safe_diagnostics, list):
                     safe_diagnostics = []
-                repair_input = ModelRunInput(
-                    messages=(
-                        PromptMessage(
-                            role="user",
-                            content=_canonical_message(
-                                {
-                                    "task": _DUNGEON_V2_SCHEMA_NAME,
-                                    "instruction": "Submit one complete corrected replacement proposal.",
-                                    "previous_proposal": submitted.proposal.model_dump(
-                                        mode="json"
-                                    ),
-                                    "diagnostics": safe_diagnostics[:8],
-                                }
-                            ),
-                        ),
-                    )
+                repair_input = _v2_repair_model_input(
+                    command=run_input,
+                    prior_arguments=record.tool_invocations[0].arguments,
+                    diagnostics=tuple(
+                        item for item in safe_diagnostics[:8] if isinstance(item, dict)
+                    ),
                 )
                 compiled = None
                 request = None
@@ -712,9 +703,12 @@ def _initial_v2_model_input(
                     {
                         "task": _DUNGEON_V2_SCHEMA_NAME,
                         "instruction": (
-                            "Use submit_dungeon_intent_v2 exactly once. Submit compact "
-                            "creative intent only; the server owns IDs, seed, geometry, "
-                            "visibility, validation, persistence, and approval. "
+                            "Use submit_dungeon_intent_v2 exactly once. Submit the "
+                            "smallest design satisfying the prompt; omit branches, loops, "
+                            "encounter slots, traps, puzzles, and features unless requested "
+                            "or necessary. Submit compact creative intent only; the server "
+                            "owns IDs, seed, geometry, visibility, validation, persistence, "
+                            "and approval. "
                             f"{_V2_CONNECTION_GUIDANCE}"
                         ),
                         "prompt": command.prompt,
@@ -722,6 +716,43 @@ def _initial_v2_model_input(
                     }
                 ),
             ),
+        )
+    )
+
+
+def _v2_repair_model_input(
+    *,
+    command: ModelRunInput,
+    prior_arguments: dict[str, JsonValue],
+    diagnostics: tuple[dict[str, JsonValue], ...],
+) -> ModelRunInput:
+    """Build a fresh bounded V2 repair request without losing the original task."""
+    try:
+        initial = json.loads(command.messages[0].content)
+    except json.JSONDecodeError:
+        # Direct service callers in deterministic tests predate the structured
+        # prompt envelope; retain their original text as the repair task.
+        initial = {"prompt": command.messages[0].content, "context": None}
+    if not isinstance(initial, dict):
+        raise ValueError("V2 repair requires the original structured request")
+    prior_json = _canonical_message(prior_arguments)
+    if len(prior_json) > _MAX_V2_REPAIR_ARGUMENT_CHARACTERS:
+        raise ModelRunAbstained("prior proposal exceeds the bounded repair context")
+    repair_document = {
+        "task": _DUNGEON_V2_SCHEMA_NAME,
+        "instruction": (
+            "Submit one complete corrected replacement proposal. Preserve the original "
+            "requested dungeon and every valid prior field; change only fields named "
+            "by the diagnostics."
+        ),
+        "prompt": initial.get("prompt"),
+        "context": initial.get("context"),
+        "previous_arguments": prior_arguments,
+        "diagnostics": list(diagnostics[:8]),
+    }
+    return ModelRunInput(
+        messages=(
+            PromptMessage(role="user", content=_canonical_message(repair_document)),
         )
     )
 
@@ -1181,7 +1212,7 @@ def _validate_v2_profile(profile: ResolvedModelRunProfile) -> None:
     if profile.output_schema_name != _DUNGEON_V2_SCHEMA_NAME:
         raise ValueError("V2 submission requires the dungeon V2 proposal schema")
     if profile.output_schema_version != _DUNGEON_V2_SCHEMA_VERSION:
-        raise ValueError("V2 submission requires proposal schema version 2.3.0")
+        raise ValueError("V2 submission requires proposal schema version 2.4.0")
     if profile.allowed_tools != (_SUBMIT_DUNGEON_INTENT_V2_TOOL,):
         raise ValueError("V2 submission exposes only submit_dungeon_intent_v2")
     if profile.turn_budget != 1 or profile.tool_budget != 1:
@@ -1211,7 +1242,7 @@ def _validate_profile(profile: ResolvedModelRunProfile) -> None:
         )
 
 
-def _canonical_message(value: dict[str, object]) -> str:
+def _canonical_message(value: Mapping[str, object]) -> str:
     return json.dumps(
         value,
         allow_nan=False,

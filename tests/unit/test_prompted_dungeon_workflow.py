@@ -269,7 +269,7 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
     proposal = {
         "proposal_version": "2",
         "design": {
-            "schema_version": "2.3.0",
+            "schema_version": "2.4.0",
             "title": "Salt Cellar",
             "premise": "A sealed ledger waits below the tide.",
             "themes": ["salt"],
@@ -317,10 +317,12 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
     profile = resolve_dungeon_v2_prompt_profile(
         provider_id="faux",
         model_id="faux_deterministic_v1",
-        capabilities=("text", "tool_calls"),
+        capabilities=("text", "tool_calls", "json_schema_constrained_sampling"),
         context_window_tokens=16_384,
         output_token_limit=4_096,
     )
+    assert profile.token_budget == 12_000
+    assert profile.override_notes["output_token_limit"] == 4_096
 
     result = DungeonV2SubmissionService(gateway).submit(
         profile=profile,
@@ -337,6 +339,7 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
     assert tuple(schema.name for schema in gateway.tool_schemas) == (
         "submit_dungeon_intent_v2",
     )
+    assert gateway.tool_schemas[0].constrained_sampling == "prefer"
     layout = generate_layout(result.layout_request)
     assert layout.success and layout.package is not None
     guide = _build_dm_guide(
@@ -359,10 +362,16 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
     assert isinstance(invalid_connections, list)
     invalid_connection = invalid_connections[0]
     assert isinstance(invalid_connection, dict)
-    invalid_connection["door_mechanics"] = {
-        "barrier": "locked",
-        "challenge": "low",
-    }
+    invalid_connection["door_mechanics"] = {"barrier": "locked"}
+    invalid_design["dependencies"] = [
+        {
+            "local_ref": "bad-key",
+            "kind": "key",
+            "target_ref": "unknown-door",
+            "located_in_room_ref": "entry",
+            "name": "Bad Key",
+        }
+    ]
     repair_gateway = FakeGatewayClient(
         (
             GatewayCompletion(
@@ -412,7 +421,10 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
     assert first_lineage.proposal_v2 is not None
     assert first_lineage.proposal_v2 != repaired_lineage.proposal_v2
     repair_document = json.loads(repair_gateway.messages[1][0].content)
-    assert repair_document["diagnostics"][0]["code"] == "design.missing_dependency"
+    assert repair_document["diagnostics"][0]["code"] == "design.unneeded_dependency"
+    assert repair_document["prompt"] == "synthetic request"
+    assert repair_document["previous_arguments"] == {"proposal": invalid}
+    assert "Preserve the original requested dungeon" in repair_document["instruction"]
 
     exhausted_repair_gateway = FakeGatewayClient(
         (
@@ -453,7 +465,15 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
     schema_invalid = deepcopy(proposal)
     invalid_schema_design = schema_invalid["design"]
     assert isinstance(invalid_schema_design, dict)
-    del invalid_schema_design["themes"]
+    schema_floors = invalid_schema_design["floors"]
+    assert isinstance(schema_floors, list)
+    schema_floor = schema_floors[0]
+    assert isinstance(schema_floor, dict)
+    schema_rooms = schema_floor["rooms"]
+    assert isinstance(schema_rooms, list)
+    schema_room = schema_rooms[0]
+    assert isinstance(schema_room, dict)
+    schema_room["encounter_slot"] = "set_piece"
     schema_repair_gateway = FakeGatewayClient(
         (
             GatewayCompletion(
@@ -501,14 +521,18 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
     assert valid_lineage.proposal_v2 == schema_repaired.proposal
     repair_message = schema_repair_gateway.messages[1][0].content
     assert "submission.schema_invalid" in repair_message
-    assert "Salt Cellar" not in repair_message
+    assert "Salt Cellar" in repair_message
+    assert '"previous_arguments"' in repair_message
+    assert '"prompt":"synthetic request"' in repair_message
+    schema_repair_document = json.loads(repair_message)
+    assert "allowed values" in schema_repair_document["diagnostics"][0]["repair"]
 
 
 def test_v2_dm_guide_retains_requested_mechanics_and_creative_details() -> None:
     proposal = {
         "proposal_version": "2",
         "design": {
-            "schema_version": "2.3.0",
+            "schema_version": "2.4.0",
             "title": "Star Vault",
             "premise": "A drowned observatory seals its lens below a trapped door.",
             "themes": ["salt"],
@@ -735,13 +759,13 @@ def test_v2_dm_guide_retains_requested_mechanics_and_creative_details() -> None:
         update={
             "dependencies": (),
             "connections": tuple(
-                item.model_copy(update={"trap_effect": "unknown"})
+                item.model_copy(update={"trap_effect": None})
                 if item.trap_id is not None and item.endpoint is None
                 else item
                 for item in guide.connections
             ),
-            "traps": (guide.traps[0].model_copy(update={"effect": "unknown"}),),
-            "puzzles": (guide.puzzles[0].model_copy(update={"solution": "TBD"}),),
+            "traps": (guide.traps[0].model_copy(update={"effect": None}),),
+            "puzzles": (guide.puzzles[0].model_copy(update={"solution": None}),),
         }
     )
     readiness = _build_preparation_readiness(incomplete)

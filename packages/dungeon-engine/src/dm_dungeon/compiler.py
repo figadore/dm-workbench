@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from hashlib import sha256
 from typing import Annotated, Literal
 
@@ -69,8 +69,8 @@ from dm_dungeon.contracts.topology import (
 )
 from dm_dungeon.layout.contracts import FloorLayoutBounds
 
-DUNGEON_DESIGN_COMPILER_VERSION: Literal["dungeon-design-v2-compiler-5"] = (
-    "dungeon-design-v2-compiler-5"
+DUNGEON_DESIGN_COMPILER_VERSION: Literal["dungeon-design-v2-compiler-6"] = (
+    "dungeon-design-v2-compiler-6"
 )
 
 
@@ -87,7 +87,7 @@ class DungeonDesignCompileResult(ContractModel):
     """A complete exact intent or a bounded set of compiler diagnostics."""
 
     accepted: bool
-    compiler_version: Literal["dungeon-design-v2-compiler-5"]
+    compiler_version: Literal["dungeon-design-v2-compiler-6"]
     input_hash: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
     output_hash: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")] | None = None
     mechanics_plan: DungeonMechanicsPlanV2 | None = None
@@ -199,7 +199,6 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
         spec,
         room_ids=room_ids,
         connection_ids=connection_ids,
-        dependencies=dependency_by_target,
     )
     same_floor_mechanics = {
         item.connection_id: item
@@ -231,8 +230,12 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
     for target_ref, mechanics in sorted(mechanics_by_target_ref.items()):
         if mechanics.gate_id is None:
             continue
-        dependency = dependency_by_target[target_ref]
-        dependency_id = _component_id("dependency", dependency.local_ref)
+        dependency = dependency_by_target.get(target_ref)
+        dependency_id = (
+            None
+            if dependency is None
+            else _component_id("dependency", dependency.local_ref)
+        )
         gates.append(
             Gate(
                 id=mechanics.gate_id,
@@ -244,39 +247,44 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
                 ),
                 blocks_connection_ids=(mechanics.connection_id,),
                 requires_all=(
-                    GateDependency(
-                        kind=(
-                            GateDependencyKind.KEY
-                            if dependency.kind is DependencyKind.KEY
-                            else GateDependencyKind.CLUE
+                    ()
+                    if dependency is None or dependency_id is None
+                    else (
+                        GateDependency(
+                            kind=(
+                                GateDependencyKind.KEY
+                                if dependency.kind is DependencyKind.KEY
+                                else GateDependencyKind.CLUE
+                            ),
+                            target_id=dependency_id,
                         ),
-                        target_id=dependency_id,
-                    ),
+                    )
                 ),
                 visibility=Visibility.DM_ONLY,
             )
         )
-        if dependency.kind is DependencyKind.KEY:
-            keys.append(
-                KeyPlacement(
-                    id=dependency_id,
-                    name=dependency.name,
-                    located_in_room_id=room_ids[dependency.located_in_room_ref],
-                    opens_gate_ids=(mechanics.gate_id,),
-                    visibility=Visibility.DM_ONLY,
+        if dependency is not None and dependency_id is not None:
+            if dependency.kind is DependencyKind.KEY:
+                keys.append(
+                    KeyPlacement(
+                        id=dependency_id,
+                        name=dependency.name,
+                        located_in_room_id=room_ids[dependency.located_in_room_ref],
+                        opens_gate_ids=(mechanics.gate_id,),
+                        visibility=Visibility.DM_ONLY,
+                    )
                 )
-            )
-        else:
-            clues.append(
-                CluePlacement(
-                    id=dependency_id,
-                    name=dependency.name,
-                    text=dependency.name,
-                    located_in_room_id=room_ids[dependency.located_in_room_ref],
-                    supports_gate_ids=(mechanics.gate_id,),
-                    visibility=Visibility.DM_ONLY,
+            else:
+                clues.append(
+                    CluePlacement(
+                        id=dependency_id,
+                        name=dependency.name,
+                        text=dependency.name,
+                        located_in_room_id=room_ids[dependency.located_in_room_ref],
+                        supports_gate_ids=(mechanics.gate_id,),
+                        visibility=Visibility.DM_ONLY,
+                    )
                 )
-            )
     connections: list[TopologyConnection] = []
     for connection in sorted(spec.connections, key=lambda value: value.local_ref):
         connection_id = connection_ids[connection.local_ref]
@@ -435,7 +443,6 @@ def _compile_mechanics_plan(
     *,
     room_ids: dict[str, str],
     connection_ids: dict[str, str],
-    dependencies: Mapping[str, DesignDependencyV2],
 ) -> DungeonMechanicsPlanV2:
     mechanics: list[CompiledDoorMechanicsV2] = []
     for connection in sorted(spec.connections, key=lambda value: value.local_ref):
@@ -445,11 +452,10 @@ def _compile_mechanics_plan(
                     identity=connection.local_ref,
                     connection_id=connection_ids[connection.local_ref],
                     endpoint=None,
-                    concealed=connection.door_mechanics.concealed,
+                    concealed=_hidden_at_either_end(connection),
                     barrier=connection.door_mechanics.barrier,
                     hazard=connection.door_mechanics.hazard,
                     challenge=connection.door_mechanics.challenge,
-                    dependency=dependencies.get(connection.local_ref),
                 )
             )
         elif connection.passage in {PassageType.STAIRS, PassageType.LADDER}:
@@ -462,11 +468,14 @@ def _compile_mechanics_plan(
                         connection_id=connection_ids[connection.local_ref],
                         endpoint=endpoint_door.endpoint,
                         endpoint_kind=endpoint_door.kind,
-                        concealed=endpoint_door.mechanics.concealed,
+                        concealed=(
+                            connection.from_hidden
+                            if endpoint_door.endpoint is VerticalEndpointSide.FROM
+                            else connection.to_hidden
+                        ),
                         barrier=endpoint_door.mechanics.barrier,
                         hazard=endpoint_door.mechanics.hazard,
                         challenge=endpoint_door.mechanics.challenge,
-                        dependency=dependencies.get(endpoint_door.local_ref),
                     )
                 )
     return DungeonMechanicsPlanV2(
@@ -535,14 +544,14 @@ def _compile_door_mechanics(
     barrier: BarrierIntent,
     hazard: HazardIntent,
     challenge: ChallengeBand | None,
-    dependency: object | None,
 ) -> CompiledDoorMechanicsV2:
-    # Validation requires a dependency for every non-open barrier. The argument
-    # makes that contract explicit here even though stable IDs derive from the
-    # barrier, not the dependency prose or array order.
-    if barrier is not BarrierIntent.NONE:
-        assert dependency is not None
-    difficulty = None if challenge is None else _difficulty(challenge)
+    # A missing key/clue is a preparation-readiness blocker, not a reason to lose
+    # an otherwise connected draft.  The gate remains exact; an empty dependency
+    # list is projected into the DM guide/readiness report.
+    active = (
+        concealed or barrier is not BarrierIntent.NONE or hazard is HazardIntent.TRAPPED
+    )
+    difficulty = _difficulty(challenge or ChallengeBand.MODERATE) if active else None
     return CompiledDoorMechanicsV2(
         id=_component_id("door-mechanics", identity),
         connection_id=connection_id,
@@ -719,15 +728,6 @@ def _validate_design(spec: DungeonDesignSpecV2) -> list[DungeonDesignCompileDiag
                     "place the dependency in a declared room",
                 )
             )
-    for target in sorted(target_barriers - set(dependency_targets)):
-        diagnostics.append(
-            _diagnostic(
-                "design.missing_dependency",
-                "/dependencies",
-                (target,),
-                "add one key or clue dependency for each barrier",
-            )
-        )
     for target in sorted(
         {item for item in dependency_targets if dependency_targets.count(item) > 1}
     ):

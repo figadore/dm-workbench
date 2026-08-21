@@ -365,6 +365,50 @@ content.
 - The updated active V2 contract round-trips and the synthetic pre-P7-13d fixtures are
   deliberately migrated; future retained artifacts remain pinned and immutable.
 
+### P7-13d.1 — Prompt-contract reliability and bounded-cost recovery
+
+**Goal:** restore a cheap, reliable basic prompt-to-draft path after P7-13d expanded
+its model-facing contract.
+
+Live GPT-5.4 evidence exposed a boundary failure rather than a geometry failure: some
+runtime cross-field rules were absent from the model-visible JSON Schema, schema
+repair received neither the original prompt nor prior arguments, and optional advanced
+content could invalidate the whole map. This task blocks P7-13e.
+
+**Work**
+
+- Remove duplicated concealment intent and derive it from directional hidden endpoints;
+  deterministically default an omitted active-mechanic challenge to `moderate`.
+- Move absent trap/puzzle prose and gate dependencies to truthful preparation-readiness
+  blockers while retaining the requested mechanic and valid draft. Continue to reject
+  contradictory refs, endpoint/floor semantics, duplicate identities, and invalid
+  topology.
+- Make basic prompts produce the smallest sufficient core design and omit unrequested
+  advanced collections.
+- Send schema repair the original prompt/context, bounded prior arguments, and
+  actionable static diagnostics; require preservation of valid prior content and keep
+  all bodies out of ordinary logs.
+- Enable `pi-ai` JSON-schema constrained sampling as `prefer` only for contract-tested
+  providers, retaining authoritative Python validation.
+- Start with a 4,096 output-token and 12,000 cumulative measured-token ceiling; raise
+  only the smallest amount justified by a required frozen case.
+- Gate live use in stages: faux/provider contracts, one stop-on-failure Flooded Archive
+  canary, then the fixed suite. Store metrics/hashes, never provider bodies.
+- Keep one submission plus at most one repair. Consider a separately reviewed
+  P7-13d.2 core-topology/optional-enrichment split only if the repaired one-call design
+  still misses the P7-12g live thresholds at a worse measured total cost.
+
+**Done when**
+
+- The Flooded Archive canary preserves its small upper floor, larger hidden lower
+  archive, secret descent, title/premise, and final Stone objective within the cap.
+- The fixed live suite reaches at least 90% first-pass schema validity and 95% success
+  after one repair; every repair remains about the original dungeon.
+- Optional incomplete mechanics create a draft with explicit approval blockers rather
+  than causing whole-dungeon loss, while hard topology contradictions still reject.
+- No extra retry, larger default model, or provider response fixture masks a contract
+  defect.
+
 ### P7-13e — Asset catalog, inline viewing, and meaningful filenames
 
 **Goal:** replace the persistence-shaped asset dump with a task-oriented output page.
@@ -473,25 +517,27 @@ new default.
 
 | Boundary | Minimum coverage |
 | --- | --- |
-| Pure contracts/compiler | Advanced V2 round trip, unknown-version failure, stable IDs, composable door mechanics, challenge completeness, and deliberate synthetic-fixture migration |
+| Pure contracts/compiler | Advanced V2 round trip, unknown-version failure, stable IDs, composable door mechanics, schema/runtime invariant audit, readiness handling for incomplete optional mechanics, and deliberate synthetic-fixture migration |
 | Placement/routing | direct shared-wall doors, straight-first routing, obstacle bend, endpoint lead, no room overlap, unrelated clearance, deterministic seed, locked regeneration |
 | Geometry/pathfinding | explicit openings, connected walkable cells, no undeclared openings, marker bounds/reachability, multi-floor endpoints |
 | Rendering | SVG goldens, raster equivalence, collision boxes, symbol grammar, no opaque IDs, grayscale, DM/player leakage |
 | DM guide | callout bijection, readable lock/trap/puzzle details, unknown handling, UTF-8 text export |
 | Assets/web | grouped catalog, floor/audience labels, inline/open/download matrix, safe filenames, `.txt`, CSP/nosniff, ownership/CSRF |
 | Print | disabled-policy tests first; later preflight limits, sparse rejection, reference mode, tactical crop, page raster nonblank, exact scale/calibration/stitching |
-| Integration/evals | prompt-to-package-to-output page, atomic assets, historical artifact readability, no secret metadata in every clean role |
+| Integration/evals | prompt-to-package-to-output page, atomic assets, historical artifact readability, no secret metadata in every clean role, bounded-context repair, constrained-sampling contract, token ceiling, and staged live Flooded Archive canary |
 
 ## 6. Ordering, dependencies, and scope control
 
-Implement in this order: **P7-13a → P7-13b → P7-13c → P7-13d → P7-13e →
-P7-13f → P7-13g**.
+Implement in this order: **P7-13a → P7-13b → P7-13c → P7-13d → P7-13d.1 →
+P7-13e → P7-13f → P7-13g**.
 
-- P7-13a is the immediate next task.
+- P7-13a through P7-13d are complete; P7-13d.1 is the immediate recovery task.
 - P7-13c may build symbols against synthetic exact packages while P7-13d evolves the
   model contract, but do not expose incomplete generated challenge content as ready.
-- P7-13e may begin after the output catalog contract is known; it must not wait for
-  print re-enable.
+- P7-13d.1 is a blocking reliability recovery prompted by live evidence; do not spend
+  more provider tokens on ad hoc retries or begin P7-13e before its canary passes.
+- P7-13e may begin after P7-13d.1 and after the output catalog contract is known; it
+  must not wait for print re-enable.
 - P7-13f cannot re-enable print before compact geometry from P7-13b and catalog/UI
   preflight from P7-13e exist.
 - P3 canonical revisions remain separate. Nothing in this refresh commits generated

@@ -139,9 +139,12 @@ def test_private_gateway_client_sends_only_policy_bound_input_and_decodes_sse(
         parameters={"type": "object"},
     )
 
+    profile = _profile().model_copy(
+        update={"override_notes": {"output_token_limit": 512}}
+    )
     events: list[tuple[str, dict[str, object]]] = []
     completion = client.complete(
-        profile=_profile(),
+        profile=profile,
         messages=(PromptMessage(role="user", content="Create a synthetic dungeon."),),
         allowed_tools=("validate_dungeon_intent",),
         tool_schemas=(schema,),
@@ -177,6 +180,7 @@ def test_private_gateway_client_sends_only_policy_bound_input_and_decodes_sse(
     payload = json.loads(request.data or b"{}")
     assert payload["provider"] == "faux"
     assert payload["time_limit_seconds"] == 30
+    assert payload["output_token_limit"] == 512
     assert payload["tools"] == [schema.model_dump(mode="json")]
 
 

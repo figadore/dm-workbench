@@ -8,7 +8,7 @@ visibility classification, and numeric mechanics value.
 from enum import StrEnum
 from typing import Annotated, Literal, Self
 
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
 from dm_dungeon.contracts.brief import DungeonPurpose, PacingStyle
 from dm_dungeon.contracts.common import (
@@ -19,7 +19,7 @@ from dm_dungeon.contracts.common import (
 )
 from dm_dungeon.contracts.topology import RoomRole
 
-DUNGEON_DESIGN_V2_SCHEMA_VERSION: Literal["2.3.0"] = "2.3.0"
+DUNGEON_DESIGN_V2_SCHEMA_VERSION: Literal["2.4.0"] = "2.4.0"
 LocalRef = Annotated[
     str,
     Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_-]*$"),
@@ -114,44 +114,29 @@ class DependencyKind(StrEnum):
 
 
 class DoorMechanicsIntentV2(ContractModel):
-    """Composable mechanics on one physical door or hatch.
+    """Composable barrier/hazard intent on one physical door or hatch.
 
-    ``concealed`` describes the physical barrier. Directional concealment of a
-    bare vertical connection remains on ``from_hidden`` / ``to_hidden``.
+    Physical concealment is deliberately *not* model-authored here.  The compiler
+    derives it from the connection's directional hidden endpoint(s), preventing two
+    coupled fields from disagreeing.  An omitted active-mechanic challenge is mapped
+    deterministically to the pinned ``moderate`` policy band.
     """
 
-    concealed: bool = False
     barrier: BarrierIntent = BarrierIntent.NONE
     hazard: HazardIntent = HazardIntent.NONE
     challenge: ChallengeBand | None = None
     trap_trigger: NonEmptyText | None = None
     trap_effect: NonEmptyText | None = None
 
-    @model_validator(mode="after")
-    def require_complete_active_mechanics(self) -> Self:
-        active = (
-            self.concealed
-            or self.barrier is not BarrierIntent.NONE
-            or self.hazard is not HazardIntent.NONE
-        )
-        if active and self.challenge is None:
-            raise ValueError(
-                "concealed, barrier, or trap mechanics require a relative challenge band"
-            )
-        if not active and self.challenge is not None:
-            raise ValueError(
-                "a challenge band requires a concealed, barrier, or trap mechanic"
-            )
-        trap_details = (self.trap_trigger, self.trap_effect)
-        if self.hazard is HazardIntent.TRAPPED and any(
-            value is None for value in trap_details
-        ):
-            raise ValueError("a trapped door or hatch requires trigger and effect")
-        if self.hazard is HazardIntent.NONE and any(
-            value is not None for value in trap_details
-        ):
-            raise ValueError("trap trigger and effect require a trapped door or hatch")
-        return self
+    @model_validator(mode="before")
+    @classmethod
+    def discard_legacy_concealment(cls, value: object) -> object:
+        """Read pre-2.4 proposals without exposing redundant intent to models."""
+        if isinstance(value, dict) and "concealed" in value:
+            document = dict(value)
+            document.pop("concealed")
+            return document
+        return value
 
 
 class DesignRoomV2(ContractModel):
@@ -189,6 +174,43 @@ class DesignVerticalEndpointDoorV2(ContractModel):
 class DesignConnectionV2(ContractModel):
     """A bounded creative connection with the P7-13d capability matrix."""
 
+    # The cross-field rules below are also published to providers through the
+    # generated schema.  Python retains the validator as authoritative fallback
+    # for providers that only support ``prefer`` constrained sampling.
+    model_config = ConfigDict(
+        json_schema_extra={
+            "allOf": [
+                {
+                    "if": {"properties": {"passage": {"const": "passage"}}},
+                    "then": {
+                        "properties": {
+                            "from_hidden": {"const": False},
+                            "to_hidden": {"const": False},
+                            "door_mechanics": {
+                                "const": {"barrier": "none", "hazard": "none"}
+                            },
+                            "endpoint_doors": {"maxItems": 0},
+                        }
+                    },
+                },
+                {
+                    "if": {"properties": {"passage": {"const": "door"}}},
+                    "then": {"properties": {"endpoint_doors": {"maxItems": 0}}},
+                },
+                {
+                    "if": {"properties": {"passage": {"enum": ["stairs", "ladder"]}}},
+                    "then": {
+                        "properties": {
+                            "door_mechanics": {
+                                "const": {"barrier": "none", "hazard": "none"}
+                            }
+                        }
+                    },
+                },
+            ]
+        }
+    )
+
     local_ref: LocalRef
     from_ref: LocalRef
     to_ref: LocalRef
@@ -219,10 +241,6 @@ class DesignConnectionV2(ContractModel):
                 raise ValueError(
                     "same-floor doors cannot declare vertical endpoint doors"
                 )
-            if self.door_mechanics.concealed != (self.from_hidden or self.to_hidden):
-                raise ValueError(
-                    "same-floor door concealment must name one or more hidden endpoints"
-                )
         elif vertical:
             if mechanics_requested:
                 raise ValueError(
@@ -233,16 +251,6 @@ class DesignConnectionV2(ContractModel):
                 raise ValueError(
                     "vertical endpoint doors must name each endpoint at most once"
                 )
-            for endpoint_door in self.endpoint_doors:
-                endpoint_hidden = (
-                    self.from_hidden
-                    if endpoint_door.endpoint is VerticalEndpointSide.FROM
-                    else self.to_hidden
-                )
-                if endpoint_door.mechanics.concealed and not endpoint_hidden:
-                    raise ValueError(
-                        "a concealed vertical endpoint door/hatch requires its endpoint to be hidden"
-                    )
         return self
 
 
@@ -262,27 +270,27 @@ class DesignDependencyV2(ContractModel):
 
 
 class DesignTrapV2(ContractModel):
-    """A room-local trap/hazard whose required play details are explicit."""
+    """A room-local trap whose missing play prose remains a readiness blocker."""
 
     local_ref: LocalRef
     room_ref: LocalRef
     name: ShortText
-    trigger: NonEmptyText
-    effect: NonEmptyText
-    challenge: ChallengeBand
+    trigger: NonEmptyText | None = None
+    effect: NonEmptyText | None = None
+    challenge: ChallengeBand = ChallengeBand.MODERATE
 
 
 class DesignPuzzleV2(ContractModel):
-    """A puzzle is incomplete unless the proposal states its solution."""
+    """A room-local puzzle; absent play prose is explicit unfinished preparation."""
 
     local_ref: LocalRef
     room_ref: LocalRef
     name: ShortText
-    mechanism: NonEmptyText
-    clue_refs: tuple[LocalRef, ...] = Field(max_length=8)
-    solution: NonEmptyText
-    consequence: NonEmptyText
-    challenge: ChallengeBand
+    mechanism: NonEmptyText | None = None
+    clue_refs: tuple[LocalRef, ...] = Field(default=(), max_length=8)
+    solution: NonEmptyText | None = None
+    consequence: NonEmptyText | None = None
+    challenge: ChallengeBand = ChallengeBand.MODERATE
 
 
 class DesignFeatureV2(ContractModel):
@@ -309,7 +317,7 @@ class DungeonDesignSpecV2(VersionedContract):
 
     supported_schema_version = DUNGEON_DESIGN_V2_SCHEMA_VERSION
 
-    schema_version: Literal["2.3.0"]
+    schema_version: Literal["2.4.0"]
     title: ShortText
     premise: NonEmptyText
     purpose: DungeonPurpose = DungeonPurpose.RUIN

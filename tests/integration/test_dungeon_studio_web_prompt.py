@@ -51,7 +51,7 @@ def test_browser_prompt_faux_gateway_persists_draft(
     proposal = {
         "proposal_version": "2",
         "design": {
-            "schema_version": "2.3.0",
+            "schema_version": "2.4.0",
             "title": "Synthetic Archive",
             "premise": "A synthetic archive contains a sealed ledger.",
             "themes": ["salt"],
@@ -183,11 +183,11 @@ def test_browser_prompt_faux_gateway_persists_draft(
         )
         assert run is not None
         assert run.schema_versions["dungeon_package"] == "1.3.0"
-        assert run.schema_versions["dungeon_generation_proposal"] == "2.3.0"
+        assert run.schema_versions["dungeon_generation_proposal"] == "2.4.0"
         assert (
             run.generator_versions["dungeon_mechanics_policy"]
             == "dungeon-mechanics-policy-1"
         )
         assert run.generator_versions["design_compiler"] == (
-            "dungeon-design-v2-compiler-5"
+            "dungeon-design-v2-compiler-6"
         )

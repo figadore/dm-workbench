@@ -98,6 +98,27 @@ test("normalized transcript roles preserve tool continuity without user-message 
   assert.throws(() => parseStreamRequest(fauxStreamRequest({ messages: [{ role: "tool_result", content: "x" }] })));
 });
 
+test("constrained JSON-schema sampling is forwarded as prefer and remains safe for faux fallback", async () => {
+  const parsed = parseStreamRequest(fauxStreamRequest({
+    tools: [{
+      name: "set_brief",
+      description: "Set a deterministic dungeon brief.",
+      parameters: { type: "object", properties: { rooms: { type: "integer" } } },
+      constrained_sampling: "prefer",
+    }],
+  }));
+  assert.equal(parsed.tools[0]?.constrainedSampling, "prefer");
+
+  const directory = await mkdtemp(join(tmpdir(), "dm-gateway-"));
+  const runtime = createPiAiRuntime({
+    credentials: new FileCredentialStore(join(directory, "credentials.json")),
+    fauxResponses: [fauxAssistantMessage([fauxToolCall("set_brief", { rooms: 3 })])],
+  });
+  const events: AssistantMessageEvent[] = [];
+  for await (const event of runtime.stream(parsed, new AbortController().signal)) events.push(event);
+  assert.ok(events.some((event) => event.type === "toolcall_end"));
+});
+
 test("credential persistence serializes writes, uses restrictive permissions, and never exposes tokens", async () => {
   const directory = await mkdtemp(join(tmpdir(), "dm-gateway-"));
   const path = join(directory, "credentials.json");

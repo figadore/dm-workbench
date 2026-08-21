@@ -121,6 +121,13 @@ class PiAiGatewayRuntime implements GatewayRuntime {
               "text",
               ...(model.input.includes("image") ? ["image"] : []),
               ...(model.reasoning ? ["thinking"] : []),
+              ...(
+                model.compat !== undefined
+                && "supportsStrictMode" in model.compat
+                && model.compat.supportsStrictMode
+                  ? ["json_schema_constrained_sampling"]
+                  : []
+              ),
               "tool_calls",
             ],
             contextWindow: model.contextWindow,
@@ -215,6 +222,9 @@ function toPiTool(tool: GatewayStreamRequest["tools"][number]): Tool {
     name: tool.name,
     description: tool.description,
     parameters: Type.Unsafe(tool.parameters),
+    ...(tool.constrainedSampling === undefined
+      ? {}
+      : { constrainedSampling: { type: "json_schema" as const, strict: tool.constrainedSampling } }),
   };
 }
 

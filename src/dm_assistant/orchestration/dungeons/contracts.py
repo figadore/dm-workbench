@@ -134,10 +134,8 @@ class DungeonGuideConnection(WorkflowModel):
             self.trap_effect,
             self.disable_difficulty,
         )
-        if self.trap_id is not None and not all(
-            value is not None for value in trap_fields
-        ):
-            raise ValueError("traps require trigger, effect, and disable difficulty")
+        if self.trap_id is not None and self.disable_difficulty is None:
+            raise ValueError("traps require one disable difficulty")
         if self.trap_id is None and any(value is not None for value in trap_fields):
             raise ValueError("trap details require a trap ID")
         return self
@@ -157,8 +155,8 @@ class DungeonGuideTrap(WorkflowModel):
     room_id: str = Field(min_length=1, max_length=200)
     map_reference: DungeonGuideMapReference
     name: str = Field(min_length=1, max_length=200)
-    trigger: str = Field(min_length=1, max_length=4_000)
-    effect: str = Field(min_length=1, max_length=4_000)
+    trigger: str | None = Field(default=None, min_length=1, max_length=4_000)
+    effect: str | None = Field(default=None, min_length=1, max_length=4_000)
     detection_difficulty: int = Field(ge=0)
     disable_difficulty: int = Field(ge=0)
 
@@ -168,10 +166,10 @@ class DungeonGuidePuzzle(WorkflowModel):
     room_id: str = Field(min_length=1, max_length=200)
     map_reference: DungeonGuideMapReference
     name: str = Field(min_length=1, max_length=200)
-    mechanism: str = Field(min_length=1, max_length=4_000)
+    mechanism: str | None = Field(default=None, min_length=1, max_length=4_000)
     clue_dependency_ids: tuple[str, ...] = ()
-    solution: str = Field(min_length=1, max_length=4_000)
-    consequence: str = Field(min_length=1, max_length=4_000)
+    solution: str | None = Field(default=None, min_length=1, max_length=4_000)
+    consequence: str | None = Field(default=None, min_length=1, max_length=4_000)
     difficulty: int = Field(ge=0)
 
 
@@ -306,6 +304,26 @@ class DungeonProposalAbstentionV2(WorkflowModel):
 
 class DungeonGenerationProposalV2(WorkflowModel):
     """Workbench-owned wrapper around pure compact creative design intent."""
+
+    # Keep the design/abstention XOR visible in the exact schema sent to the
+    # gateway; the runtime validator remains authoritative fallback.
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=False,
+        json_schema_extra={
+            "oneOf": [
+                {
+                    "required": ["design"],
+                    "properties": {"abstention": {"type": "null"}},
+                },
+                {
+                    "required": ["abstention"],
+                    "properties": {"design": {"type": "null"}},
+                },
+            ]
+        },
+    )
 
     proposal_version: Literal["2"]
     design: DungeonDesignSpecV2 | None = None

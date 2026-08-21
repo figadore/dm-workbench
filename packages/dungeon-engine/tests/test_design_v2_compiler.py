@@ -23,7 +23,7 @@ from dm_dungeon.rendering import RenderAudience, SvgRenderRequest, render_svg
 
 def _minimal_design() -> dict[str, object]:
     return {
-        "schema_version": "2.3.0",
+        "schema_version": "2.4.0",
         "title": "Salt Cellar",
         "premise": "A tide-worn cache protects a sealed ledger.",
         "themes": ["salt", "tide"],
@@ -104,7 +104,7 @@ def test_compiler_generates_exact_kernel_intent_without_model_ids_or_counts() ->
     result = compile_dungeon_design_v2(_spec(_minimal_design()))
 
     assert result.accepted is True
-    assert result.compiler_version == "dungeon-design-v2-compiler-5"
+    assert result.compiler_version == "dungeon-design-v2-compiler-6"
     assert result.brief is not None
     assert result.topology is not None
     assert result.brief.floor_count == 1
@@ -929,9 +929,7 @@ def test_design_contract_rejects_vertical_transition_mechanics_without_endpoint_
         _spec(payload)
 
 
-def test_design_contract_rejects_concealed_vertical_hatch_without_hidden_endpoint() -> (
-    None
-):
+def test_legacy_endpoint_concealment_is_ignored_and_hidden_state_is_derived() -> None:
     payload = _minimal_design()
     upper = payload["floors"][0]
     assert isinstance(upper, dict)
@@ -961,8 +959,11 @@ def test_design_contract_rejects_concealed_vertical_hatch_without_hidden_endpoin
     ]
     payload["objectives"] = [{"room_ref": "vault", "kind": "final_objective"}]
 
-    with pytest.raises(ValidationError, match="requires its endpoint to be hidden"):
-        _spec(payload)
+    result = compile_dungeon_design_v2(_spec(payload))
+
+    assert result.accepted
+    assert result.mechanics_plan is not None
+    assert not result.mechanics_plan.door_mechanics[0].concealed
 
 
 def test_design_schema_round_trip_and_unknown_version_fail() -> None:
@@ -980,3 +981,59 @@ def test_design_schema_round_trip_and_unknown_version_fail() -> None:
     payload["seed"] = 2
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         _spec(payload)
+
+
+def test_active_mechanics_default_to_moderate_and_schema_has_no_duplicate_concealment() -> (
+    None
+):
+    payload = _minimal_design()
+    connection = payload["connections"][0]
+    assert isinstance(connection, dict)
+    connection["from_hidden"] = True
+    connection["door_mechanics"] = {"hazard": "trapped"}
+
+    result = compile_dungeon_design_v2(_spec(payload))
+
+    assert result.accepted
+    assert result.mechanics_plan is not None
+    mechanics = result.mechanics_plan.door_mechanics[0]
+    assert mechanics.concealed
+    assert mechanics.discovery_difficulty == 13
+    assert mechanics.disable_difficulty == 13
+    schema = DungeonDesignSpecV2.model_json_schema()
+    mechanics_schema = schema["$defs"]["DoorMechanicsIntentV2"]
+    assert "concealed" not in mechanics_schema["properties"]
+
+
+def test_incomplete_optional_trap_and_puzzle_still_compile_as_a_draft() -> None:
+    payload = _minimal_design()
+    payload["traps"] = [
+        {"local_ref": "salt-needle", "room_ref": "vault", "name": "Salt Needle"}
+    ]
+    payload["puzzles"] = [
+        {"local_ref": "seal", "room_ref": "vault", "name": "Ledger Seal"}
+    ]
+
+    result = compile_dungeon_design_v2(_spec(payload))
+
+    assert result.accepted
+    assert result.mechanics_plan is not None
+    assert len(result.mechanics_plan.room_traps) == 1
+    assert len(result.mechanics_plan.room_puzzles) == 1
+
+
+def test_invalid_encounter_slot_is_schema_visible_without_provider_response() -> None:
+    payload = _minimal_design()
+    floor = payload["floors"][0]
+    assert isinstance(floor, dict)
+    rooms = floor["rooms"]
+    assert isinstance(rooms, list)
+    room = rooms[0]
+    assert isinstance(room, dict)
+    room["encounter_slot"] = "set_piece"
+
+    with pytest.raises(ValidationError, match="encounter_slot"):
+        _spec(payload)
+    schema = DungeonDesignSpecV2.model_json_schema()
+    slot_schema = schema["$defs"]["EncounterSlotIntent"]
+    assert "set_piece" not in slot_schema["enum"]

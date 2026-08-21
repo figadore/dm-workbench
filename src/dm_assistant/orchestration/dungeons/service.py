@@ -367,7 +367,7 @@ class DungeonStudioService:
                     latest_lineage.intent.schema_version
                 )
             else:
-                schema_versions["dungeon_generation_proposal"] = "2.3.0"
+                schema_versions["dungeon_generation_proposal"] = "2.4.0"
                 generator_versions["design_compiler"] = (
                     dm_dungeon.DUNGEON_DESIGN_COMPILER_VERSION
                 )
@@ -633,9 +633,11 @@ def _require_preparation_ready(specification: DungeonStudioSpecification) -> Non
         )
 
 
-def _is_unknown_preparation_text(value: str) -> bool:
+def _is_unknown_preparation_text(value: str | None) -> bool:
     """Reserve explicit, bounded unknown markers instead of guessing play details."""
 
+    if value is None:
+        return True
     return value.strip().casefold() in {
         "unknown",
         "unspecified",
@@ -672,37 +674,41 @@ def _build_preparation_readiness(
                 )
             )
     for connection in guide.connections:
-        if (
-            connection.trap_id is not None
-            and connection.trap_effect is not None
-            and _is_unknown_preparation_text(connection.trap_effect)
+        if connection.trap_id is not None and (
+            _is_unknown_preparation_text(connection.trap_trigger)
+            or _is_unknown_preparation_text(connection.trap_effect)
         ):
             diagnostics.append(
                 DungeonPreparationReadinessDiagnostic(
                     code="dungeon_preparation.trap_effect_unknown",
                     component_id=connection.component_id,
                     map_reference=connection.map_reference,
-                    message="This trapped door or hatch has an unknown effect and needs DM completion.",
+                    message="This trapped door or hatch has unknown trigger/effect details and needs DM completion.",
                 )
             )
     for trap in guide.traps:
-        if _is_unknown_preparation_text(trap.effect):
+        if _is_unknown_preparation_text(trap.trigger) or _is_unknown_preparation_text(
+            trap.effect
+        ):
             diagnostics.append(
                 DungeonPreparationReadinessDiagnostic(
                     code="dungeon_preparation.trap_effect_unknown",
                     component_id=trap.marker_id,
                     map_reference=trap.map_reference,
-                    message="This trap's effect is unknown and needs DM completion.",
+                    message="This trap's trigger/effect is unknown and needs DM completion.",
                 )
             )
     for puzzle in guide.puzzles:
-        if _is_unknown_preparation_text(puzzle.solution):
+        if any(
+            _is_unknown_preparation_text(value)
+            for value in (puzzle.mechanism, puzzle.solution, puzzle.consequence)
+        ):
             diagnostics.append(
                 DungeonPreparationReadinessDiagnostic(
                     code="dungeon_preparation.puzzle_solution_unknown",
                     component_id=puzzle.marker_id,
                     map_reference=puzzle.map_reference,
-                    message="This puzzle's solution is unknown and needs DM completion.",
+                    message="This puzzle has unknown play details and needs DM completion.",
                 )
             )
     return DungeonPreparationReadiness(
@@ -967,9 +973,7 @@ def _build_dm_guide(
     for dependency in design.dependencies:
         gate_id = gate_by_target_ref.get(dependency.target_ref)
         if gate_id is None or gate_id not in dependencies_by_target:
-            raise ConflictError(
-                "A compiled barrier is missing its key or clue dependency."
-            )
+            continue
         dependency_id, _ = dependencies_by_target[gate_id]
         room_id = room_ids_by_ref[dependency.located_in_room_ref]
         room = rooms_by_id[room_id]
@@ -1374,17 +1378,17 @@ def _dm_guide_text(guide: DungeonDmGuide) -> str:
         sections.extend(("", "## Traps and hazards"))
         for trap in guide.traps:
             sections.append(
-                f"- {trap.map_reference.token} — {trap.name}: trigger {trap.trigger} "
+                f"- {trap.map_reference.token} — {trap.name}: trigger {trap.trigger or 'unknown'} "
                 f"Detection {trap.detection_difficulty}; disable {trap.disable_difficulty}. "
-                f"Effect: {trap.effect}"
+                f"Effect: {trap.effect or 'unknown'}"
             )
     if guide.puzzles:
         sections.extend(("", "## Puzzles"))
         for puzzle in guide.puzzles:
             sections.append(
-                f"- {puzzle.map_reference.token} — {puzzle.name}: {puzzle.mechanism} "
-                f"Difficulty {puzzle.difficulty}. Solution: {puzzle.solution}. "
-                f"Consequence: {puzzle.consequence}"
+                f"- {puzzle.map_reference.token} — {puzzle.name}: {puzzle.mechanism or 'unknown'} "
+                f"Difficulty {puzzle.difficulty}. Solution: {puzzle.solution or 'unknown'}. "
+                f"Consequence: {puzzle.consequence or 'unknown'}"
             )
     if guide.objectives:
         sections.extend(("", "## Objectives"))

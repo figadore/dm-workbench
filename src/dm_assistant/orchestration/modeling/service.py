@@ -46,6 +46,7 @@ class GatewayToolSchema(BaseModel):
     name: str
     description: str
     parameters: dict[str, JsonValue]
+    constrained_sampling: Literal["prefer", "require"] | None = None
 
 
 class GatewayClient(Protocol):

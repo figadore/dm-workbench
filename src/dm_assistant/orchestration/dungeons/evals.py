@@ -372,10 +372,7 @@ def _preserves_expected_semantics(
         flags.add("one_floor")
     if len(design.floors) == 2:
         flags.add("two_floor")
-    if any(
-        item.from_hidden or item.to_hidden or item.door_mechanics.concealed
-        for item in design.connections
-    ):
+    if any(item.from_hidden or item.to_hidden for item in design.connections):
         flags.add("secret")
     if max(room_degree.values(), default=0) >= 3:
         flags.add("branch")

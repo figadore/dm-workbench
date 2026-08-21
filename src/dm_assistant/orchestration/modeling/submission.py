@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import math
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal, TypeVar, cast
@@ -103,19 +103,24 @@ class StructuredSubmissionRunner:
         request_profile = profile.model_copy(
             update={"time_budget_seconds": remaining_seconds}
         )
+        gateway_schema = tool.gateway_schema()
+        if "json_schema_constrained_sampling" in profile.observed_capabilities:
+            gateway_schema = gateway_schema.model_copy(
+                update={"constrained_sampling": "prefer"}
+            )
         if self._debug is None:
             completion = self._client.complete(
                 profile=request_profile,
                 messages=run_input.messages,
                 allowed_tools=(tool.name,),
-                tool_schemas=(tool.gateway_schema(),),
+                tool_schemas=(gateway_schema,),
             )
         else:
             completion = self._client.complete(  # type: ignore[call-arg]
                 profile=request_profile,
                 messages=run_input.messages,
                 allowed_tools=(tool.name,),
-                tool_schemas=(tool.gateway_schema(),),
+                tool_schemas=(gateway_schema,),
                 debug=self._debug,
             )
         if self._is_cancelled() or self._monotonic_clock() >= deadline:
@@ -135,12 +140,12 @@ class StructuredSubmissionRunner:
             )
         except ValidationError as error:
             diagnostic_values: list[dict[str, JsonValue]] = []
-            for detail in error.errors(include_url=False, include_context=False)[:8]:
+            for detail in error.errors(include_url=False, include_context=True)[:8]:
                 diagnostic: dict[str, JsonValue] = {
                     "code": "submission.schema_invalid",
                     "path": "/" + "/".join(str(item) for item in detail["loc"]),
                     "affected_refs": [],
-                    "repair": "provide a value matching the submitted tool schema",
+                    "repair": _schema_repair_hint(detail),
                 }
                 diagnostic_values.append(diagnostic)
             diagnostics = tuple(diagnostic_values)
@@ -184,6 +189,21 @@ class StructuredSubmissionRunner:
             status="succeeded",
         )
         return typed_submission, record
+
+
+def _schema_repair_hint(detail: Mapping[str, object]) -> str:
+    """Return only stable schema facts, never model input or validator prose."""
+    error_type = detail.get("type")
+    if error_type == "missing":
+        return "provide this required field"
+    if error_type == "extra_forbidden":
+        return "remove this field because it is not in the submitted schema"
+    if error_type in {"enum", "literal_error"}:
+        context = detail.get("ctx")
+        expected = context.get("expected") if isinstance(context, dict) else None
+        if isinstance(expected, str) and len(expected) <= 500:
+            return f"use one of the allowed values: {expected}"
+    return "provide a value matching the submitted tool schema"
 
 
 def _record(

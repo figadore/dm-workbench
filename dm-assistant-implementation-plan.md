@@ -1504,6 +1504,101 @@ consumer exists, the normal immutable reader/replay policy applies.
   endpoint rather than rejecting a valid cross-floor barrier merely for being vertical;
   never claim that all secret vertical links require a door.
 
+#### P7-13d.1 — Prompt-contract reliability and bounded-cost recovery
+
+This is a blocking continuation of P7-13d, prompted by live GPT-5.4 evidence after
+its contract expansion. Do not begin P7-13e merely because the pure compiler and
+renderer suites pass: basic prompt-to-draft generation must first be reliable and
+cost-bounded. Keep exactly one initial submission and at most one repair; adding
+retries or selecting a more expensive model is not an acceptable substitute.
+
+**Work**
+
+- Freeze provider-free regressions equivalent to the failed synthetic Flooded Archive
+  submissions without storing provider responses. Cover the invalid `set_piece`
+  encounter slot, a concealed door with omitted challenge, a concealed door whose
+  duplicated concealment disagrees with its endpoints, and a repair that otherwise
+  loses the lighthouse request.
+- Audit every runtime `model_validator` affecting model-controlled proposal fields
+  against the JSON Schema actually sent through the gateway. A first-pass requirement
+  must either be machine-visible in the supported provider schema or cease to reject
+  submission. Do not rely on prose instructions to repair an invisible contract.
+- Simplify the connection contract rather than adding more coupled fields:
+  derive physical door/hatch concealment from `from_hidden`/`to_hidden` and the named
+  vertical endpoint instead of asking the model to repeat `concealed`; allow the model
+  to omit an active mechanic's relative challenge and apply one documented pinned
+  default (`moderate`) before exact policy mapping. Preserve an explicitly supplied
+  valid challenge.
+- Separate draft generation validity from preparation readiness. Missing trap
+  trigger/effect, puzzle solution, or lock/puzzle dependency remains explicit unknown
+  preparation data and blocks approval for play, but does not discard an otherwise
+  connected map draft. Unknown data must remain visible in the DM guide/readiness
+  report; deterministic code must not invent prose, silently remove the mechanic, or
+  mark the artifact ready. Unknown refs, contradictory endpoint placement, impossible
+  floor/link types, duplicate identities, and invalid topology remain hard submission
+  errors.
+- Make the default instruction request the smallest design that satisfies the DM's
+  prompt. Optional branches, loops, encounter slots, traps, puzzles, and features are
+  omitted unless requested or necessary to the stated premise; schema breadth is not
+  an instruction to populate every collection.
+- Repair schema-invalid submissions with the original DM prompt, authorized context
+  envelope, a size-bounded canonical copy of the prior tool arguments, and stable
+  actionable diagnostics. Diagnostics must state allowed enum values or the violated
+  capability rule without echoing arbitrary model prose. Tell the model to preserve
+  the requested dungeon and valid prior content while changing only invalid fields.
+  Keep these bodies out of ordinary logs.
+- Extend the Python/Node tool contract to request `pi-ai` JSON-schema constrained
+  sampling when the resolved provider advertises and passes that capability. Start
+  with `prefer`; use `require` only after provider-contract coverage proves the active
+  schema subset is supported. Server-side validation remains authoritative.
+- Lower the V2 request output cap from 16,384 to an eval-justified basic-generation
+  limit, initially at most 4,096 output tokens, and cap cumulative initial-plus-repair
+  usage, initially at most 12,000 measured tokens. If a frozen required case cannot fit,
+  raise the smallest limit justified by its measurements rather than restoring the
+  endpoint maximum. Missing usage remains unknown and follows the existing fail-closed
+  repair policy.
+- Add a staged opt-in live gate rather than more manual retries: provider/faux tests
+  first, then the exact Flooded Archive as a stop-on-failure canary, then the fixed
+  synthetic suite only if the canary passes. Record body-free validity, semantic,
+  latency, token, and estimated/available cost observations. The canary must retain a
+  small upper floor, larger lower floor, secret descent, Flooded Archive identity, and
+  final Stone of Redemption objective.
+- Do not add a second model call in this task. After the contract/repair fixes, measure
+  whether one compact submission still couples basic topology to optional enrichment.
+  If the live gate remains below P7-12g thresholds, add a separately reviewed
+  P7-13d.2 architecture slice for core topology first and optional DM-guide enrichment
+  second; it must reuse the accepted package IDs, be independently skippable, and have
+  a lower measured total failure/cost rate than the one-call design.
+
+**Tests**
+
+- JSON-schema/gateway contract tests for visible enum and required-field behavior plus
+  server tests proving no schema-advertised payload is rejected solely by an invisible
+  connection-mechanics invariant.
+- Submission tests proving schema-invalid repair retains bounded original task/prior
+  arguments, returns actionable diagnostics, preserves valid content, and never emits
+  a third provider request.
+- Compiler/readiness/guide tests proving incomplete optional mechanics produce a valid
+  draft with blocking unknowns, while topology/reference contradictions still reject.
+- Prompt tests proving an unrequested basic dungeon does not gratuitously populate all
+  advanced collections.
+- Node faux-provider coverage for constrained-sampling translation and explicit
+  unsupported-capability fallback.
+
+**Done when**
+
+- The exact Flooded Archive canary succeeds within the frozen cost/token ceiling and
+  preserves every requested semantic, without hand-editing or repeated manual runs.
+- The fixed live suite meets the existing P7-12g target of at least 90% first-pass
+  schema validity and at least 95% acceptance after one repair; with ten cases, the
+  latter means all ten must succeed.
+- Every repair has enough bounded context to repair the original dungeon, and every
+  diagnostic tells the model what rule or value to change.
+- A malformed optional enhancement cannot erase an otherwise valid basic map; the DM
+  receives a draft with truthful readiness blockers instead.
+- No profile gains additional repair turns, no provider response becomes a fixture,
+  and no model is promoted merely to compensate for a defective contract.
+
 #### P7-13e — Asset catalog, inline viewing, and meaningful filenames
 
 - Project immutable role/ordinal links into floor/audience/purpose groups: Maps, DM
@@ -1541,6 +1636,9 @@ consumer exists, the normal immutable reader/replay policy applies.
 
 **Phase gate P7-13**
 
+- The bounded Flooded Archive live canary succeeds within the frozen token ceiling;
+  schema-invalid repair retains the original task, and the fixed live suite meets the
+  P7-12g first-pass/after-repair thresholds before further rollout.
 - Direct doors are shared-wall openings; valid corridor bends never occur at room
   endpoints or overlap room interiors.
 - Default maps contain no opaque IDs or colliding labels and use one consistent keyed

@@ -4,6 +4,7 @@ export interface GatewayToolSchema {
   readonly name: string;
   readonly description: string;
   readonly parameters: Record<string, unknown>;
+  readonly constrainedSampling?: "prefer" | "require";
 }
 
 export type GatewayMessage =
@@ -177,11 +178,16 @@ function parseTools(value: unknown): readonly GatewayToolSchema[] {
   }
   return tools.map((tool) => {
     const item = expectObject(tool, "tool schema must be an object");
-    expectOnlyKeys(item, new Set(["name", "description", "parameters"]));
+    expectOnlyKeys(item, new Set(["name", "description", "parameters", "constrained_sampling"]));
+    const constrainedSampling = item.constrained_sampling;
+    if (constrainedSampling !== undefined && constrainedSampling !== "prefer" && constrainedSampling !== "require") {
+      throw new GatewayRequestError("invalid_request", "constrained_sampling is invalid");
+    }
     return {
       name: expectIdentifier(item.name, "tool name"),
       description: expectString(item.description, "tool description"),
       parameters: expectObject(item.parameters, "tool parameters must be an object"),
+      ...(constrainedSampling === undefined ? {} : { constrainedSampling }),
     };
   });
 }

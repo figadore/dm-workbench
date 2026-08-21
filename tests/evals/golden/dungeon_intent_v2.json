@@ -9,7 +9,7 @@
     "proposal": {
       "proposal_version": "2",
       "design": {
-        "schema_version": "2.3.0",
+        "schema_version": "2.4.0",
         "title": "Salt Cellar",
         "premise": "Synthetic sealed ledger.",
         "themes": [
@@ -61,7 +61,7 @@
     "proposal": {
       "proposal_version": "2",
       "design": {
-        "schema_version": "2.3.0",
+        "schema_version": "2.4.0",
         "title": "Twin Crypt",
         "premise": "Synthetic vertical descent.",
         "themes": [
@@ -120,7 +120,7 @@
     "proposal": {
       "proposal_version": "2",
       "design": {
-        "schema_version": "2.3.0",
+        "schema_version": "2.4.0",
         "title": "Hidden Well",
         "premise": "Synthetic concealed descent.",
         "themes": [
@@ -191,7 +191,7 @@
     "proposal": {
       "proposal_version": "2",
       "design": {
-        "schema_version": "2.3.0",
+        "schema_version": "2.4.0",
         "title": "Loop Hall",
         "premise": "Synthetic looping route.",
         "themes": [
@@ -269,7 +269,7 @@
     "proposal": {
       "proposal_version": "2",
       "design": {
-        "schema_version": "2.3.0",
+        "schema_version": "2.4.0",
         "title": "Riddle Door",
         "premise": "Synthetic clue before puzzle gate.",
         "themes": [
@@ -333,7 +333,7 @@
     "proposal": {
       "proposal_version": "2",
       "design": {
-        "schema_version": "2.3.0",
+        "schema_version": "2.4.0",
         "title": "Needle Door",
         "premise": "Synthetic trapped access.",
         "themes": [
@@ -392,7 +392,7 @@
     "proposal": {
       "proposal_version": "2",
       "design": {
-        "schema_version": "2.3.0",
+        "schema_version": "2.4.0",
         "title": "Side Chamber",
         "premise": "Synthetic optional chamber.",
         "themes": [
@@ -462,7 +462,7 @@
       "proposal_version": "2",
       "intent_summary": "A synthetic relic objective.",
       "design": {
-        "schema_version": "2.3.0",
+        "schema_version": "2.4.0",
         "title": "Relic Vault",
         "premise": "Synthetic final relic.",
         "themes": [
@@ -513,7 +513,7 @@
     "proposal": {
       "proposal_version": "2",
       "design": {
-        "schema_version": "2.3.0",
+        "schema_version": "2.4.0",
         "title": "Bad Ref",
         "premise": "Synthetic invalid reference.",
         "themes": [
@@ -556,7 +556,7 @@
     "repair_proposal": {
       "proposal_version": "2",
       "design": {
-        "schema_version": "2.3.0",
+        "schema_version": "2.4.0",
         "title": "Good Ref",
         "premise": "Synthetic repaired reference.",
         "themes": [

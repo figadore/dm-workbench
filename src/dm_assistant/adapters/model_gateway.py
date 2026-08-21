@@ -29,6 +29,14 @@ class ModelGatewayTransportError(RuntimeError):
     """Raised when the private gateway cannot return a valid bounded completion."""
 
 
+def _profile_output_token_limit(profile: ResolvedModelRunProfile) -> int:
+    """Use an explicit task cap when present; never exceed gateway policy."""
+    configured = profile.override_notes.get("output_token_limit")
+    if isinstance(configured, int) and configured > 0:
+        return min(configured, 16_384)
+    return 16_384
+
+
 class GatewayCatalogModel(BaseModel):
     """Display-safe model metadata returned by the private gateway."""
 
@@ -223,7 +231,10 @@ class PiGatewayClient:
                     for message in messages
                 ],
                 "tools": [schema.model_dump(mode="json") for schema in tool_schemas],
-                "output_token_limit": min(profile.token_budget, 16_384),
+                "output_token_limit": min(
+                    profile.token_budget,
+                    _profile_output_token_limit(profile),
+                ),
                 "time_limit_seconds": profile.time_budget_seconds,
                 "run_id": run_id or str(uuid4()),
             },
