@@ -34,7 +34,7 @@ from dm_dungeon.contracts.topology import (
     VerticalConnection,
 )
 
-DUNGEON_PACKAGE_V2_SCHEMA_VERSION = "1.2.0"
+DUNGEON_PACKAGE_V2_SCHEMA_VERSION = "1.3.0"
 
 
 class PassageApproachDirection(StrEnum):
@@ -90,8 +90,8 @@ class ComposableDoorMechanicsV2(ContractModel):
     """Exact independently retained mechanics on one physical door or hatch.
 
     This is deliberately separate from the legacy exclusive ``DoorType``. The
-    active P7-13d package compiler will consume this shape when it advances the
-    root package/generator pin after endpoint-anchor generation exists.
+    active mechanics-aware layout attaches this shape to exact shared-wall or
+    vertical-endpoint geometry without collapsing independent mechanics.
     """
 
     concealed: bool = False
@@ -131,9 +131,9 @@ class DoorLayoutV2(FloorBoundMapElement):
             raise ValueError(
                 "same-floor door concealment must match at least one hidden endpoint"
             )
-        if self.mechanics.concealed or self.mechanics.trap_id is not None:
-            if self.visibility is not Visibility.DM_ONLY:
-                raise ValueError("concealed or trapped doors must be dm_only")
+        # Geometry may remain player-publishable while the renderer normalizes all
+        # mechanics to an ordinary door. Symmetrically hidden doors are still
+        # DM-only because endpoint/room publication makes their layout DM-only.
         return self
 
 
@@ -143,6 +143,7 @@ class RoomMechanicMarkerKindV2(StrEnum):
     TRAP = "trap"
     PUZZLE = "puzzle"
     FEATURE = "feature"
+    OBJECTIVE = "objective"
 
 
 class RoomMechanicMarkerV2(FloorBoundMapElement):
@@ -157,24 +158,22 @@ class RoomMechanicMarkerV2(FloorBoundMapElement):
     kind: RoomMechanicMarkerKindV2
 
 
-class VerticalEndpointDoorLayoutV2(ContractModel):
+class VerticalEndpointDoorLayoutV2(FloorBoundMapElement):
     """A door/hatch at exactly one source or destination vertical endpoint."""
 
-    id: OpaqueId
-    layer_id: OpaqueId
     vertical_link_id: OpaqueId
     endpoint: VerticalEndpointSide
     kind: EndpointDoorKind
-    floor_id: OpaqueId
     room_id: OpaqueId
     position: GridPoint
     mechanics: ComposableDoorMechanicsV2 = ComposableDoorMechanicsV2()
-    visibility: Visibility = Visibility.DM_ONLY
 
     @model_validator(mode="after")
-    def require_dm_only_mechanics(self) -> Self:
-        if self.visibility is not Visibility.DM_ONLY:
-            raise ValueError("vertical endpoint doors/hatches must be dm_only")
+    def require_concealed_endpoint_to_be_dm_only(self) -> Self:
+        if self.mechanics.concealed and self.visibility is not Visibility.DM_ONLY:
+            raise ValueError(
+                "concealed vertical endpoint doors/hatches must be dm_only"
+            )
         return self
 
 
@@ -183,12 +182,11 @@ class DungeonPackageV2(DungeonPackage):
 
     supported_schema_version = DUNGEON_PACKAGE_V2_SCHEMA_VERSION
 
-    schema_version: Literal["1.2.0"]  # type: ignore[assignment]
+    schema_version: Literal["1.3.0"]  # type: ignore[assignment]
     passage_openings: tuple[PassageOpening, ...] = ()
-    # The legacy ``doors`` projection remains available only for the already
-    # generated P7-13c packages. New mechanics-aware layout will populate these
-    # exact records instead, so no requested independent mechanic is collapsed
-    # into the old exclusive DoorType.
+    # The legacy ``doors`` projection remains available for orthogonal-v3 input.
+    # Mechanics-aware layout populates these exact records instead, so
+    # no requested independent mechanic is collapsed into exclusive DoorType.
     composable_doors: tuple[DoorLayoutV2, ...] = ()
     vertical_endpoint_doors: tuple[VerticalEndpointDoorLayoutV2, ...] = ()
     room_mechanic_markers: tuple[RoomMechanicMarkerV2, ...] = ()
@@ -253,8 +251,13 @@ class DungeonPackageV2(DungeonPackage):
                     "composable door must retain a same-floor door connection ID"
                 )
         for endpoint_door in self.vertical_endpoint_doors:
-            if endpoint_door.layer_id not in layer_ids:
+            layer = layers.get(endpoint_door.layer_id)
+            if layer is None:
                 raise ValueError("vertical endpoint door references an unknown layer")
+            if endpoint_door.visibility is not layer.visibility:
+                raise ValueError(
+                    "vertical endpoint door visibility must match its render layer"
+                )
             if endpoint_door.room_id not in room_ids:
                 raise ValueError("vertical endpoint door references an unknown room")
             link = links.get(endpoint_door.vertical_link_id)

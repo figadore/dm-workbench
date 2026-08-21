@@ -77,7 +77,7 @@ def test_v3_direct_doors_share_walls_without_synthetic_corridors(
     assert result.package is not None
     package = result.package
     assert isinstance(package, DungeonPackageV2)
-    assert package.schema_version == "1.2.0"
+    assert package.schema_version == "1.3.0"
     assert len(package.passage_openings) == 2 * len(package.corridors)
     assert load_dungeon_package_json(to_canonical_json(package)) == package
     direct_ids = {

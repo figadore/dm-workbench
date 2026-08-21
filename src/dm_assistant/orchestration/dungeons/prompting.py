@@ -73,7 +73,7 @@ _DUNGEON_CONTEXT_KIND = "dungeon_generation"
 _DUNGEON_INTENT_SCHEMA_NAME = "dungeon_generation_intent_v1"
 _DUNGEON_INTENT_SCHEMA_VERSION = "1.0.0"
 _DUNGEON_V2_SCHEMA_NAME = "dungeon_generation_proposal_v2"
-_DUNGEON_V2_SCHEMA_VERSION = "2.2.0"
+_DUNGEON_V2_SCHEMA_VERSION = "2.3.0"
 _SUBMIT_DUNGEON_INTENT_V2_TOOL = "submit_dungeon_intent_v2"
 _REVIEW_BRIEF_TOOL = "review_dungeon_brief"
 _REVIEW_TOPOLOGY_TOOL = "review_dungeon_topology"
@@ -94,7 +94,8 @@ _V2_CONNECTION_GUIDANCE = (
     "independently; a ladder hidden under an upper-floor rug has from_hidden true "
     "and to_hidden false. Same-floor passages have no hidden, barrier, or trap "
     "mechanics. A same-floor door uses from_hidden/to_hidden "
-    "plus door_mechanics {concealed, barrier, hazard, challenge}; a lock or puzzle "
+    "plus door_mechanics {concealed, barrier, hazard, challenge, trap_trigger, "
+    "trap_effect}; trapped doors/hatches require both trap details. A lock or puzzle "
     "also needs one dependency targeting the door local_ref. Stairs/ladders may have "
     "hidden endpoints without a door. A vertical lock, puzzle, or trap instead needs "
     "an explicit endpoint_doors item {local_ref, endpoint: from|to, kind: door|hatch, "
@@ -241,7 +242,7 @@ def resolve_dungeon_v2_prompt_profile(
     return base.model_copy(
         update={
             "task_profile_id": uuid.UUID("77777777-7777-7777-7777-777777777712"),
-            "task_profile_version": "2.2.0",
+            "task_profile_version": "2.3.0",
             "prompt_version": "prompt-3",
             "instruction_version": "instructions-3",
             "output_schema_name": _DUNGEON_V2_SCHEMA_NAME,
@@ -1180,7 +1181,7 @@ def _validate_v2_profile(profile: ResolvedModelRunProfile) -> None:
     if profile.output_schema_name != _DUNGEON_V2_SCHEMA_NAME:
         raise ValueError("V2 submission requires the dungeon V2 proposal schema")
     if profile.output_schema_version != _DUNGEON_V2_SCHEMA_VERSION:
-        raise ValueError("V2 submission requires proposal schema version 2.2.0")
+        raise ValueError("V2 submission requires proposal schema version 2.3.0")
     if profile.allowed_tools != (_SUBMIT_DUNGEON_INTENT_V2_TOOL,):
         raise ValueError("V2 submission exposes only submit_dungeon_intent_v2")
     if profile.turn_budget != 1 or profile.tool_budget != 1:

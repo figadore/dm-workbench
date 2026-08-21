@@ -37,7 +37,9 @@ from dm_dungeon.contracts.design_v2 import (
 from dm_dungeon.contracts.mechanics_v2 import (
     DUNGEON_MECHANICS_POLICY_VERSION,
     CompiledDoorMechanicsV2,
+    CompiledEncounterSlotV2,
     CompiledRoomFeatureV2,
+    CompiledRoomObjectiveV2,
     CompiledRoomPuzzleV2,
     CompiledRoomTrapV2,
     DungeonMechanicsPlanV2,
@@ -67,8 +69,8 @@ from dm_dungeon.contracts.topology import (
 )
 from dm_dungeon.layout.contracts import FloorLayoutBounds
 
-DUNGEON_DESIGN_COMPILER_VERSION: Literal["dungeon-design-v2-compiler-4"] = (
-    "dungeon-design-v2-compiler-4"
+DUNGEON_DESIGN_COMPILER_VERSION: Literal["dungeon-design-v2-compiler-5"] = (
+    "dungeon-design-v2-compiler-5"
 )
 
 
@@ -85,7 +87,7 @@ class DungeonDesignCompileResult(ContractModel):
     """A complete exact intent or a bounded set of compiler diagnostics."""
 
     accepted: bool
-    compiler_version: Literal["dungeon-design-v2-compiler-4"]
+    compiler_version: Literal["dungeon-design-v2-compiler-5"]
     input_hash: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
     output_hash: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")] | None = None
     mechanics_plan: DungeonMechanicsPlanV2 | None = None
@@ -497,6 +499,29 @@ def _compile_mechanics_plan(
             )
             for feature in sorted(spec.features, key=lambda value: value.local_ref)
         ),
+        room_objectives=tuple(
+            CompiledRoomObjectiveV2(
+                id=_component_id(
+                    "objective", f"{objective.kind.value}:{objective.room_ref}"
+                ),
+                room_id=room_ids[objective.room_ref],
+                kind=objective.kind,
+            )
+            for objective in sorted(
+                spec.objectives,
+                key=lambda value: (value.kind.value, value.room_ref),
+            )
+        ),
+        encounter_slots=tuple(
+            CompiledEncounterSlotV2(
+                id=_component_id("encounter-slot", room.local_ref),
+                room_id=room_ids[room.local_ref],
+                intent=room.encounter_slot,
+            )
+            for floor in sorted(spec.floors, key=lambda value: value.local_ref)
+            for room in sorted(floor.rooms, key=lambda value: value.local_ref)
+            if room.encounter_slot is not None
+        ),
     )
 
 
@@ -671,10 +696,10 @@ def _validate_design(spec: DungeonDesignSpecV2) -> list[DungeonDesignCompileDiag
                 target_barriers.add(endpoint_door.local_ref)
 
     dependency_targets: list[str] = []
-    dependency_refs: set[str] = set()
+    dependencies_by_ref: dict[str, DesignDependencyV2] = {}
     for index, dependency in enumerate(spec.dependencies):
         add_ref(dependency.local_ref, f"/dependencies/{index}/local_ref")
-        dependency_refs.add(dependency.local_ref)
+        dependencies_by_ref[dependency.local_ref] = dependency
         dependency_targets.append(dependency.target_ref)
         if dependency.target_ref not in target_barriers:
             diagnostics.append(
@@ -737,6 +762,7 @@ def _validate_design(spec: DungeonDesignSpecV2) -> list[DungeonDesignCompileDiag
                 "declare exactly one final objective",
             )
         )
+    objective_keys: set[tuple[ObjectiveKind, str]] = set()
     for index, objective in enumerate(spec.objectives):
         if objective.room_ref not in rooms:
             diagnostics.append(
@@ -747,19 +773,40 @@ def _validate_design(spec: DungeonDesignSpecV2) -> list[DungeonDesignCompileDiag
                     "reference a declared room",
                 )
             )
+        objective_key = (objective.kind, objective.room_ref)
+        if objective_key in objective_keys:
+            diagnostics.append(
+                _diagnostic(
+                    "design.duplicate_objective",
+                    f"/objectives/{index}",
+                    (objective.room_ref,),
+                    "declare each objective kind at most once per room",
+                )
+            )
+        objective_keys.add(objective_key)
 
     _validate_room_local_refs("traps", spec.traps, rooms, add_ref, diagnostics)
     _validate_room_local_refs("puzzles", spec.puzzles, rooms, add_ref, diagnostics)
     _validate_room_local_refs("features", spec.features, rooms, add_ref, diagnostics)
     for index, puzzle in enumerate(spec.puzzles):
         for clue_index, clue_ref in enumerate(puzzle.clue_refs):
-            if clue_ref not in dependency_refs:
+            puzzle_dependency = dependencies_by_ref.get(clue_ref)
+            if puzzle_dependency is None:
                 diagnostics.append(
                     _diagnostic(
                         "design.unknown_clue_ref",
                         f"/puzzles/{index}/clue_refs/{clue_index}",
                         (clue_ref,),
-                        "reference a declared key or clue local ref",
+                        "reference a declared clue local ref",
+                    )
+                )
+            elif puzzle_dependency.kind is not DependencyKind.CLUE:
+                diagnostics.append(
+                    _diagnostic(
+                        "design.clue_ref_not_clue",
+                        f"/puzzles/{index}/clue_refs/{clue_index}",
+                        (clue_ref,),
+                        "reference a dependency whose kind is clue",
                     )
                 )
 

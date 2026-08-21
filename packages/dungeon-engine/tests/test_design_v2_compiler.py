@@ -23,7 +23,7 @@ from dm_dungeon.rendering import RenderAudience, SvgRenderRequest, render_svg
 
 def _minimal_design() -> dict[str, object]:
     return {
-        "schema_version": "2.2.0",
+        "schema_version": "2.3.0",
         "title": "Salt Cellar",
         "premise": "A tide-worn cache protects a sealed ledger.",
         "themes": ["salt", "tide"],
@@ -104,7 +104,7 @@ def test_compiler_generates_exact_kernel_intent_without_model_ids_or_counts() ->
     result = compile_dungeon_design_v2(_spec(_minimal_design()))
 
     assert result.accepted is True
-    assert result.compiler_version == "dungeon-design-v2-compiler-4"
+    assert result.compiler_version == "dungeon-design-v2-compiler-5"
     assert result.brief is not None
     assert result.topology is not None
     assert result.brief.floor_count == 1
@@ -373,6 +373,8 @@ def test_compiler_preserves_composable_door_and_vertical_endpoint_mechanics() ->
                 "barrier": "locked",
                 "hazard": "trapped",
                 "challenge": "moderate",
+                "trap_trigger": "Opening the door.",
+                "trap_effect": "A synthetic ward discharges.",
             },
         },
         {
@@ -391,6 +393,8 @@ def test_compiler_preserves_composable_door_and_vertical_endpoint_mechanics() ->
                         "barrier": "puzzle",
                         "hazard": "trapped",
                         "challenge": "high",
+                        "trap_trigger": "Lifting the hatch.",
+                        "trap_effect": "A synthetic chime sounds.",
                     },
                 }
             ],
@@ -460,6 +464,8 @@ def test_compiler_preserves_composable_door_and_vertical_endpoint_mechanics() ->
     assert len(result.mechanics_plan.room_traps) == 1
     assert len(result.mechanics_plan.room_puzzles) == 1
     assert len(result.mechanics_plan.room_features) == 1
+    assert len(result.mechanics_plan.room_objectives) == 1
+    assert len(result.mechanics_plan.encounter_slots) == 1
 
     assert result.brief is not None and result.topology is not None
     assert {item.id for item in result.topology.gates} == {
@@ -497,6 +503,7 @@ def test_compiler_preserves_composable_door_and_vertical_endpoint_mechanics() ->
             *result.mechanics_plan.room_traps,
             *result.mechanics_plan.room_puzzles,
             *result.mechanics_plan.room_features,
+            *result.mechanics_plan.room_objectives,
         )
     }
     markers = {marker.kind.value: marker for marker in package.room_mechanic_markers}
@@ -505,6 +512,11 @@ def test_compiler_preserves_composable_door_and_vertical_endpoint_mechanics() ->
     # otherwise physical puzzle/feature markers remain fail-closed too.
     assert markers["puzzle"].visibility.value == "dm_only"
     assert markers["feature"].visibility.value == "dm_only"
+    assert markers["objective"].visibility.value == "dm_only"
+    assert len(package.encounter_slots) == 1
+    assert package.encounter_slots[0].id == result.mechanics_plan.encounter_slots[0].id
+    assert package.encounter_slots[0].tags == ("ambush",)
+    assert package.encounter_slots[0].visibility.value == "dm_only"
     assert (
         len(
             {
@@ -512,11 +524,16 @@ def test_compiler_preserves_composable_door_and_vertical_endpoint_mechanics() ->
                 for marker in markers.values()
             }
         )
-        == 3
+        == 4
     )
     hatch = package.vertical_endpoint_doors[0]
     assert hatch.id == vertical.id
     assert hatch.kind.value == "hatch"
+    hatch_dm_svg = _render(package, hatch.floor_id, RenderAudience.DM)
+    assert f'data-component-id="{hatch.id}"' in hatch_dm_svg
+    assert 'data-kind="vertical-endpoint-door"' in hatch_dm_svg
+    assert 'data-door-gated="true"' in hatch_dm_svg
+    assert 'data-door-trapped="true"' in hatch_dm_svg
     assert (
         hatch.position
         == next(
@@ -534,6 +551,9 @@ def test_compiler_preserves_composable_door_and_vertical_endpoint_mechanics() ->
     assert 'data-door-gated="true"' in dm_svg
     assert 'data-door-trapped="true"' in dm_svg
     assert f'data-component-id="{door.id}"' not in player_svg
+    encounter_slot = package.encounter_slots[0]
+    assert f'data-component-id="{encounter_slot.id}"' in dm_svg
+    assert f'data-component-id="{encounter_slot.id}"' not in player_svg
     trap = markers["trap"]
     puzzle = markers["puzzle"]
     feature = markers["feature"]
@@ -591,6 +611,14 @@ def test_compiler_preserves_every_same_floor_door_mechanics_combination(
         **(
             {"challenge": "moderate"}
             if concealed or barrier != "none" or hazard != "none"
+            else {}
+        ),
+        **(
+            {
+                "trap_trigger": "Opening the door.",
+                "trap_effect": "A synthetic ward discharges.",
+            }
+            if hazard == "trapped"
             else {}
         ),
     }
@@ -661,6 +689,14 @@ def test_compiler_preserves_every_vertical_endpoint_mechanics_combination(
             if concealed or barrier != "none" or hazard != "none"
             else {}
         ),
+        **(
+            {
+                "trap_trigger": "Opening the hatch.",
+                "trap_effect": "A synthetic ward discharges.",
+            }
+            if hazard == "trapped"
+            else {}
+        ),
     }
     payload["connections"] = [
         {
@@ -706,6 +742,80 @@ def test_compiler_preserves_every_vertical_endpoint_mechanics_combination(
     assert (mechanics.discovery_difficulty is not None) is concealed
     assert (mechanics.unlock_difficulty is not None) is (barrier != "none")
     assert (mechanics.disable_difficulty is not None) is (hazard == "trapped")
+
+
+def test_trapped_door_keeps_player_geometry_without_mechanics_metadata() -> None:
+    payload = _minimal_design()
+    connection = payload["connections"][0]
+    assert isinstance(connection, dict)
+    connection["door_mechanics"] = {
+        "hazard": "trapped",
+        "challenge": "moderate",
+        "trap_trigger": "Opening the door.",
+        "trap_effect": "A synthetic ward discharges.",
+    }
+    result = compile_dungeon_design_v2(_spec(payload))
+    assert result.accepted
+    assert result.brief is not None
+    assert result.topology is not None
+    assert result.mechanics_plan is not None
+
+    layout = generate_layout(
+        LayoutRequest(
+            schema_version="1.0.0",
+            package_id="player-safe-trapped-door",
+            brief=result.brief,
+            topology=result.topology,
+            seed=1042,
+            generator_version="orthogonal-v4",
+            mechanics_plan=result.mechanics_plan,
+            floor_bounds=result.floor_bounds,
+        )
+    )
+    assert isinstance(layout.package, DungeonPackageV2)
+    door = layout.package.composable_doors[0]
+    dm_svg = _render(layout.package, door.floor_id, RenderAudience.DM)
+    player_svg = _render(layout.package, door.floor_id, RenderAudience.PLAYER)
+
+    assert door.visibility.value == "player_safe"
+    assert f'data-component-id="{door.id}"' in player_svg
+    assert 'data-door-type="normal"' in player_svg
+    assert "data-door-trapped" not in player_svg
+    assert f'data-component-id="{door.id}"' in dm_svg
+    assert 'data-door-trapped="true"' in dm_svg
+
+
+def test_puzzle_clue_refs_reject_key_dependencies() -> None:
+    payload = _minimal_design()
+    connection = payload["connections"][0]
+    assert isinstance(connection, dict)
+    connection["door_mechanics"] = {"barrier": "locked", "challenge": "low"}
+    payload["dependencies"] = [
+        {
+            "local_ref": "vault-key",
+            "kind": "key",
+            "target_ref": "entry-vault",
+            "located_in_room_ref": "entry",
+            "name": "Vault Key",
+        }
+    ]
+    payload["puzzles"] = [
+        {
+            "local_ref": "dial",
+            "room_ref": "vault",
+            "name": "Dial",
+            "mechanism": "A synthetic dial.",
+            "clue_refs": ["vault-key"],
+            "solution": "Turn it once.",
+            "consequence": "The dial opens.",
+            "challenge": "low",
+        }
+    ]
+
+    result = compile_dungeon_design_v2(_spec(payload))
+
+    assert result.accepted is False
+    assert any(item.code == "design.clue_ref_not_clue" for item in result.diagnostics)
 
 
 def test_mechanics_aware_layout_rejects_a_missing_compiler_plan() -> None:
@@ -805,7 +915,12 @@ def test_design_contract_rejects_vertical_transition_mechanics_without_endpoint_
             "from_ref": "entry",
             "to_ref": "vault",
             "passage": "stairs",
-            "door_mechanics": {"hazard": "trapped", "challenge": "high"},
+            "door_mechanics": {
+                "hazard": "trapped",
+                "challenge": "high",
+                "trap_trigger": "Using the transition.",
+                "trap_effect": "A synthetic ward discharges.",
+            },
         }
     ]
     payload["objectives"] = [{"room_ref": "vault", "kind": "final_objective"}]

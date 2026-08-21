@@ -40,6 +40,7 @@ from dm_assistant.orchestration.dungeons.contracts import (
     DungeonGuideDependency,
     DungeonGuideFeature,
     DungeonGuideMapReference,
+    DungeonGuideObjective,
     DungeonGuidePuzzle,
     DungeonGuideRoom,
     DungeonGuideTrap,
@@ -57,6 +58,7 @@ from dm_assistant.orchestration.dungeons.contracts import (
 )
 from dm_dungeon import (
     CompiledRoomFeatureV2,
+    CompiledRoomObjectiveV2,
     CompiledRoomPuzzleV2,
     CompiledRoomTrapV2,
     ComposableDoorMechanicsV2,
@@ -81,6 +83,9 @@ from dm_dungeon import (
 )
 from dm_dungeon.contracts import (
     DUNGEON_PACKAGE_SCHEMA_VERSION,
+    DUNGEON_PACKAGE_V2_SCHEMA_VERSION,
+    DoorConnection,
+    DoorLayout,
     EndpointDoorKind,
     GridPoint,
     Label,
@@ -333,13 +338,21 @@ class DungeonStudioService:
             "dungeon_brief": request.brief.schema_version,
             "dungeon_topology": request.topology.schema_version,
             "layout_request": request.schema_version,
-            "dungeon_package": DUNGEON_PACKAGE_SCHEMA_VERSION,
+            "dungeon_package": (
+                DUNGEON_PACKAGE_V2_SCHEMA_VERSION
+                if request.generator_version in {"orthogonal-v3", "orthogonal-v4"}
+                else DUNGEON_PACKAGE_SCHEMA_VERSION
+            ),
             "dungeon_studio": _STUDIO_SCHEMA_VERSION,
         }
         generator_versions = {
             "dungeon_kernel": dm_dungeon.__version__,
             "layout": request.generator_version,
         }
+        if request.mechanics_plan is not None:
+            generator_versions["dungeon_mechanics_policy"] = (
+                request.mechanics_plan.policy_version
+            )
         if model_lineage:
             input_scope["model_lineage_sha256"] = canonical_json_sha256(
                 {
@@ -354,7 +367,7 @@ class DungeonStudioService:
                     latest_lineage.intent.schema_version
                 )
             else:
-                schema_versions["dungeon_generation_proposal"] = "2.2.0"
+                schema_versions["dungeon_generation_proposal"] = "2.3.0"
                 generator_versions["design_compiler"] = (
                     dm_dungeon.DUNGEON_DESIGN_COMPILER_VERSION
                 )
@@ -658,6 +671,20 @@ def _build_preparation_readiness(
                     message="A locked or puzzle barrier needs a key or clue dependency.",
                 )
             )
+    for connection in guide.connections:
+        if (
+            connection.trap_id is not None
+            and connection.trap_effect is not None
+            and _is_unknown_preparation_text(connection.trap_effect)
+        ):
+            diagnostics.append(
+                DungeonPreparationReadinessDiagnostic(
+                    code="dungeon_preparation.trap_effect_unknown",
+                    component_id=connection.component_id,
+                    map_reference=connection.map_reference,
+                    message="This trapped door or hatch has an unknown effect and needs DM completion.",
+                )
+            )
     for trap in guide.traps:
         if _is_unknown_preparation_text(trap.effect):
             diagnostics.append(
@@ -768,6 +795,9 @@ def _build_dm_guide(
             strict=True,
         )
     }
+    design_connections_by_id = {
+        connection_ids_by_ref[item.local_ref]: item for item in design.connections
+    }
     plan_by_connection = {
         item.connection_id: item
         for item in compiled.mechanics_plan.door_mechanics
@@ -781,6 +811,9 @@ def _build_dm_guide(
     door_by_connection = {item.connection_id: item for item in package.composable_doors}
     endpoint_door_by_mechanics = {
         item.id: item for item in package.vertical_endpoint_doors
+    }
+    encounter_slots_by_room = {
+        item.room_id: item for item in compiled.mechanics_plan.encounter_slots
     }
 
     guide_rooms: list[DungeonGuideRoom] = []
@@ -800,6 +833,11 @@ def _build_dm_guide(
                 tags=design_room.tags,
                 preparation_note=design_room.preparation_note,
                 encounter_slot=design_room.encounter_slot,
+                encounter_slot_id=(
+                    encounter_slots_by_room[room_id].id
+                    if design_room.encounter_slot is not None
+                    else None
+                ),
             )
         )
 
@@ -812,6 +850,7 @@ def _build_dm_guide(
                 raise ConflictError(
                     "A same-floor door is missing exact mechanics geometry."
                 )
+            design_connection = design_connections_by_id[connection.id]
             guide_connections.append(
                 _guide_connection(
                     component_id=door.id,
@@ -823,6 +862,8 @@ def _build_dm_guide(
                     endpoint=None,
                     endpoint_kind=None,
                     mechanics=door.mechanics,
+                    trap_trigger=design_connection.door_mechanics.trap_trigger,
+                    trap_effect=design_connection.door_mechanics.trap_effect,
                 )
             )
         elif connection.kind in {"stairs", "vertical_link"}:
@@ -866,12 +907,17 @@ def _build_dm_guide(
                     raise ConflictError(
                         "A vertical endpoint mechanic is missing hatch geometry."
                     )
+                endpoint_intent = next(
+                    item
+                    for item in design_connections_by_id[connection.id].endpoint_doors
+                    if item.endpoint is side
+                )
                 guide_connections.append(
                     _guide_connection(
                         component_id=endpoint_door.id,
                         connection_id=connection.id,
                         map_reference=map_reference(
-                            connection.id, endpoint_door.floor_id
+                            endpoint_door.id, endpoint_door.floor_id
                         ),
                         passage=connection.kind,
                         from_room_id=connection.from_room_id,
@@ -879,6 +925,8 @@ def _build_dm_guide(
                         endpoint=endpoint_door.endpoint,
                         endpoint_kind=endpoint_door.kind,
                         mechanics=endpoint_door.mechanics,
+                        trap_trigger=endpoint_intent.mechanics.trap_trigger,
+                        trap_effect=endpoint_intent.mechanics.trap_effect,
                     )
                 )
         else:
@@ -964,6 +1012,13 @@ def _build_dm_guide(
         map_reference,
         dependency_ids_by_local,
     )
+    guide_objectives = _guide_objectives(
+        design,
+        compiled.mechanics_plan.room_objectives,
+        markers,
+        rooms_by_id,
+        map_reference,
+    )
     guide_features = _guide_features(
         design,
         compiled.mechanics_plan.room_features,
@@ -981,6 +1036,7 @@ def _build_dm_guide(
         dependencies=tuple(guide_dependencies),
         traps=tuple(guide_traps),
         puzzles=tuple(guide_puzzles),
+        objectives=tuple(guide_objectives),
         features=tuple(guide_features),
     )
 
@@ -996,6 +1052,8 @@ def _guide_connection(
     endpoint: VerticalEndpointSide | None,
     endpoint_kind: EndpointDoorKind | None,
     mechanics: ComposableDoorMechanicsV2,
+    trap_trigger: str | None,
+    trap_effect: str | None,
 ) -> DungeonGuideConnection:
     return DungeonGuideConnection(
         component_id=component_id,
@@ -1012,6 +1070,8 @@ def _guide_connection(
         gate_kind=mechanics.gate_kind,
         unlock_difficulty=mechanics.unlock_difficulty,
         trap_id=mechanics.trap_id,
+        trap_trigger=trap_trigger,
+        trap_effect=trap_effect,
         disable_difficulty=mechanics.disable_difficulty,
     )
 
@@ -1081,6 +1141,37 @@ def _guide_puzzles(
                 solution=intent.solution,
                 consequence=intent.consequence,
                 difficulty=plan.difficulty,
+            )
+        )
+    return entries
+
+
+def _guide_objectives(
+    design: DungeonDesignSpecV2,
+    plans: tuple[CompiledRoomObjectiveV2, ...],
+    markers: dict[str, RoomMechanicMarkerV2],
+    rooms: dict[str, RoomLayout],
+    map_reference: Callable[[str, str], DungeonGuideMapReference | None],
+) -> list[DungeonGuideObjective]:
+    entries: list[DungeonGuideObjective] = []
+    intents = sorted(
+        design.objectives,
+        key=lambda value: (value.kind.value, value.room_ref),
+    )
+    for intent, plan in zip(intents, plans, strict=True):
+        marker = markers.get(plan.id)
+        room = rooms.get(plan.room_id)
+        if marker is None or room is None or marker.room_id != plan.room_id:
+            raise ConflictError("An objective is missing its exact marker geometry.")
+        reference = map_reference(plan.id, marker.floor_id)
+        if reference is None:
+            raise ConflictError("An objective is missing its DM map callout.")
+        entries.append(
+            DungeonGuideObjective(
+                marker_id=plan.id,
+                room_id=plan.room_id,
+                map_reference=reference,
+                kind=intent.kind,
             )
         )
     return entries
@@ -1258,7 +1349,11 @@ def _dm_guide_text(guide: DungeonDmGuide) -> str:
                     f"{connection.gate_kind.value} gate (unlock {connection.unlock_difficulty})"
                 )
             if connection.trap_id:
-                mechanics.append(f"trapped (disable {connection.disable_difficulty})")
+                mechanics.append(
+                    f"trapped (trigger: {connection.trap_trigger}; "
+                    f"disable {connection.disable_difficulty}; "
+                    f"effect: {connection.trap_effect})"
+                )
             endpoint = (
                 f" {connection.endpoint.value} {connection.endpoint_kind.value}"
                 if connection.endpoint is not None
@@ -1290,6 +1385,13 @@ def _dm_guide_text(guide: DungeonDmGuide) -> str:
                 f"- {puzzle.map_reference.token} — {puzzle.name}: {puzzle.mechanism} "
                 f"Difficulty {puzzle.difficulty}. Solution: {puzzle.solution}. "
                 f"Consequence: {puzzle.consequence}"
+            )
+    if guide.objectives:
+        sections.extend(("", "## Objectives"))
+        for objective in guide.objectives:
+            sections.append(
+                f"- {objective.map_reference.token} — "
+                f"{objective.kind.value.replace('_', ' ')}"
             )
     if guide.features:
         sections.extend(("", "## Features"))
@@ -1561,16 +1663,67 @@ def _select_locks(
     known.update(item.id for item in package.doors)
     known.update(item.id for item in package.stairs)
     known.update(item.id for item in package.vertical_links)
+    if isinstance(package, DungeonPackageV2):
+        known.update(item.id for item in package.composable_doors)
+        known.update(item.id for item in package.vertical_endpoint_doors)
+        known.update(item.id for item in package.room_mechanic_markers)
     if not selected <= known:
         raise ConflictError("A requested locked component does not exist.")
+
+    selected_room_ids = {item.id for item in package.rooms if item.id in selected}
+    selected_links = {item.id for item in package.vertical_links if item.id in selected}
+    selected_doors = list(item for item in package.doors if item.id in selected)
+    if isinstance(package, DungeonPackageV2):
+        topology_doors = {
+            item.id: item
+            for item in package.topology.connections
+            if isinstance(item, DoorConnection)
+        }
+        for door in package.composable_doors:
+            if door.id not in selected:
+                continue
+            topology_door = topology_doors[door.connection_id]
+            selected_room_ids.update(door.connects_room_ids)
+            selected_doors.append(
+                DoorLayout(
+                    id=door.connection_id,
+                    layer_id=door.layer_id,
+                    floor_id=door.floor_id,
+                    door_type=topology_door.door_type,
+                    segment=door.segment,
+                    connects_room_ids=door.connects_room_ids,
+                    from_hidden=door.from_hidden,
+                    to_hidden=door.to_hidden,
+                    gate_id=topology_door.gate_id,
+                    hazard_id=topology_door.trap_id,
+                    visibility=door.visibility,
+                )
+            )
+        selected_endpoint_links = {
+            item.vertical_link_id
+            for item in package.vertical_endpoint_doors
+            if item.id in selected
+        }
+        selected_links.update(selected_endpoint_links)
+        selected_room_ids.update(
+            room_id
+            for connection in package.topology.connections
+            if connection.id in selected_endpoint_links
+            for room_id in (connection.from_room_id, connection.to_room_id)
+        )
+        selected_room_ids.update(
+            item.room_id
+            for item in package.room_mechanic_markers
+            if item.id in selected
+        )
     return LockedLayoutComponents(
         floors=tuple(item for item in package.floors if item.id in selected),
-        rooms=tuple(item for item in package.rooms if item.id in selected),
+        rooms=tuple(item for item in package.rooms if item.id in selected_room_ids),
         corridors=tuple(item for item in package.corridors if item.id in selected),
-        doors=tuple(item for item in package.doors if item.id in selected),
+        doors=tuple(selected_doors),
         stairs=tuple(item for item in package.stairs if item.id in selected),
         vertical_links=tuple(
-            item for item in package.vertical_links if item.id in selected
+            item for item in package.vertical_links if item.id in selected_links
         ),
     )
 
@@ -1582,8 +1735,11 @@ def _component_documents(package: DungeonPackage) -> dict[str, object]:
         "rooms",
         "corridors",
         "doors",
+        "composable_doors",
         "stairs",
         "vertical_links",
+        "vertical_endpoint_doors",
+        "room_mechanic_markers",
         "features",
         "terrain",
         "hazards",
@@ -1592,7 +1748,7 @@ def _component_documents(package: DungeonPackage) -> dict[str, object]:
         "encounter_slots",
         "position_anchors",
     ):
-        for component in getattr(package, category):
+        for component in getattr(package, category, ()):
             documents[f"{category}:{component.id}"] = component.model_dump(mode="json")
     return documents
 

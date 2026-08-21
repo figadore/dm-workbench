@@ -7,8 +7,12 @@ from dm_dungeon.compiler import (
     compile_dungeon_design_v2,
 )
 from dm_dungeon.contracts import (
+    DUNGEON_MECHANICS_POLICY_VERSION,
+    DUNGEON_PACKAGE_V2_SCHEMA_VERSION,
     CompiledDoorMechanicsV2,
+    CompiledEncounterSlotV2,
     CompiledRoomFeatureV2,
+    CompiledRoomObjectiveV2,
     CompiledRoomPuzzleV2,
     CompiledRoomTrapV2,
     ComposableDoorMechanicsV2,
@@ -86,10 +90,13 @@ __version__ = "0.1.0"
 __all__ = [
     "DUNGEON_DESIGN_COMPILER_VERSION",
     "DUNGEON_MECHANICS_POLICY_VERSION",
+    "DUNGEON_PACKAGE_V2_SCHEMA_VERSION",
     "DungeonBrief",
     "ComposableDoorMechanicsV2",
     "CompiledDoorMechanicsV2",
+    "CompiledEncounterSlotV2",
     "CompiledRoomFeatureV2",
+    "CompiledRoomObjectiveV2",
     "CompiledRoomPuzzleV2",
     "CompiledRoomTrapV2",
     "DungeonMechanicsPlanV2",

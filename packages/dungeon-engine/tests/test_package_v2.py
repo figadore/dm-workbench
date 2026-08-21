@@ -15,6 +15,7 @@ from dm_dungeon.contracts import (
     BarrierIntent,
     EndpointDoorKind,
     VerticalEndpointSide,
+    Visibility,
 )
 
 
@@ -74,6 +75,7 @@ def test_v2_composable_mechanics_require_each_active_value() -> None:
         room_id="room-vault",
         position={"x": 3, "y": 4},
         mechanics=mechanics,
+        visibility=Visibility.DM_ONLY,
     )
 
     assert hatch.mechanics.gate_id == "gate-hatch"
@@ -86,7 +88,7 @@ def test_v2_root_retains_composable_doors(
     synthetic_package: DungeonPackage,
 ) -> None:
     payload = _composable_payload(synthetic_package)
-    payload["schema_version"] = "1.2.0"
+    payload["schema_version"] = "1.3.0"
     composable_doors = payload.pop("doors")
     assert isinstance(composable_doors, list)
     for door in composable_doors:

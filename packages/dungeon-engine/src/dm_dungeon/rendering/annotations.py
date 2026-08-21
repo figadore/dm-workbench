@@ -19,6 +19,7 @@ from dm_dungeon.contracts.package_v2 import (
     DoorLayoutV2,
     DungeonPackageV2,
     RoomMechanicMarkerKindV2,
+    VerticalEndpointDoorLayoutV2,
 )
 from dm_dungeon.contracts.topology import DoorType
 from dm_dungeon.rendering.contracts import RenderAudience
@@ -34,6 +35,7 @@ class MapCalloutKind(StrEnum):
     HAZARD = "hazard"
     PUZZLE = "puzzle"
     FEATURE = "feature"
+    OBJECTIVE = "objective"
     TRANSITION = "transition"
 
 
@@ -78,7 +80,9 @@ def build_map_key(
     """
     layers = {layer.id: layer for layer in package.layers}
 
-    def visible(component: LayeredMapElement) -> bool:
+    def visible(
+        component: LayeredMapElement | VerticalEndpointDoorLayoutV2,
+    ) -> bool:
         layer = layers[component.layer_id]
         if audience is RenderAudience.DM:
             return layer.include_in_dm_export
@@ -125,6 +129,31 @@ def build_map_key(
                     badges,
                 )
             )
+    if isinstance(package, DungeonPackageV2):
+        for endpoint_door in package.vertical_endpoint_doors:
+            if endpoint_door.floor_id != floor_id or not visible(endpoint_door):
+                continue
+            badges = (
+                tuple(
+                    badge
+                    for active, badge in (
+                        (endpoint_door.mechanics.concealed, "S"),
+                        (endpoint_door.mechanics.gate_id is not None, "L"),
+                        (endpoint_door.mechanics.trap_id is not None, "T"),
+                    )
+                    if active
+                )
+                if audience is RenderAudience.DM
+                else ()
+            )
+            candidates.append(
+                (
+                    MapCalloutKind.DOOR,
+                    endpoint_door.id,
+                    endpoint_door.position,
+                    badges,
+                )
+            )
     for hazard in package.hazards:
         if hazard.floor_id == floor_id and visible(hazard):
             candidates.append(
@@ -150,6 +179,7 @@ def build_map_key(
             RoomMechanicMarkerKindV2.TRAP: MapCalloutKind.HAZARD,
             RoomMechanicMarkerKindV2.PUZZLE: MapCalloutKind.PUZZLE,
             RoomMechanicMarkerKindV2.FEATURE: MapCalloutKind.FEATURE,
+            RoomMechanicMarkerKindV2.OBJECTIVE: MapCalloutKind.OBJECTIVE,
         }
         for marker in package.room_mechanic_markers:
             if marker.floor_id == floor_id and visible(marker):
@@ -182,6 +212,7 @@ def build_map_key(
         MapCalloutKind.HAZARD: "T",
         MapCalloutKind.PUZZLE: "P",
         MapCalloutKind.FEATURE: "F",
+        MapCalloutKind.OBJECTIVE: "O",
         MapCalloutKind.TRANSITION: "X",
     }
     numbered: list[tuple[MapCalloutKind, str, GridPoint, str, tuple[str, ...]]] = []

@@ -53,6 +53,7 @@ from dm_assistant.orchestration.dungeons.service import (
     _dm_notes_text,
     _dm_presentation_package,
     _require_preparation_ready,
+    _select_locks,
 )
 from dm_assistant.orchestration.modeling import (
     GatewayCompletion,
@@ -60,6 +61,7 @@ from dm_assistant.orchestration.modeling import (
     ModelRunAbstained,
 )
 from dm_dungeon import (
+    DungeonPackageV2,
     RenderAudience,
     SvgRenderRequest,
     generate_layout,
@@ -267,7 +269,7 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
     proposal = {
         "proposal_version": "2",
         "design": {
-            "schema_version": "2.2.0",
+            "schema_version": "2.3.0",
             "title": "Salt Cellar",
             "premise": "A sealed ledger waits below the tide.",
             "themes": ["salt"],
@@ -506,7 +508,7 @@ def test_v2_dm_guide_retains_requested_mechanics_and_creative_details() -> None:
     proposal = {
         "proposal_version": "2",
         "design": {
-            "schema_version": "2.2.0",
+            "schema_version": "2.3.0",
             "title": "Star Vault",
             "premise": "A drowned observatory seals its lens below a trapped door.",
             "themes": ["salt"],
@@ -550,6 +552,8 @@ def test_v2_dm_guide_retains_requested_mechanics_and_creative_details() -> None:
                         "barrier": "locked",
                         "hazard": "trapped",
                         "challenge": "moderate",
+                        "trap_trigger": "Opening the vault door.",
+                        "trap_effect": "A thunderous ward sounds.",
                     },
                 },
                 {
@@ -568,6 +572,8 @@ def test_v2_dm_guide_retains_requested_mechanics_and_creative_details() -> None:
                                 "barrier": "puzzle",
                                 "hazard": "trapped",
                                 "challenge": "high",
+                                "trap_trigger": "Lifting the lens hatch.",
+                                "trap_effect": "The chamber begins to flood.",
                             },
                         }
                     ],
@@ -661,13 +667,15 @@ def test_v2_dm_guide_retains_requested_mechanics_and_creative_details() -> None:
     )
 
     assert guide is not None
-    assert (
-        next(item for item in guide.rooms if item.name == "Wet Steps").preparation_note
-        == "Drips conceal soft footsteps."
-    )
+    entry_room = next(item for item in guide.rooms if item.name == "Wet Steps")
+    assert entry_room.preparation_note == "Drips conceal soft footsteps."
+    assert entry_room.encounter_slot is not None
+    assert entry_room.encounter_slot_id is not None
     door = next(item for item in guide.connections if item.passage == "door")
     hatch = next(item for item in guide.connections if item.endpoint is not None)
     assert door.concealed and door.gate_id and door.trap_id
+    assert door.trap_trigger == "Opening the vault door."
+    assert door.trap_effect == "A thunderous ward sounds."
     assert (
         door.discovery_difficulty
         == door.unlock_difficulty
@@ -676,6 +684,10 @@ def test_v2_dm_guide_retains_requested_mechanics_and_creative_details() -> None:
     )
     assert hatch.endpoint_kind is not None and hatch.endpoint_kind.value == "hatch"
     assert hatch.concealed and hatch.gate_id and hatch.trap_id
+    assert hatch.map_reference is not None
+    assert hatch.map_reference.component_id == hatch.component_id
+    assert hatch.trap_trigger == "Lifting the lens hatch."
+    assert hatch.trap_effect == "The chamber begins to flood."
     assert (
         hatch.discovery_difficulty
         == hatch.unlock_difficulty
@@ -686,18 +698,48 @@ def test_v2_dm_guide_retains_requested_mechanics_and_creative_details() -> None:
     assert guide.traps[0].trigger == "Touch the star chart."
     assert guide.traps[0].effect == "A thunderous ward sounds."
     assert guide.puzzles[0].solution == "Align the summer constellation."
+    assert guide.objectives[0].kind.value == "final_objective"
+    assert guide.objectives[0].map_reference.token.startswith("O")
     assert guide.features[0].description == "A cracked brass lens fills the chamber."
     text = _dm_guide_text(guide)
+    assert "trigger: Opening the vault door." in text
+    assert "effect: The chamber begins to flood." in text
     assert "disable 13" in text
+    assert "## Objectives" in text
     assert "Solution: Align the summer constellation." in text
     assert "Effect: A thunderous ward sounds." in text
     complete_readiness = _build_preparation_readiness(guide)
     assert complete_readiness is not None
     assert complete_readiness.ready
 
+    package = layout.package
+    assert isinstance(package, DungeonPackageV2)
+    locked_door = _select_locks(package, (door.component_id,))
+    assert locked_door.doors[0].id == door.connection_id
+    assert locked_door.doors[0].segment == package.composable_doors[0].segment
+    regenerated = generate_layout(
+        result.layout_request.model_copy(
+            update={"seed": 999_999, "locked": locked_door}
+        )
+    )
+    assert isinstance(regenerated.package, DungeonPackageV2)
+    assert regenerated.package.composable_doors[0].segment == (
+        package.composable_doors[0].segment
+    )
+    locked_hatch = _select_locks(package, (hatch.component_id,))
+    assert locked_hatch.vertical_links[0].id == hatch.connection_id
+    locked_marker = _select_locks(package, (guide.traps[0].marker_id,))
+    assert locked_marker.rooms[0].id == guide.traps[0].room_id
+
     incomplete = guide.model_copy(
         update={
             "dependencies": (),
+            "connections": tuple(
+                item.model_copy(update={"trap_effect": "unknown"})
+                if item.trap_id is not None and item.endpoint is None
+                else item
+                for item in guide.connections
+            ),
             "traps": (guide.traps[0].model_copy(update={"effect": "unknown"}),),
             "puzzles": (guide.puzzles[0].model_copy(update={"solution": "TBD"}),),
         }
@@ -708,6 +750,7 @@ def test_v2_dm_guide_retains_requested_mechanics_and_creative_details() -> None:
     assert [item.code for item in readiness.diagnostics] == [
         "dungeon_preparation.lock_dependency_missing",
         "dungeon_preparation.lock_dependency_missing",
+        "dungeon_preparation.trap_effect_unknown",
         "dungeon_preparation.trap_effect_unknown",
         "dungeon_preparation.puzzle_solution_unknown",
     ]

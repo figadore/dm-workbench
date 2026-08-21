@@ -22,6 +22,7 @@ from dm_dungeon.contracts import (
     EncounterSlotIntent,
     EndpointDoorKind,
     FeatureIntentKind,
+    ObjectiveKind,
     RoomRole,
     VerticalEndpointSide,
 )
@@ -86,6 +87,15 @@ class DungeonGuideRoom(WorkflowModel):
     tags: tuple[str, ...] = ()
     preparation_note: str | None = Field(default=None, min_length=1, max_length=4_000)
     encounter_slot: EncounterSlotIntent | None = None
+    encounter_slot_id: str | None = Field(default=None, min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def require_encounter_slot_id_with_intent(self) -> DungeonGuideRoom:
+        if (self.encounter_slot is None) != (self.encounter_slot_id is None):
+            raise ValueError(
+                "encounter slot intent and stable ID must be present together"
+            )
+        return self
 
 
 class DungeonGuideConnection(WorkflowModel):
@@ -105,6 +115,8 @@ class DungeonGuideConnection(WorkflowModel):
     gate_kind: BarrierIntent = BarrierIntent.NONE
     unlock_difficulty: int | None = Field(default=None, ge=0)
     trap_id: str | None = Field(default=None, min_length=1, max_length=200)
+    trap_trigger: str | None = Field(default=None, min_length=1, max_length=4_000)
+    trap_effect: str | None = Field(default=None, min_length=1, max_length=4_000)
     disable_difficulty: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
@@ -117,8 +129,17 @@ class DungeonGuideConnection(WorkflowModel):
             raise ValueError("gate ID and kind must be present together")
         if (self.gate_id is not None) != (self.unlock_difficulty is not None):
             raise ValueError("gates require exactly one unlock difficulty")
-        if (self.trap_id is not None) != (self.disable_difficulty is not None):
-            raise ValueError("traps require exactly one disable difficulty")
+        trap_fields = (
+            self.trap_trigger,
+            self.trap_effect,
+            self.disable_difficulty,
+        )
+        if self.trap_id is not None and not all(
+            value is not None for value in trap_fields
+        ):
+            raise ValueError("traps require trigger, effect, and disable difficulty")
+        if self.trap_id is None and any(value is not None for value in trap_fields):
+            raise ValueError("trap details require a trap ID")
         return self
 
 
@@ -152,6 +173,13 @@ class DungeonGuidePuzzle(WorkflowModel):
     solution: str = Field(min_length=1, max_length=4_000)
     consequence: str = Field(min_length=1, max_length=4_000)
     difficulty: int = Field(ge=0)
+
+
+class DungeonGuideObjective(WorkflowModel):
+    marker_id: str = Field(min_length=1, max_length=200)
+    room_id: str = Field(min_length=1, max_length=200)
+    map_reference: DungeonGuideMapReference
+    kind: ObjectiveKind
 
 
 class DungeonGuideFeature(WorkflowModel):
@@ -202,6 +230,7 @@ class DungeonDmGuide(WorkflowModel):
     dependencies: tuple[DungeonGuideDependency, ...]
     traps: tuple[DungeonGuideTrap, ...]
     puzzles: tuple[DungeonGuidePuzzle, ...]
+    objectives: tuple[DungeonGuideObjective, ...]
     features: tuple[DungeonGuideFeature, ...]
 
     @model_validator(mode="after")
@@ -211,6 +240,7 @@ class DungeonDmGuide(WorkflowModel):
             *(item.component_id for item in self.connections),
             *(item.marker_id for item in self.traps),
             *(item.marker_id for item in self.puzzles),
+            *(item.marker_id for item in self.objectives),
             *(item.marker_id for item in self.features),
         ]
         if len(ids) != len(set(ids)):
@@ -223,6 +253,7 @@ class DungeonDmGuide(WorkflowModel):
             | DungeonGuideConnection
             | DungeonGuideTrap
             | DungeonGuidePuzzle
+            | DungeonGuideObjective
             | DungeonGuideFeature,
             ...,
         ] = (
@@ -230,6 +261,7 @@ class DungeonDmGuide(WorkflowModel):
             *self.connections,
             *self.traps,
             *self.puzzles,
+            *self.objectives,
             *self.features,
         )
         for entry in entries:

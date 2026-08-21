@@ -12,8 +12,10 @@ from pydantic import Field, model_validator
 from dm_dungeon.contracts.common import ContractModel, OpaqueId
 from dm_dungeon.contracts.design_v2 import (
     BarrierIntent,
+    EncounterSlotIntent,
     EndpointDoorKind,
     FeatureIntentKind,
+    ObjectiveKind,
     VerticalEndpointSide,
 )
 
@@ -77,6 +79,22 @@ class CompiledRoomFeatureV2(ContractModel):
     kind: FeatureIntentKind
 
 
+class CompiledRoomObjectiveV2(ContractModel):
+    """One stable objective marker derived from bounded objective intent."""
+
+    id: OpaqueId
+    room_id: OpaqueId
+    kind: ObjectiveKind
+
+
+class CompiledEncounterSlotV2(ContractModel):
+    """One stable room-local slot for later independent encounter design."""
+
+    id: OpaqueId
+    room_id: OpaqueId
+    intent: EncounterSlotIntent
+
+
 class DungeonMechanicsPlanV2(ContractModel):
     """Stable policy-pinned mechanics consumed by exact layout and DM guidance."""
 
@@ -87,6 +105,8 @@ class DungeonMechanicsPlanV2(ContractModel):
     room_traps: tuple[CompiledRoomTrapV2, ...]
     room_puzzles: tuple[CompiledRoomPuzzleV2, ...]
     room_features: tuple[CompiledRoomFeatureV2, ...]
+    room_objectives: tuple[CompiledRoomObjectiveV2, ...]
+    encounter_slots: tuple[CompiledEncounterSlotV2, ...]
 
     @model_validator(mode="after")
     def require_unique_room_mechanic_ids(self) -> "DungeonMechanicsPlanV2":
@@ -94,6 +114,8 @@ class DungeonMechanicsPlanV2(ContractModel):
             *(item.id for item in self.room_traps),
             *(item.id for item in self.room_puzzles),
             *(item.id for item in self.room_features),
+            *(item.id for item in self.room_objectives),
+            *(item.id for item in self.encounter_slots),
         )
         if len(marker_ids) != len(set(marker_ids)):
             raise ValueError("room mechanics require globally unique stable IDs")

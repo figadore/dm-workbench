@@ -10,11 +10,12 @@ from urllib.request import Request
 
 import httpx
 import pytest
-from sqlalchemy import Engine
+from sqlalchemy import Engine, select
 
 from dm_assistant.api import create_app
 from dm_assistant.config import ModelGatewayPolicy, RuntimeEnvironment, Settings
 from dm_assistant.db import Campaign, build_session_factory, transactional_session
+from dm_assistant.modules.preparation.models import GenerationRun
 
 pytestmark = pytest.mark.integration
 TOKEN = "web-prompt-token-000000000000000"
@@ -50,7 +51,7 @@ def test_browser_prompt_faux_gateway_persists_draft(
     proposal = {
         "proposal_version": "2",
         "design": {
-            "schema_version": "2.2.0",
+            "schema_version": "2.3.0",
             "title": "Synthetic Archive",
             "premise": "A synthetic archive contains a sealed ledger.",
             "themes": ["salt"],
@@ -172,3 +173,21 @@ def test_browser_prompt_faux_gateway_persists_draft(
             assert "Inspect generated draft" in result.text
 
     asyncio.run(flow())
+
+    with transactional_session(build_session_factory(db_engine)) as session:
+        run = session.scalar(
+            select(GenerationRun).where(
+                GenerationRun.campaign_id == campaign_id,
+                GenerationRun.generation_kind == "prompted_dungeon_layout",
+            )
+        )
+        assert run is not None
+        assert run.schema_versions["dungeon_package"] == "1.3.0"
+        assert run.schema_versions["dungeon_generation_proposal"] == "2.3.0"
+        assert (
+            run.generator_versions["dungeon_mechanics_policy"]
+            == "dungeon-mechanics-policy-1"
+        )
+        assert run.generator_versions["design_compiler"] == (
+            "dungeon-design-v2-compiler-5"
+        )

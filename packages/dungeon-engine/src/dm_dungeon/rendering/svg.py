@@ -25,6 +25,7 @@ from dm_dungeon.contracts.package_v2 import (
     DoorLayoutV2,
     DungeonPackageV2,
     RoomMechanicMarkerKindV2,
+    VerticalEndpointDoorLayoutV2,
 )
 from dm_dungeon.contracts.topology import DoorType, StairDirection
 from dm_dungeon.rendering.annotations import MapCalloutKind, build_map_key
@@ -678,6 +679,54 @@ def _render_transitions(
                 scale,
             )
 
+    if isinstance(package, DungeonPackageV2):
+        for endpoint_door in package.vertical_endpoint_doors:
+            if endpoint_door.floor_id != floor_id or not _layered_visible(
+                endpoint_door, layers, request.audience
+            ):
+                continue
+            component = _component_group(
+                group, endpoint_door, "vertical-endpoint-door", rendered_ids
+            )
+            component.set("data-endpoint", endpoint_door.endpoint.value)
+            component.set("data-endpoint-kind", endpoint_door.kind.value)
+            if request.audience is RenderAudience.DM:
+                component.set(
+                    "data-door-concealed",
+                    str(endpoint_door.mechanics.concealed).lower(),
+                )
+                component.set(
+                    "data-door-gated",
+                    str(endpoint_door.mechanics.gate_id is not None).lower(),
+                )
+                component.set(
+                    "data-door-trapped",
+                    str(endpoint_door.mechanics.trap_id is not None).lower(),
+                )
+            _append_endpoint_door_symbol(component, endpoint_door, scale)
+
+
+def _append_endpoint_door_symbol(
+    parent: ET.Element,
+    endpoint_door: VerticalEndpointDoorLayoutV2,
+    scale: int,
+) -> None:
+    """Draw a point-anchored door/hatch without embedding DM-only mechanics."""
+
+    x = endpoint_door.position.x * scale
+    y = endpoint_door.position.y * scale
+    half = scale * 0.28
+    attributes = {
+        "class": "door",
+        "x": _number(x - half),
+        "y": _number(y - half),
+        "width": _number(half * 2),
+        "height": _number(half * 2),
+    }
+    if endpoint_door.kind.value == "hatch":
+        attributes["rx"] = _number(scale * 0.08)
+    ET.SubElement(parent, "rect", attributes)
+
 
 def _render_callouts(
     root: ET.Element,
@@ -750,6 +799,17 @@ def _render_callouts(
                     "height": _number(half * 2),
                 },
             )
+        elif entry.kind is MapCalloutKind.OBJECTIVE:
+            ET.SubElement(
+                group,
+                "circle",
+                {
+                    "class": "component-callout objective-callout",
+                    "cx": _number(entry.label_x),
+                    "cy": _number(entry.label_y),
+                    "r": _number(max(entry.width, entry.height) * 0.68),
+                },
+            )
         else:
             ET.SubElement(
                 group,
@@ -800,7 +860,7 @@ def _annotation_mode(
     if request.show_room_ids:
         return SvgAnnotationMode.DEVELOPER_IDS
     # Old exact-package artifacts retain their original unannotated output. New
-    # 1.2.0 packages receive the callout grammar by default.
+    # Active exact packages receive the callout grammar by default.
     if (
         not isinstance(package, DungeonPackageV2)
         and request.annotation_mode is SvgAnnotationMode.CALLOUTS
@@ -930,6 +990,17 @@ def _append_room_mechanic_symbol(
                 f"{_number(x + half)},{_number(y)} "
                 f"{_number(x)},{_number(y + half)} "
                 f"{_number(x - half)},{_number(y)}",
+            },
+        )
+    elif kind is RoomMechanicMarkerKindV2.OBJECTIVE:
+        ET.SubElement(
+            parent,
+            "circle",
+            {
+                "class": "marker objective",
+                "cx": _number(x),
+                "cy": _number(y),
+                "r": _number(half),
             },
         )
     else:

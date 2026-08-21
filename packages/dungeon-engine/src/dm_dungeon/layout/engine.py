@@ -8,6 +8,7 @@ from dm_dungeon.contracts.design_v2 import VerticalEndpointSide
 from dm_dungeon.contracts.geometry import (
     CorridorLayout,
     DoorLayout,
+    EncounterSlot,
     FloorLayout,
     GridPoint,
     PolylineGeometry,
@@ -221,6 +222,7 @@ def generate_layout(request: LayoutRequest) -> LayoutResult:
         layer_by_visibility,
         diagnostics,
     )
+    encounter_slots = _generate_encounter_slots(request, layer_by_visibility)
     if diagnostics:
         return _failed_result(request, random_source, diagnostics)
 
@@ -238,7 +240,7 @@ def generate_layout(request: LayoutRequest) -> LayoutResult:
         )
         package: DungeonPackage | DungeonPackageV2 = package_type(
             schema_version=(
-                "1.2.0"
+                "1.3.0"
                 if request.generator_version in {"orthogonal-v3", "orthogonal-v4"}
                 else "1.1.0"
             ),
@@ -272,7 +274,7 @@ def generate_layout(request: LayoutRequest) -> LayoutResult:
             hazards=(),
             zones=(),
             labels=(),
-            encounter_slots=(),
+            encounter_slots=tuple(encounter_slots),
             position_anchors=position_anchors,
             **(
                 {
@@ -478,11 +480,15 @@ def _validate_mechanics_plan(
         *(item.id for item in plan.room_traps),
         *(item.id for item in plan.room_puzzles),
         *(item.id for item in plan.room_features),
+        *(item.id for item in plan.room_objectives),
+        *(item.id for item in plan.encounter_slots),
     ]
     marker_room_ids = {
         *(item.room_id for item in plan.room_traps),
         *(item.room_id for item in plan.room_puzzles),
         *(item.room_id for item in plan.room_features),
+        *(item.room_id for item in plan.room_objectives),
+        *(item.room_id for item in plan.encounter_slots),
     }
     unknown_marker_rooms = sorted(marker_room_ids - topology_room_ids)
     if unknown_marker_rooms or len(marker_ids) != len(set(marker_ids)):
@@ -1058,6 +1064,7 @@ def _generate_mechanics_aware_doors(
         for item in request.mechanics_plan.door_mechanics
         if item.endpoint is None
     }
+    topology_rooms = {item.id: item for item in request.topology.rooms}
     composable_doors: list[DoorLayoutV2] = []
     for door in legacy_doors:
         mechanics = mechanics_by_connection.get(door.id)
@@ -1071,10 +1078,17 @@ def _generate_mechanics_aware_doors(
                 )
             )
             continue
-        visibility = (
-            Visibility.DM_ONLY
-            if mechanics.concealed or mechanics.trap_id is not None
-            else door.visibility
+        # The legacy topology projection marks trapped doors DM-only because its
+        # exclusive DoorType cannot separate geometry from mechanics. V4 can: derive
+        # publication from endpoint/room discovery and let player renderers normalize
+        # all mechanics to an ordinary door without emitting mechanic data.
+        from_room, to_room = (topology_rooms[item] for item in door.connects_room_ids)
+        visibility = _connection_layout_visibility(
+            door.from_hidden,
+            door.to_hidden,
+            Visibility.PLAYER_SAFE,
+            from_room.visibility,
+            to_room.visibility,
         )
         composable_doors.append(
             DoorLayoutV2(
@@ -1129,10 +1143,11 @@ def _generate_mechanics_aware_doors(
                 )
             )
             continue
+        visibility = endpoint.visibility
         endpoint_doors.append(
             VerticalEndpointDoorLayoutV2(
                 id=mechanics.id,
-                layer_id=layer_by_visibility[Visibility.DM_ONLY],
+                layer_id=layer_by_visibility[visibility],
                 vertical_link_id=mechanics.connection_id,
                 endpoint=mechanics.endpoint,
                 kind=mechanics.endpoint_kind,
@@ -1140,7 +1155,7 @@ def _generate_mechanics_aware_doors(
                 room_id=room_id,
                 position=endpoint.position,
                 mechanics=_package_door_mechanics(mechanics),
-                visibility=Visibility.DM_ONLY,
+                visibility=visibility,
             )
         )
     return composable_doors, endpoint_doors
@@ -1170,6 +1185,10 @@ def _generate_room_mechanic_markers(
         *(
             (item.id, item.room_id, RoomMechanicMarkerKindV2.FEATURE)
             for item in request.mechanics_plan.room_features
+        ),
+        *(
+            (item.id, item.room_id, RoomMechanicMarkerKindV2.OBJECTIVE)
+            for item in request.mechanics_plan.room_objectives
         ),
     ]
     by_room: dict[str, list[tuple[str, RoomMechanicMarkerKindV2]]] = {}
@@ -1233,6 +1252,31 @@ def _generate_room_mechanic_markers(
                 )
             )
     return markers
+
+
+def _generate_encounter_slots(
+    request: LayoutRequest,
+    layer_by_visibility: dict[Visibility, str],
+) -> list[EncounterSlot]:
+    """Materialize stable room-local slots without composing encounters."""
+
+    if request.generator_version != "orthogonal-v4":
+        return []
+    assert request.mechanics_plan is not None
+    rooms = {item.id: item for item in request.topology.rooms}
+    return [
+        EncounterSlot(
+            id=item.id,
+            layer_id=layer_by_visibility[Visibility.DM_ONLY],
+            floor_id=rooms[item.room_id].floor_id,
+            room_id=item.room_id,
+            minimum_creatures=1,
+            maximum_creatures=rooms[item.room_id].capacity.maximum_occupants,
+            tags=(item.intent.value,),
+            visibility=Visibility.DM_ONLY,
+        )
+        for item in request.mechanics_plan.encounter_slots
+    ]
 
 
 def _package_door_mechanics(

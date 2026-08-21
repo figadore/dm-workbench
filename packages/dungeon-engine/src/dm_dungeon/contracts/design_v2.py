@@ -19,7 +19,7 @@ from dm_dungeon.contracts.common import (
 )
 from dm_dungeon.contracts.topology import RoomRole
 
-DUNGEON_DESIGN_V2_SCHEMA_VERSION: Literal["2.2.0"] = "2.2.0"
+DUNGEON_DESIGN_V2_SCHEMA_VERSION: Literal["2.3.0"] = "2.3.0"
 LocalRef = Annotated[
     str,
     Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_-]*$"),
@@ -124,9 +124,11 @@ class DoorMechanicsIntentV2(ContractModel):
     barrier: BarrierIntent = BarrierIntent.NONE
     hazard: HazardIntent = HazardIntent.NONE
     challenge: ChallengeBand | None = None
+    trap_trigger: NonEmptyText | None = None
+    trap_effect: NonEmptyText | None = None
 
     @model_validator(mode="after")
-    def require_challenge_for_active_mechanic(self) -> Self:
+    def require_complete_active_mechanics(self) -> Self:
         active = (
             self.concealed
             or self.barrier is not BarrierIntent.NONE
@@ -140,6 +142,15 @@ class DoorMechanicsIntentV2(ContractModel):
             raise ValueError(
                 "a challenge band requires a concealed, barrier, or trap mechanic"
             )
+        trap_details = (self.trap_trigger, self.trap_effect)
+        if self.hazard is HazardIntent.TRAPPED and any(
+            value is None for value in trap_details
+        ):
+            raise ValueError("a trapped door or hatch requires trigger and effect")
+        if self.hazard is HazardIntent.NONE and any(
+            value is not None for value in trap_details
+        ):
+            raise ValueError("trap trigger and effect require a trapped door or hatch")
         return self
 
 
@@ -298,7 +309,7 @@ class DungeonDesignSpecV2(VersionedContract):
 
     supported_schema_version = DUNGEON_DESIGN_V2_SCHEMA_VERSION
 
-    schema_version: Literal["2.2.0"]
+    schema_version: Literal["2.3.0"]
     title: ShortText
     premise: NonEmptyText
     purpose: DungeonPurpose = DungeonPurpose.RUIN
