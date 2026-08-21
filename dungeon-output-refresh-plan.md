@@ -1,10 +1,10 @@
 # Dungeon Output Refresh Plan
 
-> Status: active planning baseline for the user-directed Dungeon Studio refresh.
-> No user dungeon or external dungeon consumer currently requires backward
-> compatibility. Until one exists, active V2 contracts may advance in place with new
-> version pins and updated synthetic fixtures; retained artifacts, once created, remain
-> immutable and readable under their pinned readers.
+> Status: paused by the user-directed P7-14 alpha reset. Do not resume P7-13e/f/g
+> until the Tier A gate in [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md)
+> passes. No user dungeon or external consumer requires compatibility; obsolete alpha
+> contracts, fixtures, and generated drafts are disposable while the implementation is
+> collapsed to one V1.
 
 ## 1. Problem statement and confirmed causes
 

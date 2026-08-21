@@ -20,6 +20,8 @@ The `orthogonal-v1` baseline validates topology, places size-constrained non-ove
 
 `dm-dungeon validate` checks the schema, topology, and exact geometry. Python callers can use `validate_geometry`, `find_anchor_path`, and `evaluate_encounter_fit` for structured repair diagnostics, footprint-aware shortest paths, and conservative room-space/range/cover/objective measurements. These mechanics remain campaign-, provider-, and rules-agnostic.
 
+[`src/dm_dungeon/validation/TOPOLOGY_MATH.md`](src/dm_dungeon/validation/TOPOLOGY_MATH.md) explains the graph theory behind connectivity, cycles, branches, chokepoints, secret subgraphs, directed gate dependencies, fixed-point progression, planarity, and the constructive topology-to-geometry proof boundary.
+
 Render a validated floor with a code-owned theme:
 
 ```bash

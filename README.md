@@ -329,7 +329,7 @@ The internal P1-02 Library service now ingests bounded strict-UTF-8 files throug
 
 ## Current Next Step
 
-Begin **P1-03** on the grounding path: implement the versioned deterministic Markdown parser/chunker with exact heading/block offsets and adversarial synthetic fixtures. [`PROJECT_STATUS.md`](PROJECT_STATUS.md) contains the exact handoff.
+Continue **P7-14b**, the dungeon-generation alpha reset: collapse old model/generator/package paths to one clean V1 before implementing the proof-carrying topology compiler and constructive Tier A layout. See [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) for the concepts and stress ladder and [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
 
 ## License and Third-Party Marks
 

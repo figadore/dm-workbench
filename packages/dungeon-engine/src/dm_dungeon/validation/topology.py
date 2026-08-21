@@ -1,4 +1,8 @@
-"""Deterministic topology, gating, and dependency validation."""
+"""Deterministic topology, gating, and dependency validation.
+
+See ``TOPOLOGY_MATH.md`` beside this module for the graph theory, progression
+fixed-point reasoning, and topology-versus-geometry proof boundary.
+"""
 
 from collections import defaultdict, deque
 from collections.abc import Iterable, Mapping

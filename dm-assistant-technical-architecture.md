@@ -538,53 +538,58 @@ P7-01 adds monotonically numbered immutable versions with a canonical specificat
 
 ## Dungeon Generation Architecture
 
-Dungeon generation is a constrained five-layer compilation pipeline:
+The alpha reset replaces model-authored arbitrary topology and place-then-route search with a proof-carrying constructive pipeline:
 
 ```text
-DM request + GenerationContextEnvelope<DungeonGenerationContext> + server-pinned seed
+DM request + GenerationContextEnvelope<DungeonGenerationContext> + server seed
     |
     v
-Workbench-owned DungeonGenerationProposalV2 (including abstention/unknown wrapper)
+one model tool call: submit_dungeon_plan(plan: DungeonPlan V1)
     |
     v
-pure DungeonDesignSpecV2 using temporary local relation refs
+pure topology compiler
+    |-- critical path -> connected backbone
+    |-- branches -> attached paths
+    |-- loops -> supported series/parallel bypasses
+    |-- gates/secrets/content -> typed annotations and demand
+    `-- TopologyCertificate V1
     |
     v
-pure versioned compiler -> exact DungeonBrief + DungeonTopology (compiled intent)
+constructive orthogonal layout
+    |-- room interior and wall-port arithmetic
+    |-- backbone columns + branch/loop bands + reserved channels
+    `-- exact required bounds and DungeonPackage V1
     |
     v
-exact LayoutRequest -> seeded layout/validation -> renderer-neutral DungeonPackage
+independent topology/geometry/secrecy validation
     |
-    +--> deterministic SVG / web PNG
-    +--> low-ink, exact-scale tiled print PDF
-    +--> Roll20-compatible grid-on/gridless PNG + metadata
+    +--> deterministic SVG / PNG
+    +--> optional later exports
+    `--> atomic Workbench draft publication
 ```
 
-`DungeonGenerationContext` contains only dungeon-design inputs such as relevant location lore, themes, factions, plot hooks, geography, requested tone, and coarse party constraints. It does not accumulate encounter mechanics, session extraction state, or every field another task may someday need. The envelope, accepted proposal, compiler input/output hashes, and exact compiled request are restricted immutable lineage—not ordinary log bodies.
+The normative staged design and stress ladder are in [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md). P7-13 output/print work is paused until its Tier A gate passes.
 
-The Workbench owns proposal wrapping, scope/context resolution, provider calls, prompt-attempt state, persistence, and human approval. The pure `dm_dungeon` package owns `DungeonDesignSpecV2`, deterministic ID/default/policy compilation, compile diagnostics, exact kernel contracts, layout, validation, renderers, and exporters. The model supplies compact creative intent only. It cannot select seed/scope/canonical IDs/publication visibility/lifecycle, exact coordinates or numeric dimensions/capacities, renderer syntax, assets, approval, canonical operations, files, or SQL. The package can also be driven directly from hand-authored synthetic JSON through its CLI/test adapter and cannot access the Workbench database or model gateway. The model-visible JSON Schema and runtime submission acceptance are one contract: a cross-field invariant that cannot be expressed in the provider-supported schema subset must be derived/defaulted deterministically, validated later as a semantic diagnostic, or removed from first-pass rejection. Prompt prose is not a substitute for a machine-visible contract.
+`DungeonGenerationContext` remains narrow: authorized location lore, themes, factions, plot hooks, geography, tone, and coarse party constraints. It never becomes an all-purpose encounter/session payload. The Workbench owns context, provider calls, run state, persistence, and human approval. The pure package owns `DungeonPlan`, deterministic IDs and policies, topology construction/certification, layout, validation, rendering, and export. The model cannot select scope, seed, canonical IDs, coordinates, dimensions, visibility policy, lifecycle, renderer syntax, files, SQL, approval, or canonical operations.
 
-Geometry-affecting features, marker anchors, composable door mechanics, and stable encounter slots belong in `DungeonPackage`; prose-heavy room/trap/puzzle/feature content and links to separately versioned encounter artifacts belong to the Workbench preparation layer and reference those stable room/zone/connection/marker IDs. The existing exclusive `DoorType` and empty generated feature collections are pre-P7-13d development behavior, not a retained user contract. During the alpha round before a user dungeon or external consumer is declared, P7-13d may patch the active V2 design/topology/package/compiler pins and recreate synthetic local artifacts in place instead of adding readers or a parallel V3 stack. Once the first user artifact or consumer is explicitly declared, later changes use pinned readers and never reinterpret it. The model may propose bounded creative descriptions and relative challenge bands, while a pinned deterministic mechanics policy owns exact displayed discovery/unlock/disable values, visibility, IDs, references, and completeness validation. Directional hidden endpoints are the single model-authored source of physical concealment; there is no separate repeated model-authored `concealed` value. An omitted active-mechanic challenge receives the pinned relative default before exact policy mapping. Missing trap effects, puzzle solutions, or gate dependencies remain explicit unknown/incomplete preparation data and cannot be manufactured: they block readiness/approval but do not discard an otherwise structurally valid map draft. Unknown references, contradictory endpoint/floor semantics, duplicate identities, and invalid topology remain hard submission failures.
+The model-visible schema and runtime contract must use the provider-supported JSON Schema subset and stay small enough to inspect. The model supplies room identity/purpose and progression primitives—critical path, branches, bounded loops, secrets, gates, and content intent—not an arbitrary complete edge list. Code constructs the graph. A schema-invalid submission may receive one bounded repair; deterministic topology or geometry bugs never trigger a request for another random model graph.
 
-Each immutable Studio specification retains the original DM request, brief prose, hooks/constraints, and a versioned DM guide with room, door/transition, trap/hazard, puzzle, clue/key, objective, and feature entries. A render-only DM overlay derives the same short callouts used by that guide; it is included only in DM previews/exports and never changes the canonical deterministic package or player output. A requested lock exposes its state, bypass/key dependency, and pinned difficulty in the DM guide; a trap exposes trigger/detection/disable/effect; a puzzle exposes mechanism/clues/solution/consequence. This preserves independent encounter regeneration without making the dungeon kernel depend on encounter orchestration.
+There are no retained user dungeons or external consumers. The alpha therefore collapses proposal/design/compiler/topology/package/generator history to one V1, removes numeric suffixes from public names, deletes old generation and compatibility dispatch, and recreates synthetic fixtures. This does not rewrite Git history. Compatibility readers begin only after a real artifact or consumer is explicitly retained.
 
-V1 compatibility is read-only and immutable: `dungeon_generation_intent_v1`, existing specifications, lineage, artifact versions, and exports are never rewritten or reinterpreted as V2. V2 receives new proposal/design/compiler/profile/instruction/schema versions. On success, deterministic preparation renders and validates every required asset, stages content-addressed blobs, then one PostgreSQL unit of work creates any artifact, its immutable version, all required asset links, its current-version pointer, and the successful final generation run. Staged unreferenced blobs may remain safely deduplicated after rollback; no current version or succeeded run is visible without the complete required role/ordinal asset set.
+Geometry-affecting features, exact markers, door mechanics, and encounter-space demand belong in `DungeonPackage`; prose-heavy guide content remains in the Workbench and references exact IDs. Missing prose may block preparation readiness without invalidating proven geometry. On success, deterministic preparation renders and validates every required asset, stages blobs, and atomically publishes the artifact/version/assets/run. No model can approve the result or make it canon.
 
 ### Dungeon Specification Layers
 
-Keep five representations distinct:
+Keep four V1 representations distinct:
 
-1. **`DungeonGenerationProposalV2` (Workbench)** — proposal wrapper: compact design, request/context references, explicit unknowns/conflicts/abstention, and no authoritative package fields.
-2. **`DungeonDesignSpecV2` (pure package)** — model-independent creative design: bounded prose/themes, floors/rooms/connections/objectives/dependencies expressed with temporary local refs and relative bands only.
-3. **Compiled kernel intent (pure package)** — exact `DungeonBrief` and `DungeonTopology`, with canonical opaque IDs, counts, numeric constraints, visibility/layers, and gate/key/clue dependencies derived by a pinned compiler.
-4. **`LayoutRequest`** — exact compiled intent plus server-pinned seed, generator version, and explicit regeneration locks; it is the input to seeded layout.
-5. **`DungeonPackage`** — exact layout package: floors, grid geometry, wall/door segments, rooms/polygons, corridors, stairs, zones, terrain/features, labels, encounter/position anchors, and render layers.
+1. **`DungeonPlan`** — the one small creative model/human contract. Local refs relate rooms only within the plan. Progression uses critical-path, branch, and loop primitives.
+2. **`TopologyCertificate`** — compiler-owned graph, mechanics/demand projection, supported-grammar parse tree, reachability/loop/gate witnesses, room degree/port demand, and constructive embedding order. Validators recompute its claims.
+3. **`LayoutRequest`** — certificate plus server seed, optional maximum bounds, and later explicit regeneration locks.
+4. **`DungeonPackage`** — exact renderer-neutral geometry, openings, mechanics, markers, encounter demand, and audience layers.
 
-A V2 local ref such as `archive` or `sanctum` is a noncanonical relation handle, valid only within one design specification. Duplicate or ambiguous refs fail compilation. The compiler derives canonical opaque IDs from compiler version and canonical semantic identity, independent of seed, prose changes, and array order; changing the semantic identity or compiler version may change the ID. Only explicit later DM regeneration/edit workflows may provide already-established opaque IDs.
+Local refs such as `archive` are noncanonical relation handles. The compiler derives stable opaque IDs from the V1 compiler pin and semantic identity, independent of seed, prose, and array order. Exact established IDs may enter only later explicit edit/regeneration operations.
 
-The current pre-release `2.4.0` design contract supports directional connection concealment with `from_hidden` and `to_hidden` on doors, stairs, and ladders. The compiler computes physical door/hatch concealment from those endpoints and initial room discovery as directed traversal from the entrance; it never accepts a repeated model-authored concealment flag. Layout derives publication per endpoint and containing-room visibility rather than treating one hidden endpoint as making both endpoints invisible. A one-sided secret or trapped physical door remains ordinary geometry in player output while DM output retains its mechanics; clean metadata receives the same normalization. Missing trap/puzzle prose remains explicit unfinished preparation in the Workbench guide, while deterministic code owns stable IDs and defaults omitted active-mechanic challenge to the pinned moderate policy. Explicit in-play reveal state and overlay publication remain a later Workbench feature.
-
-Because these contracts changed before any external consumer or retained dungeon artifact existed, the implementation advances the active V2 design/topology/package/compiler/generator/renderer pins and updates synthetic fixtures in place rather than carrying unused compatibility readers or parallel V3 classes. Temporary V3-shaped P7-13d WIP may be used as refactoring scaffolding, but its useful fields, mechanics policy, diagnostics, and tests are folded into the active V2 path before the V3-only modules and dispatch are removed. Once retained artifacts or consumers exist, future changes follow the immutable reader/replay policy above.
+Directional discovery, gates, traps, features, and encounter intent are annotations on the constructed graph and room demand. They do not create competing topology representations. A one-sided secret physical link may retain ordinary player geometry only under an explicit publication rule; otherwise filtered components are absent before rendering. In-play reveal state remains a later Workbench concern.
 
 A conceptual package can be stored as one versioned aggregate rather than one relational row per tile:
 
@@ -607,27 +612,29 @@ metadata
 
 Initial generation should favor orthogonal square-grid geometry. Each floor is laid out independently but stairs/vertical connections must pair and validate. Regional/world maps and arbitrary illustration-first geometry are out of scope.
 
-#### Initial Deterministic Layout Algorithm
+#### Constructive Deterministic Layout Algorithm
 
-The P7-04 baseline is graph-guided per-floor rectangle placement followed by orthogonal corridor routing. It validates topology first, installs locked floor/room geometry before any new placement, orders remaining rooms by stable graph traversal, and uses bounded deterministic retries to choose size-conforming non-overlapping rectangles. A single explicit SHA-256 counter-based random source owns every seeded ordering and tie-break; code must not call module-global randomness.
+Tier A supports a deliberately bounded series/parallel-with-spurs graph class. The compiler creates a connected critical-path backbone, attaches branches, and adds only loop intervals that preserve the supported embedding. For a connected floor, validators recompute `cycle_rank = edges - rooms + 1` and require witnesses for every requested loop. Gate progression is solved by repeated reachability with closed gate edges; dependencies must be reachable before their gates.
 
-Connections route between room-boundary anchors over the square grid and compress to orthogonal polylines. Door segments align to the selected boundary anchor, and cross-floor connections emit paired stair or vertical-link endpoints. Failure to place or route any requested component returns structured diagnostics rather than a partial package. Input component IDs are retained; auxiliary IDs derive from the package ID, generator version, and stable component key (including a seed only when identity itself is seed-created), so geometry randomization does not casually break stable references. Targeted regeneration passes exact locked components back into the request and must preserve them byte-for-byte.
+Layout consumes the certificate rather than discovering feasibility through random retries. Critical-path rooms receive ordered columns; branches receive dedicated upper/lower bands; loop bypasses receive reserved nonintersecting interval bands; and each connection receives a channel. Room dimensions expand deterministically to satisfy side-specific opening demand and usable interior demand from encounters/features. The required floor bounds are computed before geometry is emitted. An optional caller maximum is accepted only when it contains those proven bounds.
 
-P7-13 replaces the baseline's universal one-cell room padding and source-end-only “door corridor” behavior under new package/generator pins. Spacing is semantic: rooms joined by one direct door share a wall and emit no corridor; passage-linked rooms use explicit traversable corridor cells and validated openings at both room boundaries; unrelated rooms retain at least one five-foot cell of solid-rock clearance. Passage routing ranks valid perpendicular endpoint approach and clear first/last segments before bend count, length, clearance, and deterministic seeded ties. Straight routes are preferred, then explainable one-bend routes; a bend in an opening or first exterior corridor cell is invalid. Corridor interiors cannot overlap room interiors, and renderers clip corridor walls at the validated opening rather than drawing a box inside the connected room. If a direct door cannot be placed on a shared wall, deterministic placement retries or fails—it never silently converts the door into a short hallway.
+Direct shared-wall doors are used only when the constructive embedding assigns compatible adjacent room sides. An arbitrary connection remains a corridor with explicit openings because not every planar graph is a rectangle-contact graph. Seeded optimization may compact, mirror, rotate, or vary a proven layout, but failure falls back to the constructive baseline. Backtracking is never the correctness mechanism.
 
-This first algorithm optimizes for reproducibility, inspectability, and clean failure rather than compact or organic-looking maps. P7-05 separately validates full geometry, pathfinding, and capacity before any output is approved. P7-13 adds occupied-bounds density and connector-quality metrics without allowing presentation goals to bypass topology or geometry validity.
+Independent topology, raster geometry, pathfinding, capacity, and secrecy validators remain mandatory. Their purpose is to catch implementation bugs—off-by-one bounds, bad openings, overlaps, disconnected cells, or leaks—not to discover whether the supported input happened to have a solution.
 
 ### Dungeon Primitives and Model Tools
 
-Initial V2 generation exposes exactly one structured model submission:
+Alpha V1 exposes exactly one structured submission:
 
 ```text
-submit_dungeon_intent_v2(proposal)
+submit_dungeon_plan(plan)
 ```
 
-It validates one proposal, invokes the pure compiler and deterministic preflight, and returns either a compact accepted summary/hash/compiler version or at most eight stable code/path/affected-ref/repair diagnostics. It neither persists a package nor approves or commits anything. The accepted submit arguments are the structured result; the model is not asked to echo a duplicate final response. One rejected submission may receive one fresh bounded repair request with the original authorized request, size-bounded prior arguments, and diagnostics that identify the allowed value or violated capability rule. A malformed optional preparation detail becomes a readiness blocker when its structural identity can still be compiled; it does not force whole-map regeneration.
+The tool validates `DungeonPlan`, invokes pure topology compilation/certification and constructive preflight, and returns a compact accepted plan hash, graph counts, cycle rank, certificate version, and warnings—or at most eight stable code/path/ref/repair diagnostics. The accepted arguments are the model result; no duplicate final text is requested. The tool neither persists nor approves anything.
 
-Incremental `add_room`, `connect_rooms`, and targeted-regeneration operations remain possible later authenticated DM-edit workflows, not overlapping initial-generation model tools. The server owns component identity and exact placement. A model can request a loop or secret bypass; code computes a realizable route. Regeneration can lock accepted rooms/floors and change only a selected component. Initial generation remains one model submission plus at most one repair. Splitting core topology from optional prose/mechanics enrichment requires a separately reviewed architecture slice and measured evidence that the extra bounded call lowers total failure and cost; enrichment must then be independently skippable and reference accepted server-owned package IDs.
+The model declares room purposes plus critical path, branches, bounded loops, secrets, gates, and content intent. It does not author the exact graph edge aggregate, coordinates, dimensions, ports, IDs, visibility layers, or arithmetic. Code computes a realizable graph and exact layout. One schema-invalid plan may receive one bounded repair. A valid structural draft with missing optional prose remains a readiness-blocked draft; it is not regenerated randomly.
+
+Targeted editing/regeneration remains a later authenticated DM operation. Optional guide enrichment occurs only after exact geometry exists, references server IDs, and may fail independently. Initial structural generation remains one model call plus at most one schema repair.
 
 ### Deterministic Dungeon Validation
 

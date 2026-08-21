@@ -1650,6 +1650,67 @@ retries or selecting a more expensive model is not an acceptable substitute.
 - New print output remains disabled until reference/tactical preflight and nonblank-page
   gates pass; historical assets remain immutable/readable.
 
+### P7-14 — Dungeon generation alpha reset and constructive V1
+
+This user-directed recovery supersedes P7-13e through P7-13g until its Tier A gate
+passes. The complete model contract, topology proof, constructive layout, stress ladder,
+and resumable slices are in
+[`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md).
+
+#### P7-14a — Architecture, characterization, and green baseline
+
+- Freeze Tier A as one floor, 4–8 rooms, one critical path, bounded branches/loop,
+  bounded gate/secret/trap/feature/encounter intent, and DM/player SVG/PNG.
+- Add active-generator properties for simple plans and the observed assertion/out-of-
+  bounds failures. No active supported plan may throw an exception.
+- Pause live calls and P7-13 output/print work.
+
+#### P7-14b — One alpha V1 and dead-code deletion
+
+- Collapse proposal/design/compiler/topology/package/generator names and pins to one V1;
+  remove numeric suffixes from active public Python names.
+- Delete old model generation, generator branches, readers, known-bad baseline fixtures,
+  and compatibility tests because no user artifact or external consumer exists.
+- Recreate only useful synthetic V1 fixtures, break circular imports, and require a green
+  package/unit gate. Do not rewrite Git history.
+
+#### P7-14c — Creative plan and topology certificate
+
+- Replace the arbitrary model-authored edge list with `DungeonPlan`: room purposes,
+  critical path, branches, supported loops, gates/secrets, and bounded content intent.
+- Construct a connected series/parallel-with-spurs graph and emit independently checked
+  connectivity, cycle, branch, gate-order, public/secret reachability, room-demand,
+  port-demand, and embedding witnesses.
+
+#### P7-14d — Constructive Tier A geometry
+
+- Allocate backbone columns, branch/loop bands, room dimensions, side ports, and
+  corridor channels from the certificate; compute exact required bounds before cells.
+- Keep seeded compaction/variation optional and fall back to the guaranteed baseline.
+- Reach 100% valid output, zero exceptions, and zero leaks over generated Tier A
+  plans/seeds.
+
+#### P7-14e — Prompt/guide integration and stress ladder
+
+- Expose only `submit_dungeon_plan`; one accepted tool call is the structural result.
+- Build exact keyed guide content after geometry; optional enrichment fails
+  independently and cannot erase a valid draft.
+- Pass CLI/web/faux publication, fixed-prompt DM quality rubrics, then Tier B multi-floor
+  and Tier C dense hub/nested-loop/port/interior-demand stress cases before resuming live
+  canaries or P7-13 polish.
+
+**Phase gate P7-14 Tier A**
+
+- Every generated supported topology is connected by construction and carries a
+  recomputable certificate; every requested loop/gate/secret has a witness.
+- Every supported certificate has a deterministic constructive orthogonal layout under
+  its computed bounds. Validator failures are regressions, never normal random misses.
+- Active properties cover 4–8 rooms across seeds with zero exceptions and 100% valid
+  topology/geometry; clean output has zero DM-only leaks.
+- One bounded `submit_dungeon_plan` call preserves fixed-prompt semantics and produces a
+  playable draft with a human-reviewed room progression and guide.
+- There is one V1 path and no dormant V2/V3/V4 generation or package dispatch.
+
 **Phase gate P7**
 
 - The independently runnable `dm_dungeon` package turns a constrained brief into a connected, non-overlapping, multi-floor practical grid with reproducible seed behavior and passes dependency-isolation tests.

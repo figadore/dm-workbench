@@ -407,8 +407,8 @@ def _breadth_first_route(
                 or neighbor in blocked
                 or neighbor[0] < 0
                 or neighbor[1] < 0
-                or neighbor[0] > bounds.width_cells
-                or neighbor[1] > bounds.height_cells
+                or neighbor[0] >= bounds.width_cells
+                or neighbor[1] >= bounds.height_cells
             ):
                 continue
             previous[neighbor] = point

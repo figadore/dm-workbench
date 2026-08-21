@@ -1,196 +1,145 @@
 # Project Status and Handoff
 
-> Read this file for the current implementation resume point. Historical milestones,
-> superseded handoffs, and older verification results are in
-> [`PROJECT_HISTORY.md`](PROJECT_HISTORY.md) and are not required to begin work.
+> Read this file first. Historical milestones and superseded handoffs belong in
+> [`PROJECT_HISTORY.md`](PROJECT_HISTORY.md). Do not infer the next task from old V2/V3/V4
+> names in the tree.
 
 ## Current Snapshot
 
 - **Last updated:** 2026-08-21
-- **Branch:** `fast-track-prompt-to-dungeon` — ahead of `origin/fast-track-prompt-to-dungeon` by 4 commits.
-- **Working tree:** uncommitted alpha P7-13d.1 transport/named-objective repairs plus this handoff update; no migration changed.
-- **Current phase:** P7-13 — Dungeon output, map readability, asset UX, and print refresh (user-directed priority; P3 remains deferred, not partially started).
-- **Last completed task:** **P7-13d — Doors, traps, puzzles, features, and a usable DM guide**, including post-implementation review repairs.
-- **Current task:** **P7-13d.1 — Prompt-contract reliability and bounded-cost recovery (the alpha patched-contract Flooded Archive canary passes, but the fixed live suite stopped on its first case at deterministic preflight).**
-- **First action:** reproduce the fixed-suite `one_floor` layout-preflight failure provider-free from its durable safe record; do not rerun the case or continue the suite without a reviewed repair and renewed explicit opt-in.
-- **Schema head:** `0008_workbench_defaults`.
+- **Branch:** `fast-track-prompt-to-dungeon`, synchronized with its origin before this WIP.
+- **Current task:** **P7-14a — Dungeon generation alpha reset, characterization, and green baseline.**
+- **Task state:** architecture/reset decision and first safety/deletion slice complete but uncommitted.
+- **Schema head:** `0008_workbench_defaults`; no migration changed.
+- **Live providers:** no call was made. Do not resume the stopped live suite during P7-14a/b.
 
-## Current Implementation State
+## User Direction and Architecture Decision
 
-- V2 is the active new-generation path: a Workbench-only structured proposal is compiled by the pure `dm_dungeon` V2 compiler into deterministic kernel input, then published atomically.
-- CLI and web both use `DungeonPromptApplicationService`. Each prompt starts one durable `dungeon_prompt_v2` attempt before provider contact; its UUID is the gateway caller-run ID and it safely links to the separate artifact generation run/version on completion.
-- V2 has one structured submission and at most one bounded fresh repair. Shared time/token budgets, cancellation, transcript role handling, safe diagnostics, and body-free ordinary logging are enforced.
-- V1 artifacts remain readable and immutable. New V1 generation has **not** been retired: P7-12g retained it because no opt-in live small-model comparison has been recorded.
-- Standalone prompt-to-package preparation work is not blocked by P3-01. P3-01 is only needed to promote generated dungeon facts to campaign canon. P5-02 remains deferred.
+The prior P7-13 feature program is paused. The project had optimized contracts,
+compatibility, rendering, and edge mechanics before reliably producing a small coherent
+dungeon. The active recovery is specified in
+[`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md).
 
-## Latest Verification
+The target pipeline is:
 
-P7-13d.1 live-gate follow-up:
+```text
+one submit_dungeon_plan V1 model call
+    -> deterministic critical-path/branch/loop topology compiler
+    -> independently checked TopologyCertificate
+    -> constructive orthogonal layout with computed bounds
+    -> independent geometry/secrecy validation
+    -> optional independently-failable guide enrichment
+    -> atomic draft publication
+```
 
-- Podman Compose now starts a ready local Workbench, PostgreSQL, and private gateway (`make stack-up`; `make stack-smoke` → ready). `podman compose exec workbench dm model providers` confirmed authenticated OpenAI Codex `gpt-5.4`; no OAuth credential was displayed or changed.
-- **Exactly one** opt-in Flooded Archive canary was invoked with OpenAI Codex `gpt-5.4`, standard effort, seed `1842`, and no `--debug`. It stopped before any gateway stream/provider event or generated artifact: durable attempt `019e4bdd-9c6d-4cc6-83f9-4dc02285d3f0` is `failed` at `model_submission` with public-safe `dungeon_prompt_failed`; safe inspection shows no usage/cost/latency metric. The fixed suite was not run and there was no manual retry.
-- Provider-free reconstruction of that exact request found a 18,016-byte request (within the 262,144-byte gateway limit), one 2,206-character message, a 4,096 output limit, and a 300-second deadline. It found the actual transport-contract defect: Python serialized unset `GatewayToolSchema.constrained_sampling` as JSON `null`; the Node gateway correctly accepts only an omitted field or `prefer`/`require`, so it rejected the request before stream logging. This did not involve a provider response body.
-- The uncommitted repair serializes tool schemas with `exclude_none=True` and adds a regression assertion that a non-constrained schema omits `constrained_sampling`. The Compose Workbench image was rebuilt and the stack is ready.
-- **Replacement canary (explicitly authorized):** one non-debug OpenAI Codex `gpt-5.4` standard-effort Flooded Archive canary ran with seed `1842` and succeeded structurally. It created artifact `65b9966c-8733-4a55-9534-72ed956e3ff9`, version `3fe11e0b-c922-44aa-ad24-5cf9b032392b`, attempt `ef92378d-d95c-4581-b396-814324f8cad3`, and generation run `ac6812fe-d086-4eb1-98f4-e081ea192d49`. Body-free metrics: one first-pass model call, no repair, measured input/output tokens `3810`/`702`, model latency `14675` ms, specification SHA-256 `19fd215b6317ce4ebe62074aed1e25b71960319a26be2530d6c634c31c738505`, and preparation readiness `true`.
-- **Replacement canary semantic result:** Flooded Archive identity, lighthouse premise, two floors, small-upper/larger-lower scale, and secret vertical descent all passed. The sole final-objective marker did **not** resolve to a room named Stone of Redemption, so the required final Stone objective failed. No provider response body is recorded here.
-- **Alpha named-objective repair:** per user direction, patch the active design/profile/compiler pins in place rather than adding compatibility versions/readers. Active `2.4.0` objectives now require a bounded `name`; the model-facing schema rejects an omission, and the prompt explicitly requires an exact copy of a specifically named DM final objective rather than a generic substitute. The compiler plan and DM guide retain the name without changing stable marker IDs or geometry. The frozen `final_relic` case names the Stone of Redemption and checks `named_final_objective`. Synthetic local artifacts from before this alpha patch are disposable and not retained-reader fixtures.
-- **Alpha patched-contract canary (explicitly authorized):** one non-debug OpenAI Codex `gpt-5.4` standard-effort Flooded Archive canary ran with seed `1842` and succeeded. It created artifact `7ac667f9-bcba-4f5f-b6ed-1b474b518cbd`, version `0da79264-a38d-495b-af1c-364ed276d68f`, attempt `4a29711b-513f-4fb7-b4ff-021130226dd5`, and generation run `4eb1aa03-7172-4334-9bef-f0a5e33a67ad`. Body-free metrics: one first-pass model call, no repair, measured input/output tokens `3888`/`607`, model latency `13019` ms, specification SHA-256 `0115e5fd270e551bb9c269283ad9f86bd27a3a37fa613263d5c92e975f95e70f`, and preparation readiness `true`. All required semantics passed: Flooded Archive identity, lighthouse premise, two floors, small-upper/larger-lower scale, secret vertical descent, and exact final Stone of Redemption objective.
-- **Fixed live suite (explicitly authorized):** execution stopped on the first `one_floor` case; there was no retry and the remaining nine cases were not invoked. Attempt `25d5267c-d6bd-4335-84c3-a9e157d9f70c` failed at deterministic preflight and linked generation run `9b2ed011-eda4-4938-88b9-3fdd1a21eed0`; no artifact/version was created. The body-free terminal-output SHA-256 is `23a6028ba73ea10ab9118c3cc86961459765ad261387bc139f42bac0d2ea94ba`. Safe validation reports a disconnected required-room topology (`layout.topology_invalid`): one required room cannot reach an exit, another cannot reach an entrance, and gate progression leaves it blocked. The failed run has no retained model-run usage metrics; usage/cost are therefore unknown. No provider response body is recorded here.
-- Earlier host-only `uv run --frozen dm model providers` did **not** make a provider call: this checkout's ignored `.env` lacks the required native Workbench `DM_DATABASE_URL`, `DM_SOURCE_ROOTS`, `DM_ASSET_ROOT`, and `DM_SCRATCH_ROOT` settings. Compose supplies them; do not point native commands at the private Compose gateway.
-- `npm --prefix model-gateway run check && npm --prefix model-gateway test` → passed (`8` Node tests), including constrained-schema `prefer` and faux fallback coverage.
-- `uv run --frozen pytest -q packages/dungeon-engine/tests/test_design_v2_compiler.py tests/unit/test_prompted_dungeon_workflow.py tests/unit/test_model_gateway_client.py tests/evals/test_dungeon_evals.py` → `103 passed, 2 failed`; the failures are the previously documented V1 targeted-regeneration repair-budget cases (`no budget remains for deterministic diagnostic repair`), not V2/P7-13d.1 behavior.
-- `git diff --check` → passed before this status-only update.
+Correctness must not depend on random placement/routing retries. Tier A uses a bounded
+series/parallel-with-spurs graph grammar. Connectivity is true by construction; loop,
+branch, gate-order, public/secret reachability, room interior demand, wall-port demand,
+and embedding witnesses are recomputed by validators. Layout allocates backbone columns,
+branch/loop bands, room dimensions, openings, and corridor channels from the certificate.
+Seeded search may improve a proven baseline but cannot be required to find one.
 
-From completed P7-12g:
+There are no retained user dungeons or external dungeon consumers. Collapse application
+contract/generator history to one clean V1 and delete old generation/readers/fixtures.
+This does **not** authorize rewriting or force-pushing Git history.
 
-- `uv run pytest -q tests/evals/test_dungeon_evals.py tests/unit/test_prompted_dungeon_workflow.py tests/unit/test_cli.py` → `29 passed`
-- `uv run ruff check src/dm_assistant/orchestration/dungeons/evals.py tests/evals/test_dungeon_evals.py` → passed.
-- `uv run ruff format --check src/dm_assistant/orchestration/dungeons/evals.py tests/evals/test_dungeon_evals.py` → passed.
-- `uv run mypy --strict src/dm_assistant/orchestration/dungeons/evals.py` → passed.
+## P7-14a Work Completed in This WIP
+
+### Planning and architecture
+
+- Added `dungeon-generation-recovery-plan.md` with:
+  - the Tier A scope and exact model tool-call example;
+  - graph construction and topology-certificate rules;
+  - gate/secret reachability proofs;
+  - room port/interior feasibility arithmetic;
+  - constructive layout rules that do not use backtracking for correctness;
+  - Tier A through Tier E stress progression;
+  - resumable R0–R5 implementation slices.
+- Updated `dm-assistant-technical-architecture.md` to make the proof-carrying V1 pipeline normative.
+- Added P7-14a through P7-14e and the Tier A gate to `dm-assistant-implementation-plan.md`.
+- Added `packages/dungeon-engine/src/dm_dungeon/validation/TOPOLOGY_MATH.md`
+  beside the executable topology validator. It introduces graph/topology terms in code
+  order and explains adjacency, BFS reachability, components, cycle rank, branch
+  witnesses, separators, secret subgraphs, Tarjan SCCs, monotone gate-progression fixed
+  points, planarity limits, the constructive series/parallel V1 boundary, room-port
+  arithmetic, and which proofs are current versus P7-14c/d work. `topology.py` and the
+  package README link to it.
+
+### Active-path safety and characterization
+
+- Fixed `layout/routing.py` so the exclusive width/height floor boundary cannot be
+  entered; the previous `>` check allowed `x == width` or `y == height`.
+- Fixed `layout/engine.py` so an active explicit-passage routing failure cannot silently
+  fall back to the legacy router and then crash on `assert passage_route is not None`.
+  It now returns `layout.connection_routing_failed`.
+- Added focused regressions for both defects.
+- Replaced legacy `orthogonal-v2` Hypothesis coverage with property tests through the
+  actual active compact-design/compiler/mechanics/layout path.
+- The current characterization certifies 2–5 room chains across generated seeds. This
+  is an interim green floor, not the Tier A gate. A sampled 7-room chain still had 5/30
+  ordinary routing failures; an 8-room chain had 7/30 failures. There were no crashes or
+  out-of-bounds diagnostics after the safety fix. P7-14d must replace this fallible path,
+  not increase retries.
+
+### Dead-code deletion
+
+Deleted the obsolete known-bad output baseline:
+
+- `packages/dungeon-engine/tests/fixtures/output_quality_baseline.v1.json`
+- `packages/dungeon-engine/tests/golden/output_quality_baseline.upper.dm.svg`
+- `packages/dungeon-engine/tests/test_output_quality_baseline.py`
+
+Those files existed to preserve/count defects including raw IDs, overlaps, missing
+mechanics, and 73 mostly blank PDF pages. No retained user artifact required them.
+
+## Verification
+
+- `uv run pytest -q packages/dungeon-engine/tests/test_routing.py packages/dungeon-engine/tests/test_design_v2_compiler.py` → `90 passed` before the property rewrite.
+- Focused active property/compiler/routing gate → `92 passed`.
+- `uv run pytest -q packages/dungeon-engine/tests` → **`206 passed`**.
+- `uv run ruff check packages/dungeon-engine/src/dm_dungeon packages/dungeon-engine/tests` → passed.
+- `uv run ruff format --check packages/dungeon-engine/src/dm_dungeon packages/dungeon-engine/tests` → passed.
+- `uv run mypy --strict packages/dungeon-engine/src/dm_dungeon` → passed.
+- `uv run pytest -q packages/dungeon-engine/tests/test_topology_validation.py packages/dungeon-engine/tests/test_topology_properties.py` → `11 passed`.
+- Focused Ruff check/format over `validation/topology.py` → passed.
 - `git diff --check` → passed.
+- Root unit/integration suites were not run; the Workbench/model contract was not changed in this slice.
 
-Post-completion P7 V2 review verification:
+## Working Tree
 
-- `uv run pytest -q packages/dungeon-engine/tests` → `118 passed`.
-- Focused V2 compiler/eval/prompt/model/CLI suites → `45 passed` before the final provenance pin, then `44 passed` across the final root focus (the package compiler cases are included in the separate 118-test package gate).
-- `make test-integration PYTEST_ARGS=tests/integration/test_dungeon_studio_web_prompt.py` → `1 passed` against a disposable pgvector PostgreSQL container.
-- P7/preparation PostgreSQL integration focus → `20 passed`.
-- Full root unit/eval suite → `171 passed`; repository tests now ignore developer-local `.env` values explicitly.
-- Focused Ruff and strict mypy over all reviewed source/test files → passed.
-- `npm --prefix model-gateway run check && npm --prefix model-gateway test` → passed (`7` Node tests).
-- A combined package-plus-root pytest invocation cannot collect both `packages/dungeon-engine/tests/test_cli.py` and `tests/unit/test_cli.py` in one process because they share the module basename; running the package and root gates separately passes.
-- Full `make test-integration` now runs rather than skipping and reports `44 passed, 3 failed`; the remaining failures are pre-existing Library/schema issues: SQLAlchemy metadata/check-constraint drift, duplicate vector result behavior, and an embedding-resume fixture missing required document path history.
-- `git diff --check` → passed.
+Uncommitted P7-14a changes:
 
-CLI debug enhancement verification:
+- `dungeon-generation-recovery-plan.md` (new)
+- `dm-assistant-implementation-plan.md`
+- `dm-assistant-technical-architecture.md`
+- `PROJECT_STATUS.md`
+- `packages/dungeon-engine/README.md`
+- `packages/dungeon-engine/src/dm_dungeon/layout/{engine,routing}.py`
+- `packages/dungeon-engine/src/dm_dungeon/validation/{topology.py,TOPOLOGY_MATH.md}`
+- `packages/dungeon-engine/tests/{test_design_v2_compiler,test_layout_properties,test_routing}.py`
+- the three deleted output-baseline files listed above
 
-- `uv run pytest -q tests/unit/test_model_gateway_client.py tests/unit/test_prompted_dungeon_workflow.py tests/unit/test_cli.py` → `32 passed`.
-- Focused Ruff format/lint and strict mypy over the changed CLI/model adapter/orchestration files → passed.
-- `uv run dm dungeon prompt --help` confirms `--debug` is exposed.
-- `git diff --check` → passed.
+No migration, provider response, real campaign content, credential, or live-provider state changed.
 
-User-directed repair-usage diagnostic verification:
+## Single Next Recommended Task
 
-- `uv run pytest -q tests/unit/test_cli.py tests/unit/test_prompted_dungeon_workflow.py` → `29 passed`.
-- `uv run ruff check` and `uv run ruff format --check` over the changed application/CLI/tests → passed.
-- `uv run mypy --strict src/dm_assistant/orchestration/dungeons/application.py src/dm_assistant/cli/main.py` → passed.
+**P7-14b — collapse model generation and exact package/layout dispatch to one alpha V1.**
 
-User-directed V2 connection-guidance verification:
+**First concrete action:** remove the unused `DungeonPromptService.create` V1 arbitrary-
+topology workflow, its five old model tools, `DungeonGenerationIntentV1`, legacy lineage
+field, and their tests. Keep the currently active single-submission workflow working while
+renaming it toward `submit_dungeon_plan`; do not leave both old and replacement paths
+half-supported.
 
-- `uv run pytest -q tests/unit/test_prompted_dungeon_workflow.py tests/unit/test_cli.py` → `30 passed`.
-- `uv run ruff check` and `uv run ruff format --check src/dm_assistant/orchestration/dungeons/prompting.py tests/unit/test_prompted_dungeon_workflow.py` → passed.
-- `uv run mypy --strict src/dm_assistant/orchestration/dungeons/prompting.py` → passed.
-- `git diff --check` → passed.
+Then, in the same ordered slice:
 
-Last-two-commit review verification:
+1. break the `modules.modeling` ↔ `orchestration.modeling` circular import;
+2. collapse active design/proposal/package/mechanics names and schema pins to V1;
+3. delete `orthogonal-v2/v3/v4` dispatch and keep one current generator pin;
+4. regenerate or delete remaining synthetic legacy fixtures;
+5. restore green package, root unit/eval, strict mypy, Ruff, and integration focus before
+   starting the new topology certificate.
 
-- `uv run pytest -q packages/dungeon-engine/tests` → `120 passed`.
-- `uv run pytest -q tests/unit/test_prompted_dungeon_workflow.py tests/unit/test_cli.py` → `30 passed`.
-- `uv run pytest -q tests/unit tests/evals` → `177 passed`.
-- Focused Ruff lint and format checks over all reviewed files → passed.
-- Strict mypy over all reviewed source files → passed.
-- `git diff --check` → passed.
+Suggested commit subject for the completed current slice:
 
-Directional endpoint concealment verification:
-
-- `uv run pytest -q packages/dungeon-engine/tests` → `122 passed`.
-- `uv run pytest -q tests/unit tests/evals` → `177 passed`.
-- `make test-integration PYTEST_ARGS='tests/integration/test_dungeon_studio_cli.py tests/integration/test_dungeon_studio_web_prompt.py tests/integration/test_preparation_persistence.py'` → `16 passed`.
-- Focused Ruff lint/format and strict mypy over changed source/tests → passed after formatting.
-- `git diff --check` → passed.
-
-The frozen suite contains ten synthetic compact V2 cases: one/two floor, secret lower level, actual branch plus loop, clue gate, trap, optional hidden area, final relic, invalid-reference repair, and safe impossible-request abstention. It now enforces the declared first-pass outcomes and requested semantics, compiler/layout validity, deterministic replay, and omission of all compiler-classified DM-only components from player SVG. A body-free comparison contract records independent V1/V2 observations for tool/schema/compile/repair/semantic/package/secrecy, token, latency, and optional DM-edit metrics; it cannot accept provider response bodies or pass one response into the other run. `dungeon-intent-v2-eval` is explicitly documented as an opt-in comparison policy.
-
-**P7-12g rollout decision:** retain the existing V2 new-generation path and V1 immutable readers/replay compatibility, but do **not** retire V1 orchestration or make an additional default/profile change. No opt-in live small-model comparison has been recorded; the synthetic suite alone cannot supply that evidence. Live calls remain excluded from CI.
-
-## P7 V2 Review Repairs and Deferred Notes
-
-Review fixes completed:
-
-- Rooms reachable only through secret access are compiler-derived `dm_only`; clean player rendering no longer exposes hidden-wing room geometry. Traps/barriers retain visible destination geometry while their mechanics remain DM-only. Directional concealment is pinned as `dungeon-design-v2-compiler-3`, and final artifact generation runs record the active compiler version.
-- Multiple dependencies targeting one barred connection now fail with a stable compiler diagnostic instead of silently selecting the last dependency.
-- A schema-invalid V2 submit call now consumes the one bounded fresh repair path with safe location-only diagnostics and measured remaining budgets. Failed and repaired submissions preserve their own exact lineage rather than associating every run with the final proposal.
-- Web no longer attempts to terminally finish an application-owned prompt run a second time, and non-cancellation `ModelRunAbstained` failures are no longer mislabeled as cancelled.
-- PostgreSQL CLI/browser integration fixtures now exercise the V2 tool-call contract rather than returning obsolete V1 text. `make test-integration` provides an isolated, automatically port-assigned pgvector database and guaranteed cleanup; tests cannot inherit provider/settings policy from the ignored developer `.env`.
-- `attempt_run_id` is now an allowlisted structured logging correlation field; the previously skipped browser test exposed and fixed that runtime failure.
-
-Deferred review notes (do not fold into P3-01 opportunistically):
-
-- Prompt-attempt inspection still does not durably pin the resolved provider/model/profile. The run begins correctly before catalog/provider contact, but the existing immutable start fields have no later safe metadata-enrichment operation. Design an explicit constrained attempt-metadata update or stage-event projection before claiming full P7-12f inspection coverage.
-- Browser reconnect state is still process-local in `DungeonPromptWorkbenchService._runs`; the durable generation run survives, but a Workbench restart cannot reconstruct SSE/UI events or the final artifact link. A future P7 observability slice should project web state from durable attempt records.
-- The application boundary still collapses most non-cancellation transport/submission/compile failures to `dungeon_prompt_failed`. Extend the public-safe stage/code taxonomy without exposing provider/model text.
-- The implemented compact V2 schema still omits some target-boundary creative fields from P7-12 (room tags/preparation prose, tones, explicit branch/loop requests, and encounter-slot intent). P7-13d now combines that work with door/trap/puzzle/feature completeness. No user dungeon or external consumer currently needs the pre-P7-13d representation, so advance the active V2 schema/compiler pins and synthetic fixtures in place rather than maintaining a parallel V3 path.
-- The frozen V2 evaluator directly checks SVG component secrecy; PNG/PDF/Roll20 secrecy remains covered by lower-level exporter tests rather than this cross-version comparison. A future eval revision should aggregate all clean package roles before using leakage as rollout evidence.
-
-## User-Directed V2 Follow-up Tracker
-
-- [x] **Explain a skipped V2 repair when gateway usage is unavailable.** The application now emits stable `dungeon_prompt_repair_usage_unavailable`, and the CLI explains that deterministic validation failed but safe automatic repair could not start because the gateway did not report token usage. This is not presented as a model abstention. Covered by focused CLI/application classification tests.
-- [x] **Enable secret vertical links** (stairs/ladders). Design `2.1.0` accepts directional or symmetric hidden endpoints; compiler-3 derives directed discovery and endpoint publication.
-- [x] **Add directional endpoint concealment/discovery semantics** for connections. Doors, stairs, and ladders support independent `from_hidden`/`to_hidden`; layout combines endpoint concealment with room publication, player output normalizes a publishable one-sided secret door, and DM output retains the secret classification. Durable in-play reveal/overlay state remains deferred.
-- [x] **Bounded fresh V2 repair exists.** It remains one fresh request containing the prior compact proposal and safe diagnostics, subject to cumulative time/token budgets.
-- [x] **Propagate measured `pi-ai` usage through the private gateway.** The pinned `pi-ai` final-message contract uses `usage.input`/`usage.output`; the gateway now maps those fields to its normalized SSE event, and its faux-provider contract test requires that event. V2 repair coverage verifies a measured rejected submission gets one fresh request with a reduced token budget.
-- [ ] **Make bounded repair usable with genuinely unavailable provider usage.** Requires an explicit architecture/budget-policy decision; do not treat unknown usage as zero.
-- [x] **Add compact connection-validity guidance/example to the initial V2 prompt.** Instruction lineage `instructions-3` distinguishes same-floor passage/door links from cross-floor stairs/ladders and gives a compact one-sided hidden-ladder example using `from_hidden`/`to_hidden`.
-
-## P7-13 Output Refresh Decisions
-
-- The detailed baseline and ordered slices are in [`dungeon-output-refresh-plan.md`](dungeon-output-refresh-plan.md); the implementation plan owns stable task IDs P7-13a through P7-13g.
-- The inspected screenshot is `Screenshot 2026-08-18 at 7.31.33 AM.png`. It confirms tiny endpoint doglegs/box-like corridor outlines plus overlapping raw room IDs and numbered room labels.
-- There is no universal five-foot room gap: direct-door rooms share a wall, passage links use explicit corridor cells, and unrelated rooms retain one cell of rock clearance.
-- Default maps use short keyed callouts and one grayscale-safe feature grammar. Opaque IDs remain in lineage/developer inspection only.
-- New feature intent and composable door mechanics advance the active V2 contract pins in place because no user dungeon or external consumer requires backward compatibility. Geometry/marker IDs stay in `dm_dungeon`; prose-heavy DM guide content stays in the Workbench. Retained-artifact compatibility begins once an artifact or consumer actually exists.
-- User-directed P7-13d clarification: freeze a connection-mechanics matrix. Same-floor passages carry no hidden/barrier/trap mechanics; same-floor doors may combine concealment, lock/puzzle gate, and trap; cross-floor stairs/ladders allow directional hidden endpoints plus optional explicitly located source/destination endpoint doors or hatches with those same mechanics. The task now explicitly requires deterministic endpoint anchor/traversal/dependency semantics, truthful repair diagnostics, no lost gate/trap during compilation, mechanics-matrix/prompt-repair coverage, and a terminal result distinct from a model abstention after bounded rejected submissions.
-- P7-13a centrally disables new print generation. Historical PDFs remain readable; print re-enable requires the new PDF request/exporter version and P7-13f preflight gates.
-- The redesigned print feature separates bounded reference maps from selected-region exact-scale tactical tiles and rejects excessive/sparse jobs during preflight.
-- User-directed live GPT-5.4 evidence now blocks P7-13e behind **P7-13d.1**. The recovery keeps one submission plus at most one repair, removes invisible/redundant model-contract coupling, retains incomplete optional mechanics as truthful readiness-blocked drafts, restores original context and actionable diagnostics to repair, contract-tests `pi-ai` constrained sampling, lowers token ceilings, and requires a staged Flooded Archive live canary before more rollout. A two-call core/enrichment split is contingent on measured failure/cost after these fixes, not assumed up front.
-
-## P7-12g Guardrails
-
-- Keep all eval inputs and expected outputs synthetic.
-- Measure V1 versus V2 without double-persisting artifacts or placing one provider response into another model's context.
-- Do not make live provider calls part of CI; any live small-model evaluation is opt-in and follows faux/provider-contract coverage.
-- Do not change the default profile or retire V1 generation until the documented P7-12g thresholds and CLI, web, cancellation, publication, logging, and replay gates pass.
-
-## Handoff
-
-- **Task completed:** P7-13d — Doors, traps, puzzles, features, and a usable DM guide.
-- **Implemented behavior:** `orthogonal-v3` uses the retained-artifact-safe `DungeonPackageV2` root schema `1.3.0`; its `PassageOpening` records pin each corridor's room-wall segment and outward approach direction. The reader dispatches `1.1.0` to the original model (legacy JSON still round-trips exactly) and `1.3.0` to the new model. V3 direct-door pairs share a wall, emit no synthetic corridor, and validate as corridor-free shared-wall openings. Passage routing enumerates valid exterior openings, reserves endpoint leads, ranks bends, length, unrelated-room clearance, and seeded ties, and emits two stable opening IDs per corridor. Compact placement ranks occupied bounds before local graph distance while unrelated rooms retain rock clearance. V3 geometry rejects room-interior corridors, invalid/missing openings, wrong endpoint approach, undeclared room-wall contact, and non-shared direct doors. SVG clips corridor outlines and erases room-wall strokes only at explicit V3 openings, leaving retained legacy SVG bytes/goldens unchanged. Locked V3 corridor paths recover/pin their opening records.
-- **Files changed:** P7-13a files listed below remain uncommitted, plus `packages/dungeon-engine/src/dm_dungeon/{__init__.py,serialization.py,contracts/{__init__.py,package_v2.py},layout/{contracts,engine,placement,routing}.py,rendering/svg.py,validation/{geometry,geometry_contracts}.py}` and `packages/dungeon-engine/tests/{test_layout,test_routing,test_geometry_validation,test_rendering}.py`; no migration changed.
-- **Implemented behavior:** `ExportDungeonWorkflow` now selects exactly one format. The centralized `DungeonStudioService` policy rejects `pdf` before reading/generating anything with stable `dungeon_print_export_disabled`; `roll20` creates only Roll20 bundles/manifests. CLI has `--format roll20|pdf`; the web only offers Roll20 and explains print is disabled; API/web/CLI tests exercise the same PDF rejection. Existing PDF asset reads/routes were untouched. The frozen synthetic retained-output fixture includes shared-wall direct-door intent, straight and deliberately one-bend connector geometry, secret/locked/trapped doors, a trap, puzzle room, clue/key, stairs, feature, and a sparse 56x56 upper floor. Its golden/metrics record 3 raw opaque IDs, 3 text collisions, 1 endpoint-clearance bend, 6 corridor/room interior-overlap cells, 3 missing keyed mechanics, and 73 PDF pages with 66/72 blank tiles.
-- **Commands/tests run:** `uv run pytest -q packages/dungeon-engine/tests` → `124 passed`; `uv run pytest -q tests/unit/test_cli.py tests/integration/test_dungeon_studio_workflow.py tests/integration/test_dungeon_studio_cli.py tests/integration/test_dungeon_studio_web.py` → `18 passed, 6 skipped`; focused Ruff lint/format and strict mypy → passed; `make test-integration PYTEST_ARGS='tests/integration/test_dungeon_studio_workflow.py tests/integration/test_dungeon_studio_cli.py tests/integration/test_dungeon_studio_web.py'` → `6 passed`; `git diff --check` → passed.
-- **Commands/tests run for P7-13b:** `uv run pytest -q packages/dungeon-engine/tests` → `128 passed`; `uv run ruff check packages/dungeon-engine/src/dm_dungeon packages/dungeon-engine/tests` → passed; `uv run ruff format --check packages/dungeon-engine/src/dm_dungeon packages/dungeon-engine/tests` → passed; `uv run mypy --strict packages/dungeon-engine/src/dm_dungeon` → passed; `git diff --check` → passed.
-- **User-directed completed repair:** gateway final-usage normalization now follows pinned `@earendil-works/pi-ai`'s `Usage.input`/`Usage.output` contract rather than unsupported camel/snake-case provider fields. The Node faux stream contract now requires `usage`, and the V2 repair test records both request profiles and proves the second budget is reduced by first-call usage. Files: `model-gateway/src/server.ts`, `model-gateway/tests/gateway.test.ts`, and `tests/unit/test_prompted_dungeon_workflow.py`.
-- **Repair verification:** `npm --prefix model-gateway run check && npm --prefix model-gateway test` → 7 passed; focused V2/Python client test selection → 2 passed; Ruff lint/format and strict mypy over changed Workbench source → passed; `git diff --check` → passed. Running the whole `tests/unit/test_model_gateway_client.py tests/unit/test_prompted_dungeon_workflow.py` selection yields 15 passed, 2 failed in unrelated V1 repair tests because the current P7-13b layout/preflight behavior consumes the V1 profile's remaining turn budget (`no budget remains for deterministic diagnostic repair`); do not fold that V1/P7-13 issue into the gateway repair.
-- **User-directed planning clarification:** updated `dm-assistant-implementation-plan.md` and `dungeon-output-refresh-plan.md` to make P7-13d/g cover the complete connection-mechanics matrix, versioned composable-door implementation, explicitly located cross-floor endpoint doors/hatches for barriers/traps, preservation of every accepted mechanic, truthful prompt/repair diagnostics, renderer/DM-guide integration, matrix and prompt-repair evaluations, and correct terminal classification after exhausted rejected submissions. This was documentation-only; `git diff --check` passed and no test suite was needed.
-- **Implemented behavior for P7-13c:** `MapKey`/`MapCallout` is a versioned (`1.0.0`) pure renderer projection. It deterministically allocates floor-local room numbers and `D`/`T`/`F`/`X` callouts only after audience filtering, then uses pinned text bounds and candidate/ring placement to guarantee non-overlapping boxes and leader lines when local placement is exhausted. `SvgAnnotationMode` makes `none`, `callouts`, and inspection-only `developer_ids` explicit. New `DungeonPackageV2` (`1.3.0`) default SVG/PNG/PDF/Workbench output uses callouts; retained `1.1.0` package output keeps its old unannotated/default and explicit developer-ID behavior. DM callouts show secret/trapped badges; player projections have no DM-only badge allocation. The SVG grammar has grayscale-safe circle/triangle/square/transition primitives, and Pillow draws the same trusted primitives.
-- **Files changed for P7-13c:** `packages/dungeon-engine/src/dm_dungeon/{__init__.py,cli.py,export/{pdf,raster}.py,rendering/{__init__,annotations,contracts,svg,themes}.py}`, `packages/dungeon-engine/tests/test_rendering.py`, and `src/dm_assistant/orchestration/dungeons/service.py`; no migration changed.
-- **Commands/tests run for P7-13c:** focused renderer/compiler/PNG/PDF tests → `37 passed`; strict package mypy → passed; focused Ruff lint/format → passed; `git diff --check` → passed. The full package suite currently reports `127 passed, 2 failed` in existing Hypothesis `orthogonal-v2` layout-property cases (seeds `10075227` and `2280218`, `geometry.walkable_region_disconnected`); renderer changes do not execute layout generation. The existing root prompted-workflow focus similarly reports `28 passed, 2 failed, 6 skipped` in the documented V1 remaining-repair-budget cases; do not fold either unrelated P7-13b/V1 failure into P7-13c.
-- **P7-13d reusable scaffolding (superseded architecture direction):** Commit `6db29d5` contains separate `DungeonDesignSpecV3`, mechanics-plan compiler, and `DungeonPackageV3` scaffolding. Its capability matrix, bounded creative fields, stable mechanics IDs, pinned difficulty policy, endpoint-door/hatch shape, diagnostics, exact-reference validation, and tests remain useful. It is **not wired into prompting, topology/layout, rendering, or the DM guide** and creates no artifact. Do not extend it into a parallel V3 stack.
-- **P7-13d direction decision:** Continue from commit `6db29d5` rather than resetting or reverting it. A Git rollback would discard useful validated scaffolding; extending V3 would duplicate every downstream boundary. Fold the useful shapes and behavior into the active V2 contracts/compiler/package, advance V2 pins and synthetic fixtures in place, then delete V3-only modules and dispatch once equivalent V2 tests pass. Completed P7-13a/P7-13b/P7-13c work must remain untouched.
-- **P7-13d committed scaffolding files:** `packages/dungeon-engine/src/dm_dungeon/{__init__.py,cli.py,compiler_v3.py,serialization.py,contracts/{__init__.py,design_v3.py,package_v3.py}}` and `packages/dungeon-engine/tests/{test_design_v3_compiler.py,test_package_v3.py}`. Current uncommitted files are `dm-assistant-implementation-plan.md`, `dungeon-output-refresh-plan.md`, `dm-assistant-technical-architecture.md`, and this status file; no migration changed.
-- **P7-13d prior scaffolding verification:** focused V3 compiler/package tests after endpoint-concealment tightening → `9 passed`; prior V3 compiler/package/CLI focus → `19 passed`; Ruff check and format over changed package source/test → passed; strict package mypy → passed; full package suite → `136 passed, 2 failed` in the documented pre-existing `orthogonal-v2` Hypothesis cases (`geometry.walkable_region_disconnected`, seeds `10075227` and `2280218`); `git diff --check` → passed.
-- **Planning-decision verification:** documentation-only update; `git diff --check` passed. No test suite was required.
-- **P7-13d WIP (V2 contract/compiler):** active `DungeonDesignSpecV2` is now `2.2.0`, with bounded tones; room tags/preparation notes/encounter-slot intent; features; traps; puzzles; loop/branch requirements; composable `DoorMechanicsIntentV2`; and explicit vertical endpoint doors/hatches. Its local capability matrix rejects mechanics on passages, requires explicit vertical endpoint barriers, and requires a challenge band for every physical concealment/barrier/trap mechanic. `dungeon-design-v2-compiler-4` derives deterministic `DungeonMechanicsPlanV2` IDs and policy-pinned discovery/unlock/disable values, validates exact dependency, clue, room, loop, and branch refs, and preserves combined gate/trap mechanics in that plan. Existing simple V2 topology still compiles, now carries room tags/loop/branch requirements, and uses the plan's same-floor IDs.
-- **P7-13d mechanics-aware layout WIP:** `DungeonMechanicsPlanV2` now lives in pure `contracts/mechanics_v2.py`, so compiler and layout share it without an import cycle. `orthogonal-v4` requires its exact plan (and rejects missing/mismatched/duplicate records with `layout.mechanics_plan_invalid`), keeps V1 on `orthogonal-v3`, and emits `DungeonPackageV2.composable_doors` from the stable mechanics IDs plus `vertical_endpoint_doors` at the paired vertical-link endpoint positions. Composable doors retain their topology `connection_id` separately from their stable mechanic ID; package and geometry validation require every direct connection to have exactly one shared-wall opening. SVG/callouts and Roll20 now consume composable doors and omit all mechanics metadata from player output.
-- **P7-13d deterministic room markers and DM-guide WIP:** the compiler now retains stable plan records for every room trap, puzzle, and feature; `orthogonal-v4` deterministically assigns distinct interior cells by stable ID and emits `DungeonPackageV2.room_mechanic_markers`. Trap markers are DM-only; puzzle/feature markers are player-safe only when their containing room is publishable. Package and geometry validation require known layer/floor/room ownership and an in-room cell. SVG renders triangle/diamond/square symbols and uses `T`/`P`/`F` callouts after audience filtering. The pure package has no creative prose or solutions. The Workbench now persists a versioned `DungeonDmGuide` from the accepted V2 proposal plus a recompiled exact mechanics plan/package check and shared DM `MapKey` callouts. It has rooms, composable doors/transitions/endpoint hatches, key/clue dependencies, traps/effects, puzzles/solutions, and features; its UTF-8 text asset and web detail projection use readable callouts rather than opaque IDs. Advanced prompt proposals now remain preparation-publishable through this guide. Vertical endpoint barriers now materialize their topology gate and key/clue dependency rather than losing it before the guide.
-- **P7-13d readiness and cleanup WIP:** `DungeonPreparationReadiness` is a persisted, versioned DM-only projection from the immutable guide. It deterministically flags missing key/clue dependencies and exact explicit unknown markers (`unknown`, `unspecified`, `not specified`, or `tbd`) for trap effects and puzzle solutions; generation remains a valid preparation draft, but `DungeonStudioService.approve` rejects it until ready. The validation report and browser DM guide show the same diagnostic projection, and prompt guidance tells the model to preserve genuine unknowns rather than inventing details. `DungeonStudioSpecification` now deserializes active `DungeonPackageV2` output (not just legacy `1.1.0`). Superseded V3 contract/compiler/package modules, serialization dispatch, CLI fail-closed branch, and V3-only tests are removed; retained package readers are now legacy `1.1.0` plus active V2 `1.3.0`, and the useful package test is `test_package_v2.py`.
-- **P7-13d acceptance-coverage WIP:** compiler coverage now enumerates all 12 composable mechanics combinations (concealment × `none|locked|puzzle` gate × `none|trapped` hazard) for same-floor doors and for `from`/`to` endpoint hatches on both stairs and ladders. It also pins each prohibited capability-matrix edge. The V2 fresh-repair test asserts `design.missing_dependency` reaches the repair prompt safely; a second deterministic rejection raises `DungeonProposalRejectedAfterRepair`, which is classified as `dungeon_prompt_rejected_after_repair` and rendered by the CLI as explicitly distinct from a model abstention. Explicit model abstentions remain their own path.
-- **Files changed in this WIP:** `packages/dungeon-engine/src/dm_dungeon/{__init__.py,compiler.py,contracts/{__init__.py,design_v2.py,mechanics_v2.py,package_v2.py},layout/{__init__.py,contracts.py,engine.py},rendering/{annotations.py,svg.py},export/roll20.py,validation/geometry.py}`, `packages/dungeon-engine/tests/{test_design_v2_compiler.py,test_package_v2.py}`, `src/dm_assistant/orchestration/dungeons/{application,contracts,evals,prompting,service}.py`, `src/dm_assistant/web/{routes.py,templates/dungeon_detail.html}`, V2 synthetic eval fixture, prompt/integration tests, and prior planning/status docs. No migration changed.
-- **Commands/tests run:** V2 compiler plus eval/prompt focus (excluding two documented unrelated V1 remaining-budget cases) → `25 passed, 2 deselected`; strict mypy over changed pure compiler/contracts and Workbench sources → passed; focused Ruff → passed. Earlier direct V2 compiler suite → `12 passed`; V2 eval suite → `3 passed` before the prompt-focus run. V2 mechanics-contract plus V2 compiler focus → `17 passed`; package-root extension plus compiler focus → `18 passed`; strict mypy/Ruff over new package V2 contracts/export → passed. Mechanics-aware layout/render/Roll20/package focus → `43 passed`; focused V2 eval/prompt suite → `4 passed, 11 deselected`; strict package mypy and Ruff/format → passed. Current deterministic-marker/compiler focus: `uv run pytest -q packages/dungeon-engine/tests/test_design_v2_compiler.py` → `13 passed`; strict package mypy and package Ruff/format → passed. DM-guide/advanced endpoint focus: `uv run pytest -q packages/dungeon-engine/tests/test_design_v2_compiler.py tests/unit/test_prompted_dungeon_workflow.py -k 'v2_dm_guide or v2_submits_one_compact or compiler_preserves_composable'` → `3 passed`; strict mypy and Ruff/format over the package compiler and changed Workbench/web/test files → passed; `make test-integration PYTEST_ARGS=tests/integration/test_dungeon_studio_web_prompt.py` → `1 passed`; `git diff --check` → passed. The full prompted-workflow file reports `11 passed, 2 failed` in the documented unrelated V1 remaining-repair-budget cases. **Readiness/cleanup verification:** `uv run pytest -q packages/dungeon-engine/tests/test_design_v2_compiler.py packages/dungeon-engine/tests/test_package_v2.py` → `15 passed`; focused V2 prompt/guide tests → `3 passed`; web-prompt PostgreSQL integration → `1 passed`; package-wide Ruff/format and strict mypy → passed. The full package suite is now `132 passed, 2 failed`, only the documented pre-existing `orthogonal-v2` Hypothesis failures (`geometry.walkable_region_disconnected`, seeds `10075227` and `2280218`); the stale V3 reader failure is gone. **Acceptance-coverage verification:** V2 compiler matrix → `79 passed`; focused repair/classification CLI/workflow selection → `5 passed`; strict mypy over package plus changed application/prompt/CLI code → passed; `make test-integration PYTEST_ARGS=tests/integration/test_dungeon_studio_web_prompt.py` → `1 passed`. The final focused compiler/eval/unit/CLI gate reports `112 passed, 2 failed`, the same documented unrelated V1 remaining-repair-budget failures. The full package gate reports `198 passed, 2 failed`, only the documented pre-existing `orthogonal-v2` Hypothesis failures (`geometry.walkable_region_disconnected`, seeds `10075227` and `2280218`); strict mypy over all changed package/Workbench/CLI source and `git diff --check` pass.
-- **P7-13d post-implementation review repairs:** advanced the then-active design/compiler pins to `2.3.0`/`dungeon-design-v2-compiler-5`; trapped doors/hatches now require and retain trigger/effect prose, readiness blocks explicit unknown trap effects, and puzzle clue references reject key dependencies. Player output keeps publishable door/hatch geometry but normalizes away mechanics. Vertical endpoint doors now render with their own stable DM callout and guide reference. Objective markers/guide entries and stable exact DM-only encounter slots are emitted without leaking encounter markers to player maps. Regeneration lock selection and version comparison now understand composable doors, endpoint hatches, and room-mechanic markers. Generation lineage records package `1.3.0` and the mechanics-policy pin instead of legacy package `1.1.0`.
-- **Review files changed:** `packages/dungeon-engine/src/dm_dungeon/{__init__.py,compiler.py,contracts/{__init__.py,design_v2.py,mechanics_v2.py,package_v2.py},layout/engine.py,rendering/{annotations.py,svg.py}}`, package compiler/package tests, `src/dm_assistant/orchestration/dungeons/{application.py,contracts.py,prompting.py,service.py}`, V2 eval/integration/unit fixtures/tests, architecture, and this status file. No migration changed.
-- **Review verification:** focused compiler/package/eval/V2 workflow gate → `88 passed, 11 deselected`; focused Ruff and strict mypy → passed; `make test-integration PYTEST_ARGS=tests/integration/test_dungeon_studio_web_prompt.py` → `1 passed`, including durable version-pin assertions; Node gateway check/tests → `7 passed`; full package gate → `200 passed, 2 failed` only in the documented pre-existing `orthogonal-v2` Hypothesis seeds `10075227` and `2280218`; full root unit/eval gate → `175 passed, 4 failed` (the two documented V1 remaining-repair-budget failures plus two pre-existing web-auth export requests missing the now-required `export_format`); `git diff --check` → passed.
-- **User-directed P7-13d.1 planning update:** live GPT-5.4 failures were traced to model-visible/runtime schema drift, generic context-free schema repair, gratuitous optional enrichment, and oversized task ceilings rather than to deterministic geometry. Added blocking P7-13d.1 to `dm-assistant-implementation-plan.md` and `dungeon-output-refresh-plan.md`; updated architecture to distinguish hard structural submission errors from preparation-readiness blockers, require bounded original context/prior arguments in repair, permit contract-tested constrained sampling, and keep a core/enrichment split contingent on measured evidence.
-- **Planning files changed:** `dm-assistant-implementation-plan.md`, `dungeon-output-refresh-plan.md`, `dm-assistant-technical-architecture.md`, and this status file; no code or migration changed.
-- **Planning verification:** `git diff --check` → passed; no test suite was required for documentation-only changes.
-- **P7-13d.1 implementation:** active V2 pins are now design `2.4.0` and `dungeon-design-v2-compiler-6`. The model-facing mechanics contract no longer contains duplicated `concealed`; compiler-6 derives it from directional hidden endpoints and defaults omitted active-mechanic challenge to moderate. Missing trap/puzzle prose and missing gate dependencies compile to a draft and are explicit DM-guide/readiness approval blockers; unknown references and capability/topology errors remain rejected. The generated schema exposes the connection capability matrix and proposal design/abstention XOR; provider-free regressions cover invalid `set_piece`, legacy/disagreeing concealment, omitted challenge, incomplete optional mechanics, and one bounded repair retaining prior arguments/original task.
-- **Repair/runtime:** V2 repair now receives original prompt/context, bounded canonical prior tool arguments, and static enum/required/extra-field diagnostics; ordinary logs still remain body-free. V2 profiles use a 4,096 output cap and 12,000 cumulative measured-token ceiling. The Python/Node contract enables `pi-ai` JSON-schema constrained sampling as `prefer` only when catalog capability advertises it; the Node faux fallback contract passes.
-- **Files changed:** planning/architecture/status docs; `model-gateway/src/{contracts,runtime}.ts`, gateway tests; `packages/dungeon-engine/src/dm_dungeon/{compiler.py,contracts/design_v2.py}`, compiler tests; `src/dm_assistant/{adapters/model_gateway.py,orchestration/dungeons/{application,contracts,evals,prompting,service}.py,orchestration/modeling/{service,submission}.py`; V2 golden/unit/integration fixtures/tests (including `test_model_gateway_client.py`). No migration changed.
-- **Verification:** focused V2 compiler/workflow gate → `87 passed, 10 deselected`; Node check/tests → `8 passed`; CLI/web PostgreSQL integration → `3 passed`; strict mypy over changed pure/Workbench source and focused Ruff/format → passed. Full package suite → `202 passed, 2 failed`, only the pre-existing `orthogonal-v2` Hypothesis `geometry.walkable_region_disconnected` seeds `10075227` and `2280218`. Combined compiler/prompt/eval focus → `98 passed, 2 failed`, the documented unrelated V1 remaining-repair-budget cases. `git diff --check` passed.
-- **Canary/suite results:** the first opt-in canary stopped before provider streaming because unset `constrained_sampling` was serialized as `null` rather than omitted. The deterministic client serialization repair is staged locally. Its first replacement reached/passed deterministic publication with measured usage but missed the final Stone of Redemption semantic. The alpha in-place named-objective patch then passed all six canary semantics. The subsequently authorized fixed suite stopped on case one due to a deterministic layout-preflight topology failure; no provider response body is recorded in this status file.
-- **Working tree:** uncommitted P7-13d.1 repair files: `packages/dungeon-engine/src/dm_dungeon/{compiler.py,contracts/{design_v2.py,mechanics_v2.py}}`, compiler tests; `src/dm_assistant/{adapters/model_gateway.py,orchestration/dungeons/{application.py,contracts.py,evals.py,prompting.py,service.py}}`; V2 golden/unit/integration tests; alpha architecture/output-plan decisions; and this status file. The Podman stack has synthetic generated drafts that may be discarded; no migration changed.
-- **Commands/tests run:** alpha named-objective provider-free compiler/eval/V2 workflow focus → `104 passed, 2 failed` (only the documented unrelated V1 repair-budget cases); focused adapter/eval → `8 passed`; CLI/web PostgreSQL integration → `3 passed`; Node check/tests → `8 passed`; strict mypy and Ruff/format over changed pure/Workbench code → passed; Podman `make stack-smoke` → ready; the one authorized `one_floor` fixed-suite call → stopped at deterministic preflight as recorded above; `git diff --check` → passed before this status update.
-- **Single next recommended task:** **Diagnose and repair the P7-13d.1 fixed-suite `one_floor` deterministic layout-preflight failure provider-free.** **First concrete action:** use attempt `25d5267c-d6bd-4335-84c3-a9e157d9f70c` and generation run `9b2ed011-eda4-4938-88b9-3fdd1a21eed0` to reproduce the disconnected topology without exposing/storing model bodies; add a regression that preserves a connected one-floor route. Do not rerun the failed case or continue the suite until the repair is reviewed and the user gives renewed explicit opt-in.
-- **Committed baseline:** `dd2aaad terra-high P7-13d.1 harden prompt contract recovery`.
-- **Suggested commit subject:** `P7-13d.1 omit unset constrained sampling`.
-- Before live use: inspect `git status --short --branch`, read this file and the P7-13d.1 live-gate requirements; do not store provider bodies or make manual retries.
+`P7-14a reset dungeon generation architecture and baseline`

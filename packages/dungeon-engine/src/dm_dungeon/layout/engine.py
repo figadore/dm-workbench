@@ -850,21 +850,28 @@ def _generate_same_floor_connections(
             and request.generator_version in {"orthogonal-v3", "orthogonal-v4"}
             else None
         )
+        uses_explicit_passage_contract = isinstance(
+            connection, CorridorConnection
+        ) and request.generator_version in {"orthogonal-v3", "orthogonal-v4"}
         route = (
             None
             if is_direct_door
             else (
                 passage_route.path
                 if passage_route is not None
-                else route_between_rooms(
-                    room_rects[connection.from_room_id],
-                    room_rects[connection.to_room_id],
-                    floor_rectangles,
-                    floor_bounds[floor_id],
-                    connection.minimum_width_cells
-                    if isinstance(connection, CorridorConnection)
-                    else 1,
-                    random_source,
+                else (
+                    None
+                    if uses_explicit_passage_contract
+                    else route_between_rooms(
+                        room_rects[connection.from_room_id],
+                        room_rects[connection.to_room_id],
+                        floor_rectangles,
+                        floor_bounds[floor_id],
+                        connection.minimum_width_cells
+                        if isinstance(connection, CorridorConnection)
+                        else 1,
+                        random_source,
+                    )
                 )
             )
         )

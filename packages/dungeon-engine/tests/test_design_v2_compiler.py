@@ -120,6 +120,44 @@ def test_compiler_generates_exact_kernel_intent_without_model_ids_or_counts() ->
     assert all(component.id.startswith("v2-") for component in result.topology.rooms)
 
 
+def test_active_passage_failure_is_a_diagnostic_without_legacy_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = _minimal_design()
+    connections = payload["connections"]
+    assert isinstance(connections, list)
+    assert isinstance(connections[0], dict)
+    connections[0]["passage"] = "passage"
+    compiled = compile_dungeon_design_v2(_spec(payload))
+    assert compiled.accepted
+    assert compiled.brief is not None
+    assert compiled.topology is not None
+    assert compiled.mechanics_plan is not None
+    monkeypatch.setattr(
+        "dm_dungeon.layout.engine.route_passage_between_rooms",
+        lambda *args, **kwargs: None,
+    )
+
+    result = generate_layout(
+        LayoutRequest(
+            schema_version="1.0.0",
+            package_id="active-passage-failure",
+            brief=compiled.brief,
+            topology=compiled.topology,
+            seed=1042,
+            generator_version="orthogonal-v4",
+            mechanics_plan=compiled.mechanics_plan,
+            floor_bounds=compiled.floor_bounds,
+        )
+    )
+
+    assert result.success is False
+    assert result.package is None
+    assert {item.code.value for item in result.diagnostics} == {
+        "layout.connection_routing_failed"
+    }
+
+
 def test_active_design_requires_and_preserves_named_final_objective() -> None:
     payload = _minimal_design()
     objectives = payload["objectives"]

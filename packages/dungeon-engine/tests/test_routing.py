@@ -4,7 +4,11 @@ from dm_dungeon.contracts import GridPoint, PassageApproachDirection
 from dm_dungeon.layout.contracts import FloorLayoutBounds
 from dm_dungeon.layout.placement import Rect
 from dm_dungeon.layout.random_source import DeterministicRandom
-from dm_dungeon.layout.routing import route_between_rooms, route_passage_between_rooms
+from dm_dungeon.layout.routing import (
+    _breadth_first_route,
+    route_between_rooms,
+    route_passage_between_rooms,
+)
 from dm_dungeon.validation.grid import cells_for_corridor
 
 
@@ -50,6 +54,24 @@ def _direction(first: GridPoint, second: GridPoint) -> PassageApproachDirection:
     if second_y > first_y:
         return PassageApproachDirection.SOUTH
     return PassageApproachDirection.WEST
+
+
+def test_router_never_enters_the_exclusive_floor_boundary() -> None:
+    bounds = FloorLayoutBounds(
+        floor_id="floor_test",
+        width_cells=2,
+        height_cells=2,
+    )
+
+    route = _breadth_first_route(
+        (0, 0),
+        (2, 0),
+        blocked=set(),
+        bounds=bounds,
+        directions=[(1, 0), (0, 1), (-1, 0), (0, -1)],
+    )
+
+    assert route is None
 
 
 def test_wide_corridor_does_not_clip_an_adjacent_unrelated_room() -> None:
