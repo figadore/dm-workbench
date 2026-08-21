@@ -263,6 +263,8 @@ def test_v2_prompt_explains_connection_constraints() -> None:
     assert "vertical lock, puzzle, or trap" in message
     assert "explicit endpoint_doors item" in message
     assert "target its local_ref with the dependency" in message
+    assert "design schema version 2.4.0" in message
+    assert "objectives[].name" in message
 
 
 def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
@@ -295,7 +297,13 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
                     "passage": "door",
                 }
             ],
-            "objectives": [{"room_ref": "vault", "kind": "final_objective"}],
+            "objectives": [
+                {
+                    "room_ref": "vault",
+                    "kind": "final_objective",
+                    "name": "Sealed Ledger",
+                }
+            ],
             "dependencies": [],
         },
     }
@@ -603,7 +611,13 @@ def test_v2_dm_guide_retains_requested_mechanics_and_creative_details() -> None:
                     ],
                 },
             ],
-            "objectives": [{"room_ref": "lens", "kind": "final_objective"}],
+            "objectives": [
+                {
+                    "room_ref": "lens",
+                    "kind": "final_objective",
+                    "name": "Astral Lens",
+                }
+            ],
             "dependencies": [
                 {
                     "local_ref": "vault-key",
@@ -723,6 +737,7 @@ def test_v2_dm_guide_retains_requested_mechanics_and_creative_details() -> None:
     assert guide.traps[0].effect == "A thunderous ward sounds."
     assert guide.puzzles[0].solution == "Align the summer constellation."
     assert guide.objectives[0].kind.value == "final_objective"
+    assert guide.objectives[0].name == "Astral Lens"
     assert guide.objectives[0].map_reference.token.startswith("O")
     assert guide.features[0].description == "A cracked brass lens fills the chamber."
     text = _dm_guide_text(guide)

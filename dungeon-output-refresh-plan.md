@@ -168,8 +168,11 @@ justify a parallel compatibility stack.
 - Introduce new package/generator/renderer pins for changed connection geometry and
   map symbols. Exact version numbers are frozen in P7-13b/P7-13d before code lands.
 - Introduce a new PDF request/exporter version before print is re-enabled.
-- Once an artifact exists, refreshing it creates a new immutable artifact version or a
-  new artifact; it never mutates an existing version’s role links.
+- During this alpha development round, no user artifact or external consumer exists:
+  patch active contracts/pins in place and discard/recreate synthetic local artifacts
+  as needed. Once the first user artifact or consumer is explicitly declared,
+  refreshing it creates a new immutable artifact version or a new artifact; it never
+  mutates an existing version’s role links.
 - Content-addressed blobs remain generic. Human filenames and grouping are a
   presentation projection over artifact-version links, not blob identity.
 

@@ -703,10 +703,14 @@ def _initial_v2_model_input(
                     {
                         "task": _DUNGEON_V2_SCHEMA_NAME,
                         "instruction": (
-                            "Use submit_dungeon_intent_v2 exactly once. Submit the "
-                            "smallest design satisfying the prompt; omit branches, loops, "
-                            "encounter slots, traps, puzzles, and features unless requested "
-                            "or necessary. Submit compact creative intent only; the server "
+                            "Use submit_dungeon_intent_v2 exactly once with design schema "
+                            "version 2.4.0. Submit the smallest design satisfying the prompt; "
+                            "omit branches, loops, encounter slots, traps, puzzles, and "
+                            "features unless requested or necessary. Every objective requires "
+                            "a name: copy a specifically named final objective from the DM "
+                            "prompt exactly into objectives[].name and point it at the room "
+                            "that holds it; never substitute a generic relic or objective. "
+                            "Submit compact creative intent only; the server "
                             "owns IDs, seed, geometry, visibility, validation, persistence, "
                             "and approval. "
                             f"{_V2_CONNECTION_GUIDANCE}"

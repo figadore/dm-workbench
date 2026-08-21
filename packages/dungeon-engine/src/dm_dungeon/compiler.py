@@ -515,6 +515,7 @@ def _compile_mechanics_plan(
                 ),
                 room_id=room_ids[objective.room_ref],
                 kind=objective.kind,
+                name=objective.name,
             )
             for objective in sorted(
                 spec.objectives,

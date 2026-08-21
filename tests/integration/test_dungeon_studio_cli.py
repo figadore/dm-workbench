@@ -243,7 +243,13 @@ def test_cli_prompt_uses_private_gateway_and_persists_package(
                     "passage": "door",
                 }
             ],
-            "objectives": [{"room_ref": "vault", "kind": "final_objective"}],
+            "objectives": [
+                {
+                    "room_ref": "vault",
+                    "kind": "final_objective",
+                    "name": "Sealed Ledger",
+                }
+            ],
             "dependencies": [],
         },
     }

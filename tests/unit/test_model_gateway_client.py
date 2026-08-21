@@ -181,7 +181,8 @@ def test_private_gateway_client_sends_only_policy_bound_input_and_decodes_sse(
     assert payload["provider"] == "faux"
     assert payload["time_limit_seconds"] == 30
     assert payload["output_token_limit"] == 512
-    assert payload["tools"] == [schema.model_dump(mode="json")]
+    assert payload["tools"] == [schema.model_dump(mode="json", exclude_none=True)]
+    assert "constrained_sampling" not in payload["tools"][0]
 
 
 def test_private_gateway_client_lists_live_catalog_and_coordinates_login(

@@ -44,7 +44,8 @@
         "objectives": [
           {
             "room_ref": "vault",
-            "kind": "final_objective"
+            "kind": "final_objective",
+            "name": "Synthetic Objective"
           }
         ],
         "dependencies": []
@@ -102,7 +103,8 @@
         "objectives": [
           {
             "room_ref": "relic",
-            "kind": "final_objective"
+            "kind": "final_objective",
+            "name": "Synthetic Objective"
           }
         ],
         "dependencies": []
@@ -173,7 +175,8 @@
         "objectives": [
           {
             "room_ref": "relic",
-            "kind": "final_objective"
+            "kind": "final_objective",
+            "name": "Synthetic Objective"
           }
         ],
         "dependencies": []
@@ -251,7 +254,8 @@
         "objectives": [
           {
             "room_ref": "vault",
-            "kind": "final_objective"
+            "kind": "final_objective",
+            "name": "Synthetic Objective"
           }
         ],
         "dependencies": []
@@ -308,7 +312,8 @@
         "objectives": [
           {
             "room_ref": "vault",
-            "kind": "final_objective"
+            "kind": "final_objective",
+            "name": "Synthetic Objective"
           }
         ],
         "dependencies": [
@@ -374,7 +379,8 @@
         "objectives": [
           {
             "room_ref": "vault",
-            "kind": "final_objective"
+            "kind": "final_objective",
+            "name": "Synthetic Objective"
           }
         ],
         "dependencies": []
@@ -444,7 +450,8 @@
         "objectives": [
           {
             "room_ref": "vault",
-            "kind": "final_objective"
+            "kind": "final_objective",
+            "name": "Synthetic Objective"
           }
         ],
         "dependencies": []
@@ -453,10 +460,11 @@
   },
   {
     "case_id": "final_relic",
-    "prompt": "Synthetic final relic.",
+    "prompt": "Synthetic final Stone of Redemption relic.",
     "expected_first_pass": "accepted",
     "expected_semantics": [
-      "final_relic"
+      "final_relic",
+      "named_final_objective"
     ],
     "proposal": {
       "proposal_version": "2",
@@ -496,7 +504,8 @@
         "objectives": [
           {
             "room_ref": "relic",
-            "kind": "final_objective"
+            "kind": "final_objective",
+            "name": "Stone of Redemption"
           }
         ],
         "dependencies": []
@@ -547,7 +556,8 @@
         "objectives": [
           {
             "room_ref": "vault",
-            "kind": "final_objective"
+            "kind": "final_objective",
+            "name": "Synthetic Objective"
           }
         ],
         "dependencies": []
@@ -590,7 +600,8 @@
         "objectives": [
           {
             "room_ref": "vault",
-            "kind": "final_objective"
+            "kind": "final_objective",
+            "name": "Synthetic Objective"
           }
         ],
         "dependencies": []

@@ -1176,6 +1176,7 @@ def _guide_objectives(
                 room_id=plan.room_id,
                 map_reference=reference,
                 kind=intent.kind,
+                name=plan.name,
             )
         )
     return entries
@@ -1393,10 +1394,7 @@ def _dm_guide_text(guide: DungeonDmGuide) -> str:
     if guide.objectives:
         sections.extend(("", "## Objectives"))
         for objective in guide.objectives:
-            sections.append(
-                f"- {objective.map_reference.token} — "
-                f"{objective.kind.value.replace('_', ' ')}"
-            )
+            sections.append(f"- {objective.map_reference.token} — {objective.name}")
     if guide.features:
         sections.extend(("", "## Features"))
         for feature in guide.features:

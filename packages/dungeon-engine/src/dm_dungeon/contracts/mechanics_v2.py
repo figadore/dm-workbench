@@ -85,6 +85,7 @@ class CompiledRoomObjectiveV2(ContractModel):
     id: OpaqueId
     room_id: OpaqueId
     kind: ObjectiveKind
+    name: str
 
 
 class CompiledEncounterSlotV2(ContractModel):

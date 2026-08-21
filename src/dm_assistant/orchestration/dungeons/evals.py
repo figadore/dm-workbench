@@ -402,6 +402,11 @@ def _preserves_expected_semantics(
     ).lower()
     if "relic" in searchable_text:
         flags.add("final_relic")
+    if any(
+        item.kind.value == "final_objective" and item.name is not None
+        for item in design.objectives
+    ):
+        flags.add("named_final_objective")
     if first_pass == "rejected":
         flags.add("repair")
     return set(case.expected_semantics) <= flags

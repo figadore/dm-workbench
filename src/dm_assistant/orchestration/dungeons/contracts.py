@@ -178,6 +178,7 @@ class DungeonGuideObjective(WorkflowModel):
     room_id: str = Field(min_length=1, max_length=200)
     map_reference: DungeonGuideMapReference
     kind: ObjectiveKind
+    name: str = Field(min_length=1, max_length=200)
 
 
 class DungeonGuideFeature(WorkflowModel):

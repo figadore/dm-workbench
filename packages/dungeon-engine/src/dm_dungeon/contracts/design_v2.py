@@ -255,8 +255,11 @@ class DesignConnectionV2(ContractModel):
 
 
 class DesignObjectiveV2(ContractModel):
+    """A named preparation objective at one room."""
+
     room_ref: LocalRef
     kind: ObjectiveKind
+    name: ShortText
 
 
 class DesignDependencyV2(ContractModel):

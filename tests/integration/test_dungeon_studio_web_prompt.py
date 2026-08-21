@@ -73,7 +73,13 @@ def test_browser_prompt_faux_gateway_persists_draft(
                     "passage": "door",
                 }
             ],
-            "objectives": [{"room_ref": "vault", "kind": "final_objective"}],
+            "objectives": [
+                {
+                    "room_ref": "vault",
+                    "kind": "final_objective",
+                    "name": "Sealed Ledger",
+                }
+            ],
             "dependencies": [],
         },
     }

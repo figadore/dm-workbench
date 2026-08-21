@@ -56,7 +56,13 @@ def _minimal_design() -> dict[str, object]:
                 "passage": "door",
             }
         ],
-        "objectives": [{"room_ref": "vault", "kind": "final_objective"}],
+        "objectives": [
+            {
+                "room_ref": "vault",
+                "kind": "final_objective",
+                "name": "Sealed Ledger",
+            }
+        ],
         "dependencies": [],
     }
 
@@ -112,6 +118,24 @@ def test_compiler_generates_exact_kernel_intent_without_model_ids_or_counts() ->
     assert result.floor_bounds[0].width_cells == 28
     assert validate_topology(result.topology).valid is True
     assert all(component.id.startswith("v2-") for component in result.topology.rooms)
+
+
+def test_active_design_requires_and_preserves_named_final_objective() -> None:
+    payload = _minimal_design()
+    objectives = payload["objectives"]
+    assert isinstance(objectives, list)
+    assert isinstance(objectives[0], dict)
+    objectives[0].pop("name")
+
+    with pytest.raises(ValidationError, match="objectives.0.name"):
+        _spec(payload)
+
+    objectives[0]["name"] = "Stone of Redemption"
+    accepted = compile_dungeon_design_v2(_spec(payload))
+
+    assert accepted.accepted is True
+    assert accepted.mechanics_plan is not None
+    assert accepted.mechanics_plan.room_objectives[0].name == "Stone of Redemption"
 
 
 def test_compiler_replay_is_canonical_and_ids_ignore_prose_and_array_order() -> None:
@@ -400,7 +424,13 @@ def test_compiler_preserves_composable_door_and_vertical_endpoint_mechanics() ->
             ],
         },
     ]
-    payload["objectives"] = [{"room_ref": "lens", "kind": "final_objective"}]
+    payload["objectives"] = [
+        {
+            "room_ref": "lens",
+            "kind": "final_objective",
+            "name": "Astral Lens",
+        }
+    ]
     payload["dependencies"] = [
         {
             "local_ref": "study-key",
@@ -715,7 +745,13 @@ def test_compiler_preserves_every_vertical_endpoint_mechanics_combination(
             ],
         }
     ]
-    payload["objectives"] = [{"room_ref": "vault", "kind": "final_objective"}]
+    payload["objectives"] = [
+        {
+            "room_ref": "vault",
+            "kind": "final_objective",
+            "name": "Synthetic Objective",
+        }
+    ]
     if barrier != "none":
         payload["dependencies"] = [
             {
@@ -923,7 +959,13 @@ def test_design_contract_rejects_vertical_transition_mechanics_without_endpoint_
             },
         }
     ]
-    payload["objectives"] = [{"room_ref": "vault", "kind": "final_objective"}]
+    payload["objectives"] = [
+        {
+            "room_ref": "vault",
+            "kind": "final_objective",
+            "name": "Synthetic Objective",
+        }
+    ]
 
     with pytest.raises(ValidationError, match="require explicit endpoint_doors"):
         _spec(payload)
@@ -957,7 +999,13 @@ def test_legacy_endpoint_concealment_is_ignored_and_hidden_state_is_derived() ->
             ],
         }
     ]
-    payload["objectives"] = [{"room_ref": "vault", "kind": "final_objective"}]
+    payload["objectives"] = [
+        {
+            "room_ref": "vault",
+            "kind": "final_objective",
+            "name": "Synthetic Objective",
+        }
+    ]
 
     result = compile_dungeon_design_v2(_spec(payload))
 

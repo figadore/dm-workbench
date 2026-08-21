@@ -230,7 +230,14 @@ class PiGatewayClient:
                     }
                     for message in messages
                 ],
-                "tools": [schema.model_dump(mode="json") for schema in tool_schemas],
+                # The gateway accepts an omitted constrained-sampling preference,
+                # not a JSON null. Sending the Pydantic default as null causes its
+                # request parser to reject otherwise valid providers that do not
+                # advertise constrained sampling.
+                "tools": [
+                    schema.model_dump(mode="json", exclude_none=True)
+                    for schema in tool_schemas
+                ],
                 "output_token_limit": min(
                     profile.token_budget,
                     _profile_output_token_limit(profile),
