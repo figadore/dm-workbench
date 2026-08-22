@@ -50,37 +50,39 @@ def test_browser_prompt_faux_gateway_persists_draft(
         session.add(Campaign(id=campaign_id, name="Synthetic Browser Prompt"))
     proposal = {
         "proposal_version": "1",
-        "design": {
+        "plan": {
             "schema_version": "1.0.0",
             "title": "Synthetic Archive",
             "premise": "A synthetic archive contains a sealed ledger.",
             "themes": ["salt"],
-            "floors": [
+            "rooms": [
                 {
-                    "local_ref": "archive",
-                    "name": "Archive",
-                    "rooms": [
-                        {"local_ref": "entry", "name": "Entry", "role": "entrance"},
-                        {"local_ref": "vault", "name": "Vault", "role": "objective"},
-                    ],
-                }
-            ],
-            "connections": [
+                    "ref": "entry",
+                    "name": "Entry",
+                    "role": "entrance",
+                    "purpose": "Establish the archive.",
+                },
                 {
-                    "local_ref": "entry-vault",
-                    "from_ref": "entry",
-                    "to_ref": "vault",
-                    "passage": "door",
-                }
-            ],
-            "objectives": [
+                    "ref": "stacks",
+                    "name": "Stacks",
+                    "role": "exploration",
+                    "purpose": "Reveal its history.",
+                },
                 {
-                    "room_ref": "vault",
-                    "kind": "final_objective",
-                    "name": "Sealed Ledger",
-                }
+                    "ref": "gallery",
+                    "name": "Gallery",
+                    "role": "exploration",
+                    "purpose": "Foreshadow the vault.",
+                },
+                {
+                    "ref": "vault",
+                    "name": "Vault",
+                    "role": "objective",
+                    "purpose": "Hold the ledger.",
+                },
             ],
-            "dependencies": [],
+            "critical_path": ["entry", "stacks", "gallery", "vault"],
+            "room_contents": [{"room_ref": "vault", "objective": "Sealed Ledger"}],
         },
     }
 
@@ -194,6 +196,4 @@ def test_browser_prompt_faux_gateway_persists_draft(
             run.generator_versions["dungeon_mechanics_policy"]
             == "dungeon-mechanics-policy-v1"
         )
-        assert run.generator_versions["design_compiler"] == (
-            "dungeon-design-compiler-v1"
-        )
+        assert run.generator_versions["plan_compiler"] == "dungeon-plan-compiler-v1"

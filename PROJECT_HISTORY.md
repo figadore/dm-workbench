@@ -74,6 +74,13 @@ superseded them. This history resolves those conflicts as follows:
   `dungeon_prompt_v2` attempts begin before provider contact and link safely to
   the separate generated-artifact run/version. Ordinary logs are body-free and
   run inspection exposes safe metadata only.
+- **P7-14a:** Adopted the proof-carrying constructive Tier A recovery architecture,
+  added topology-math guidance and active-path safety/property regressions, and
+  deleted the known-bad output baseline (`25c031e`).
+- **P7-14b:** Collapsed model orchestration, proposal/compiler/mechanics/package,
+  layout dispatch, rendering, and exports to one suffix-free alpha V1; deleted
+  disposable V2/V3/V4 paths/readers/tests and restored green focused gates
+  (`1bad985`, `dd54b4e`).
 
 ### Deployment baseline
 

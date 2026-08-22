@@ -7,6 +7,7 @@ from typing import Any
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from dm_dungeon import DungeonPlan, compile_dungeon_plan, validate_topology_certificate
 from dm_dungeon.contracts import DungeonTopology
 from dm_dungeon.validation import TopologyDiagnosticCode, validate_topology
 
@@ -139,3 +140,101 @@ def test_removing_any_chain_edge_reports_unreachable_required_rooms(
 
     assert TopologyDiagnosticCode.REQUIRED_ROOM_UNREACHABLE_FROM_ENTRANCE in codes
     assert TopologyDiagnosticCode.REQUIRED_ROOM_UNREACHABLE_FROM_EXIT in codes
+
+
+@settings(max_examples=60, deadline=None)
+@given(
+    room_count=st.integers(min_value=4, max_value=8),
+    branch_length=st.integers(min_value=0, max_value=2),
+    secret_loop=st.booleans(),
+)
+def test_tier_a_compiler_carries_recomputable_graph_proofs(
+    room_count: int,
+    branch_length: int,
+    secret_loop: bool,
+) -> None:
+    branch_length = min(branch_length, room_count - 3)
+    critical_count = room_count - branch_length
+    rooms = [
+        {
+            "ref": f"room_{index}",
+            "name": f"Room {index}",
+            "role": (
+                "entrance"
+                if index == 0
+                else "objective"
+                if index == critical_count - 1
+                else "optional"
+                if index >= critical_count
+                else "exploration"
+            ),
+            "purpose": f"Exercise synthetic progression step {index}.",
+        }
+        for index in range(room_count)
+    ]
+    critical = [f"room_{index}" for index in range(critical_count)]
+    branches = (
+        [
+            {
+                "ref": "side_branch",
+                "from_room": "room_1",
+                "rooms": [
+                    f"room_{index}" for index in range(critical_count, room_count)
+                ],
+            }
+        ]
+        if branch_length
+        else []
+    )
+    loop_from = f"room_{room_count - 1}" if branch_length else "room_0"
+    loop_to = f"room_{critical_count - 1}"
+    loops = (
+        [
+            {
+                "ref": "single_loop",
+                "from_room": loop_from,
+                "to_room": loop_to,
+                "secret": secret_loop,
+            }
+        ]
+        if loop_from not in {f"room_{critical_count - 2}", loop_to}
+        else []
+    )
+    plan = DungeonPlan.model_validate_json(
+        json.dumps(
+            {
+                "schema_version": "1.0.0",
+                "title": "Generated Certificate Property",
+                "premise": "A synthetic proof-carrying Tier A dungeon.",
+                "themes": ["synthetic"],
+                "rooms": rooms,
+                "critical_path": critical,
+                "branches": branches,
+                "loops": loops,
+                "room_contents": [
+                    {
+                        "room_ref": f"room_{critical_count - 1}",
+                        "objective": "Synthetic Objective",
+                    }
+                ],
+            }
+        )
+    )
+
+    compiled = compile_dungeon_plan(plan)
+
+    assert compiled.accepted
+    assert compiled.topology is not None
+    assert compiled.mechanics_plan is not None
+    assert compiled.certificate is not None
+    assert validate_topology(compiled.topology).valid
+    assert validate_topology_certificate(
+        plan, compiled.topology, compiled.mechanics_plan, compiled.certificate
+    ).valid
+    assert compiled.certificate.component_count == 1
+    assert compiled.certificate.cycle_rank == len(loops)
+    assert len(compiled.certificate.branches) == len(branches)
+    assert all(
+        demand.degree == demand.required_ports
+        for demand in compiled.certificate.room_demands
+    )

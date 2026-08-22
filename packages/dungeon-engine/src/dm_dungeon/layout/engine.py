@@ -4,7 +4,6 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from dm_dungeon.contracts.common import Visibility
-from dm_dungeon.contracts.design import VerticalEndpointSide
 from dm_dungeon.contracts.geometry import (
     CorridorLayout,
     EncounterSlot,
@@ -20,7 +19,7 @@ from dm_dungeon.contracts.geometry import (
     VerticalEndpoint,
     VerticalLinkLayout,
 )
-from dm_dungeon.contracts.mechanics import CompiledDoorMechanics
+from dm_dungeon.contracts.mechanics import CompiledDoorMechanics, VerticalEndpointSide
 from dm_dungeon.contracts.package import (
     DUNGEON_PACKAGE_SCHEMA_VERSION,
     ComponentIdStrategy,

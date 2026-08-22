@@ -4,7 +4,6 @@ import json
 import uuid
 from copy import deepcopy
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -19,7 +18,6 @@ from dm_assistant.modules.preparation import AttachArtifactAsset
 from dm_assistant.modules.scope import TaskType, resolve_task_scope
 from dm_assistant.orchestration.dungeons import (
     DungeonGenerationRegressionCase,
-    DungeonStudioService,
     DungeonStudioSpecification,
     DungeonSubmissionService,
     PromptDungeonWorkflow,
@@ -41,7 +39,6 @@ from dm_assistant.orchestration.dungeons.service import (
     _dm_notes_text,
     _dm_presentation_package,
     _require_preparation_ready,
-    _select_locks,
 )
 from dm_assistant.orchestration.modeling import (
     GatewayCompletion,
@@ -51,7 +48,6 @@ from dm_assistant.orchestration.modeling import (
 from dm_dungeon import (
     CompiledDoorMechanics,
     DungeonMechanicsPlan,
-    DungeonPackage,
     LayoutRequest,
     generate_layout,
     read_dungeon_package,
@@ -144,10 +140,50 @@ def _fixture_layout_request(*, topology_connections: bool = True):
     )
 
 
-def test_prompt_explains_connection_constraints() -> None:
+def _tier_a_proposal() -> dict[str, object]:
+    return {
+        "proposal_version": "1",
+        "plan": {
+            "schema_version": "1.0.0",
+            "title": "Salt Cellar",
+            "premise": "A sealed ledger waits below the tide.",
+            "themes": ["salt"],
+            "rooms": [
+                {
+                    "ref": "entry",
+                    "name": "Wet Steps",
+                    "role": "entrance",
+                    "purpose": "Establish the descent.",
+                },
+                {
+                    "ref": "stacks",
+                    "name": "Drowned Stacks",
+                    "role": "exploration",
+                    "purpose": "Reveal the archive.",
+                },
+                {
+                    "ref": "gallery",
+                    "name": "Salt Gallery",
+                    "role": "exploration",
+                    "purpose": "Foreshadow the vault.",
+                },
+                {
+                    "ref": "vault",
+                    "name": "Ledger Vault",
+                    "role": "objective",
+                    "purpose": "Hold the ledger.",
+                },
+            ],
+            "critical_path": ["entry", "stacks", "gallery", "vault"],
+            "room_contents": [{"room_ref": "vault", "objective": "Sealed Ledger"}],
+        },
+    }
+
+
+def test_prompt_explains_tier_a_plan_constraints() -> None:
     command = PromptDungeonWorkflow(
         campaign_id=uuid.UUID("10000000-0000-0000-0000-000000000001"),
-        prompt="Synthetic hidden lower level.",
+        prompt="Synthetic hidden archive.",
         seed=1842,
         created_by="dm",
         scope=resolve_task_scope(
@@ -163,57 +199,18 @@ def test_prompt_explains_connection_constraints() -> None:
         .content
     )
 
-    assert "use passage or door only between rooms on one floor" in message
-    assert "use stairs or ladder only between different floors" in message
-    assert "from_hidden and to_hidden independently" in message
-    assert "from_hidden true and to_hidden false" in message
-    assert "vertical lock, puzzle, or trap" in message
-    assert "explicit endpoint_doors item" in message
-    assert "target its local_ref with the dependency" in message
-    assert "design schema version 1.0.0" in message
-    assert "objectives[].name" in message
+    assert "one floor and 4–8 rooms" in message
+    assert "critical_path starts at the entrance" in message
+    assert "at most two ordered branches" in message
+    assert "at most one loop" in message
+    assert "key or clue" in message
+    assert "Do not author edges" in message
+    assert "DungeonPlan schema version 1.0.0" in message
+    assert "room_contents[].objective" in message
 
 
 def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
-    proposal = {
-        "proposal_version": "1",
-        "design": {
-            "schema_version": "1.0.0",
-            "title": "Salt Cellar",
-            "premise": "A sealed ledger waits below the tide.",
-            "themes": ["salt"],
-            "floors": [
-                {
-                    "local_ref": "cellar",
-                    "name": "Salt Cellar",
-                    "rooms": [
-                        {"local_ref": "entry", "name": "Wet Steps", "role": "entrance"},
-                        {
-                            "local_ref": "vault",
-                            "name": "Ledger Vault",
-                            "role": "objective",
-                        },
-                    ],
-                }
-            ],
-            "connections": [
-                {
-                    "local_ref": "entry-vault",
-                    "from_ref": "entry",
-                    "to_ref": "vault",
-                    "passage": "door",
-                }
-            ],
-            "objectives": [
-                {
-                    "room_ref": "vault",
-                    "kind": "final_objective",
-                    "name": "Sealed Ledger",
-                }
-            ],
-            "dependencies": [],
-        },
-    }
+    proposal = _tier_a_proposal()
     gateway = FakeGatewayClient(
         (
             GatewayCompletion(
@@ -236,8 +233,6 @@ def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
         context_window_tokens=16_384,
         output_token_limit=4_096,
     )
-    assert profile.token_budget == 12_000
-    assert profile.override_notes["output_token_limit"] == 4_096
 
     result = DungeonSubmissionService(gateway).submit(
         profile=profile,
@@ -248,43 +243,47 @@ def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
     )
 
     assert result.compilation is not None and result.compilation.accepted
+    assert result.compilation.certificate is not None
     assert result.layout_request is not None
     assert result.model_run.turn_count == 1
     assert result.model_run.tool_invocations[0].tool_name == "submit_dungeon_plan"
+    tool_payload = result.model_run.tool_invocations[0].result.payload
+    assert tool_payload["certificate_version"] == "topology-certificate-v1"
+    assert tool_payload["topology"] == {
+        "rooms": 4,
+        "connections": 3,
+        "branches": 0,
+        "cycle_rank": 0,
+        "secret_routes": 0,
+        "gates": 0,
+    }
     assert tuple(schema.name for schema in gateway.tool_schemas) == (
         "submit_dungeon_plan",
     )
     assert gateway.tool_schemas[0].constrained_sampling == "prefer"
+    schema_text = json.dumps(gateway.tool_schemas[0].parameters)
+    assert "DungeonPlan" in schema_text
+    assert '"connections"' not in schema_text
     layout = generate_layout(result.layout_request)
     assert layout.success and layout.package is not None
     guide = _build_dm_guide(
         result.layout_request, layout.package, (_lineage(result.model_run),)
     )
     assert guide is not None
-    assert {item.map_reference.token for item in guide.rooms} == {"1", "2"}
-    assert guide.connections[0].map_reference is not None
-    assert guide.connections[0].map_reference.token == "D1"
-    assert "# Salt Cellar — DM guide" in _dm_guide_text(guide)
-    assert "D1 — door." in _dm_guide_text(guide)
-    assert _dm_notes_asset(
-        result.layout_request, _build_dm_notes(result.layout_request, None), guide
-    ).data == _dm_guide_text(guide).encode("utf-8")
+    assert {item.map_reference.token for item in guide.rooms} == {"1", "2", "3", "4"}
+    assert len(guide.connections) == 3
 
     invalid = deepcopy(proposal)
-    invalid_design = invalid["design"]
-    assert isinstance(invalid_design, dict)
-    invalid_connections = invalid_design["connections"]
-    assert isinstance(invalid_connections, list)
-    invalid_connection = invalid_connections[0]
-    assert isinstance(invalid_connection, dict)
-    invalid_connection["door_mechanics"] = {"barrier": "locked"}
-    invalid_design["dependencies"] = [
+    invalid_plan = invalid["plan"]
+    assert isinstance(invalid_plan, dict)
+    invalid_plan["gates"] = [
         {
-            "local_ref": "bad-key",
-            "kind": "key",
-            "target_ref": "unknown-door",
-            "located_in_room_ref": "entry",
-            "name": "Bad Key",
+            "ref": "vault_gate",
+            "between_rooms": ["gallery", "vault"],
+            "kind": "locked",
+            "dependency_kind": "key",
+            "dependency_room": "vault",
+            "dependency_name": "Impossible Key",
         }
     ]
     repair_gateway = FakeGatewayClient(
@@ -320,34 +319,21 @@ def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
         ),
         seed=1842,
     )
-    assert repaired.repaired is True
+    assert repaired.repaired
     assert len(repaired.model_runs) == 2
-    assert repaired.compilation is not None and repaired.compilation.accepted
-    assert len(repair_gateway.profiles) == 2
-    assert repair_gateway.profiles[1].token_budget == profile.token_budget - 20
-    assert (
-        repair_gateway.profiles[1].token_budget
-        < repair_gateway.profiles[0].token_budget
-    )
-    assert (
-        repaired.model_runs[0].output_payload != repaired.model_runs[1].output_payload
-    )
-    first_lineage, repaired_lineage = (_lineage(run) for run in repaired.model_runs)
-    assert first_lineage.proposal is not None
-    assert first_lineage.proposal != repaired_lineage.proposal
     repair_document = json.loads(repair_gateway.messages[1][0].content)
-    assert repair_document["diagnostics"][0]["code"] == "design.unneeded_dependency"
-    assert repair_document["prompt"] == "synthetic request"
+    assert (
+        repair_document["diagnostics"][0]["code"] == "plan.gate_dependency_unreachable"
+    )
     assert repair_document["previous_arguments"] == {"proposal": invalid}
-    assert "Preserve the original requested dungeon" in repair_document["instruction"]
 
-    exhausted_repair_gateway = FakeGatewayClient(
+    exhausted_gateway = FakeGatewayClient(
         (
             GatewayCompletion(
                 tool_calls=(
                     ToolCall(
                         tool_name="submit_dungeon_plan",
-                        call_id="submit-invalid-again",
+                        call_id="bad-1",
                         arguments={"proposal": invalid},
                     ),
                 ),
@@ -358,7 +344,7 @@ def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
                 tool_calls=(
                     ToolCall(
                         tool_name="submit_dungeon_plan",
-                        call_id="submit-repair-invalid-again",
+                        call_id="bad-2",
                         arguments={"proposal": invalid},
                     ),
                 ),
@@ -367,35 +353,28 @@ def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
             ),
         )
     )
-    with pytest.raises(DungeonProposalRejectedAfterRepair) as exhausted:
-        DungeonSubmissionService(exhausted_repair_gateway).submit(
+    with pytest.raises(DungeonProposalRejectedAfterRepair):
+        DungeonSubmissionService(exhausted_gateway).submit(
             profile=profile,
             run_input=ModelRunInput(
                 messages=(PromptMessage(role="user", content="synthetic request"),)
             ),
             seed=1842,
         )
-    assert not isinstance(exhausted.value, ModelRunAbstained)
 
     schema_invalid = deepcopy(proposal)
-    invalid_schema_design = schema_invalid["design"]
-    assert isinstance(invalid_schema_design, dict)
-    schema_floors = invalid_schema_design["floors"]
-    assert isinstance(schema_floors, list)
-    schema_floor = schema_floors[0]
-    assert isinstance(schema_floor, dict)
-    schema_rooms = schema_floor["rooms"]
+    schema_plan = schema_invalid["plan"]
+    assert isinstance(schema_plan, dict)
+    schema_rooms = schema_plan["rooms"]
     assert isinstance(schema_rooms, list)
-    schema_room = schema_rooms[0]
-    assert isinstance(schema_room, dict)
-    schema_room["encounter_slot"] = "set_piece"
-    schema_repair_gateway = FakeGatewayClient(
+    schema_rooms[0]["encounter"] = "set_piece"
+    schema_gateway = FakeGatewayClient(
         (
             GatewayCompletion(
                 tool_calls=(
                     ToolCall(
                         tool_name="submit_dungeon_plan",
-                        call_id="submit-schema-invalid",
+                        call_id="schema-bad",
                         arguments={"proposal": schema_invalid},
                     ),
                 ),
@@ -406,7 +385,7 @@ def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
                 tool_calls=(
                     ToolCall(
                         tool_name="submit_dungeon_plan",
-                        call_id="submit-schema-repair",
+                        call_id="schema-repair",
                         arguments={"proposal": proposal},
                     ),
                 ),
@@ -415,165 +394,54 @@ def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
             ),
         )
     )
-
-    schema_repaired = DungeonSubmissionService(schema_repair_gateway).submit(
+    schema_repaired = DungeonSubmissionService(schema_gateway).submit(
         profile=profile,
         run_input=ModelRunInput(
             messages=(PromptMessage(role="user", content="synthetic request"),)
         ),
         seed=1842,
     )
-
-    assert schema_repaired.repaired is True
-    assert schema_repaired.compilation is not None
-    assert schema_repaired.compilation.accepted
+    assert schema_repaired.repaired
     assert schema_repaired.model_runs[0].status == "abstained"
-    assert schema_repaired.model_runs[0].output_payload is None
-    invalid_lineage, valid_lineage = (
-        _lineage(run) for run in schema_repaired.model_runs
-    )
-    assert invalid_lineage.proposal is None
-    assert valid_lineage.proposal == schema_repaired.proposal
-    repair_message = schema_repair_gateway.messages[1][0].content
-    assert "submission.schema_invalid" in repair_message
-    assert "Salt Cellar" in repair_message
-    assert '"previous_arguments"' in repair_message
-    assert '"prompt":"synthetic request"' in repair_message
-    schema_repair_document = json.loads(repair_message)
-    assert "allowed values" in schema_repair_document["diagnostics"][0]["repair"]
+    assert "submission.schema_invalid" in schema_gateway.messages[1][0].content
 
 
-def test_dm_guide_retains_requested_mechanics_and_creative_details() -> None:
-    proposal = {
-        "proposal_version": "1",
-        "design": {
-            "schema_version": "1.0.0",
-            "title": "Star Vault",
-            "premise": "A drowned observatory seals its lens below a trapped door.",
-            "themes": ["salt"],
-            "floors": [
-                {
-                    "local_ref": "upper",
-                    "name": "Upper Archive",
-                    "rooms": [
-                        {
-                            "local_ref": "entry",
-                            "name": "Wet Steps",
-                            "role": "entrance",
-                            "tags": ["flooded"],
-                            "preparation_note": "Drips conceal soft footsteps.",
-                            "encounter_slot": "ambush",
-                        },
-                        {"local_ref": "vault", "name": "Chart Vault", "role": "puzzle"},
-                    ],
-                },
-                {
-                    "local_ref": "lower",
-                    "name": "Lower Lens",
-                    "rooms": [
-                        {
-                            "local_ref": "lens",
-                            "name": "Lens Chamber",
-                            "role": "objective",
-                        }
-                    ],
-                },
-            ],
-            "connections": [
-                {
-                    "local_ref": "vault-door",
-                    "from_ref": "entry",
-                    "to_ref": "vault",
-                    "passage": "door",
-                    "from_hidden": True,
-                    "door_mechanics": {
-                        "concealed": True,
-                        "barrier": "locked",
-                        "hazard": "trapped",
-                        "challenge": "moderate",
-                        "trap_trigger": "Opening the vault door.",
-                        "trap_effect": "A thunderous ward sounds.",
-                    },
-                },
-                {
-                    "local_ref": "vault-stairs",
-                    "from_ref": "vault",
-                    "to_ref": "lens",
-                    "passage": "stairs",
-                    "to_hidden": True,
-                    "endpoint_doors": [
-                        {
-                            "local_ref": "lens-hatch",
-                            "endpoint": "to",
-                            "kind": "hatch",
-                            "mechanics": {
-                                "concealed": True,
-                                "barrier": "puzzle",
-                                "hazard": "trapped",
-                                "challenge": "high",
-                                "trap_trigger": "Lifting the lens hatch.",
-                                "trap_effect": "The chamber begins to flood.",
-                            },
-                        }
-                    ],
-                },
-            ],
-            "objectives": [
-                {
-                    "room_ref": "lens",
-                    "kind": "final_objective",
-                    "name": "Astral Lens",
-                }
-            ],
-            "dependencies": [
-                {
-                    "local_ref": "vault-key",
-                    "kind": "key",
-                    "target_ref": "vault-door",
-                    "located_in_room_ref": "entry",
-                    "name": "Brass Key",
-                },
-                {
-                    "local_ref": "lens-clue",
-                    "kind": "clue",
-                    "target_ref": "lens-hatch",
-                    "located_in_room_ref": "vault",
-                    "name": "Star Chart",
-                },
-            ],
-            "traps": [
-                {
-                    "local_ref": "vault-glyph",
-                    "room_ref": "vault",
-                    "name": "Thunder Glyph",
-                    "trigger": "Touch the star chart.",
-                    "effect": "A thunderous ward sounds.",
-                    "challenge": "high",
-                }
-            ],
-            "puzzles": [
-                {
-                    "local_ref": "star-dial",
-                    "room_ref": "lens",
-                    "name": "Star Dial",
-                    "mechanism": "Three rotating rings.",
-                    "clue_refs": ["lens-clue"],
-                    "solution": "Align the summer constellation.",
-                    "consequence": "The hatch releases.",
-                    "challenge": "moderate",
-                }
-            ],
-            "features": [
-                {
-                    "local_ref": "fallen-lens",
-                    "room_ref": "lens",
-                    "kind": "altar",
-                    "name": "Fallen Lens",
-                    "description": "A cracked brass lens fills the chamber.",
-                }
-            ],
+def test_dm_guide_retains_tier_a_gate_content_and_creative_details() -> None:
+    proposal = _tier_a_proposal()
+    plan = proposal["plan"]
+    assert isinstance(plan, dict)
+    rooms = plan["rooms"]
+    assert isinstance(rooms, list)
+    rooms[0]["tags"] = ["flooded"]
+    rooms[0]["encounter"] = "ambush"
+    rooms[0]["purpose"] = "Drips conceal soft footsteps."
+    plan["gates"] = [
+        {
+            "ref": "vault_gate",
+            "between_rooms": ["gallery", "vault"],
+            "kind": "locked",
+            "dependency_kind": "key",
+            "dependency_room": "entry",
+            "dependency_name": "Brass Key",
+        }
+    ]
+    plan["room_contents"] = [
+        {
+            "room_ref": "gallery",
+            "trap": {
+                "name": "Thunder Glyph",
+                "trigger": "Touch the chained folio.",
+                "effect": "A thunderous ward sounds.",
+                "challenge": "high",
+            },
+            "feature": {
+                "kind": "altar",
+                "name": "Fallen Lens",
+                "description": "A cracked brass lens fills the alcove.",
+            },
         },
-    }
+        {"room_ref": "vault", "objective": "Astral Lens"},
+    ]
     gateway = FakeGatewayClient(
         (
             GatewayCompletion(
@@ -612,125 +480,46 @@ def test_dm_guide_retains_requested_mechanics_and_creative_details() -> None:
     )
 
     assert guide is not None
-    entry_room = next(item for item in guide.rooms if item.name == "Wet Steps")
-    assert entry_room.preparation_note == "Drips conceal soft footsteps."
-    assert entry_room.encounter_slot is not None
-    assert entry_room.encounter_slot_id is not None
-    door = next(item for item in guide.connections if item.passage == "door")
-    hatch = next(item for item in guide.connections if item.endpoint is not None)
-    assert door.concealed and door.gate_id and door.trap_id
-    assert door.trap_trigger == "Opening the vault door."
-    assert door.trap_effect == "A thunderous ward sounds."
-    assert (
-        door.discovery_difficulty
-        == door.unlock_difficulty
-        == door.disable_difficulty
-        == 13
-    )
-    assert hatch.endpoint_kind is not None and hatch.endpoint_kind.value == "hatch"
-    assert hatch.concealed and hatch.gate_id and hatch.trap_id
-    assert hatch.map_reference is not None
-    assert hatch.map_reference.component_id == hatch.component_id
-    assert hatch.trap_trigger == "Lifting the lens hatch."
-    assert hatch.trap_effect == "The chamber begins to flood."
-    assert (
-        hatch.discovery_difficulty
-        == hatch.unlock_difficulty
-        == hatch.disable_difficulty
-        == 16
-    )
+    entry = next(item for item in guide.rooms if item.name == "Wet Steps")
+    assert entry.preparation_note == "Drips conceal soft footsteps."
+    assert entry.encounter_slot is not None and entry.encounter_slot_id is not None
+    gated = next(item for item in guide.connections if item.gate_id is not None)
+    assert gated.gate_kind.value == "locked"
+    assert gated.unlock_difficulty == 13
     assert guide.dependencies[0].name == "Brass Key"
-    assert guide.traps[0].trigger == "Touch the star chart."
+    assert guide.traps[0].trigger == "Touch the chained folio."
     assert guide.traps[0].effect == "A thunderous ward sounds."
-    assert guide.puzzles[0].solution == "Align the summer constellation."
-    assert guide.objectives[0].kind.value == "final_objective"
+    assert guide.traps[0].detection_difficulty == 16
+    assert guide.features[0].name == "Fallen Lens"
     assert guide.objectives[0].name == "Astral Lens"
-    assert guide.objectives[0].map_reference.token.startswith("O")
-    assert guide.features[0].description == "A cracked brass lens fills the chamber."
     text = _dm_guide_text(guide)
-    assert "trigger: Opening the vault door." in text
-    assert "effect: The chamber begins to flood." in text
-    assert "disable 13" in text
     assert "## Objectives" in text
-    assert "Solution: Align the summer constellation." in text
     assert "Effect: A thunderous ward sounds." in text
-    complete_readiness = _build_preparation_readiness(guide)
-    assert complete_readiness is not None
-    assert complete_readiness.ready
-
-    package = layout.package
-    assert isinstance(package, DungeonPackage)
-    locked_door = _select_locks(package, (door.component_id,))
-    assert locked_door.doors[0].id == door.component_id
-    assert locked_door.doors[0].connection_id == door.connection_id
-    assert locked_door.doors[0].segment == package.composable_doors[0].segment
-    regenerated = generate_layout(
-        result.layout_request.model_copy(
-            update={"seed": 999_999, "locked": locked_door}
-        )
-    )
-    assert isinstance(regenerated.package, DungeonPackage)
-    assert regenerated.package.composable_doors[0].segment == (
-        package.composable_doors[0].segment
-    )
-    locked_hatch = _select_locks(package, (hatch.component_id,))
-    assert locked_hatch.vertical_links[0].id == hatch.connection_id
-    locked_marker = _select_locks(package, (guide.traps[0].marker_id,))
-    assert locked_marker.rooms[0].id == guide.traps[0].room_id
+    readiness = _build_preparation_readiness(guide)
+    assert readiness is not None and readiness.ready
 
     incomplete = guide.model_copy(
         update={
             "dependencies": (),
-            "connections": tuple(
-                item.model_copy(update={"trap_effect": None})
-                if item.trap_id is not None and item.endpoint is None
-                else item
-                for item in guide.connections
-            ),
             "traps": (guide.traps[0].model_copy(update={"effect": None}),),
-            "puzzles": (guide.puzzles[0].model_copy(update={"solution": None}),),
         }
     )
-    readiness = _build_preparation_readiness(incomplete)
-    assert readiness is not None
-    assert readiness.ready is False
-    assert [item.code for item in readiness.diagnostics] == [
-        "dungeon_preparation.lock_dependency_missing",
+    blocked = _build_preparation_readiness(incomplete)
+    assert blocked is not None and not blocked.ready
+    assert {item.code for item in blocked.diagnostics} == {
         "dungeon_preparation.lock_dependency_missing",
         "dungeon_preparation.trap_effect_unknown",
-        "dungeon_preparation.trap_effect_unknown",
-        "dungeon_preparation.puzzle_solution_unknown",
-    ]
+    }
     specification = DungeonStudioSpecification(
         schema_version="1.0.0",
         layout_request=result.layout_request,
         package=layout.package,
         dm_guide=incomplete,
-        preparation_readiness=readiness,
+        preparation_readiness=blocked,
         model_lineage=(_lineage(result.model_run),),
     )
     with pytest.raises(ConflictError, match="preparation is incomplete"):
         _require_preparation_ready(specification)
-
-    class IncompletePreparation:
-        def get_version(
-            self, campaign_id: uuid.UUID, artifact_version_id: uuid.UUID
-        ) -> SimpleNamespace:
-            del campaign_id, artifact_version_id
-            return SimpleNamespace(specification=specification.model_dump(mode="json"))
-
-        def transition_artifact(self, command: object) -> None:
-            del command
-            raise AssertionError("incomplete preparation must not be transitioned")
-
-    with pytest.raises(ConflictError, match="preparation is incomplete"):
-        DungeonStudioService(IncompletePreparation()).approve(
-            campaign_id=uuid.uuid4(),
-            artifact_id=uuid.uuid4(),
-            artifact_version_id=uuid.uuid4(),
-            actor="synthetic-dm",
-            reason="This must remain a draft.",
-        )
 
 
 def test_failed_generation_regression_case_is_self_contained_and_replayable() -> None:

@@ -5,14 +5,11 @@ from pathlib import Path
 from typing import Any
 
 from dm_dungeon.contracts.common import ContractModel
-from dm_dungeon.contracts.design import (
-    DUNGEON_DESIGN_SCHEMA_VERSION,
-    DungeonDesignSpec,
-)
 from dm_dungeon.contracts.package import (
     DUNGEON_PACKAGE_SCHEMA_VERSION,
     DungeonPackage,
 )
+from dm_dungeon.contracts.plan import DUNGEON_PLAN_SCHEMA_VERSION, DungeonPlan
 
 
 class UnsupportedSchemaVersionError(ValueError):
@@ -39,28 +36,24 @@ def to_canonical_json(contract: ContractModel) -> str:
     )
 
 
-def dungeon_design_json_schema() -> dict[str, Any]:
-    """Return the compact alpha V1 design JSON Schema document."""
-    return DungeonDesignSpec.model_json_schema(mode="validation")
+def dungeon_plan_json_schema() -> dict[str, Any]:
+    """Return the sole provider-visible alpha V1 plan schema."""
+    return DungeonPlan.model_json_schema(mode="validation")
 
 
-def load_dungeon_design_json(
-    document: str | bytes | bytearray,
-) -> DungeonDesignSpec:
-    """Validate serialized V1 design input, rejecting unknown versions first."""
+def load_dungeon_plan_json(document: str | bytes | bytearray) -> DungeonPlan:
+    """Validate serialized V1 plan input, rejecting unknown versions first."""
     payload = json.loads(document)
     if not isinstance(payload, dict):
-        raise InvalidContractDocumentError(
-            "DungeonDesignSpec document must be a JSON object"
-        )
+        raise InvalidContractDocumentError("DungeonPlan document must be a JSON object")
     actual_version = payload.get("schema_version")
-    if actual_version != DUNGEON_DESIGN_SCHEMA_VERSION:
+    if actual_version != DUNGEON_PLAN_SCHEMA_VERSION:
         rendered = "<missing>" if actual_version is None else repr(actual_version)
         raise UnsupportedSchemaVersionError(
-            f"Unsupported DungeonDesignSpec schema version {rendered}; "
-            f"expected {DUNGEON_DESIGN_SCHEMA_VERSION!r}"
+            f"Unsupported DungeonPlan schema version {rendered}; "
+            f"expected {DUNGEON_PLAN_SCHEMA_VERSION!r}"
         )
-    return DungeonDesignSpec.model_validate_json(document)
+    return DungeonPlan.model_validate_json(document)
 
 
 def dungeon_package_json_schema() -> dict[str, Any]:
@@ -88,9 +81,9 @@ def load_dungeon_package_json(
     return DungeonPackage.model_validate_json(document)
 
 
-def read_dungeon_design(path: str | Path) -> DungeonDesignSpec:
-    """Read and validate a compact V1 design JSON file."""
-    return load_dungeon_design_json(Path(path).read_bytes())
+def read_dungeon_plan(path: str | Path) -> DungeonPlan:
+    """Read and validate a compact V1 plan JSON file."""
+    return load_dungeon_plan_json(Path(path).read_bytes())
 
 
 def read_dungeon_package(path: str | Path) -> DungeonPackage:

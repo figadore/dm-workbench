@@ -11,8 +11,8 @@ from dm_assistant.modules.modeling import ModelRunRecord
 from dm_assistant.modules.preparation import GenerationContextPin, ToolRunPin
 from dm_assistant.modules.scope import TaskScope, TaskType
 from dm_dungeon import (
-    DungeonDesignSpec,
     DungeonPackage,
+    DungeonPlan,
     LayoutRequest,
     MapCallout,
 )
@@ -310,19 +310,19 @@ class DungeonGenerationProposal(WorkflowModel):
         json_schema_extra={
             "oneOf": [
                 {
-                    "required": ["design"],
+                    "required": ["plan"],
                     "properties": {"abstention": {"type": "null"}},
                 },
                 {
                     "required": ["abstention"],
-                    "properties": {"design": {"type": "null"}},
+                    "properties": {"plan": {"type": "null"}},
                 },
             ]
         },
     )
 
     proposal_version: Literal["1"]
-    design: DungeonDesignSpec | None = None
+    plan: DungeonPlan | None = None
     intent_summary: str | None = Field(default=None, min_length=1, max_length=500)
     requested_constraints: tuple[str, ...] = Field(default=(), max_length=16)
     citation_ids: tuple[str, ...] = Field(default=(), max_length=32)
@@ -333,19 +333,15 @@ class DungeonGenerationProposal(WorkflowModel):
 
     @model_validator(mode="before")
     @classmethod
-    def decode_pure_design(cls, value: object) -> object:
-        if not isinstance(value, dict) or isinstance(
-            value.get("design"), DungeonDesignSpec
-        ):
+    def decode_pure_plan(cls, value: object) -> object:
+        if not isinstance(value, dict) or isinstance(value.get("plan"), DungeonPlan):
             return value
         document = dict(value)
-        design = document.get("design")
-        if isinstance(design, dict):
+        plan = document.get("plan")
+        if isinstance(plan, dict):
             import json
 
-            document["design"] = DungeonDesignSpec.model_validate_json(
-                json.dumps(design)
-            )
+            document["plan"] = DungeonPlan.model_validate_json(json.dumps(plan))
         for name in (
             "requested_constraints",
             "citation_ids",
@@ -358,9 +354,9 @@ class DungeonGenerationProposal(WorkflowModel):
         return document
 
     @model_validator(mode="after")
-    def require_design_or_safe_abstention(self) -> DungeonGenerationProposal:
-        if (self.design is None) == (self.abstention is None):
-            raise ValueError("proposal requires exactly one of design or abstention")
+    def require_plan_or_safe_abstention(self) -> DungeonGenerationProposal:
+        if (self.plan is None) == (self.abstention is None):
+            raise ValueError("proposal requires exactly one of plan or abstention")
         if self.abstention is not None and self.intent_summary is not None:
             raise ValueError("abstention cannot include an intent summary")
         return self

@@ -1,5 +1,6 @@
 """Deterministic dungeon validators."""
 
+from dm_dungeon.validation.certificate import validate_topology_certificate
 from dm_dungeon.validation.diagnostics import (
     DiagnosticSeverity,
     TopologyDiagnosticCode,
@@ -44,4 +45,5 @@ __all__ = [
     "find_anchor_path",
     "validate_geometry",
     "validate_topology",
+    "validate_topology_certificate",
 ]

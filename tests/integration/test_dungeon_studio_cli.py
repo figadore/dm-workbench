@@ -255,37 +255,39 @@ def test_cli_prompt_uses_private_gateway_and_persists_package(
     package = read_dungeon_package(FIXTURE_PATH)
     proposal: dict[str, object] = {
         "proposal_version": "1",
-        "design": {
+        "plan": {
             "schema_version": "1.0.0",
             "title": package.brief.title,
             "premise": "A synthetic flooded archive lies beneath a lighthouse.",
             "themes": ["flooded archive"],
-            "floors": [
+            "rooms": [
                 {
-                    "local_ref": "archive",
-                    "name": "Archive",
-                    "rooms": [
-                        {"local_ref": "entry", "name": "Entry", "role": "entrance"},
-                        {"local_ref": "vault", "name": "Vault", "role": "objective"},
-                    ],
-                }
-            ],
-            "connections": [
+                    "ref": "entry",
+                    "name": "Entry",
+                    "role": "entrance",
+                    "purpose": "Establish the archive.",
+                },
                 {
-                    "local_ref": "entry-vault",
-                    "from_ref": "entry",
-                    "to_ref": "vault",
-                    "passage": "door",
-                }
-            ],
-            "objectives": [
+                    "ref": "stacks",
+                    "name": "Stacks",
+                    "role": "exploration",
+                    "purpose": "Reveal its history.",
+                },
                 {
-                    "room_ref": "vault",
-                    "kind": "final_objective",
-                    "name": "Sealed Ledger",
-                }
+                    "ref": "gallery",
+                    "name": "Gallery",
+                    "role": "exploration",
+                    "purpose": "Foreshadow the vault.",
+                },
+                {
+                    "ref": "vault",
+                    "name": "Vault",
+                    "role": "objective",
+                    "purpose": "Hold the ledger.",
+                },
             ],
-            "dependencies": [],
+            "critical_path": ["entry", "stacks", "gallery", "vault"],
+            "room_contents": [{"room_ref": "vault", "objective": "Sealed Ledger"}],
         },
     }
     source_root = tmp_path / "prompt-sources"

@@ -14,11 +14,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from dm_assistant.orchestration.dungeons.contracts import DungeonGenerationProposal
 from dm_dungeon import (
-    DungeonDesignCompileResult,
+    DungeonPlanCompileResult,
     LayoutRequest,
     RenderAudience,
     SvgRenderRequest,
-    compile_dungeon_design,
+    compile_dungeon_plan,
     generate_layout,
     render_svg,
     validate_geometry,
@@ -160,8 +160,8 @@ def _evaluate_case(case: DungeonIntentEvalCase) -> DungeonIntentEvalResult:
             player_secret_leak=False,
             diagnostics=("proposal.abstained",),
         )
-    assert proposal.design is not None
-    compiled = compile_dungeon_design(proposal.design)
+    assert proposal.plan is not None
+    compiled = compile_dungeon_plan(proposal.plan)
     if not compiled.accepted:
         return DungeonIntentEvalResult(
             case_id=case.case_id,
@@ -175,7 +175,7 @@ def _evaluate_case(case: DungeonIntentEvalCase) -> DungeonIntentEvalResult:
             player_secret_leak=False,
             diagnostics=tuple(item.code for item in compiled.diagnostics),
         )
-    replay = compile_dungeon_design(proposal.design)
+    replay = compile_dungeon_plan(proposal.plan)
     assert compiled.topology is not None and compiled.brief is not None
     request = _layout_request(compiled, case.case_id)
     layout = generate_layout(request)
@@ -235,7 +235,7 @@ def _evaluate_case(case: DungeonIntentEvalCase) -> DungeonIntentEvalResult:
 
 def _preserves_expected_semantics(
     case: DungeonIntentEvalCase,
-    compiled: DungeonDesignCompileResult,
+    compiled: DungeonPlanCompileResult,
     first_pass: Literal["accepted", "rejected", "abstained"],
 ) -> bool:
     """Check the frozen suite's compact structural semantic vocabulary."""
@@ -244,52 +244,30 @@ def _preserves_expected_semantics(
         if first_pass == "rejected" and case.repair_proposal is not None
         else case.proposal
     )
-    if proposal.design is None or compiled.topology is None:
+    if proposal.plan is None or compiled.topology is None:
         return False
-    design = proposal.design
-    room_degree = {room.local_ref: 0 for floor in design.floors for room in floor.rooms}
-    for connection in design.connections:
-        room_degree[connection.from_ref] += 1
-        room_degree[connection.to_ref] += 1
-    flags: set[str] = set()
-    if len(design.floors) == 1:
-        flags.add("one_floor")
-    if len(design.floors) == 2:
-        flags.add("two_floor")
-    if any(item.from_hidden or item.to_hidden for item in design.connections):
-        flags.add("secret")
-    if max(room_degree.values(), default=0) >= 3:
+    plan = proposal.plan
+    flags: set[str] = {"one_floor"}
+    if plan.branches:
         flags.add("branch")
-    if len(design.connections) >= len(room_degree) and room_degree:
+    if plan.loops:
         flags.add("loop")
-    if any(item.kind.value == "clue" for item in design.dependencies):
+    if any(item.secret for item in plan.loops):
+        flags.update(("secret", "hidden"))
+    if any(item.dependency_kind.value == "clue" for item in plan.gates):
         flags.add("clue")
-    mechanics = [connection.door_mechanics for connection in design.connections] + [
-        endpoint.mechanics
-        for connection in design.connections
-        for endpoint in connection.endpoint_doors
-    ]
-    if any(item.barrier.value != "none" for item in mechanics):
+    if plan.gates:
         flags.add("gate")
-    if any(item.hazard.value == "trapped" for item in mechanics) or design.traps:
+    if any(item.trap is not None for item in plan.room_contents):
         flags.add("trap")
-    if any(room.optional for floor in design.floors for room in floor.rooms):
+    if any(room.role.value == "optional" for room in plan.rooms):
         flags.add("optional")
-    if any(room.visibility.value == "dm_only" for room in compiled.topology.rooms):
-        flags.add("hidden")
     searchable_text = " ".join(
-        (
-            design.title,
-            design.premise,
-            *(room.name for floor in design.floors for room in floor.rooms),
-        )
+        (plan.title, plan.premise, *(room.name for room in plan.rooms))
     ).lower()
     if "relic" in searchable_text:
         flags.add("final_relic")
-    if any(
-        item.kind.value == "final_objective" and item.name is not None
-        for item in design.objectives
-    ):
+    if any(item.objective is not None for item in plan.room_contents):
         flags.add("named_final_objective")
     if first_pass == "rejected":
         flags.add("repair")
@@ -301,13 +279,11 @@ def _proposal_status(
 ) -> Literal["accepted", "rejected", "abstained"]:
     if proposal.abstention is not None:
         return "abstained"
-    assert proposal.design is not None
-    return (
-        "accepted" if compile_dungeon_design(proposal.design).accepted else "rejected"
-    )
+    assert proposal.plan is not None
+    return "accepted" if compile_dungeon_plan(proposal.plan).accepted else "rejected"
 
 
-def _layout_request(result: DungeonDesignCompileResult, case_id: str) -> LayoutRequest:
+def _layout_request(result: DungeonPlanCompileResult, case_id: str) -> LayoutRequest:
     """Build a stable kernel request without treating fixture data as server input."""
     assert (
         result.accepted

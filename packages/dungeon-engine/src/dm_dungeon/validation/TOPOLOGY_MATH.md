@@ -191,9 +191,10 @@ compiler should either prohibit duplicate room-pair edges in its supported gramm
 represent that case explicitly rather than mixing the multigraph rank with simple-cycle
 claims.
 
-The current validator checks explicit loop witnesses but does not yet certify that the
-number of requested independent loops equals `μ`. The planned `TopologyCertificate`
-should record both the rank and witnesses so validators can recompute them.
+The lower topology validator checks explicit loop witnesses. The Tier A compiler also
+emits `TopologyCertificate.cycle_rank` and one `LoopWitness` per model-authored loop;
+`validate_topology_certificate()` independently recomputes `|E| - |V| + C`, verifies
+that it equals the realized loop count, and checks each tree-path-plus-loop-edge cycle.
 
 ## 7. Branches and vertex degree
 
@@ -207,9 +208,11 @@ therefore checks an explicit local witness:
 - branch destinations are distinct;
 - each declared destination is directly adjacent to the declared junction.
 
-This contract currently models a star-shaped branch at one junction, not an arbitrary
-multi-room branch path. The constructive V1 grammar will represent an attached ordered
-path and compile it into exact edges before applying lower-level validation.
+The lower `BranchRequirement` validator accepts the historical star witness used by the
+synthetic package fixture and the ordered attached path used by Tier A. `DungeonPlan`
+allows only the latter: every branch names an attachment on the critical path and an
+ordered sequence of one to three newly introduced optional rooms. The certificate binds
+those rooms to exact edges and a dedicated upper/lower embedding band.
 
 ## 8. Chokepoints, cut vertices, and bridges
 
@@ -469,10 +472,11 @@ then a necessary capacity bound is
 P >= d * o + total separation clearance
 ```
 
-A constructive certificate should use the stronger side-specific version. If `d_N`
-ports are assigned to the north wall, for example, then `w` must fit those openings and
-their required separation. Width/height are expanded before room placement until all
-assigned sides fit.
+`RoomDemandWitness` now records graph degree, required port count, opening width,
+separation clearance, and minimum total boundary demand. P7-14d will strengthen this to
+side-specific assignments. If `d_N` ports are assigned to the north wall, for example,
+then `w` must fit those openings and their required separation. Width/height will be
+expanded before room placement until all assigned sides fit.
 
 Interior demand is separate. If room features reserve blocked cells and encounters need
 movement/footprint space, layout must ensure
@@ -484,8 +488,9 @@ usable interior cells
 ```
 
 These inequalities connect abstract graph degree and annotations to geometric size.
-They are not currently calculated by `topology.py`; they belong in the planned topology
-certificate and constructive layout.
+The certificate now derives base interior area plus encounter, feature, and trap demand
+from the exact plan/mechanics projection, and its validator recomputes those values.
+P7-14d must consume them in the constructive layout and add side-specific port proofs.
 
 ## 16. Why validation remains necessary after construction
 
@@ -524,8 +529,8 @@ graph.
 | Bidirectional dependency integrity | `_validate_gate_reciprocity()` |
 | Directed SCC/cycle detection | `_strongly_connected_gate_cycles()` |
 | Monotone least-fixed-point progression | `_validate_gate_progression()` |
-| Planarity/embedding certificate | not implemented yet; P7-14c/d |
-| Port/interior feasibility | not implemented yet; P7-14c/d |
+| Tier A grammar/embedding certificate | `TopologyCertificate`, `validate_topology_certificate()` |
+| Port/interior demand | `RoomDemandWitness`, independently recomputed; side assignment is P7-14d |
 
 ## 18. Properties future changes must preserve
 
@@ -544,6 +549,6 @@ example JSON:
 - every supported certificate materializes without topology or geometry validator
   errors.
 
-When `TopologyCertificate` and the V1 compiler land, update this document in the same
-change so equations and terminology continue to describe executable behavior rather
-than architectural aspiration.
+P7-14c implements `DungeonPlan`, deterministic path/branch/loop construction, and the
+independently recomputed V1 certificate. P7-14d must update this document again when
+side-specific ports, exact required bounds, and constructive cells become executable.

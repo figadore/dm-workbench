@@ -299,11 +299,11 @@ class LoopRequirement(VisibleContract):
 
 
 class BranchRequirement(VisibleContract):
-    """A requested branch from a junction to multiple destinations."""
+    """A requested ordered branch path attached to one junction."""
 
     id: OpaqueId
     junction_room_id: OpaqueId
-    branch_room_ids: tuple[OpaqueId, ...] = Field(min_length=2)
+    branch_room_ids: tuple[OpaqueId, ...] = Field(min_length=1)
 
 
 class ChokepointComponentKind(StrEnum):

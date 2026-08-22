@@ -8,178 +8,124 @@
     ],
     "proposal": {
       "proposal_version": "1",
-      "design": {
+      "plan": {
         "schema_version": "1.0.0",
         "title": "Salt Cellar",
-        "premise": "Synthetic sealed ledger.",
+        "premise": "Synthetic proof-carrying archive.",
         "themes": [
-          "salt"
+          "synthetic"
         ],
-        "floors": [
+        "rooms": [
           {
-            "local_ref": "cellar",
-            "name": "Cellar",
-            "rooms": [
-              {
-                "local_ref": "entry",
-                "name": "Entry",
-                "role": "entrance"
-              },
-              {
-                "local_ref": "vault",
-                "name": "Vault",
-                "role": "objective"
-              }
-            ]
+            "ref": "entry",
+            "name": "Entry",
+            "role": "entrance",
+            "purpose": "Establish the entrance."
+          },
+          {
+            "ref": "hall",
+            "name": "Hall",
+            "role": "exploration",
+            "purpose": "Develop the route."
+          },
+          {
+            "ref": "gallery",
+            "name": "Gallery",
+            "role": "exploration",
+            "purpose": "Foreshadow the objective."
+          },
+          {
+            "ref": "vault",
+            "name": "Vault",
+            "role": "objective",
+            "purpose": "Hold the objective."
           }
         ],
-        "connections": [
-          {
-            "local_ref": "entry-vault",
-            "from_ref": "entry",
-            "to_ref": "vault",
-            "passage": "door"
-          }
+        "critical_path": [
+          "entry",
+          "hall",
+          "gallery",
+          "vault"
         ],
-        "objectives": [
+        "room_contents": [
           {
             "room_ref": "vault",
-            "kind": "final_objective",
-            "name": "Synthetic Objective"
+            "objective": "Synthetic Objective"
           }
-        ],
-        "dependencies": []
+        ]
       }
     }
   },
   {
-    "case_id": "two_floor",
-    "prompt": "Synthetic two-floor crypt.",
+    "case_id": "optional_branch",
+    "prompt": "Synthetic optional branch.",
     "expected_first_pass": "accepted",
     "expected_semantics": [
-      "two_floor"
+      "branch",
+      "optional"
     ],
     "proposal": {
       "proposal_version": "1",
-      "design": {
+      "plan": {
         "schema_version": "1.0.0",
-        "title": "Twin Crypt",
-        "premise": "Synthetic vertical descent.",
+        "title": "Branch Hall",
+        "premise": "Synthetic proof-carrying archive.",
         "themes": [
-          "stone"
+          "synthetic"
         ],
-        "floors": [
+        "rooms": [
           {
-            "local_ref": "upper",
-            "name": "Upper",
-            "rooms": [
-              {
-                "local_ref": "entry",
-                "name": "Entry",
-                "role": "entrance"
-              }
-            ]
+            "ref": "entry",
+            "name": "Entry",
+            "role": "entrance",
+            "purpose": "Establish the entrance."
           },
           {
-            "local_ref": "lower",
-            "name": "Lower",
-            "rooms": [
-              {
-                "local_ref": "relic",
-                "name": "Relic",
-                "role": "objective"
-              }
-            ]
-          }
-        ],
-        "connections": [
-          {
-            "local_ref": "stairs-down",
-            "from_ref": "entry",
-            "to_ref": "relic",
-            "passage": "stairs"
-          }
-        ],
-        "objectives": [
-          {
-            "room_ref": "relic",
-            "kind": "final_objective",
-            "name": "Synthetic Objective"
-          }
-        ],
-        "dependencies": []
-      }
-    }
-  },
-  {
-    "case_id": "secret_lower_level",
-    "prompt": "Synthetic secret lower level.",
-    "expected_first_pass": "accepted",
-    "expected_semantics": [
-      "secret",
-      "two_floor"
-    ],
-    "proposal": {
-      "proposal_version": "1",
-      "design": {
-        "schema_version": "1.0.0",
-        "title": "Hidden Well",
-        "premise": "Synthetic concealed descent.",
-        "themes": [
-          "mist"
-        ],
-        "floors": [
-          {
-            "local_ref": "upper",
-            "name": "Upper",
-            "rooms": [
-              {
-                "local_ref": "entry",
-                "name": "Entry",
-                "role": "entrance"
-              }
-            ]
+            "ref": "hall",
+            "name": "Hall",
+            "role": "exploration",
+            "purpose": "Develop the route."
           },
           {
-            "local_ref": "lower",
-            "name": "Lower",
-            "rooms": [
-              {
-                "local_ref": "landing",
-                "name": "Landing",
-                "role": "exploration"
-              },
-              {
-                "local_ref": "relic",
-                "name": "Relic",
-                "role": "objective"
-              }
-            ]
-          }
-        ],
-        "connections": [
-          {
-            "local_ref": "ladder-down",
-            "from_ref": "entry",
-            "to_ref": "landing",
-            "passage": "ladder",
-            "from_hidden": true,
-            "to_hidden": false
+            "ref": "gallery",
+            "name": "Gallery",
+            "role": "exploration",
+            "purpose": "Foreshadow the objective."
           },
           {
-            "local_ref": "landing-relic",
-            "from_ref": "landing",
-            "to_ref": "relic"
-          }
-        ],
-        "objectives": [
+            "ref": "study",
+            "name": "Study",
+            "role": "optional",
+            "purpose": "Hold optional context."
+          },
           {
-            "room_ref": "relic",
-            "kind": "final_objective",
-            "name": "Synthetic Objective"
+            "ref": "vault",
+            "name": "Vault",
+            "role": "objective",
+            "purpose": "Hold the objective."
           }
         ],
-        "dependencies": []
+        "critical_path": [
+          "entry",
+          "hall",
+          "gallery",
+          "vault"
+        ],
+        "room_contents": [
+          {
+            "room_ref": "vault",
+            "objective": "Synthetic Objective"
+          }
+        ],
+        "branches": [
+          {
+            "ref": "study_branch",
+            "from_room": "hall",
+            "rooms": [
+              "study"
+            ]
+          }
+        ]
       }
     }
   },
@@ -193,72 +139,156 @@
     ],
     "proposal": {
       "proposal_version": "1",
-      "design": {
+      "plan": {
         "schema_version": "1.0.0",
         "title": "Loop Hall",
-        "premise": "Synthetic looping route.",
+        "premise": "Synthetic proof-carrying archive.",
         "themes": [
-          "brass"
+          "synthetic"
         ],
-        "floors": [
+        "rooms": [
           {
-            "local_ref": "hall",
+            "ref": "entry",
+            "name": "Entry",
+            "role": "entrance",
+            "purpose": "Establish the entrance."
+          },
+          {
+            "ref": "hall",
             "name": "Hall",
+            "role": "exploration",
+            "purpose": "Develop the route."
+          },
+          {
+            "ref": "gallery",
+            "name": "Gallery",
+            "role": "exploration",
+            "purpose": "Foreshadow the objective."
+          },
+          {
+            "ref": "study",
+            "name": "Study",
+            "role": "optional",
+            "purpose": "Hold optional context."
+          },
+          {
+            "ref": "vault",
+            "name": "Vault",
+            "role": "objective",
+            "purpose": "Hold the objective."
+          }
+        ],
+        "critical_path": [
+          "entry",
+          "hall",
+          "gallery",
+          "vault"
+        ],
+        "room_contents": [
+          {
+            "room_ref": "vault",
+            "objective": "Synthetic Objective"
+          }
+        ],
+        "branches": [
+          {
+            "ref": "study_branch",
+            "from_room": "hall",
             "rooms": [
-              {
-                "local_ref": "entry",
-                "name": "Entry",
-                "role": "entrance"
-              },
-              {
-                "local_ref": "branch",
-                "name": "Branch",
-                "role": "exploration"
-              },
-              {
-                "local_ref": "side",
-                "name": "Side",
-                "role": "exploration",
-                "optional": true
-              },
-              {
-                "local_ref": "vault",
-                "name": "Vault",
-                "role": "objective"
-              }
+              "study"
             ]
           }
         ],
-        "connections": [
+        "loops": [
           {
-            "local_ref": "entry-branch",
-            "from_ref": "entry",
-            "to_ref": "branch"
+            "ref": "study_loop",
+            "from_room": "study",
+            "to_room": "vault",
+            "secret": false
+          }
+        ]
+      }
+    }
+  },
+  {
+    "case_id": "secret_route",
+    "prompt": "Synthetic secret bypass.",
+    "expected_first_pass": "accepted",
+    "expected_semantics": [
+      "secret",
+      "hidden",
+      "loop"
+    ],
+    "proposal": {
+      "proposal_version": "1",
+      "plan": {
+        "schema_version": "1.0.0",
+        "title": "Secret Bypass",
+        "premise": "Synthetic proof-carrying archive.",
+        "themes": [
+          "synthetic"
+        ],
+        "rooms": [
+          {
+            "ref": "entry",
+            "name": "Entry",
+            "role": "entrance",
+            "purpose": "Establish the entrance."
           },
           {
-            "local_ref": "branch-vault",
-            "from_ref": "branch",
-            "to_ref": "vault"
+            "ref": "hall",
+            "name": "Hall",
+            "role": "exploration",
+            "purpose": "Develop the route."
           },
           {
-            "local_ref": "branch-side",
-            "from_ref": "branch",
-            "to_ref": "side"
+            "ref": "gallery",
+            "name": "Gallery",
+            "role": "exploration",
+            "purpose": "Foreshadow the objective."
           },
           {
-            "local_ref": "side-entry",
-            "from_ref": "side",
-            "to_ref": "entry"
+            "ref": "study",
+            "name": "Study",
+            "role": "optional",
+            "purpose": "Hold optional context."
+          },
+          {
+            "ref": "vault",
+            "name": "Vault",
+            "role": "objective",
+            "purpose": "Hold the objective."
           }
         ],
-        "objectives": [
+        "critical_path": [
+          "entry",
+          "hall",
+          "gallery",
+          "vault"
+        ],
+        "room_contents": [
           {
             "room_ref": "vault",
-            "kind": "final_objective",
-            "name": "Synthetic Objective"
+            "objective": "Synthetic Objective"
           }
         ],
-        "dependencies": []
+        "branches": [
+          {
+            "ref": "study_branch",
+            "from_room": "hall",
+            "rooms": [
+              "study"
+            ]
+          }
+        ],
+        "loops": [
+          {
+            "ref": "secret_bypass",
+            "from_room": "study",
+            "to_room": "vault",
+            "secret": true
+          }
+        ]
       }
     }
   },
@@ -272,189 +302,129 @@
     ],
     "proposal": {
       "proposal_version": "1",
-      "design": {
+      "plan": {
         "schema_version": "1.0.0",
         "title": "Riddle Door",
-        "premise": "Synthetic clue before puzzle gate.",
+        "premise": "Synthetic proof-carrying archive.",
         "themes": [
-          "runes"
+          "synthetic"
         ],
-        "floors": [
+        "rooms": [
           {
-            "local_ref": "hall",
+            "ref": "entry",
+            "name": "Entry",
+            "role": "entrance",
+            "purpose": "Establish the entrance."
+          },
+          {
+            "ref": "hall",
             "name": "Hall",
-            "rooms": [
-              {
-                "local_ref": "entry",
-                "name": "Entry",
-                "role": "entrance"
-              },
-              {
-                "local_ref": "vault",
-                "name": "Vault",
-                "role": "objective"
-              }
-            ]
-          }
-        ],
-        "connections": [
+            "role": "exploration",
+            "purpose": "Develop the route."
+          },
           {
-            "local_ref": "riddle-door",
-            "from_ref": "entry",
-            "to_ref": "vault",
-            "passage": "door",
-            "door_mechanics": {
-              "barrier": "puzzle",
-              "challenge": "low"
-            }
+            "ref": "gallery",
+            "name": "Gallery",
+            "role": "exploration",
+            "purpose": "Foreshadow the objective."
+          },
+          {
+            "ref": "vault",
+            "name": "Vault",
+            "role": "objective",
+            "purpose": "Hold the objective."
           }
         ],
-        "objectives": [
+        "critical_path": [
+          "entry",
+          "hall",
+          "gallery",
+          "vault"
+        ],
+        "room_contents": [
           {
             "room_ref": "vault",
-            "kind": "final_objective",
-            "name": "Synthetic Objective"
+            "objective": "Synthetic Objective"
           }
         ],
-        "dependencies": [
+        "gates": [
           {
-            "local_ref": "riddle-clue",
-            "kind": "clue",
-            "located_in_room_ref": "entry",
-            "name": "Riddle",
-            "target_ref": "riddle-door"
+            "ref": "riddle_gate",
+            "between_rooms": [
+              "gallery",
+              "vault"
+            ],
+            "kind": "puzzle",
+            "dependency_kind": "clue",
+            "dependency_room": "hall",
+            "dependency_name": "Synthetic Riddle"
           }
         ]
       }
     }
   },
   {
-    "case_id": "trapped_route",
-    "prompt": "Synthetic trapped route.",
+    "case_id": "trapped_room",
+    "prompt": "Synthetic trapped room.",
     "expected_first_pass": "accepted",
     "expected_semantics": [
       "trap"
     ],
     "proposal": {
       "proposal_version": "1",
-      "design": {
+      "plan": {
         "schema_version": "1.0.0",
-        "title": "Needle Door",
-        "premise": "Synthetic trapped access.",
+        "title": "Trapped Gallery",
+        "premise": "Synthetic proof-carrying archive.",
         "themes": [
-          "copper"
+          "synthetic"
         ],
-        "floors": [
+        "rooms": [
           {
-            "local_ref": "hall",
-            "name": "Hall",
-            "rooms": [
-              {
-                "local_ref": "entry",
-                "name": "Entry",
-                "role": "entrance"
-              },
-              {
-                "local_ref": "vault",
-                "name": "Vault",
-                "role": "objective"
-              }
-            ]
-          }
-        ],
-        "connections": [
-          {
-            "local_ref": "needle-door",
-            "from_ref": "entry",
-            "to_ref": "vault",
-            "passage": "door",
-            "door_mechanics": {
-              "hazard": "trapped",
-              "challenge": "low",
-              "trap_trigger": "Opening the needle door.",
-              "trap_effect": "A synthetic bell rings."
-            }
-          }
-        ],
-        "objectives": [
-          {
-            "room_ref": "vault",
-            "kind": "final_objective",
-            "name": "Synthetic Objective"
-          }
-        ],
-        "dependencies": []
-      }
-    }
-  },
-  {
-    "case_id": "optional_hidden_area",
-    "prompt": "Synthetic optional hidden area.",
-    "expected_first_pass": "accepted",
-    "expected_semantics": [
-      "optional",
-      "hidden"
-    ],
-    "proposal": {
-      "proposal_version": "1",
-      "design": {
-        "schema_version": "1.0.0",
-        "title": "Side Chamber",
-        "premise": "Synthetic optional chamber.",
-        "themes": [
-          "moss"
-        ],
-        "floors": [
-          {
-            "local_ref": "hall",
-            "name": "Hall",
-            "rooms": [
-              {
-                "local_ref": "entry",
-                "name": "Entry",
-                "role": "entrance"
-              },
-              {
-                "local_ref": "side",
-                "name": "Side",
-                "role": "exploration",
-                "optional": true
-              },
-              {
-                "local_ref": "vault",
-                "name": "Vault",
-                "role": "objective"
-              }
-            ]
-          }
-        ],
-        "connections": [
-          {
-            "local_ref": "entry-vault",
-            "from_ref": "entry",
-            "to_ref": "vault"
+            "ref": "entry",
+            "name": "Entry",
+            "role": "entrance",
+            "purpose": "Establish the entrance."
           },
           {
-            "local_ref": "entry-side",
-            "from_ref": "entry",
-            "to_ref": "side",
-            "passage": "door",
-            "from_hidden": true,
-            "to_hidden": true,
-            "door_mechanics": {
-              "concealed": true,
-              "challenge": "low"
-            }
+            "ref": "hall",
+            "name": "Hall",
+            "role": "exploration",
+            "purpose": "Develop the route."
+          },
+          {
+            "ref": "gallery",
+            "name": "Gallery",
+            "role": "exploration",
+            "purpose": "Foreshadow the objective."
+          },
+          {
+            "ref": "vault",
+            "name": "Vault",
+            "role": "objective",
+            "purpose": "Hold the objective."
           }
         ],
-        "objectives": [
+        "critical_path": [
+          "entry",
+          "hall",
+          "gallery",
+          "vault"
+        ],
+        "room_contents": [
+          {
+            "room_ref": "gallery",
+            "trap": {
+              "name": "Needle Plate",
+              "trigger": "Cross the plate.",
+              "effect": "A bell rings."
+            }
+          },
           {
             "room_ref": "vault",
-            "kind": "final_objective",
-            "name": "Synthetic Objective"
+            "objective": "Synthetic Objective"
           }
-        ],
-        "dependencies": []
+        ]
       }
     }
   },
@@ -468,47 +438,51 @@
     ],
     "proposal": {
       "proposal_version": "1",
-      "intent_summary": "A synthetic relic objective.",
-      "design": {
+      "plan": {
         "schema_version": "1.0.0",
         "title": "Relic Vault",
         "premise": "Synthetic final relic.",
         "themes": [
-          "amber"
+          "synthetic"
         ],
-        "floors": [
+        "rooms": [
           {
-            "local_ref": "vault",
-            "name": "Vault",
-            "rooms": [
-              {
-                "local_ref": "entry",
-                "name": "Entry",
-                "role": "entrance"
-              },
-              {
-                "local_ref": "relic",
-                "name": "Relic",
-                "role": "objective"
-              }
-            ]
+            "ref": "entry",
+            "name": "Entry",
+            "role": "entrance",
+            "purpose": "Establish the entrance."
+          },
+          {
+            "ref": "hall",
+            "name": "Hall",
+            "role": "exploration",
+            "purpose": "Develop the route."
+          },
+          {
+            "ref": "gallery",
+            "name": "Gallery",
+            "role": "exploration",
+            "purpose": "Foreshadow the objective."
+          },
+          {
+            "ref": "vault",
+            "name": "Relic Vault",
+            "role": "objective",
+            "purpose": "Hold the objective."
           }
         ],
-        "connections": [
-          {
-            "local_ref": "entry-relic",
-            "from_ref": "entry",
-            "to_ref": "relic"
-          }
+        "critical_path": [
+          "entry",
+          "hall",
+          "gallery",
+          "vault"
         ],
-        "objectives": [
+        "room_contents": [
           {
-            "room_ref": "relic",
-            "kind": "final_objective",
-            "name": "Stone of Redemption"
+            "room_ref": "vault",
+            "objective": "Stone of Redemption"
           }
-        ],
-        "dependencies": []
+        ]
       }
     }
   },
@@ -521,96 +495,106 @@
     ],
     "proposal": {
       "proposal_version": "1",
-      "design": {
+      "plan": {
         "schema_version": "1.0.0",
         "title": "Bad Ref",
-        "premise": "Synthetic invalid reference.",
+        "premise": "Synthetic proof-carrying archive.",
         "themes": [
-          "chalk"
+          "synthetic"
         ],
-        "floors": [
+        "rooms": [
           {
-            "local_ref": "hall",
+            "ref": "entry",
+            "name": "Entry",
+            "role": "entrance",
+            "purpose": "Establish the entrance."
+          },
+          {
+            "ref": "hall",
             "name": "Hall",
-            "rooms": [
-              {
-                "local_ref": "entry",
-                "name": "Entry",
-                "role": "entrance"
-              },
-              {
-                "local_ref": "vault",
-                "name": "Vault",
-                "role": "objective"
-              }
-            ]
-          }
-        ],
-        "connections": [
+            "role": "exploration",
+            "purpose": "Develop the route."
+          },
           {
-            "local_ref": "bad-link",
-            "from_ref": "entry",
-            "to_ref": "missing"
+            "ref": "gallery",
+            "name": "Gallery",
+            "role": "exploration",
+            "purpose": "Foreshadow the objective."
+          },
+          {
+            "ref": "vault",
+            "name": "Vault",
+            "role": "objective",
+            "purpose": "Hold the objective."
           }
         ],
-        "objectives": [
+        "critical_path": [
+          "entry",
+          "missing",
+          "gallery",
+          "vault"
+        ],
+        "room_contents": [
           {
             "room_ref": "vault",
-            "kind": "final_objective",
-            "name": "Synthetic Objective"
+            "objective": "Synthetic Objective"
           }
-        ],
-        "dependencies": []
+        ]
       }
     },
     "repair_proposal": {
       "proposal_version": "1",
-      "design": {
+      "plan": {
         "schema_version": "1.0.0",
         "title": "Good Ref",
-        "premise": "Synthetic repaired reference.",
+        "premise": "Synthetic proof-carrying archive.",
         "themes": [
-          "chalk"
+          "synthetic"
         ],
-        "floors": [
+        "rooms": [
           {
-            "local_ref": "hall",
+            "ref": "entry",
+            "name": "Entry",
+            "role": "entrance",
+            "purpose": "Establish the entrance."
+          },
+          {
+            "ref": "hall",
             "name": "Hall",
-            "rooms": [
-              {
-                "local_ref": "entry",
-                "name": "Entry",
-                "role": "entrance"
-              },
-              {
-                "local_ref": "vault",
-                "name": "Vault",
-                "role": "objective"
-              }
-            ]
-          }
-        ],
-        "connections": [
+            "role": "exploration",
+            "purpose": "Develop the route."
+          },
           {
-            "local_ref": "good-link",
-            "from_ref": "entry",
-            "to_ref": "vault"
+            "ref": "gallery",
+            "name": "Gallery",
+            "role": "exploration",
+            "purpose": "Foreshadow the objective."
+          },
+          {
+            "ref": "vault",
+            "name": "Vault",
+            "role": "objective",
+            "purpose": "Hold the objective."
           }
         ],
-        "objectives": [
+        "critical_path": [
+          "entry",
+          "hall",
+          "gallery",
+          "vault"
+        ],
+        "room_contents": [
           {
             "room_ref": "vault",
-            "kind": "final_objective",
-            "name": "Synthetic Objective"
+            "objective": "Synthetic Objective"
           }
-        ],
-        "dependencies": []
+        ]
       }
     }
   },
   {
     "case_id": "impossible_request",
-    "prompt": "Synthetic impossible request with conflicting direction.",
+    "prompt": "Synthetic conflicting request.",
     "expected_first_pass": "abstained",
     "expected_semantics": [
       "abstention"

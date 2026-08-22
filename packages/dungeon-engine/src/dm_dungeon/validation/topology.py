@@ -437,7 +437,11 @@ def _validate_required_room_reachability(
     entrance_ids = tuple(
         room.id for room in topology.rooms if room.role is RoomRole.ENTRANCE
     )
-    exit_ids = tuple(room.id for room in topology.rooms if room.role is RoomRole.EXIT)
+    exit_ids = tuple(
+        room.id
+        for room in topology.rooms
+        if room.role in {RoomRole.EXIT, RoomRole.OBJECTIVE}
+    )
 
     if not entrance_ids:
         diagnostics.append(
@@ -521,16 +525,24 @@ def _validate_branch_requirements(
         requested_rooms = {branch.junction_room_id, *branch.branch_room_ids}
         if not requested_rooms.issubset(adjacency):
             continue
-        if len(set(branch.branch_room_ids)) != len(branch.branch_room_ids) or any(
-            branch_room_id not in adjacency[branch.junction_room_id]
-            for branch_room_id in branch.branch_room_ids
+        path = (branch.junction_room_id, *branch.branch_room_ids)
+        ordered_path = all(
+            right in adjacency[left]
+            for left, right in zip(path, path[1:], strict=False)
+        )
+        legacy_star = all(
+            room_id in adjacency[branch.junction_room_id]
+            for room_id in branch.branch_room_ids
+        )
+        if len(set(branch.branch_room_ids)) != len(branch.branch_room_ids) or not (
+            ordered_path or legacy_star
         ):
             diagnostics.append(
                 _diagnostic(
                     TopologyDiagnosticCode.BRANCH_NOT_REALIZED,
                     (branch.id, branch.junction_room_id, *branch.branch_room_ids),
-                    f"Requested branch {branch.id!r} is not realized at its junction.",
-                    "Connect each distinct branch room directly to the junction.",
+                    f"Requested branch {branch.id!r} is not an attached ordered path.",
+                    "Connect the junction and branch rooms in their declared order.",
                 )
             )
 

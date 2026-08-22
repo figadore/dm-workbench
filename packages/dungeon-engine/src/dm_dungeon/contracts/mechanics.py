@@ -5,19 +5,35 @@ layout consumes this pure contract to attach those mechanics to exact package
 geometry without importing compiler implementation code.
 """
 
+from enum import StrEnum
 from typing import Literal
 
 from pydantic import Field, model_validator
 
 from dm_dungeon.contracts.common import ContractModel, OpaqueId
-from dm_dungeon.contracts.design import (
-    BarrierIntent,
-    EncounterSlotIntent,
-    EndpointDoorKind,
-    FeatureIntentKind,
-    ObjectiveKind,
-    VerticalEndpointSide,
-)
+from dm_dungeon.contracts.plan import EncounterSlotIntent, FeatureIntentKind
+
+
+class BarrierIntent(StrEnum):
+    NONE = "none"
+    LOCKED = "locked"
+    PUZZLE = "puzzle"
+
+
+class EndpointDoorKind(StrEnum):
+    DOOR = "door"
+    HATCH = "hatch"
+
+
+class VerticalEndpointSide(StrEnum):
+    FROM = "from"
+    TO = "to"
+
+
+class ObjectiveKind(StrEnum):
+    FINAL_OBJECTIVE = "final_objective"
+    OPTIONAL_OBJECTIVE = "optional_objective"
+
 
 DUNGEON_MECHANICS_POLICY_VERSION: Literal["dungeon-mechanics-policy-v1"] = (
     "dungeon-mechanics-policy-v1"

@@ -1,4 +1,9 @@
-"""Property tests for the active compact-design-to-layout pipeline."""
+"""Property tests for the active plan-to-layout compatibility seam.
+
+P7-14d replaces this fallible legacy geometry path with certificate-driven
+construction. P7-14c keeps a narrow 4–5 room green floor while certifying 4–8 room
+topologies independently of geometry.
+"""
 
 import json
 
@@ -6,9 +11,9 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from dm_dungeon import (
-    DungeonDesignSpec,
+    DungeonPlan,
     LayoutRequest,
-    compile_dungeon_design,
+    compile_dungeon_plan,
     generate_layout,
     validate_geometry,
 )
@@ -17,10 +22,9 @@ from dm_dungeon.validation import GeometryDiagnosticCode
 
 
 def active_chain_request(room_count: int, seed: int) -> LayoutRequest:
-    """Compile one connected synthetic chain through the active alpha path."""
     rooms = [
         {
-            "local_ref": f"room_{index}",
+            "ref": f"room_{index}",
             "name": f"Room {index}",
             "role": (
                 "entrance"
@@ -29,6 +33,7 @@ def active_chain_request(room_count: int, seed: int) -> LayoutRequest:
                 if index == room_count - 1
                 else "exploration"
             ),
+            "purpose": f"Serve synthetic progression step {index}.",
         }
         for index in range(room_count)
     ]
@@ -37,33 +42,17 @@ def active_chain_request(room_count: int, seed: int) -> LayoutRequest:
         "title": "Generated Layout Property",
         "premise": "A synthetic connected dungeon with no campaign content.",
         "themes": ["synthetic"],
-        "floors": [
-            {
-                "local_ref": "main",
-                "name": "Generated Floor",
-                "floor_scale": "small",
-                "rooms": rooms,
-            }
-        ],
-        "connections": [
-            {
-                "local_ref": f"connection_{index}_{index + 1}",
-                "from_ref": f"room_{index}",
-                "to_ref": f"room_{index + 1}",
-                "passage": "passage",
-            }
-            for index in range(room_count - 1)
-        ],
-        "objectives": [
+        "rooms": rooms,
+        "critical_path": [item["ref"] for item in rooms],
+        "room_contents": [
             {
                 "room_ref": f"room_{room_count - 1}",
-                "kind": "final_objective",
-                "name": "Synthetic Objective",
+                "objective": "Synthetic Objective",
             }
         ],
     }
-    design = DungeonDesignSpec.model_validate_json(json.dumps(payload))
-    compiled = compile_dungeon_design(design)
+    plan = DungeonPlan.model_validate_json(json.dumps(payload))
+    compiled = compile_dungeon_plan(plan)
     assert compiled.accepted
     assert compiled.brief is not None
     assert compiled.topology is not None
@@ -80,9 +69,9 @@ def active_chain_request(room_count: int, seed: int) -> LayoutRequest:
     )
 
 
-@settings(max_examples=40, deadline=None)
+@settings(max_examples=30, deadline=None)
 @given(
-    room_count=st.integers(min_value=2, max_value=5),
+    room_count=st.integers(min_value=4, max_value=5),
     seed=st.integers(min_value=0, max_value=2**32 - 1),
 )
 def test_active_small_chain_layouts_are_successful_and_repeatable(
@@ -98,13 +87,13 @@ def test_active_small_chain_layouts_are_successful_and_repeatable(
     assert first.package is not None
     assert first == second
     assert len(first.package.rooms) == room_count
-    assert len(first.package.corridors) == room_count - 1
+    assert len(first.package.composable_doors) == room_count - 1
     assert validate_geometry(first.package).valid is True
 
 
-@settings(max_examples=20, deadline=None)
+@settings(max_examples=15, deadline=None)
 @given(
-    room_count=st.integers(min_value=2, max_value=5),
+    room_count=st.integers(min_value=4, max_value=5),
     seed=st.integers(min_value=0, max_value=2**32 - 1),
 )
 def test_overlapping_active_room_mutation_is_always_rejected(

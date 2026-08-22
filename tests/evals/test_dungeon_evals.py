@@ -25,15 +25,14 @@ def test_synthetic_suite_covers_compact_success_repair_and_abstention() -> None:
     summary = summarize_dungeon_intent_evals(results)
 
     assert DUNGEON_INTENT_EVAL_POLICY == "dungeon-intent-eval"
-    assert len(cases) == 10
+    assert len(cases) == 9
     assert {case.case_id for case in cases} == {
         "one_floor",
-        "two_floor",
-        "secret_lower_level",
+        "optional_branch",
         "branch_loop",
+        "secret_route",
         "clue_gate",
-        "trapped_route",
-        "optional_hidden_area",
+        "trapped_room",
         "final_relic",
         "invalid_reference_repair",
         "impossible_request",

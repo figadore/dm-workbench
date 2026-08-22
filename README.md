@@ -251,11 +251,13 @@ created and switched without copying UUIDs into every command:
 
 ### Alpha dungeon V1 evaluation
 
-The alpha accepts one compact `submit_dungeon_plan` proposal only. Models supply
-relative rooms, connections, objectives, and dependencies; deterministic code
-owns IDs, seed, geometry, visibility, validation, rendering, persistence, and
-approval. The temporary arbitrary-edge design is replaced by the progression
-grammar in P7-14c. Run inspection remains body-free:
+The alpha accepts one compact `submit_dungeon_plan` proposal only. Models supply a
+bounded `DungeonPlan`: 4–8 relative rooms, one critical path, up to two branches,
+one loop, one gate, and bounded room content. Deterministic code constructs all
+edges and IDs and emits an independently recomputed `TopologyCertificate` covering
+connectivity, cycle/branch/gate/secret witnesses, room/port demand, and embedding
+bands. Geometry, visibility, validation, rendering, persistence, and approval
+remain server-owned. Run inspection remains body-free:
 
 ```bash
 uv run --frozen dm dungeon run inspect <attempt-run-id>
@@ -322,7 +324,7 @@ The internal P1-02 Library service now ingests bounded strict-UTF-8 files throug
 
 ## Current Next Step
 
-Continue **P7-14b**, the dungeon-generation alpha reset: collapse old model/generator/package paths to one clean V1 before implementing the proof-carrying topology compiler and constructive Tier A layout. See [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) for the concepts and stress ladder and [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
+Continue **P7-14d** with certificate-driven constructive Tier A geometry: allocate backbone columns, branch/loop bands, room dimensions, side ports, and reserved corridor channels from the P7-14c proof data. See [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) and [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
 
 ## License and Third-Party Marks
 

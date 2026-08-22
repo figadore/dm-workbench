@@ -14,11 +14,6 @@ from dm_dungeon.contracts.common import (
     Visibility,
     ensure_unique_ids,
 )
-from dm_dungeon.contracts.design import (
-    BarrierIntent,
-    EndpointDoorKind,
-    VerticalEndpointSide,
-)
 from dm_dungeon.contracts.geometry import (
     CorridorLayout,
     EncounterSlot,
@@ -39,6 +34,11 @@ from dm_dungeon.contracts.geometry import (
     Terrain,
     VerticalLinkLayout,
     Zone,
+)
+from dm_dungeon.contracts.mechanics import (
+    BarrierIntent,
+    EndpointDoorKind,
+    VerticalEndpointSide,
 )
 from dm_dungeon.contracts.topology import (
     DoorConnection,

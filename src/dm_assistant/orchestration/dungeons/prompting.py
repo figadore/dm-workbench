@@ -50,10 +50,10 @@ from dm_assistant.orchestration.modeling import (
     StructuredSubmissionTool,
 )
 from dm_dungeon import (
-    DUNGEON_DESIGN_COMPILER_VERSION,
-    DungeonDesignCompileResult,
+    DUNGEON_PLAN_COMPILER_VERSION,
+    DungeonPlanCompileResult,
     LayoutRequest,
-    compile_dungeon_design,
+    compile_dungeon_plan,
     generate_layout,
     validate_geometry,
     validate_topology,
@@ -67,21 +67,15 @@ _SUBMIT_DUNGEON_PLAN_TOOL = "submit_dungeon_plan"
 _MAX_REPAIR_ARGUMENT_CHARACTERS = 12_000
 _OUTPUT_TOKEN_LIMIT = 4_096
 _CUMULATIVE_TOKEN_BUDGET = 12_000
-_CONNECTION_GUIDANCE = (
-    "Connection rules: use passage or door only between rooms on one floor; use "
-    "stairs or ladder only between different floors. Use from_hidden and to_hidden "
-    "independently; a ladder hidden under an upper-floor rug has from_hidden true "
-    "and to_hidden false. Same-floor passages have no hidden, barrier, or trap "
-    "mechanics. A same-floor door uses from_hidden/to_hidden "
-    "plus door_mechanics {barrier, hazard, challenge, trap_trigger, trap_effect}; "
-    "a door's physical concealment is derived from its hidden endpoints. Omit an "
-    "unneeded challenge (active mechanics default to moderate). A lock or puzzle may "
-    "include one dependency targeting the door local_ref; if its dependency or trap/"
-    "puzzle play prose is genuinely unknown, omit it or say exactly 'unknown' so the "
-    "draft remains blocked for DM completion. Stairs/ladders may have hidden endpoints "
-    "without a door. A vertical lock, puzzle, or trap instead needs an explicit "
-    "endpoint_doors item {local_ref, endpoint: from|to, kind: door|hatch, mechanics}; "
-    "target its local_ref with the dependency when one is supplied."
+_PLAN_GUIDANCE = (
+    "Plan rules: one floor and 4–8 rooms; exactly one entrance and one objective; "
+    "critical_path starts at the entrance and ends at the objective. Put every other "
+    "room on one of at most two ordered branches and give branch rooms the optional "
+    "role. Add at most one loop between non-adjacent rooms and mark it secret only "
+    "when concealment is intended. Add at most one gate on a constructed public path "
+    "edge; put its key or clue in a public room reachable before that gate. Name the "
+    "final objective in exactly one room_contents record for the objective room. "
+    "Do not author edges, IDs, floors, coordinates, dimensions, seeds, or numeric DCs."
 )
 
 
@@ -100,7 +94,7 @@ class DungeonSubmissionResult(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     proposal: DungeonGenerationProposal
-    compilation: DungeonDesignCompileResult | None = None
+    compilation: DungeonPlanCompileResult | None = None
     layout_request: LayoutRequest | None = None
     model_run: ModelRunRecord
     model_runs: tuple[ModelRunRecord, ...] = ()
@@ -208,7 +202,7 @@ class DungeonSubmissionService:
         seed: int,
     ) -> DungeonSubmissionResult:
         _validate_profile(profile)
-        compiled: DungeonDesignCompileResult | None = None
+        compiled: DungeonPlanCompileResult | None = None
         request: LayoutRequest | None = None
 
         def handle(value: SubmitDungeonPlanInput) -> ToolResult:
@@ -220,8 +214,8 @@ class DungeonSubmissionService:
                     call_id="server_submit",
                     payload={"accepted": False, "code": "proposal.abstained"},
                 )
-            assert proposal.design is not None
-            compiled = compile_dungeon_design(proposal.design)
+            assert proposal.plan is not None
+            compiled = compile_dungeon_plan(proposal.plan)
             if not compiled.accepted:
                 return ToolResult(
                     tool_name=_SUBMIT_DUNGEON_PLAN_TOOL,
@@ -234,6 +228,7 @@ class DungeonSubmissionService:
                         ],
                     },
                 )
+            assert compiled.certificate is not None
             request = _compile_layout_request(compiled, seed)
             _, diagnostics, valid = _preflight(request)
             if not valid:
@@ -247,9 +242,24 @@ class DungeonSubmissionService:
                 call_id="server_submit",
                 payload={
                     "accepted": True,
-                    "compiler_version": DUNGEON_DESIGN_COMPILER_VERSION,
+                    "plan_hash": compiled.input_hash,
+                    "topology": {
+                        "rooms": compiled.certificate.room_count,
+                        "connections": compiled.certificate.connection_count,
+                        "branches": len(compiled.certificate.branches),
+                        "cycle_rank": compiled.certificate.cycle_rank,
+                        "secret_routes": sum(
+                            item.secret for item in compiled.certificate.loops
+                        ),
+                        "gates": len(compiled.certificate.gates),
+                    },
+                    "certificate_version": compiled.certificate.certificate_version,
+                    "compiler_version": DUNGEON_PLAN_COMPILER_VERSION,
                     "compiler_output_hash": compiled.output_hash or "",
                     "package_id": request.package_id,
+                    "warnings": [
+                        item.model_dump(mode="json") for item in compiled.warnings
+                    ],
                 },
             )
 
@@ -475,17 +485,14 @@ def _initial_model_input(
                     {
                         "task": _DUNGEON_SCHEMA_NAME,
                         "instruction": (
-                            "Use submit_dungeon_plan exactly once with design schema "
-                            "version 1.0.0. Submit the smallest design satisfying the prompt; "
-                            "omit branches, loops, encounter slots, traps, puzzles, and "
-                            "features unless requested or necessary. Every objective requires "
-                            "a name: copy a specifically named final objective from the DM "
-                            "prompt exactly into objectives[].name and point it at the room "
-                            "that holds it; never substitute a generic relic or objective. "
-                            "Submit compact creative intent only; the server "
-                            "owns IDs, seed, geometry, visibility, validation, persistence, "
-                            "and approval. "
-                            f"{_CONNECTION_GUIDANCE}"
+                            "Use submit_dungeon_plan exactly once with DungeonPlan schema "
+                            "version 1.0.0. Submit the smallest Tier A plan satisfying the "
+                            "prompt. Copy a specifically named final objective from the DM "
+                            "prompt exactly into room_contents[].objective; never substitute "
+                            "a generic relic or objective. Submit compact creative intent "
+                            "only; the server owns graph edges, IDs, seed, geometry, "
+                            "visibility, validation, persistence, and approval. "
+                            f"{_PLAN_GUIDANCE}"
                         ),
                         "prompt": command.prompt,
                         "context": context.envelope,
@@ -534,7 +541,7 @@ def _repair_model_input(
 
 
 def _compile_layout_request(
-    compiled: DungeonDesignCompileResult,
+    compiled: DungeonPlanCompileResult,
     seed: int,
 ) -> LayoutRequest:
     """Turn accepted pure V1 output plus server seed into an exact kernel request."""
