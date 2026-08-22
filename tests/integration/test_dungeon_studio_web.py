@@ -15,7 +15,14 @@ from dm_assistant.api import create_app
 from dm_assistant.config import RuntimeEnvironment, Settings
 from dm_assistant.db import Campaign, build_session_factory, transactional_session
 from dm_assistant.readiness import check_readiness
-from dm_dungeon import LayoutRequest, read_dungeon_package, to_canonical_json
+from dm_dungeon import (
+    CompiledDoorMechanics,
+    DungeonMechanicsPlan,
+    DungeonPackage,
+    LayoutRequest,
+    read_dungeon_package,
+    to_canonical_json,
+)
 
 pytestmark = pytest.mark.integration
 FIXTURE_PATH = (
@@ -23,6 +30,33 @@ FIXTURE_PATH = (
     / "packages/dungeon-engine/tests/fixtures/sunken_archive.v1.json"
 )
 TOKEN = "web-integration-token-000000000000000"
+
+
+def _mechanics_plan(package: DungeonPackage) -> DungeonMechanicsPlan:
+    return DungeonMechanicsPlan(
+        policy_version="dungeon-mechanics-policy-v1",
+        connection_ids=tuple(item.id for item in package.topology.connections),
+        room_ids=tuple(item.id for item in package.topology.rooms),
+        door_mechanics=tuple(
+            CompiledDoorMechanics(
+                id=door.id,
+                connection_id=door.connection_id,
+                concealed=door.mechanics.concealed,
+                gate_id=door.mechanics.gate_id,
+                gate_kind=door.mechanics.gate_kind,
+                trap_id=door.mechanics.trap_id,
+                discovery_difficulty=door.mechanics.discovery_difficulty,
+                unlock_difficulty=door.mechanics.unlock_difficulty,
+                disable_difficulty=door.mechanics.disable_difficulty,
+            )
+            for door in package.composable_doors
+        ),
+        room_traps=(),
+        room_puzzles=(),
+        room_features=(),
+        room_objectives=(),
+        encounter_slots=(),
+    )
 
 
 def create_campaign(engine: Engine) -> uuid.UUID:
@@ -40,7 +74,8 @@ def layout_document() -> str:
         brief=package.brief,
         topology=package.topology,
         seed=424242,
-        generator_version="orthogonal-v2",
+        generator_version="orthogonal-v1",
+        mechanics_plan=_mechanics_plan(package),
     )
     return to_canonical_json(request)
 

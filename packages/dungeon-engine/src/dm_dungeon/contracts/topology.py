@@ -16,7 +16,7 @@ from dm_dungeon.contracts.common import (
     ensure_unique_ids,
 )
 
-DUNGEON_TOPOLOGY_SCHEMA_VERSION = "1.1.0"
+DUNGEON_TOPOLOGY_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 PositiveCells = Annotated[int, Field(ge=1)]
 NonNegativeCount = Annotated[int, Field(ge=0)]
 PositiveCount = Annotated[int, Field(ge=1)]
@@ -343,7 +343,7 @@ class DungeonTopology(VersionedContract):
 
     supported_schema_version = DUNGEON_TOPOLOGY_SCHEMA_VERSION
 
-    schema_version: Literal["1.1.0"]
+    schema_version: Literal["1.0.0"]
     id: OpaqueId
     visibility: Visibility
     floors: tuple[TopologyFloor, ...] = Field(min_length=1)

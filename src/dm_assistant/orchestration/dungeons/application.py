@@ -1,4 +1,4 @@
-"""Shared durable V2 prompt application boundary for CLI and web adapters."""
+"""Shared durable V1 prompt application boundary for CLI and web adapters."""
 
 from __future__ import annotations
 
@@ -64,10 +64,10 @@ class DungeonPromptApplicationService:
         return self._preparation.start_generation_run(
             StartGenerationRun(
                 campaign_id=command.campaign_id,
-                generation_kind="dungeon_prompt_v2",
+                generation_kind="dungeon_prompt",
                 seed=command.seed,
                 input_scope={"task_type": "standalone_dungeon", "surface": surface},
-                schema_versions={"dungeon_generation_proposal": "2.4.0"},
+                schema_versions={"dungeon_generation_proposal": "1.0.0"},
             )
         ).id
 

@@ -1,17 +1,16 @@
 """Seeded graph-guided orthogonal dungeon layout engine."""
 
 from collections.abc import Iterable
-from typing import Any
+from dataclasses import dataclass
 
 from dm_dungeon.contracts.common import Visibility
-from dm_dungeon.contracts.design_v2 import VerticalEndpointSide
+from dm_dungeon.contracts.design import VerticalEndpointSide
 from dm_dungeon.contracts.geometry import (
     CorridorLayout,
-    DoorLayout,
     EncounterSlot,
     FloorLayout,
     GridPoint,
-    PolylineGeometry,
+    GridSegment,
     PositionAnchor,
     PositionAnchorKind,
     RenderLayer,
@@ -21,20 +20,18 @@ from dm_dungeon.contracts.geometry import (
     VerticalEndpoint,
     VerticalLinkLayout,
 )
-from dm_dungeon.contracts.mechanics_v2 import CompiledDoorMechanicsV2
+from dm_dungeon.contracts.mechanics import CompiledDoorMechanics
 from dm_dungeon.contracts.package import (
+    DUNGEON_PACKAGE_SCHEMA_VERSION,
     ComponentIdStrategy,
+    DoorMechanics,
     DungeonPackage,
+    MechanicDoorLayout,
     PackageMetadata,
-)
-from dm_dungeon.contracts.package_v2 import (
-    ComposableDoorMechanicsV2,
-    DoorLayoutV2,
-    DungeonPackageV2,
     PassageOpening,
-    RoomMechanicMarkerKindV2,
-    RoomMechanicMarkerV2,
-    VerticalEndpointDoorLayoutV2,
+    RoomMechanicMarker,
+    RoomMechanicMarkerKind,
+    VerticalEndpointDoorLayout,
 )
 from dm_dungeon.contracts.topology import (
     CorridorConnection,
@@ -63,10 +60,8 @@ from dm_dungeon.layout.placement import (
 from dm_dungeon.layout.random_source import DeterministicRandom
 from dm_dungeon.layout.routing import (
     PassageRoute,
-    door_segment_at_anchor,
     door_segment_between_rects,
     passage_endpoint_at_exterior_cell,
-    route_between_rooms,
     route_passage_between_rooms,
 )
 from dm_dungeon.validation import (
@@ -74,6 +69,18 @@ from dm_dungeon.validation import (
     validate_geometry,
     validate_topology,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class _DoorGeometry:
+    """Internal shared-wall geometry before compiled mechanics are attached."""
+
+    connection_id: str
+    floor_id: str
+    segment: GridSegment
+    connects_room_ids: tuple[str, str]
+    from_hidden: bool
+    to_hidden: bool
 
 
 def generate_layout(request: LayoutRequest) -> LayoutResult:
@@ -195,7 +202,7 @@ def generate_layout(request: LayoutRequest) -> LayoutResult:
     if diagnostics:
         return _failed_result(request, random_source, diagnostics)
 
-    corridors, legacy_doors, passage_openings = _generate_same_floor_connections(
+    corridors, door_geometries, passage_openings = _generate_same_floor_connections(
         request,
         room_rects,
         floor_bounds,
@@ -211,7 +218,7 @@ def generate_layout(request: LayoutRequest) -> LayoutResult:
     )
     composable_doors, vertical_endpoint_doors = _generate_mechanics_aware_doors(
         request,
-        legacy_doors,
+        door_geometries,
         vertical_links,
         layer_by_visibility,
         diagnostics,
@@ -233,17 +240,8 @@ def generate_layout(request: LayoutRequest) -> LayoutResult:
     )
 
     try:
-        package_type: Any = (
-            DungeonPackageV2
-            if request.generator_version in {"orthogonal-v3", "orthogonal-v4"}
-            else DungeonPackage
-        )
-        package: DungeonPackage | DungeonPackageV2 = package_type(
-            schema_version=(
-                "1.3.0"
-                if request.generator_version in {"orthogonal-v3", "orthogonal-v4"}
-                else "1.1.0"
-            ),
+        package = DungeonPackage(
+            schema_version=DUNGEON_PACKAGE_SCHEMA_VERSION,
             id=request.package_id,
             brief=request.brief,
             topology=request.topology,
@@ -262,11 +260,6 @@ def generate_layout(request: LayoutRequest) -> LayoutResult:
             floors=tuple(floors),
             rooms=tuple(rooms),
             corridors=tuple(corridors),
-            doors=(
-                ()
-                if request.generator_version == "orthogonal-v4"
-                else tuple(legacy_doors)
-            ),
             stairs=tuple(stairs),
             vertical_links=tuple(vertical_links),
             features=(),
@@ -276,20 +269,10 @@ def generate_layout(request: LayoutRequest) -> LayoutResult:
             labels=(),
             encounter_slots=tuple(encounter_slots),
             position_anchors=position_anchors,
-            **(
-                {
-                    "passage_openings": tuple(passage_openings),
-                    "composable_doors": tuple(composable_doors),
-                    "vertical_endpoint_doors": tuple(vertical_endpoint_doors),
-                    "room_mechanic_markers": tuple(room_mechanic_markers),
-                }
-                if request.generator_version == "orthogonal-v4"
-                else (
-                    {"passage_openings": tuple(passage_openings)}
-                    if request.generator_version == "orthogonal-v3"
-                    else {}
-                )
-            ),
+            passage_openings=tuple(passage_openings),
+            composable_doors=tuple(composable_doors),
+            vertical_endpoint_doors=tuple(vertical_endpoint_doors),
+            room_mechanic_markers=tuple(room_mechanic_markers),
         )
     except ValueError as error:
         diagnostics.append(
@@ -389,19 +372,7 @@ def _validate_mechanics_plan(
 ) -> None:
     """Require a complete compiler plan before mechanics-aware layout begins."""
 
-    if request.generator_version != "orthogonal-v4":
-        return
     plan = request.mechanics_plan
-    if plan is None:
-        diagnostics.append(
-            _diagnostic(
-                LayoutDiagnosticCode.MECHANICS_PLAN_INVALID,
-                (request.package_id,),
-                "The mechanics-aware generator requires a compiled mechanics plan.",
-                "Compile the V2 design and pass its mechanics_plan unchanged.",
-            )
-        )
-        return
 
     topology_connection_ids = {item.id for item in request.topology.connections}
     topology_room_ids = {item.id for item in request.topology.rooms}
@@ -504,7 +475,7 @@ def _validate_mechanics_plan(
 
 def _mechanics_plan_diagnostic(
     request: LayoutRequest,
-    mechanics: CompiledDoorMechanicsV2,
+    mechanics: CompiledDoorMechanics,
     issue: str,
 ) -> LayoutDiagnostic:
     return _diagnostic(
@@ -522,16 +493,18 @@ def _validate_locked_component_ids(
     floor_ids = {floor.id for floor in request.topology.floors}
     room_ids = {room.id for room in request.topology.rooms}
     corridor_ids: set[str] = set()
-    door_ids: set[str] = set()
+    door_ids = {
+        item.id
+        for item in request.mechanics_plan.door_mechanics
+        if item.endpoint is None
+    }
     stair_ids: set[str] = set()
     vertical_link_ids: set[str] = set()
     for connection in request.topology.connections:
         if isinstance(connection, CorridorConnection):
             corridor_ids.add(connection.id)
         elif isinstance(connection, DoorConnection):
-            if request.generator_version not in {"orthogonal-v3", "orthogonal-v4"}:
-                corridor_ids.add(_door_corridor_id(request, connection.id))
-            door_ids.add(connection.id)
+            continue
         elif isinstance(connection, StairConnection):
             stair_ids.update(_stair_ids(request, connection.id))
             vertical_link_ids.add(connection.id)
@@ -593,6 +566,38 @@ def _validate_locked_component_ids(
                     (locked_room.id,),
                     f"Locked room {locked_room.id!r} conflicts with topology fields.",
                     "Use a lock created from the same topology version.",
+                )
+            )
+
+    mechanics_by_id = {
+        item.id: item
+        for item in request.mechanics_plan.door_mechanics
+        if item.endpoint is None
+    }
+    topology_doors = {
+        item.id: item
+        for item in request.topology.connections
+        if isinstance(item, DoorConnection)
+    }
+    for locked_door in request.locked.doors:
+        mechanics = mechanics_by_id.get(locked_door.id)
+        locked_connection = topology_doors.get(locked_door.connection_id)
+        if mechanics is None or locked_connection is None:
+            continue
+        if (
+            mechanics.connection_id != locked_door.connection_id
+            or locked_door.connects_room_ids
+            != (locked_connection.from_room_id, locked_connection.to_room_id)
+            or locked_door.from_hidden != locked_connection.from_hidden
+            or locked_door.to_hidden != locked_connection.to_hidden
+            or locked_door.mechanics != _package_door_mechanics(mechanics)
+        ):
+            diagnostics.append(
+                _diagnostic(
+                    LayoutDiagnosticCode.LOCKED_COMPONENT_CONFLICT,
+                    (locked_door.id, locked_door.connection_id),
+                    f"Locked door {locked_door.id!r} conflicts with compiled intent.",
+                    "Use a lock created from the same compiler and topology version.",
                 )
             )
 
@@ -708,21 +713,12 @@ def _resolve_floor_bounds(
     return resolved
 
 
-def _required_route(route: PolylineGeometry | None) -> PolylineGeometry:
-    """Narrow a guarded corridor route without accepting a partial direct door."""
-
-    assert route is not None
-    return route
-
-
 def _direct_door_pairs(
     request: LayoutRequest,
     floor_id: str,
 ) -> frozenset[frozenset[str]]:
-    """Pairs that must share one wall under modern connection contracts."""
+    """Pairs that must share one wall under the sole V1 connection contract."""
 
-    if request.generator_version not in {"orthogonal-v3", "orthogonal-v4"}:
-        return frozenset()
     rooms = {room.id: room for room in request.topology.rooms}
     return frozenset(
         frozenset((connection.from_room_id, connection.to_room_id))
@@ -784,12 +780,14 @@ def _generate_same_floor_connections(
     layer_by_visibility: dict[Visibility, str],
     random_source: DeterministicRandom,
     diagnostics: list[LayoutDiagnostic],
-) -> tuple[list[CorridorLayout], list[DoorLayout], list[PassageOpening]]:
+) -> tuple[list[CorridorLayout], list[_DoorGeometry], list[PassageOpening]]:
+    """Materialize V1 passages and shared-wall doors without version dispatch."""
+
     topology_rooms = {room.id: room for room in request.topology.rooms}
     locked_corridors = {item.id: item for item in request.locked.corridors}
-    locked_doors = {item.id: item for item in request.locked.doors}
+    locked_doors = {item.connection_id: item for item in request.locked.doors}
     corridors: list[CorridorLayout] = []
-    doors: list[DoorLayout] = []
+    door_geometries: list[_DoorGeometry] = []
     passage_openings: list[PassageOpening] = []
 
     for connection in request.topology.connections:
@@ -805,158 +803,15 @@ def _generate_same_floor_connections(
             source_room.visibility,
             target_room.visibility,
         )
-        is_direct_door = isinstance(
-            connection, DoorConnection
-        ) and request.generator_version in {"orthogonal-v3", "orthogonal-v4"}
-        corridor_id = (
-            connection.id
-            if isinstance(connection, CorridorConnection)
-            else _door_corridor_id(request, connection.id)
-        )
-        locked_corridor = locked_corridors.get(corridor_id)
-        locked_door = (
-            locked_doors.get(connection.id)
-            if isinstance(connection, DoorConnection)
-            else None
-        )
-        if (
-            locked_corridor is not None
-            and not (
-                request.generator_version in {"orthogonal-v3", "orthogonal-v4"}
-                and isinstance(connection, CorridorConnection)
-            )
-            and (not isinstance(connection, DoorConnection) or locked_door is not None)
-        ):
-            corridors.append(locked_corridor)
-            if locked_door is not None:
-                doors.append(locked_door)
-            continue
-
-        floor_rectangles = tuple(
-            room_rects[room.id]
-            for room in request.topology.rooms
-            if room.floor_id == floor_id
-        )
-        passage_route = (
-            route_passage_between_rooms(
-                room_rects[connection.from_room_id],
-                room_rects[connection.to_room_id],
-                floor_rectangles,
-                floor_bounds[floor_id],
-                connection.minimum_width_cells,
-                random_source,
-            )
-            if isinstance(connection, CorridorConnection)
-            and request.generator_version in {"orthogonal-v3", "orthogonal-v4"}
-            else None
-        )
-        uses_explicit_passage_contract = isinstance(
-            connection, CorridorConnection
-        ) and request.generator_version in {"orthogonal-v3", "orthogonal-v4"}
-        route = (
-            None
-            if is_direct_door
-            else (
-                passage_route.path
-                if passage_route is not None
-                else (
-                    None
-                    if uses_explicit_passage_contract
-                    else route_between_rooms(
-                        room_rects[connection.from_room_id],
-                        room_rects[connection.to_room_id],
-                        floor_rectangles,
-                        floor_bounds[floor_id],
-                        connection.minimum_width_cells
-                        if isinstance(connection, CorridorConnection)
-                        else 1,
-                        random_source,
-                    )
-                )
-            )
-        )
-        if route is None and not is_direct_door:
-            diagnostics.append(
-                _diagnostic(
-                    LayoutDiagnosticCode.CONNECTION_ROUTING_FAILED,
-                    (
-                        connection.id,
-                        connection.from_room_id,
-                        connection.to_room_id,
-                    ),
-                    f"Could not route connection {connection.id!r} orthogonally.",
-                    "Increase floor space, move unlocked rooms, or preserve a known "
-                    "working corridor.",
-                )
-            )
-            continue
-        if not is_direct_door:
-            assert route is not None
-
-        if locked_corridor is not None:
-            corridors.append(locked_corridor)
-            if request.generator_version in {"orthogonal-v3", "orthogonal-v4"}:
-                passage_route = _locked_passage_route(
-                    locked_corridor,
-                    room_rects[connection.from_room_id],
-                    room_rects[connection.to_room_id],
-                )
-                if passage_route is None:
-                    diagnostics.append(
-                        _diagnostic(
-                            LayoutDiagnosticCode.LOCKED_COMPONENT_CONFLICT,
-                            (locked_corridor.id,),
-                            f"Locked corridor {locked_corridor.id!r} lacks valid P7-13 "
-                            "endpoint openings.",
-                            "Unlock the corridor or use a lock from the same generator "
-                            "contract.",
-                        )
-                    )
-                    continue
-        elif not is_direct_door:
-            assert route is not None
-            width = (
-                connection.minimum_width_cells
-                if isinstance(connection, CorridorConnection)
-                else 1
-            )
-            corridors.append(
-                CorridorLayout(
-                    id=corridor_id,
-                    layer_id=layer_by_visibility[layout_visibility],
-                    floor_id=floor_id,
-                    path=route,
-                    width_cells=width,
-                    connects_room_ids=(
-                        connection.from_room_id,
-                        connection.to_room_id,
-                    ),
-                    visibility=layout_visibility,
-                )
-            )
-
-        if request.generator_version in {
-            "orthogonal-v3",
-            "orthogonal-v4",
-        } and isinstance(connection, CorridorConnection):
-            assert passage_route is not None
-            passage_openings.extend(
-                _passage_openings_for_connection(request, connection.id, passage_route)
-            )
 
         if isinstance(connection, DoorConnection):
-            if locked_door is not None:
-                doors.append(locked_door)
-                continue
+            locked_door = locked_doors.get(connection.id)
             segment = (
-                door_segment_between_rects(
+                locked_door.segment
+                if locked_door is not None
+                else door_segment_between_rects(
                     room_rects[connection.from_room_id],
                     room_rects[connection.to_room_id],
-                )
-                if is_direct_door
-                else door_segment_at_anchor(
-                    room_rects[connection.from_room_id],
-                    _required_route(route).points[0],
                 )
             )
             if segment is None:
@@ -964,17 +819,15 @@ def _generate_same_floor_connections(
                     _diagnostic(
                         LayoutDiagnosticCode.CONNECTION_ROUTING_FAILED,
                         (connection.id, connection.from_room_id),
-                        f"Door {connection.id!r} could not align to its room boundary.",
-                        "Regenerate the route or unlock the source room.",
+                        f"Door {connection.id!r} could not align to a shared wall.",
+                        "Regenerate the route or unlock the connected rooms.",
                     )
                 )
                 continue
-            doors.append(
-                DoorLayout(
-                    id=connection.id,
-                    layer_id=layer_by_visibility[layout_visibility],
+            door_geometries.append(
+                _DoorGeometry(
+                    connection_id=connection.id,
                     floor_id=floor_id,
-                    door_type=connection.door_type,
                     segment=segment,
                     connects_room_ids=(
                         connection.from_room_id,
@@ -982,12 +835,77 @@ def _generate_same_floor_connections(
                     ),
                     from_hidden=connection.from_hidden,
                     to_hidden=connection.to_hidden,
-                    gate_id=connection.gate_id,
-                    hazard_id=connection.trap_id,
+                )
+            )
+            continue
+
+        locked_corridor = locked_corridors.get(connection.id)
+        floor_rectangles = tuple(
+            room_rects[room.id]
+            for room in request.topology.rooms
+            if room.floor_id == floor_id
+        )
+        if locked_corridor is not None:
+            passage_route = _locked_passage_route(
+                locked_corridor,
+                room_rects[connection.from_room_id],
+                room_rects[connection.to_room_id],
+            )
+            if passage_route is None:
+                diagnostics.append(
+                    _diagnostic(
+                        LayoutDiagnosticCode.LOCKED_COMPONENT_CONFLICT,
+                        (locked_corridor.id,),
+                        f"Locked corridor {locked_corridor.id!r} lacks valid V1 "
+                        "endpoint openings.",
+                        "Unlock the corridor or use a lock from the V1 generator.",
+                    )
+                )
+                continue
+            corridors.append(locked_corridor)
+        else:
+            passage_route = route_passage_between_rooms(
+                room_rects[connection.from_room_id],
+                room_rects[connection.to_room_id],
+                floor_rectangles,
+                floor_bounds[floor_id],
+                connection.minimum_width_cells,
+                random_source,
+            )
+            if passage_route is None:
+                diagnostics.append(
+                    _diagnostic(
+                        LayoutDiagnosticCode.CONNECTION_ROUTING_FAILED,
+                        (
+                            connection.id,
+                            connection.from_room_id,
+                            connection.to_room_id,
+                        ),
+                        f"Could not route connection {connection.id!r} orthogonally.",
+                        "Increase floor space, move unlocked rooms, or preserve a known "
+                        "working corridor.",
+                    )
+                )
+                continue
+            corridors.append(
+                CorridorLayout(
+                    id=connection.id,
+                    layer_id=layer_by_visibility[layout_visibility],
+                    floor_id=floor_id,
+                    path=passage_route.path,
+                    width_cells=connection.minimum_width_cells,
+                    connects_room_ids=(
+                        connection.from_room_id,
+                        connection.to_room_id,
+                    ),
                     visibility=layout_visibility,
                 )
             )
-    return corridors, doors, passage_openings
+        passage_openings.extend(
+            _passage_openings_for_connection(request, connection.id, passage_route)
+        )
+
+    return corridors, door_geometries, passage_openings
 
 
 def _passage_openings_for_connection(
@@ -1056,39 +974,39 @@ def _locked_passage_route(
 
 def _generate_mechanics_aware_doors(
     request: LayoutRequest,
-    legacy_doors: list[DoorLayout],
+    door_geometries: list[_DoorGeometry],
     vertical_links: list[VerticalLinkLayout],
     layer_by_visibility: dict[Visibility, str],
     diagnostics: list[LayoutDiagnostic],
-) -> tuple[list[DoorLayoutV2], list[VerticalEndpointDoorLayoutV2]]:
+) -> tuple[list[MechanicDoorLayout], list[VerticalEndpointDoorLayout]]:
     """Attach compiler-pinned mechanics to the exact openings chosen by layout."""
 
-    if request.generator_version != "orthogonal-v4":
-        return [], []
-    assert request.mechanics_plan is not None
     mechanics_by_connection = {
         item.connection_id: item
         for item in request.mechanics_plan.door_mechanics
         if item.endpoint is None
     }
     topology_rooms = {item.id: item for item in request.topology.rooms}
-    composable_doors: list[DoorLayoutV2] = []
-    for door in legacy_doors:
-        mechanics = mechanics_by_connection.get(door.id)
+    locked_doors = {item.connection_id: item for item in request.locked.doors}
+    composable_doors: list[MechanicDoorLayout] = []
+    for door in door_geometries:
+        mechanics = mechanics_by_connection.get(door.connection_id)
         if mechanics is None:
             diagnostics.append(
                 _diagnostic(
                     LayoutDiagnosticCode.MECHANICS_PLAN_INVALID,
-                    (door.id,),
-                    f"Same-floor door {door.id!r} has no compiled mechanics record.",
+                    (door.connection_id,),
+                    f"Same-floor door {door.connection_id!r} has no compiled mechanics record.",
                     "Recompile the design instead of editing its mechanics plan.",
                 )
             )
             continue
-        # The legacy topology projection marks trapped doors DM-only because its
-        # exclusive DoorType cannot separate geometry from mechanics. V4 can: derive
-        # publication from endpoint/room discovery and let player renderers normalize
-        # all mechanics to an ordinary door without emitting mechanic data.
+        locked_door = locked_doors.get(door.connection_id)
+        if locked_door is not None:
+            composable_doors.append(locked_door)
+            continue
+        # Derive geometry publication from endpoint/room discovery. Player renderers
+        # normalize mechanics to an ordinary door without emitting mechanic data.
         from_room, to_room = (topology_rooms[item] for item in door.connects_room_ids)
         visibility = _connection_layout_visibility(
             door.from_hidden,
@@ -1098,9 +1016,9 @@ def _generate_mechanics_aware_doors(
             to_room.visibility,
         )
         composable_doors.append(
-            DoorLayoutV2(
+            MechanicDoorLayout(
                 id=mechanics.id,
-                connection_id=door.id,
+                connection_id=door.connection_id,
                 layer_id=layer_by_visibility[visibility],
                 floor_id=door.floor_id,
                 segment=door.segment,
@@ -1114,7 +1032,7 @@ def _generate_mechanics_aware_doors(
 
     links = {item.id: item for item in vertical_links}
     connections = {item.id: item for item in request.topology.connections}
-    endpoint_doors: list[VerticalEndpointDoorLayoutV2] = []
+    endpoint_doors: list[VerticalEndpointDoorLayout] = []
     for mechanics in request.mechanics_plan.door_mechanics:
         if mechanics.endpoint is None:
             continue
@@ -1152,7 +1070,7 @@ def _generate_mechanics_aware_doors(
             continue
         visibility = endpoint.visibility
         endpoint_doors.append(
-            VerticalEndpointDoorLayoutV2(
+            VerticalEndpointDoorLayout(
                 id=mechanics.id,
                 layer_id=layer_by_visibility[visibility],
                 vertical_link_id=mechanics.connection_id,
@@ -1173,36 +1091,33 @@ def _generate_room_mechanic_markers(
     room_rects: dict[str, Rect],
     layer_by_visibility: dict[Visibility, str],
     diagnostics: list[LayoutDiagnostic],
-) -> list[RoomMechanicMarkerV2]:
+) -> list[RoomMechanicMarker]:
     """Choose stable, distinct interior cells for compiler-pinned room mechanics."""
 
-    if request.generator_version != "orthogonal-v4":
-        return []
-    assert request.mechanics_plan is not None
     rooms = {item.id: item for item in request.topology.rooms}
     planned = [
         *(
-            (item.id, item.room_id, RoomMechanicMarkerKindV2.TRAP)
+            (item.id, item.room_id, RoomMechanicMarkerKind.TRAP)
             for item in request.mechanics_plan.room_traps
         ),
         *(
-            (item.id, item.room_id, RoomMechanicMarkerKindV2.PUZZLE)
+            (item.id, item.room_id, RoomMechanicMarkerKind.PUZZLE)
             for item in request.mechanics_plan.room_puzzles
         ),
         *(
-            (item.id, item.room_id, RoomMechanicMarkerKindV2.FEATURE)
+            (item.id, item.room_id, RoomMechanicMarkerKind.FEATURE)
             for item in request.mechanics_plan.room_features
         ),
         *(
-            (item.id, item.room_id, RoomMechanicMarkerKindV2.OBJECTIVE)
+            (item.id, item.room_id, RoomMechanicMarkerKind.OBJECTIVE)
             for item in request.mechanics_plan.room_objectives
         ),
     ]
-    by_room: dict[str, list[tuple[str, RoomMechanicMarkerKindV2]]] = {}
+    by_room: dict[str, list[tuple[str, RoomMechanicMarkerKind]]] = {}
     for marker_id, room_id, kind in planned:
         by_room.setdefault(room_id, []).append((marker_id, kind))
 
-    markers: list[RoomMechanicMarkerV2] = []
+    markers: list[RoomMechanicMarker] = []
     for room_id, room_markers in sorted(by_room.items()):
         rect = room_rects.get(room_id)
         room = rooms.get(room_id)
@@ -1243,12 +1158,12 @@ def _generate_room_mechanic_markers(
         for (marker_id, kind), position in zip(ordered_markers, cells, strict=False):
             visibility = (
                 Visibility.DM_ONLY
-                if kind is RoomMechanicMarkerKindV2.TRAP
+                if kind is RoomMechanicMarkerKind.TRAP
                 or room.visibility is Visibility.DM_ONLY
                 else Visibility.PLAYER_SAFE
             )
             markers.append(
-                RoomMechanicMarkerV2(
+                RoomMechanicMarker(
                     id=marker_id,
                     layer_id=layer_by_visibility[visibility],
                     floor_id=room.floor_id,
@@ -1267,9 +1182,6 @@ def _generate_encounter_slots(
 ) -> list[EncounterSlot]:
     """Materialize stable room-local slots without composing encounters."""
 
-    if request.generator_version != "orthogonal-v4":
-        return []
-    assert request.mechanics_plan is not None
     rooms = {item.id: item for item in request.topology.rooms}
     return [
         EncounterSlot(
@@ -1287,9 +1199,9 @@ def _generate_encounter_slots(
 
 
 def _package_door_mechanics(
-    mechanics: CompiledDoorMechanicsV2,
-) -> ComposableDoorMechanicsV2:
-    return ComposableDoorMechanicsV2(
+    mechanics: CompiledDoorMechanics,
+) -> DoorMechanics:
+    return DoorMechanics(
         concealed=mechanics.concealed,
         gate_id=mechanics.gate_id,
         gate_kind=mechanics.gate_kind,
@@ -1489,15 +1401,6 @@ def _generate_role_anchors(
 def _center_point(rect: Rect) -> GridPoint:
     center_x, center_y = rect.center
     return GridPoint(x=center_x, y=center_y)
-
-
-def _door_corridor_id(request: LayoutRequest, connection_id: str) -> str:
-    return derive_component_id(
-        "corridor",
-        request.package_id,
-        request.generator_version,
-        f"door-corridor:{connection_id}",
-    )
 
 
 def _stair_ids(request: LayoutRequest, connection_id: str) -> tuple[str, str]:

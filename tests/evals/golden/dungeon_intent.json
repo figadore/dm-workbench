@@ -7,9 +7,9 @@
       "one_floor"
     ],
     "proposal": {
-      "proposal_version": "2",
+      "proposal_version": "1",
       "design": {
-        "schema_version": "2.4.0",
+        "schema_version": "1.0.0",
         "title": "Salt Cellar",
         "premise": "Synthetic sealed ledger.",
         "themes": [
@@ -60,9 +60,9 @@
       "two_floor"
     ],
     "proposal": {
-      "proposal_version": "2",
+      "proposal_version": "1",
       "design": {
-        "schema_version": "2.4.0",
+        "schema_version": "1.0.0",
         "title": "Twin Crypt",
         "premise": "Synthetic vertical descent.",
         "themes": [
@@ -120,9 +120,9 @@
       "two_floor"
     ],
     "proposal": {
-      "proposal_version": "2",
+      "proposal_version": "1",
       "design": {
-        "schema_version": "2.4.0",
+        "schema_version": "1.0.0",
         "title": "Hidden Well",
         "premise": "Synthetic concealed descent.",
         "themes": [
@@ -192,9 +192,9 @@
       "loop"
     ],
     "proposal": {
-      "proposal_version": "2",
+      "proposal_version": "1",
       "design": {
-        "schema_version": "2.4.0",
+        "schema_version": "1.0.0",
         "title": "Loop Hall",
         "premise": "Synthetic looping route.",
         "themes": [
@@ -271,9 +271,9 @@
       "gate"
     ],
     "proposal": {
-      "proposal_version": "2",
+      "proposal_version": "1",
       "design": {
-        "schema_version": "2.4.0",
+        "schema_version": "1.0.0",
         "title": "Riddle Door",
         "premise": "Synthetic clue before puzzle gate.",
         "themes": [
@@ -336,9 +336,9 @@
       "trap"
     ],
     "proposal": {
-      "proposal_version": "2",
+      "proposal_version": "1",
       "design": {
-        "schema_version": "2.4.0",
+        "schema_version": "1.0.0",
         "title": "Needle Door",
         "premise": "Synthetic trapped access.",
         "themes": [
@@ -396,9 +396,9 @@
       "hidden"
     ],
     "proposal": {
-      "proposal_version": "2",
+      "proposal_version": "1",
       "design": {
-        "schema_version": "2.4.0",
+        "schema_version": "1.0.0",
         "title": "Side Chamber",
         "premise": "Synthetic optional chamber.",
         "themes": [
@@ -467,10 +467,10 @@
       "named_final_objective"
     ],
     "proposal": {
-      "proposal_version": "2",
+      "proposal_version": "1",
       "intent_summary": "A synthetic relic objective.",
       "design": {
-        "schema_version": "2.4.0",
+        "schema_version": "1.0.0",
         "title": "Relic Vault",
         "premise": "Synthetic final relic.",
         "themes": [
@@ -520,9 +520,9 @@
       "repair"
     ],
     "proposal": {
-      "proposal_version": "2",
+      "proposal_version": "1",
       "design": {
-        "schema_version": "2.4.0",
+        "schema_version": "1.0.0",
         "title": "Bad Ref",
         "premise": "Synthetic invalid reference.",
         "themes": [
@@ -564,9 +564,9 @@
       }
     },
     "repair_proposal": {
-      "proposal_version": "2",
+      "proposal_version": "1",
       "design": {
-        "schema_version": "2.4.0",
+        "schema_version": "1.0.0",
         "title": "Good Ref",
         "premise": "Synthetic repaired reference.",
         "themes": [
@@ -616,7 +616,7 @@
       "abstention"
     ],
     "proposal": {
-      "proposal_version": "2",
+      "proposal_version": "1",
       "abstention": {
         "kind": "conflicting_direction"
       }

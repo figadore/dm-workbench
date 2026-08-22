@@ -47,7 +47,7 @@ from dm_assistant.orchestration.dungeons.prompting import (
 from dm_assistant.orchestration.modeling import ModelRunAbstained
 
 _TASK_NAME = "dungeon_generation_intent_v1"
-_POLICY = "dungeon-task-baseline-v2"
+_POLICY = "dungeon-task-baseline-v1"
 logger = get_logger(__name__)
 
 

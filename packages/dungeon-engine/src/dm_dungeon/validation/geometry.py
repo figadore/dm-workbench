@@ -4,19 +4,16 @@ from collections.abc import Iterable
 
 from dm_dungeon.contracts.geometry import (
     CorridorLayout,
-    DoorLayout,
     GridPoint,
     GridSegment,
     PolygonGeometry,
     RectangleGeometry,
 )
-from dm_dungeon.contracts.package import DungeonPackage
-from dm_dungeon.contracts.package_v2 import (
-    DoorLayoutV2,
-    DungeonPackageV2,
+from dm_dungeon.contracts.package import (
+    DungeonPackage,
     PassageApproachDirection,
     PassageOpening,
-    RoomMechanicMarkerV2,
+    RoomMechanicMarker,
 )
 from dm_dungeon.contracts.topology import (
     CorridorConnection,
@@ -48,9 +45,8 @@ def validate_geometry(package: DungeonPackage) -> GeometryValidationReport:
     _validate_grid_scale(package, diagnostics)
     _validate_room_geometry(package, grid, diagnostics)
     _validate_corridors(package, grid, diagnostics)
-    if isinstance(package, DungeonPackageV2):
-        _validate_v2_passage_geometry(package, grid, diagnostics)
-        _validate_v2_direct_doors(package, diagnostics)
+    _validate_passage_geometry(package, grid, diagnostics)
+    _validate_direct_doors(package, diagnostics)
     _validate_doors(package, diagnostics)
     _validate_floor_transitions(package, grid, diagnostics)
     _validate_other_geometry_bounds(package, grid, diagnostics)
@@ -309,12 +305,12 @@ def _validate_corridors(
             )
 
 
-def _validate_v2_passage_geometry(
-    package: DungeonPackageV2,
+def _validate_passage_geometry(
+    package: DungeonPackage,
     grid: WalkableGrid,
     diagnostics: list[GeometryDiagnostic],
 ) -> None:
-    """Enforce P7-13 openings, endpoint leads, and room-clear passages."""
+    """Enforce V1 openings, endpoint leads, and room-clear passages."""
     rooms = {room.id: room for room in package.rooms}
     openings_by_corridor: dict[str, dict[str, PassageOpening]] = {}
     for opening in package.passage_openings:
@@ -427,25 +423,19 @@ def _validate_v2_passage_geometry(
             )
 
 
-def _validate_v2_direct_doors(
-    package: DungeonPackageV2,
+def _validate_direct_doors(
+    package: DungeonPackage,
     diagnostics: list[GeometryDiagnostic],
 ) -> None:
-    """Require every P7-13 door to be a corridor-free shared-wall opening."""
+    """Require every V1 door to be a corridor-free shared-wall opening."""
     rooms = {room.id: room for room in package.rooms}
     corridors_by_rooms = {
         frozenset(item.connects_room_ids) for item in package.corridors
     }
-    direct_doors: tuple[DoorLayoutV2 | DoorLayout, ...]
-    doors_by_connection_id: dict[str, DoorLayoutV2 | DoorLayout]
-    if package.composable_doors:
-        direct_doors = package.composable_doors
-        doors_by_connection_id = {
-            door.connection_id: door for door in package.composable_doors
-        }
-    else:
-        direct_doors = package.doors
-        doors_by_connection_id = {door.id: door for door in package.doors}
+    direct_doors = package.composable_doors
+    doors_by_connection_id = {
+        door.connection_id: door for door in package.composable_doors
+    }
     for connection in package.topology.connections:
         if not isinstance(connection, DoorConnection):
             continue
@@ -530,7 +520,7 @@ def _validate_doors(
 ) -> None:
     rooms = {room.id: room for room in package.rooms}
     floors = {floor.id: floor for floor in package.floors}
-    for door in package.doors:
+    for door in package.composable_doors:
         segment = door.segment
         length = _segment_length(segment)
         if length < 1:
@@ -724,9 +714,7 @@ def _validate_other_geometry_bounds(
                 )
             )
 
-    room_markers: tuple[RoomMechanicMarkerV2, ...] = (
-        package.room_mechanic_markers if isinstance(package, DungeonPackageV2) else ()
-    )
+    room_markers: tuple[RoomMechanicMarker, ...] = package.room_mechanic_markers
     point_elements = (
         *((item.id, item.floor_id, item.position) for item in package.labels),
         *((item.id, item.floor_id, item.position) for item in package.position_anchors),

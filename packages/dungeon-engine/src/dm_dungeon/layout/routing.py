@@ -4,7 +4,7 @@ from collections import deque
 from dataclasses import dataclass
 
 from dm_dungeon.contracts.geometry import GridPoint, GridSegment, PolylineGeometry
-from dm_dungeon.contracts.package_v2 import PassageApproachDirection
+from dm_dungeon.contracts.package import PassageApproachDirection
 from dm_dungeon.layout.contracts import FloorLayoutBounds
 from dm_dungeon.layout.placement import Rect
 from dm_dungeon.layout.random_source import DeterministicRandom

@@ -10,18 +10,18 @@ from dm_dungeon.validation import (
 )
 
 
-def test_synthetic_sanctum_satisfies_small_spatial_query(
+def test_synthetic_entrance_satisfies_small_spatial_query(
     synthetic_package: DungeonPackage,
 ) -> None:
     start_anchor = next(
         anchor
         for anchor in synthetic_package.position_anchors
-        if anchor.id == "anchor_guardian_start"
+        if anchor.room_id == "room_entrance"
     )
     query = EncounterFitQuery(
         schema_version="1.0.0",
         package_id=synthetic_package.id,
-        room_id="room_sanctum",
+        room_id="room_entrance",
         footprints=(
             FootprintRequirement(
                 id="guardian_group",
@@ -31,8 +31,8 @@ def test_synthetic_sanctum_satisfies_small_spatial_query(
         ),
         starting_anchor_ids=(start_anchor.id,),
         objective_anchor_ids=(),
-        minimum_range_cells=4,
-        minimum_cover_features=1,
+        minimum_range_cells=2,
+        minimum_cover_features=0,
     )
 
     result = evaluate_encounter_fit(synthetic_package, query)
@@ -41,7 +41,7 @@ def test_synthetic_sanctum_satisfies_small_spatial_query(
     assert result.metrics is not None
     assert result.metrics.usable_cell_count >= 4
     assert result.metrics.required_footprint_cell_count == 4
-    assert result.metrics.cover_feature_ids == ("feature_sanctum_pillar",)
+    assert result.metrics.cover_feature_ids == ()
     assert result.metrics.reachable_starting_anchor_ids == (start_anchor.id,)
 
 

@@ -1,4 +1,4 @@
-"""Synthetic, provider-free evaluation for compact Dungeon intent V2.
+"""Synthetic, provider-free evaluation for compact alpha V1 dungeon intent.
 
 This deliberately evaluates model-shaped submissions without starting preparation
 runs or calling a provider.  Live comparisons are an explicit operator action,
@@ -12,13 +12,13 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from dm_assistant.orchestration.dungeons.contracts import DungeonGenerationProposalV2
+from dm_assistant.orchestration.dungeons.contracts import DungeonGenerationProposal
 from dm_dungeon import (
     DungeonDesignCompileResult,
     LayoutRequest,
     RenderAudience,
     SvgRenderRequest,
-    compile_dungeon_design_v2,
+    compile_dungeon_design,
     generate_layout,
     render_svg,
     validate_geometry,
@@ -31,22 +31,22 @@ class _EvalModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
-DUNGEON_INTENT_V2_EVAL_POLICY = "dungeon-intent-v2-eval"
+DUNGEON_INTENT_EVAL_POLICY = "dungeon-intent-eval"
 """Explicit non-default policy name for isolated model comparison evidence."""
 
 
-class DungeonIntentV2EvalCase(_EvalModel):
+class DungeonIntentEvalCase(_EvalModel):
     """One synthetic model submission and, optionally, its bounded repair."""
 
     case_id: str = Field(pattern=r"^[a-z0-9_]+$")
     prompt: str = Field(min_length=1, max_length=4_000)
-    proposal: DungeonGenerationProposalV2
-    repair_proposal: DungeonGenerationProposalV2 | None = None
+    proposal: DungeonGenerationProposal
+    repair_proposal: DungeonGenerationProposal | None = None
     expected_first_pass: Literal["accepted", "rejected", "abstained"]
     expected_semantics: tuple[str, ...] = ()
 
 
-class DungeonIntentV2EvalResult(_EvalModel):
+class DungeonIntentEvalResult(_EvalModel):
     case_id: str
     # Fixture parsing proves the tool payload/schema contract; `first_pass`
     # separately records compiler/preflight acceptance.
@@ -61,7 +61,7 @@ class DungeonIntentV2EvalResult(_EvalModel):
     diagnostics: tuple[str, ...]
 
 
-class DungeonIntentV2EvalSummary(_EvalModel):
+class DungeonIntentEvalSummary(_EvalModel):
     case_count: int
     first_pass_schema_valid_rate: float
     first_pass_compile_valid_rate: float
@@ -73,56 +73,21 @@ class DungeonIntentV2EvalSummary(_EvalModel):
     passes_synthetic_thresholds: bool
 
 
-class DungeonIntentComparisonObservation(_EvalModel):
-    """Body-free observation from one independently executed V1 or V2 run."""
-
-    case_id: str = Field(pattern=r"^[a-z0-9_]+$")
-    generation_version: Literal["v1", "v2"]
-    provider_response_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    tool_compliant: bool
-    first_pass_schema_valid: bool
-    first_pass_compile_valid: bool
-    accepted_after_one_repair: bool
-    requested_semantics_preserved: bool
-    deterministic_package_valid: bool
-    player_secret_leak: bool
-    input_tokens: int | None = Field(default=None, ge=0)
-    output_tokens: int | None = Field(default=None, ge=0)
-    latency_milliseconds: int | None = Field(default=None, ge=0)
-    dm_edited: bool | None = None
-
-
-class DungeonIntentComparisonSummary(_EvalModel):
-    generation_version: Literal["v1", "v2"]
-    case_count: int
-    tool_compliance_rate: float
-    first_pass_schema_valid_rate: float
-    first_pass_compile_valid_rate: float
-    accepted_after_one_repair_rate: float
-    semantics_preserved_rate: float
-    package_valid_rate: float
-    player_secret_leak_count: int
-    measured_input_tokens: int | None
-    measured_output_tokens: int | None
-    measured_latency_milliseconds: int | None
-    dm_edit_count: int | None
-
-
-def evaluate_dungeon_intent_v2_cases(
-    cases: tuple[DungeonIntentV2EvalCase, ...],
-) -> tuple[DungeonIntentV2EvalResult, ...]:
+def evaluate_dungeon_intent_cases(
+    cases: tuple[DungeonIntentEvalCase, ...],
+) -> tuple[DungeonIntentEvalResult, ...]:
     """Run only pure compiler/layout validation against frozen synthetic inputs."""
     return tuple(
         _evaluate_case(case) for case in sorted(cases, key=lambda case: case.case_id)
     )
 
 
-def summarize_dungeon_intent_v2_evals(
-    results: tuple[DungeonIntentV2EvalResult, ...],
-) -> DungeonIntentV2EvalSummary:
+def summarize_dungeon_intent_evals(
+    results: tuple[DungeonIntentEvalResult, ...],
+) -> DungeonIntentEvalSummary:
     """Apply the documented objective gates; no live/provider metric is invented."""
     if not results:
-        raise ValueError("at least one dungeon V2 eval result is required")
+        raise ValueError("at least one dungeon eval result is required")
     count = len(results)
     schema_rate = sum(item.first_pass_schema_valid for item in results) / count
     compile_rate = sum(item.first_pass == "accepted" for item in results) / count
@@ -137,7 +102,7 @@ def summarize_dungeon_intent_v2_evals(
     replay_rate = sum(item.deterministic_replay for item in results) / count
     leaks = sum(item.player_secret_leak for item in results)
     outcomes_match = all(item.expected_first_pass_matches for item in results)
-    return DungeonIntentV2EvalSummary(
+    return DungeonIntentEvalSummary(
         case_count=count,
         first_pass_schema_valid_rate=schema_rate,
         first_pass_compile_valid_rate=compile_rate,
@@ -157,94 +122,13 @@ def summarize_dungeon_intent_v2_evals(
     )
 
 
-def compare_dungeon_intent_versions(
-    observations: tuple[DungeonIntentComparisonObservation, ...],
-) -> tuple[DungeonIntentComparisonSummary, ...]:
-    """Summarize independently captured V1/V2 observations without raw bodies.
-
-    The caller executes each version separately. This function intentionally has
-    no gateway, persistence, or prompt-context inputs, preventing a response
-    from one model run from becoming input to the other.
-    """
-    if not observations:
-        raise ValueError("at least one comparison observation is required")
-    by_version: dict[Literal["v1", "v2"], list[DungeonIntentComparisonObservation]] = {
-        "v1": [],
-        "v2": [],
-    }
-    for observation in observations:
-        by_version[observation.generation_version].append(observation)
-    if not by_version["v1"] or not by_version["v2"]:
-        raise ValueError(
-            "comparison requires at least one independent V1 and V2 observation"
-        )
-    case_ids: dict[str, set[str]] = {}
-    for version, items in by_version.items():
-        ids = [item.case_id for item in items]
-        if len(ids) != len(set(ids)):
-            raise ValueError(f"comparison contains duplicate {version} case IDs")
-        case_ids[version] = set(ids)
-    if case_ids["v1"] != case_ids["v2"]:
-        raise ValueError("comparison requires matching V1 and V2 case IDs")
-    return (
-        _comparison_summary("v1", by_version["v1"]),
-        _comparison_summary("v2", by_version["v2"]),
-    )
-
-
-def _comparison_summary(
-    version: Literal["v1", "v2"],
-    items: list[DungeonIntentComparisonObservation],
-) -> DungeonIntentComparisonSummary:
-    count = len(items)
-
-    def rate(field: str) -> float:
-        return sum(bool(getattr(item, field)) for item in items) / count
-
-    input_tokens = [item.input_tokens for item in items]
-    output_tokens = [item.output_tokens for item in items]
-    latency = [item.latency_milliseconds for item in items]
-    edits = [item.dm_edited for item in items]
-    return DungeonIntentComparisonSummary(
-        generation_version=version,
-        case_count=count,
-        tool_compliance_rate=rate("tool_compliant"),
-        first_pass_schema_valid_rate=rate("first_pass_schema_valid"),
-        first_pass_compile_valid_rate=rate("first_pass_compile_valid"),
-        accepted_after_one_repair_rate=rate("accepted_after_one_repair"),
-        semantics_preserved_rate=rate("requested_semantics_preserved"),
-        package_valid_rate=rate("deterministic_package_valid"),
-        player_secret_leak_count=sum(item.player_secret_leak for item in items),
-        measured_input_tokens=(
-            sum(item or 0 for item in input_tokens)
-            if all(item is not None for item in input_tokens)
-            else None
-        ),
-        measured_output_tokens=(
-            sum(item or 0 for item in output_tokens)
-            if all(item is not None for item in output_tokens)
-            else None
-        ),
-        measured_latency_milliseconds=(
-            sum(item or 0 for item in latency)
-            if all(item is not None for item in latency)
-            else None
-        ),
-        dm_edit_count=(
-            sum(bool(item) for item in edits)
-            if all(item is not None for item in edits)
-            else None
-        ),
-    )
-
-
-def render_dungeon_intent_v2_eval_report(
-    summary: DungeonIntentV2EvalSummary,
+def render_dungeon_intent_eval_report(
+    summary: DungeonIntentEvalSummary,
 ) -> str:
     """Produce a stable body-free report suitable for review or CI artifacts."""
     return "\n".join(
         (
-            "Dungeon intent V2 synthetic evaluation",
+            "Dungeon intent V1 synthetic evaluation",
             f"cases: {summary.case_count}",
             f"first-pass schema-valid rate: {summary.first_pass_schema_valid_rate:.0%}",
             f"first-pass compile-valid rate: {summary.first_pass_compile_valid_rate:.0%}",
@@ -258,13 +142,13 @@ def render_dungeon_intent_v2_eval_report(
     )
 
 
-def _evaluate_case(case: DungeonIntentV2EvalCase) -> DungeonIntentV2EvalResult:
+def _evaluate_case(case: DungeonIntentEvalCase) -> DungeonIntentEvalResult:
     first_pass = _proposal_status(case.proposal)
     proposal = case.proposal
     if first_pass == "rejected" and case.repair_proposal is not None:
         proposal = case.repair_proposal
     if proposal.abstention is not None:
-        return DungeonIntentV2EvalResult(
+        return DungeonIntentEvalResult(
             case_id=case.case_id,
             first_pass_schema_valid=True,
             first_pass="abstained",
@@ -277,9 +161,9 @@ def _evaluate_case(case: DungeonIntentV2EvalCase) -> DungeonIntentV2EvalResult:
             diagnostics=("proposal.abstained",),
         )
     assert proposal.design is not None
-    compiled = compile_dungeon_design_v2(proposal.design)
+    compiled = compile_dungeon_design(proposal.design)
     if not compiled.accepted:
-        return DungeonIntentV2EvalResult(
+        return DungeonIntentEvalResult(
             case_id=case.case_id,
             first_pass_schema_valid=True,
             first_pass=first_pass,
@@ -291,7 +175,7 @@ def _evaluate_case(case: DungeonIntentV2EvalCase) -> DungeonIntentV2EvalResult:
             player_secret_leak=False,
             diagnostics=tuple(item.code for item in compiled.diagnostics),
         )
-    replay = compile_dungeon_design_v2(proposal.design)
+    replay = compile_dungeon_design(proposal.design)
     assert compiled.topology is not None and compiled.brief is not None
     request = _layout_request(compiled, case.case_id)
     layout = generate_layout(request)
@@ -322,7 +206,7 @@ def _evaluate_case(case: DungeonIntentV2EvalCase) -> DungeonIntentV2EvalResult:
             for components in (
                 layout.package.rooms,
                 layout.package.corridors,
-                layout.package.doors,
+                layout.package.composable_doors,
                 layout.package.stairs,
                 layout.package.vertical_links,
                 layout.package.features,
@@ -333,7 +217,7 @@ def _evaluate_case(case: DungeonIntentV2EvalCase) -> DungeonIntentV2EvalResult:
             if component.visibility.value == "dm_only"
         }
         player_secret_leak = bool(rendered_ids & dm_only_ids)
-    return DungeonIntentV2EvalResult(
+    return DungeonIntentEvalResult(
         case_id=case.case_id,
         first_pass_schema_valid=True,
         first_pass=first_pass,
@@ -350,7 +234,7 @@ def _evaluate_case(case: DungeonIntentV2EvalCase) -> DungeonIntentV2EvalResult:
 
 
 def _preserves_expected_semantics(
-    case: DungeonIntentV2EvalCase,
+    case: DungeonIntentEvalCase,
     compiled: DungeonDesignCompileResult,
     first_pass: Literal["accepted", "rejected", "abstained"],
 ) -> bool:
@@ -413,15 +297,13 @@ def _preserves_expected_semantics(
 
 
 def _proposal_status(
-    proposal: DungeonGenerationProposalV2,
+    proposal: DungeonGenerationProposal,
 ) -> Literal["accepted", "rejected", "abstained"]:
     if proposal.abstention is not None:
         return "abstained"
     assert proposal.design is not None
     return (
-        "accepted"
-        if compile_dungeon_design_v2(proposal.design).accepted
-        else "rejected"
+        "accepted" if compile_dungeon_design(proposal.design).accepted else "rejected"
     )
 
 

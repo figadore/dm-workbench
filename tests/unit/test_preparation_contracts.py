@@ -111,7 +111,7 @@ def test_generation_run_requires_schema_versions_and_strict_tool_pins() -> None:
         seed=42,
         context=context_pin(),
         schema_versions={"dungeon_package": "1.0.0"},
-        generator_versions={"layout": "orthogonal-v2"},
+        generator_versions={"layout": "orthogonal-v1"},
         renderer_versions={"svg": "svg-v1"},
         tool_runs=(
             ToolRunPin(

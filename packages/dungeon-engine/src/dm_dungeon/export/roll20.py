@@ -5,9 +5,7 @@ import io
 import zipfile
 from collections.abc import Iterable
 
-from dm_dungeon.contracts.geometry import DoorLayout
-from dm_dungeon.contracts.package import DungeonPackage
-from dm_dungeon.contracts.package_v2 import DoorLayoutV2, DungeonPackageV2
+from dm_dungeon.contracts.package import DungeonPackage, MechanicDoorLayout
 from dm_dungeon.contracts.topology import DoorType
 from dm_dungeon.export.contracts import (
     ExportDiagnostic,
@@ -37,24 +35,20 @@ from dm_dungeon.validation.diagnostics import DiagnosticSeverity
 
 
 def _roll20_door_type(
-    door: DoorLayoutV2 | DoorLayout,
+    door: MechanicDoorLayout,
     audience: RenderAudience,
 ) -> DoorType:
     """Expose only player-safe door state in Roll20 metadata."""
 
-    if isinstance(door, DoorLayoutV2):
-        if audience is RenderAudience.PLAYER:
-            return DoorType.NORMAL
-        if door.mechanics.concealed:
-            return DoorType.SECRET
-        if door.mechanics.trap_id is not None:
-            return DoorType.TRAPPED
-        if door.mechanics.gate_id is not None:
-            return DoorType.LOCKED
+    if audience is RenderAudience.PLAYER:
         return DoorType.NORMAL
-    if audience is RenderAudience.PLAYER and door.door_type is DoorType.SECRET:
-        return DoorType.NORMAL
-    return door.door_type
+    if door.mechanics.concealed:
+        return DoorType.SECRET
+    if door.mechanics.trap_id is not None:
+        return DoorType.TRAPPED
+    if door.mechanics.gate_id is not None:
+        return DoorType.LOCKED
+    return DoorType.NORMAL
 
 
 def export_roll20_bundle(
@@ -125,11 +119,6 @@ def export_roll20_bundle(
         for room in package.rooms
         if room.floor_id == request.floor_id and room.id in allowed_ids
     )
-    doors = (
-        package.composable_doors
-        if isinstance(package, DungeonPackageV2)
-        else package.doors
-    )
     door_segments = tuple(
         Roll20DoorSegment(
             component_id=door.id,
@@ -138,7 +127,7 @@ def export_roll20_bundle(
             start=door.segment.start,
             end=door.segment.end,
         )
-        for door in doors
+        for door in package.composable_doors
         if door.floor_id == request.floor_id and door.id in allowed_ids
     )
     token_placements = (

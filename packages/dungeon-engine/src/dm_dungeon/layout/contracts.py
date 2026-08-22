@@ -15,26 +15,20 @@ from dm_dungeon.contracts.common import (
 )
 from dm_dungeon.contracts.geometry import (
     CorridorLayout,
-    DoorLayout,
     FloorLayout,
     GridSpec,
     RoomLayout,
     StairLayout,
     VerticalLinkLayout,
 )
-from dm_dungeon.contracts.mechanics_v2 import DungeonMechanicsPlanV2
-from dm_dungeon.contracts.package import DungeonPackage
-from dm_dungeon.contracts.package_v2 import DungeonPackageV2
+from dm_dungeon.contracts.mechanics import DungeonMechanicsPlan
+from dm_dungeon.contracts.package import DungeonPackage, MechanicDoorLayout
 from dm_dungeon.contracts.topology import DungeonTopology
 from dm_dungeon.validation.diagnostics import DiagnosticSeverity
 
 LAYOUT_REQUEST_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 LAYOUT_RESULT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
-ORTHOGONAL_LAYOUT_GENERATOR_VERSION: Literal["orthogonal-v4"] = "orthogonal-v4"
-PRE_MECHANICS_ORTHOGONAL_LAYOUT_GENERATOR_VERSION: Literal["orthogonal-v3"] = (
-    "orthogonal-v3"
-)
-LEGACY_ORTHOGONAL_LAYOUT_GENERATOR_VERSION: Literal["orthogonal-v2"] = "orthogonal-v2"
+ORTHOGONAL_LAYOUT_GENERATOR_VERSION: Literal["orthogonal-v1"] = "orthogonal-v1"
 PositiveCells = Annotated[int, Field(ge=1)]
 NonNegativeCells = Annotated[int, Field(ge=0)]
 PositiveAttempts = Annotated[int, Field(ge=1, le=256)]
@@ -84,7 +78,7 @@ class LockedLayoutComponents(ContractModel):
     floors: tuple[FloorLayout, ...] = ()
     rooms: tuple[RoomLayout, ...] = ()
     corridors: tuple[CorridorLayout, ...] = ()
-    doors: tuple[DoorLayout, ...] = ()
+    doors: tuple[MechanicDoorLayout, ...] = ()
     stairs: tuple[StairLayout, ...] = ()
     vertical_links: tuple[VerticalLinkLayout, ...] = ()
 
@@ -128,8 +122,8 @@ class LayoutRequest(VersionedContract):
     brief: DungeonBrief
     topology: DungeonTopology
     seed: int
-    generator_version: Literal["orthogonal-v2", "orthogonal-v3", "orthogonal-v4"]
-    mechanics_plan: DungeonMechanicsPlanV2 | None = None
+    generator_version: Literal["orthogonal-v1"]
+    mechanics_plan: DungeonMechanicsPlan
     grid: GridSpec = GridSpec()
     floor_bounds: tuple[FloorLayoutBounds, ...] = ()
     locked: LockedLayoutComponents = LockedLayoutComponents()
@@ -149,11 +143,11 @@ class LayoutResult(VersionedContract):
     supported_schema_version = LAYOUT_RESULT_SCHEMA_VERSION
 
     schema_version: Literal["1.0.0"]
-    generator_version: Literal["orthogonal-v2", "orthogonal-v3", "orthogonal-v4"]
+    generator_version: Literal["orthogonal-v1"]
     seed: int
     random_draw_count: NonNegativeCount
     success: bool
-    package: DungeonPackageV2 | DungeonPackage | None
+    package: DungeonPackage | None
     diagnostics: tuple[LayoutDiagnostic, ...]
 
     @model_validator(mode="after")

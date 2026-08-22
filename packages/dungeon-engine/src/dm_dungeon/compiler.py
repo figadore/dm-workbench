@@ -1,4 +1,4 @@
-"""Pure deterministic compiler from compact V2 design intent to kernel contracts."""
+"""Pure deterministic compiler from compact alpha V1 design intent."""
 
 from __future__ import annotations
 
@@ -16,17 +16,17 @@ from dm_dungeon.contracts.common import (
     OpaqueId,
     Visibility,
 )
-from dm_dungeon.contracts.design_v2 import (
+from dm_dungeon.contracts.design import (
     BarrierIntent,
     ChallengeBand,
     DependencyKind,
-    DesignConnectionV2,
-    DesignDependencyV2,
-    DesignFeatureV2,
-    DesignPuzzleV2,
-    DesignRoomV2,
-    DesignTrapV2,
-    DungeonDesignSpecV2,
+    DesignConnection,
+    DesignDependency,
+    DesignFeature,
+    DesignPuzzle,
+    DesignRoom,
+    DesignTrap,
+    DungeonDesignSpec,
     EndpointDoorKind,
     HazardIntent,
     ObjectiveKind,
@@ -34,15 +34,15 @@ from dm_dungeon.contracts.design_v2 import (
     RoomSizeBand,
     VerticalEndpointSide,
 )
-from dm_dungeon.contracts.mechanics_v2 import (
+from dm_dungeon.contracts.mechanics import (
     DUNGEON_MECHANICS_POLICY_VERSION,
-    CompiledDoorMechanicsV2,
-    CompiledEncounterSlotV2,
-    CompiledRoomFeatureV2,
-    CompiledRoomObjectiveV2,
-    CompiledRoomPuzzleV2,
-    CompiledRoomTrapV2,
-    DungeonMechanicsPlanV2,
+    CompiledDoorMechanics,
+    CompiledEncounterSlot,
+    CompiledRoomFeature,
+    CompiledRoomObjective,
+    CompiledRoomPuzzle,
+    CompiledRoomTrap,
+    DungeonMechanicsPlan,
 )
 from dm_dungeon.contracts.topology import (
     BranchRequirement,
@@ -69,8 +69,8 @@ from dm_dungeon.contracts.topology import (
 )
 from dm_dungeon.layout.contracts import FloorLayoutBounds
 
-DUNGEON_DESIGN_COMPILER_VERSION: Literal["dungeon-design-v2-compiler-6"] = (
-    "dungeon-design-v2-compiler-6"
+DUNGEON_DESIGN_COMPILER_VERSION: Literal["dungeon-design-compiler-v1"] = (
+    "dungeon-design-compiler-v1"
 )
 
 
@@ -87,10 +87,10 @@ class DungeonDesignCompileResult(ContractModel):
     """A complete exact intent or a bounded set of compiler diagnostics."""
 
     accepted: bool
-    compiler_version: Literal["dungeon-design-v2-compiler-6"]
+    compiler_version: Literal["dungeon-design-compiler-v1"]
     input_hash: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
     output_hash: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")] | None = None
-    mechanics_plan: DungeonMechanicsPlanV2 | None = None
+    mechanics_plan: DungeonMechanicsPlan | None = None
     brief: DungeonBrief | None = None
     topology: DungeonTopology | None = None
     floor_bounds: tuple[FloorLayoutBounds, ...] = ()
@@ -125,8 +125,8 @@ class DungeonDesignCompileResult(ContractModel):
         return self
 
 
-def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompileResult:
-    """Compile a V2 design without accessing persistence, providers, or randomness."""
+def compile_dungeon_design(spec: DungeonDesignSpec) -> DungeonDesignCompileResult:
+    """Compile a V1 design without accessing persistence, providers, or randomness."""
     input_hash = _hash_contract(spec)
     diagnostics = _validate_design(spec)
     if diagnostics:
@@ -175,8 +175,8 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
             floor_id=floor_ids[floor.local_ref],
             name=room.name,
             role=(
-                # The V1 kernel requires a reachable exit. V2 final-objective
-                # semantics are the compact equivalent, so the compiler—not
+                # The kernel requires a reachable exit. Final-objective semantics
+                # are the compact equivalent, so the compiler—not
                 # the model—materializes that mechanical role.
                 RoomRole.EXIT if room.local_ref in final_objective_rooms else room.role
             ),
@@ -208,7 +208,7 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
     gates: list[Gate] = []
     keys: list[KeyPlacement] = []
     clues: list[CluePlacement] = []
-    mechanics_by_target_ref: dict[str, CompiledDoorMechanicsV2] = {}
+    mechanics_by_target_ref: dict[str, CompiledDoorMechanics] = {}
     for connection in sorted(spec.connections, key=lambda value: value.local_ref):
         if connection.passage is PassageType.DOOR:
             mechanics = same_floor_mechanics.get(connection_ids[connection.local_ref])
@@ -311,9 +311,8 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
                 )
             )
         elif connection.passage is PassageType.DOOR:
-            # The retained topology is still an exclusive legacy projection. The
-            # mechanics plan above is authoritative until the P7-13d package
-            # contracts carry every independent mechanic to exact geometry.
+            # Topology retains a coarse exclusive door type for graph validation;
+            # the mechanics plan carries independent exact door mechanics.
             door_type = (
                 DoorType.SECRET
                 if _hidden_at_either_end(connection)
@@ -376,7 +375,7 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
         for floor in sorted(spec.floors, key=lambda value: value.local_ref)
     )
     topology = DungeonTopology(
-        schema_version="1.1.0",
+        schema_version="1.0.0",
         id=_component_id("topology", "root"),
         visibility=Visibility.PLAYER_SAFE,
         floors=floors,
@@ -439,12 +438,12 @@ def compile_dungeon_design_v2(spec: DungeonDesignSpecV2) -> DungeonDesignCompile
 
 
 def _compile_mechanics_plan(
-    spec: DungeonDesignSpecV2,
+    spec: DungeonDesignSpec,
     *,
     room_ids: dict[str, str],
     connection_ids: dict[str, str],
-) -> DungeonMechanicsPlanV2:
-    mechanics: list[CompiledDoorMechanicsV2] = []
+) -> DungeonMechanicsPlan:
+    mechanics: list[CompiledDoorMechanics] = []
     for connection in sorted(spec.connections, key=lambda value: value.local_ref):
         if connection.passage is PassageType.DOOR:
             mechanics.append(
@@ -478,13 +477,13 @@ def _compile_mechanics_plan(
                         challenge=endpoint_door.mechanics.challenge,
                     )
                 )
-    return DungeonMechanicsPlanV2(
+    return DungeonMechanicsPlan(
         policy_version=DUNGEON_MECHANICS_POLICY_VERSION,
         connection_ids=tuple(sorted(connection_ids.values())),
         room_ids=tuple(sorted(room_ids.values())),
         door_mechanics=tuple(mechanics),
         room_traps=tuple(
-            CompiledRoomTrapV2(
+            CompiledRoomTrap(
                 id=_component_id("trap", trap.local_ref),
                 room_id=room_ids[trap.room_ref],
                 detection_difficulty=_difficulty(trap.challenge),
@@ -493,7 +492,7 @@ def _compile_mechanics_plan(
             for trap in sorted(spec.traps, key=lambda value: value.local_ref)
         ),
         room_puzzles=tuple(
-            CompiledRoomPuzzleV2(
+            CompiledRoomPuzzle(
                 id=_component_id("puzzle", puzzle.local_ref),
                 room_id=room_ids[puzzle.room_ref],
                 difficulty=_difficulty(puzzle.challenge),
@@ -501,7 +500,7 @@ def _compile_mechanics_plan(
             for puzzle in sorted(spec.puzzles, key=lambda value: value.local_ref)
         ),
         room_features=tuple(
-            CompiledRoomFeatureV2(
+            CompiledRoomFeature(
                 id=_component_id("feature", feature.local_ref),
                 room_id=room_ids[feature.room_ref],
                 kind=feature.kind,
@@ -509,7 +508,7 @@ def _compile_mechanics_plan(
             for feature in sorted(spec.features, key=lambda value: value.local_ref)
         ),
         room_objectives=tuple(
-            CompiledRoomObjectiveV2(
+            CompiledRoomObjective(
                 id=_component_id(
                     "objective", f"{objective.kind.value}:{objective.room_ref}"
                 ),
@@ -523,7 +522,7 @@ def _compile_mechanics_plan(
             )
         ),
         encounter_slots=tuple(
-            CompiledEncounterSlotV2(
+            CompiledEncounterSlot(
                 id=_component_id("encounter-slot", room.local_ref),
                 room_id=room_ids[room.local_ref],
                 intent=room.encounter_slot,
@@ -545,7 +544,7 @@ def _compile_door_mechanics(
     barrier: BarrierIntent,
     hazard: HazardIntent,
     challenge: ChallengeBand | None,
-) -> CompiledDoorMechanicsV2:
+) -> CompiledDoorMechanics:
     # A missing key/clue is a preparation-readiness blocker, not a reason to lose
     # an otherwise connected draft.  The gate remains exact; an empty dependency
     # list is projected into the DM guide/readiness report.
@@ -553,7 +552,7 @@ def _compile_door_mechanics(
         concealed or barrier is not BarrierIntent.NONE or hazard is HazardIntent.TRAPPED
     )
     difficulty = _difficulty(challenge or ChallengeBand.MODERATE) if active else None
-    return CompiledDoorMechanicsV2(
+    return CompiledDoorMechanics(
         id=_component_id("door-mechanics", identity),
         connection_id=connection_id,
         endpoint=endpoint,
@@ -578,19 +577,19 @@ def _difficulty(band: ChallengeBand) -> int:
     ]
 
 
-def _hidden_from(connection: DesignConnectionV2) -> bool:
+def _hidden_from(connection: DesignConnection) -> bool:
     return connection.from_hidden
 
 
-def _hidden_to(connection: DesignConnectionV2) -> bool:
+def _hidden_to(connection: DesignConnection) -> bool:
     return connection.to_hidden
 
 
-def _hidden_at_either_end(connection: DesignConnectionV2) -> bool:
+def _hidden_at_either_end(connection: DesignConnection) -> bool:
     return _hidden_from(connection) or _hidden_to(connection)
 
 
-def _player_visible_room_refs(spec: DungeonDesignSpecV2) -> set[str]:
+def _player_visible_room_refs(spec: DungeonDesignSpec) -> set[str]:
     """Return rooms discoverable without traversing a secret connection.
 
     Traps and barriers stay DM-only mechanics, but do not hide the room geometry
@@ -621,7 +620,7 @@ def _player_visible_room_refs(spec: DungeonDesignSpecV2) -> set[str]:
     return visible
 
 
-def _validate_design(spec: DungeonDesignSpecV2) -> list[DungeonDesignCompileDiagnostic]:
+def _validate_design(spec: DungeonDesignSpec) -> list[DungeonDesignCompileDiagnostic]:
     """Validate local relation refs before deriving opaque component IDs."""
     diagnostics: list[DungeonDesignCompileDiagnostic] = []
     refs: dict[str, str] = {}
@@ -639,7 +638,7 @@ def _validate_design(spec: DungeonDesignSpecV2) -> list[DungeonDesignCompileDiag
         refs[ref] = path
 
     room_floor: dict[str, str] = {}
-    rooms: dict[str, DesignRoomV2] = {}
+    rooms: dict[str, DesignRoom] = {}
     for floor_index, floor in enumerate(spec.floors):
         add_ref(floor.local_ref, f"/floors/{floor_index}/local_ref")
         for room_index, room in enumerate(floor.rooms):
@@ -706,7 +705,7 @@ def _validate_design(spec: DungeonDesignSpecV2) -> list[DungeonDesignCompileDiag
                 target_barriers.add(endpoint_door.local_ref)
 
     dependency_targets: list[str] = []
-    dependencies_by_ref: dict[str, DesignDependencyV2] = {}
+    dependencies_by_ref: dict[str, DesignDependency] = {}
     for index, dependency in enumerate(spec.dependencies):
         add_ref(dependency.local_ref, f"/dependencies/{index}/local_ref")
         dependencies_by_ref[dependency.local_ref] = dependency
@@ -847,8 +846,8 @@ def _validate_design(spec: DungeonDesignSpecV2) -> list[DungeonDesignCompileDiag
 
 def _validate_room_local_refs(
     collection_name: str,
-    values: tuple[DesignTrapV2 | DesignPuzzleV2 | DesignFeatureV2, ...],
-    rooms: dict[str, DesignRoomV2],
+    values: tuple[DesignTrap | DesignPuzzle | DesignFeature, ...],
+    rooms: dict[str, DesignRoom],
     add_ref: Callable[[str, str], None],
     diagnostics: list[DungeonDesignCompileDiagnostic],
 ) -> None:
@@ -878,7 +877,7 @@ def _component_id(kind: str, identity: str) -> str:
     digest = sha256(
         f"{DUNGEON_DESIGN_COMPILER_VERSION}:{kind}:{identity}".encode()
     ).hexdigest()[:20]
-    return f"v2-{kind}-{digest}"
+    return f"v1-{kind}-{digest}"
 
 
 def _floor_extent(band: object) -> int:

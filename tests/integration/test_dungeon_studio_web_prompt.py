@@ -49,9 +49,9 @@ def test_browser_prompt_faux_gateway_persists_draft(
     with transactional_session(build_session_factory(db_engine)) as session:
         session.add(Campaign(id=campaign_id, name="Synthetic Browser Prompt"))
     proposal = {
-        "proposal_version": "2",
+        "proposal_version": "1",
         "design": {
-            "schema_version": "2.4.0",
+            "schema_version": "1.0.0",
             "title": "Synthetic Archive",
             "premise": "A synthetic archive contains a sealed ledger.",
             "themes": ["salt"],
@@ -117,8 +117,8 @@ def test_browser_prompt_faux_gateway_persists_draft(
             )
         if request.full_url.endswith("/v1/streams"):
             tool_call = {
-                "name": "submit_dungeon_intent_v2",
-                "id": "submit-browser-v2",
+                "name": "submit_dungeon_plan",
+                "id": "submit-browser-v1",
                 "arguments": {"proposal": proposal},
             }
             return _Response(
@@ -188,12 +188,12 @@ def test_browser_prompt_faux_gateway_persists_draft(
             )
         )
         assert run is not None
-        assert run.schema_versions["dungeon_package"] == "1.3.0"
-        assert run.schema_versions["dungeon_generation_proposal"] == "2.4.0"
+        assert run.schema_versions["dungeon_package"] == "1.0.0"
+        assert run.schema_versions["dungeon_generation_proposal"] == "1.0.0"
         assert (
             run.generator_versions["dungeon_mechanics_policy"]
-            == "dungeon-mechanics-policy-1"
+            == "dungeon-mechanics-policy-v1"
         )
         assert run.generator_versions["design_compiler"] == (
-            "dungeon-design-v2-compiler-6"
+            "dungeon-design-compiler-v1"
         )

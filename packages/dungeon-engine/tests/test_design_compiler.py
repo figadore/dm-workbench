@@ -1,4 +1,4 @@
-"""V2 compact-design compiler contracts."""
+"""V1 compact-design compiler contracts."""
 
 import json
 from copy import deepcopy
@@ -7,11 +7,10 @@ import pytest
 from pydantic import ValidationError
 
 from dm_dungeon import (
-    DungeonDesignSpecV2,
+    DungeonDesignSpec,
     DungeonPackage,
-    DungeonPackageV2,
-    compile_dungeon_design_v2,
-    load_dungeon_design_v2_json,
+    compile_dungeon_design,
+    load_dungeon_design_json,
     to_canonical_json,
     validate_geometry,
     validate_topology,
@@ -23,7 +22,7 @@ from dm_dungeon.rendering import RenderAudience, SvgRenderRequest, render_svg
 
 def _minimal_design() -> dict[str, object]:
     return {
-        "schema_version": "2.4.0",
+        "schema_version": "1.0.0",
         "title": "Salt Cellar",
         "premise": "A tide-worn cache protects a sealed ledger.",
         "themes": ["salt", "tide"],
@@ -67,12 +66,12 @@ def _minimal_design() -> dict[str, object]:
     }
 
 
-def _spec(payload: dict[str, object]) -> DungeonDesignSpecV2:
-    return DungeonDesignSpecV2.model_validate_json(json.dumps(payload))
+def _spec(payload: dict[str, object]) -> DungeonDesignSpec:
+    return DungeonDesignSpec.model_validate_json(json.dumps(payload))
 
 
 def _generate(payload: dict[str, object]) -> DungeonPackage:
-    compiled = compile_dungeon_design_v2(_spec(payload))
+    compiled = compile_dungeon_design(_spec(payload))
     assert compiled.accepted
     assert compiled.brief is not None
     assert compiled.topology is not None
@@ -83,7 +82,8 @@ def _generate(payload: dict[str, object]) -> DungeonPackage:
             brief=compiled.brief,
             topology=compiled.topology,
             seed=1042,
-            generator_version="orthogonal-v2",
+            generator_version="orthogonal-v1",
+            mechanics_plan=compiled.mechanics_plan,
             floor_bounds=compiled.floor_bounds,
         )
     )
@@ -107,17 +107,17 @@ def _render(package: DungeonPackage, floor_id: str, audience: RenderAudience) ->
 
 
 def test_compiler_generates_exact_kernel_intent_without_model_ids_or_counts() -> None:
-    result = compile_dungeon_design_v2(_spec(_minimal_design()))
+    result = compile_dungeon_design(_spec(_minimal_design()))
 
     assert result.accepted is True
-    assert result.compiler_version == "dungeon-design-v2-compiler-6"
+    assert result.compiler_version == "dungeon-design-compiler-v1"
     assert result.brief is not None
     assert result.topology is not None
     assert result.brief.floor_count == 1
     assert result.brief.target_room_count == 2
     assert result.floor_bounds[0].width_cells == 28
     assert validate_topology(result.topology).valid is True
-    assert all(component.id.startswith("v2-") for component in result.topology.rooms)
+    assert all(component.id.startswith("v1-") for component in result.topology.rooms)
 
 
 def test_active_passage_failure_is_a_diagnostic_without_legacy_fallback(
@@ -128,7 +128,7 @@ def test_active_passage_failure_is_a_diagnostic_without_legacy_fallback(
     assert isinstance(connections, list)
     assert isinstance(connections[0], dict)
     connections[0]["passage"] = "passage"
-    compiled = compile_dungeon_design_v2(_spec(payload))
+    compiled = compile_dungeon_design(_spec(payload))
     assert compiled.accepted
     assert compiled.brief is not None
     assert compiled.topology is not None
@@ -145,7 +145,7 @@ def test_active_passage_failure_is_a_diagnostic_without_legacy_fallback(
             brief=compiled.brief,
             topology=compiled.topology,
             seed=1042,
-            generator_version="orthogonal-v4",
+            generator_version="orthogonal-v1",
             mechanics_plan=compiled.mechanics_plan,
             floor_bounds=compiled.floor_bounds,
         )
@@ -169,7 +169,7 @@ def test_active_design_requires_and_preserves_named_final_objective() -> None:
         _spec(payload)
 
     objectives[0]["name"] = "Stone of Redemption"
-    accepted = compile_dungeon_design_v2(_spec(payload))
+    accepted = compile_dungeon_design(_spec(payload))
 
     assert accepted.accepted is True
     assert accepted.mechanics_plan is not None
@@ -186,8 +186,8 @@ def test_compiler_replay_is_canonical_and_ids_ignore_prose_and_array_order() -> 
     assert isinstance(rooms, list)
     rooms.reverse()
 
-    first = compile_dungeon_design_v2(_spec(original))
-    second = compile_dungeon_design_v2(_spec(altered))
+    first = compile_dungeon_design(_spec(original))
+    second = compile_dungeon_design(_spec(altered))
 
     assert first.accepted and second.accepted
     assert first.topology is not None and second.topology is not None
@@ -205,7 +205,7 @@ def test_compiler_rejects_duplicate_local_refs_with_bounded_path_diagnostic() ->
     assert isinstance(rooms, list)
     rooms[1]["local_ref"] = "entry"
 
-    result = compile_dungeon_design_v2(_spec(payload))
+    result = compile_dungeon_design(_spec(payload))
 
     assert result.accepted is False
     assert result.diagnostics[0].code == "design.duplicate_local_ref"
@@ -241,7 +241,7 @@ def test_compiler_hides_rooms_reachable_only_through_secret_access() -> None:
         }
     )
 
-    result = compile_dungeon_design_v2(_spec(payload))
+    result = compile_dungeon_design(_spec(payload))
 
     assert result.accepted and result.topology is not None
     rooms_by_name = {room.name: room for room in result.topology.rooms}
@@ -250,7 +250,7 @@ def test_compiler_hides_rooms_reachable_only_through_secret_access() -> None:
     secret = next(
         connection
         for connection in result.topology.connections
-        if connection.id.startswith("v2-connection-")
+        if connection.id.startswith("v1-connection-")
         and connection.visibility.value == "dm_only"
     )
     assert secret.visibility.value == "dm_only"
@@ -266,7 +266,7 @@ def test_one_sided_hidden_door_is_safe_and_visible_from_its_open_side() -> None:
 
     package = _generate(payload)
 
-    door = package.doors[0]
+    door = package.composable_doors[0]
     floor_id = package.floors[0].id
     dm_svg = _render(package, floor_id, RenderAudience.DM)
     player_svg = _render(package, floor_id, RenderAudience.PLAYER)
@@ -278,7 +278,7 @@ def test_one_sided_hidden_door_is_safe_and_visible_from_its_open_side() -> None:
     assert "door-secret-symbol" not in player_svg
     assert f'data-component-id="{door.id}"' in dm_svg
     assert 'data-door-type="secret"' in dm_svg
-    assert "door-secret-symbol" in dm_svg
+    assert 'class="door door-secret"' in dm_svg
 
 
 @pytest.mark.parametrize(
@@ -368,7 +368,7 @@ def test_compiler_derives_dm_only_gate_and_key_from_relative_intent() -> None:
         }
     ]
 
-    result = compile_dungeon_design_v2(_spec(payload))
+    result = compile_dungeon_design(_spec(payload))
 
     assert result.accepted and result.topology is not None
     assert result.topology.gates[0].visibility.value == "dm_only"
@@ -394,7 +394,7 @@ def test_compiler_rejects_multiple_dependencies_for_one_barrier() -> None:
         )
     ]
 
-    result = compile_dungeon_design_v2(_spec(payload))
+    result = compile_dungeon_design(_spec(payload))
 
     assert result.accepted is False
     assert any(
@@ -519,7 +519,7 @@ def test_compiler_preserves_composable_door_and_vertical_endpoint_mechanics() ->
     payload["loops"] = []
     payload["branches"] = []
 
-    result = compile_dungeon_design_v2(_spec(payload))
+    result = compile_dungeon_design(_spec(payload))
 
     assert result.accepted and result.mechanics_plan is not None
     mechanics = {item.endpoint: item for item in result.mechanics_plan.door_mechanics}
@@ -545,19 +545,18 @@ def test_compiler_preserves_composable_door_and_vertical_endpoint_mechanics() ->
     layout = generate_layout(
         LayoutRequest(
             schema_version="1.0.0",
-            package_id="mechanics-aware-v2",
+            package_id="mechanics-aware-v1",
             brief=result.brief,
             topology=result.topology,
             seed=1042,
-            generator_version="orthogonal-v4",
+            generator_version="orthogonal-v1",
             mechanics_plan=result.mechanics_plan,
             floor_bounds=result.floor_bounds,
         )
     )
     assert layout.success is True
-    assert isinstance(layout.package, DungeonPackageV2)
+    assert isinstance(layout.package, DungeonPackage)
     package = layout.package
-    assert package.doors == ()
     assert len(package.composable_doors) == 1
     door = package.composable_doors[0]
     assert door.id == mechanics[None].id
@@ -701,7 +700,7 @@ def test_compiler_preserves_every_same_floor_door_mechanics_combination(
             }
         ]
 
-    result = compile_dungeon_design_v2(_spec(payload))
+    result = compile_dungeon_design(_spec(payload))
 
     assert result.accepted and result.mechanics_plan is not None
     mechanics = result.mechanics_plan.door_mechanics[0]
@@ -801,7 +800,7 @@ def test_compiler_preserves_every_vertical_endpoint_mechanics_combination(
             }
         ]
 
-    result = compile_dungeon_design_v2(_spec(payload))
+    result = compile_dungeon_design(_spec(payload))
 
     assert result.accepted and result.mechanics_plan is not None
     mechanics = result.mechanics_plan.door_mechanics[0]
@@ -828,7 +827,7 @@ def test_trapped_door_keeps_player_geometry_without_mechanics_metadata() -> None
         "trap_trigger": "Opening the door.",
         "trap_effect": "A synthetic ward discharges.",
     }
-    result = compile_dungeon_design_v2(_spec(payload))
+    result = compile_dungeon_design(_spec(payload))
     assert result.accepted
     assert result.brief is not None
     assert result.topology is not None
@@ -841,12 +840,12 @@ def test_trapped_door_keeps_player_geometry_without_mechanics_metadata() -> None
             brief=result.brief,
             topology=result.topology,
             seed=1042,
-            generator_version="orthogonal-v4",
+            generator_version="orthogonal-v1",
             mechanics_plan=result.mechanics_plan,
             floor_bounds=result.floor_bounds,
         )
     )
-    assert isinstance(layout.package, DungeonPackageV2)
+    assert isinstance(layout.package, DungeonPackage)
     door = layout.package.composable_doors[0]
     dm_svg = _render(layout.package, door.floor_id, RenderAudience.DM)
     player_svg = _render(layout.package, door.floor_id, RenderAudience.PLAYER)
@@ -886,30 +885,26 @@ def test_puzzle_clue_refs_reject_key_dependencies() -> None:
         }
     ]
 
-    result = compile_dungeon_design_v2(_spec(payload))
+    result = compile_dungeon_design(_spec(payload))
 
     assert result.accepted is False
     assert any(item.code == "design.clue_ref_not_clue" for item in result.diagnostics)
 
 
-def test_mechanics_aware_layout_rejects_a_missing_compiler_plan() -> None:
-    result = compile_dungeon_design_v2(_spec(_minimal_design()))
+def test_layout_request_requires_a_compiler_mechanics_plan() -> None:
+    result = compile_dungeon_design(_spec(_minimal_design()))
     assert result.accepted and result.brief is not None and result.topology is not None
 
-    layout = generate_layout(
+    with pytest.raises(ValidationError, match="mechanics_plan"):
         LayoutRequest(
             schema_version="1.0.0",
             package_id="missing-mechanics-plan",
             brief=result.brief,
             topology=result.topology,
             seed=1042,
-            generator_version="orthogonal-v4",
+            generator_version="orthogonal-v1",
             floor_bounds=result.floor_bounds,
         )
-    )
-
-    assert layout.success is False
-    assert layout.diagnostics[0].code.value == "layout.mechanics_plan_invalid"
 
 
 def test_design_contract_rejects_unsupported_connection_mechanics_matrix() -> None:
@@ -1045,7 +1040,7 @@ def test_legacy_endpoint_concealment_is_ignored_and_hidden_state_is_derived() ->
         }
     ]
 
-    result = compile_dungeon_design_v2(_spec(payload))
+    result = compile_dungeon_design(_spec(payload))
 
     assert result.accepted
     assert result.mechanics_plan is not None
@@ -1054,14 +1049,14 @@ def test_legacy_endpoint_concealment_is_ignored_and_hidden_state_is_derived() ->
 
 def test_design_schema_round_trip_and_unknown_version_fail() -> None:
     spec = _spec(_minimal_design())
-    assert load_dungeon_design_v2_json(to_canonical_json(spec)) == spec
+    assert load_dungeon_design_json(to_canonical_json(spec)) == spec
 
     payload = _minimal_design()
     payload["schema_version"] = "99.0.0"
     with pytest.raises(
-        ValueError, match="Unsupported DungeonDesignSpecV2 schema version"
+        ValueError, match="Unsupported DungeonDesignSpec schema version"
     ):
-        load_dungeon_design_v2_json(json.dumps(payload))
+        load_dungeon_design_json(json.dumps(payload))
 
     payload = _minimal_design()
     payload["seed"] = 2
@@ -1078,7 +1073,7 @@ def test_active_mechanics_default_to_moderate_and_schema_has_no_duplicate_concea
     connection["from_hidden"] = True
     connection["door_mechanics"] = {"hazard": "trapped"}
 
-    result = compile_dungeon_design_v2(_spec(payload))
+    result = compile_dungeon_design(_spec(payload))
 
     assert result.accepted
     assert result.mechanics_plan is not None
@@ -1086,8 +1081,8 @@ def test_active_mechanics_default_to_moderate_and_schema_has_no_duplicate_concea
     assert mechanics.concealed
     assert mechanics.discovery_difficulty == 13
     assert mechanics.disable_difficulty == 13
-    schema = DungeonDesignSpecV2.model_json_schema()
-    mechanics_schema = schema["$defs"]["DoorMechanicsIntentV2"]
+    schema = DungeonDesignSpec.model_json_schema()
+    mechanics_schema = schema["$defs"]["DoorMechanicsIntent"]
     assert "concealed" not in mechanics_schema["properties"]
 
 
@@ -1100,7 +1095,7 @@ def test_incomplete_optional_trap_and_puzzle_still_compile_as_a_draft() -> None:
         {"local_ref": "seal", "room_ref": "vault", "name": "Ledger Seal"}
     ]
 
-    result = compile_dungeon_design_v2(_spec(payload))
+    result = compile_dungeon_design(_spec(payload))
 
     assert result.accepted
     assert result.mechanics_plan is not None
@@ -1120,6 +1115,6 @@ def test_invalid_encounter_slot_is_schema_visible_without_provider_response() ->
 
     with pytest.raises(ValidationError, match="encounter_slot"):
         _spec(payload)
-    schema = DungeonDesignSpecV2.model_json_schema()
+    schema = DungeonDesignSpec.model_json_schema()
     slot_schema = schema["$defs"]["EncounterSlotIntent"]
     assert "set_piece" not in slot_schema["enum"]

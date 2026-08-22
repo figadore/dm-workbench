@@ -20,12 +20,10 @@ from dm_dungeon.contracts.geometry import (
     SegmentGeometry,
     VerticalLinkLayout,
 )
-from dm_dungeon.contracts.package import DungeonPackage
-from dm_dungeon.contracts.package_v2 import (
-    DoorLayoutV2,
-    DungeonPackageV2,
-    RoomMechanicMarkerKindV2,
-    VerticalEndpointDoorLayoutV2,
+from dm_dungeon.contracts.package import (
+    DungeonPackage,
+    RoomMechanicMarkerKind,
+    VerticalEndpointDoorLayout,
 )
 from dm_dungeon.contracts.topology import DoorType, StairDirection
 from dm_dungeon.rendering.annotations import MapCalloutKind, build_map_key
@@ -332,14 +330,10 @@ def _render_corridors(
         ):
             continue
         component = _component_group(group, corridor, "corridor", rendered_ids)
-        opening_segments = (
-            tuple(
-                opening.segment
-                for opening in package.passage_openings
-                if opening.corridor_id == corridor.id
-            )
-            if isinstance(package, DungeonPackageV2)
-            else ()
+        opening_segments = tuple(
+            opening.segment
+            for opening in package.passage_openings
+            if opening.corridor_id == corridor.id
         )
         fill_path, outline_path = _corridor_footprint_paths(
             corridor,
@@ -459,9 +453,7 @@ def _render_passage_openings(
     request: SvgRenderRequest,
     scale: int,
 ) -> None:
-    """Erase room-wall strokes at validated P7-13 passage openings."""
-    if not isinstance(package, DungeonPackageV2):
-        return
+    """Erase room-wall strokes at validated V1 passage openings."""
     corridors = {corridor.id: corridor for corridor in package.corridors}
     group = ET.SubElement(root, "g", {"id": "passage-openings"})
     for opening in package.passage_openings:
@@ -496,51 +488,36 @@ def _render_doors(
     rendered_ids: list[str],
 ) -> None:
     group = ET.SubElement(root, "g", {"id": "doors"})
-    doors = (
-        package.composable_doors
-        if isinstance(package, DungeonPackageV2)
-        else package.doors
-    )
-    for door in doors:
+    for door in package.composable_doors:
         if door.floor_id != floor_id or not _layered_visible(
             door, layers, request.audience
         ):
             continue
         component = _component_group(group, door, "door", rendered_ids)
-        if isinstance(door, DoorLayoutV2):
-            rendered_door_type = (
-                DoorType.NORMAL
-                if request.audience is RenderAudience.PLAYER
+        rendered_door_type = (
+            DoorType.NORMAL
+            if request.audience is RenderAudience.PLAYER
+            else (
+                DoorType.SECRET
+                if door.mechanics.concealed
                 else (
-                    DoorType.SECRET
-                    if door.mechanics.concealed
+                    DoorType.TRAPPED
+                    if door.mechanics.trap_id is not None
                     else (
-                        DoorType.TRAPPED
-                        if door.mechanics.trap_id is not None
-                        else (
-                            DoorType.LOCKED
-                            if door.mechanics.gate_id is not None
-                            else DoorType.NORMAL
-                        )
+                        DoorType.LOCKED
+                        if door.mechanics.gate_id is not None
+                        else DoorType.NORMAL
                     )
                 )
             )
-            if request.audience is RenderAudience.DM:
-                component.set(
-                    "data-door-concealed", str(door.mechanics.concealed).lower()
-                )
-                component.set(
-                    "data-door-gated", str(door.mechanics.gate_id is not None).lower()
-                )
-                component.set(
-                    "data-door-trapped", str(door.mechanics.trap_id is not None).lower()
-                )
-        else:
-            rendered_door_type = (
-                DoorType.NORMAL
-                if request.audience is RenderAudience.PLAYER
-                and door.door_type is DoorType.SECRET
-                else door.door_type
+        )
+        if request.audience is RenderAudience.DM:
+            component.set("data-door-concealed", str(door.mechanics.concealed).lower())
+            component.set(
+                "data-door-gated", str(door.mechanics.gate_id is not None).lower()
+            )
+            component.set(
+                "data-door-trapped", str(door.mechanics.trap_id is not None).lower()
             )
         component.set("data-door-type", rendered_door_type.value)
         css_class = "door"
@@ -559,10 +536,9 @@ def _render_doors(
                 "y2": str(door.segment.end.y * scale),
             },
         )
-        if (
-            not isinstance(package, DungeonPackageV2)
-            or _annotation_mode(package, request) is SvgAnnotationMode.DEVELOPER_IDS
-        ) and rendered_door_type in {
+        if _annotation_mode(
+            package, request
+        ) is SvgAnnotationMode.DEVELOPER_IDS and rendered_door_type in {
             DoorType.SECRET,
             DoorType.TRAPPED,
         }:
@@ -605,17 +581,16 @@ def _render_features_and_hazards(
             component = _component_group(group, hazard, "hazard", rendered_ids)
             component.set("data-hazard-kind", hazard.kind.value)
             _append_geometry(component, hazard.geometry, scale, "hazard")
-    if isinstance(package, DungeonPackageV2):
-        for marker in package.room_mechanic_markers:
-            if marker.floor_id != floor_id or not _layered_visible(
-                marker, layers, request.audience
-            ):
-                continue
-            component = _component_group(
-                group, marker, "room-mechanic-marker", rendered_ids
-            )
-            component.set("data-mechanic-kind", marker.kind.value)
-            _append_room_mechanic_symbol(component, marker.position, marker.kind, scale)
+    for marker in package.room_mechanic_markers:
+        if marker.floor_id != floor_id or not _layered_visible(
+            marker, layers, request.audience
+        ):
+            continue
+        component = _component_group(
+            group, marker, "room-mechanic-marker", rendered_ids
+        )
+        component.set("data-mechanic-kind", marker.kind.value)
+        _append_room_mechanic_symbol(component, marker.position, marker.kind, scale)
 
 
 def _render_transitions(
@@ -679,36 +654,35 @@ def _render_transitions(
                 scale,
             )
 
-    if isinstance(package, DungeonPackageV2):
-        for endpoint_door in package.vertical_endpoint_doors:
-            if endpoint_door.floor_id != floor_id or not _layered_visible(
-                endpoint_door, layers, request.audience
-            ):
-                continue
-            component = _component_group(
-                group, endpoint_door, "vertical-endpoint-door", rendered_ids
+    for endpoint_door in package.vertical_endpoint_doors:
+        if endpoint_door.floor_id != floor_id or not _layered_visible(
+            endpoint_door, layers, request.audience
+        ):
+            continue
+        component = _component_group(
+            group, endpoint_door, "vertical-endpoint-door", rendered_ids
+        )
+        component.set("data-endpoint", endpoint_door.endpoint.value)
+        component.set("data-endpoint-kind", endpoint_door.kind.value)
+        if request.audience is RenderAudience.DM:
+            component.set(
+                "data-door-concealed",
+                str(endpoint_door.mechanics.concealed).lower(),
             )
-            component.set("data-endpoint", endpoint_door.endpoint.value)
-            component.set("data-endpoint-kind", endpoint_door.kind.value)
-            if request.audience is RenderAudience.DM:
-                component.set(
-                    "data-door-concealed",
-                    str(endpoint_door.mechanics.concealed).lower(),
-                )
-                component.set(
-                    "data-door-gated",
-                    str(endpoint_door.mechanics.gate_id is not None).lower(),
-                )
-                component.set(
-                    "data-door-trapped",
-                    str(endpoint_door.mechanics.trap_id is not None).lower(),
-                )
-            _append_endpoint_door_symbol(component, endpoint_door, scale)
+            component.set(
+                "data-door-gated",
+                str(endpoint_door.mechanics.gate_id is not None).lower(),
+            )
+            component.set(
+                "data-door-trapped",
+                str(endpoint_door.mechanics.trap_id is not None).lower(),
+            )
+        _append_endpoint_door_symbol(component, endpoint_door, scale)
 
 
 def _append_endpoint_door_symbol(
     parent: ET.Element,
-    endpoint_door: VerticalEndpointDoorLayoutV2,
+    endpoint_door: VerticalEndpointDoorLayout,
     scale: int,
 ) -> None:
     """Draw a point-anchored door/hatch without embedding DM-only mechanics."""
@@ -856,16 +830,9 @@ def _render_callouts(
 def _annotation_mode(
     package: DungeonPackage, request: SvgRenderRequest
 ) -> SvgAnnotationMode:
-    """Preserve legacy artifacts and explicit developer inspection."""
+    """Resolve explicit developer inspection versus the V1 callout default."""
     if request.show_room_ids:
         return SvgAnnotationMode.DEVELOPER_IDS
-    # Old exact-package artifacts retain their original unannotated output. New
-    # Active exact packages receive the callout grammar by default.
-    if (
-        not isinstance(package, DungeonPackageV2)
-        and request.annotation_mode is SvgAnnotationMode.CALLOUTS
-    ):
-        return SvgAnnotationMode.NONE
     return request.annotation_mode
 
 
@@ -962,14 +929,14 @@ def _render_markers(
 def _append_room_mechanic_symbol(
     parent: ET.Element,
     point: GridPoint,
-    kind: RoomMechanicMarkerKindV2,
+    kind: RoomMechanicMarkerKind,
     scale: int,
 ) -> None:
     """Render trusted, grayscale-safe symbols without prose-bearing metadata."""
 
     x, y = point.x * scale, point.y * scale
     half = scale * 0.23
-    if kind is RoomMechanicMarkerKindV2.TRAP:
+    if kind is RoomMechanicMarkerKind.TRAP:
         ET.SubElement(
             parent,
             "polygon",
@@ -980,7 +947,7 @@ def _append_room_mechanic_symbol(
                 f"{_number(x - half)},{_number(y + half)}",
             },
         )
-    elif kind is RoomMechanicMarkerKindV2.PUZZLE:
+    elif kind is RoomMechanicMarkerKind.PUZZLE:
         ET.SubElement(
             parent,
             "polygon",
@@ -992,7 +959,7 @@ def _append_room_mechanic_symbol(
                 f"{_number(x - half)},{_number(y)}",
             },
         )
-    elif kind is RoomMechanicMarkerKindV2.OBJECTIVE:
+    elif kind is RoomMechanicMarkerKind.OBJECTIVE:
         ET.SubElement(
             parent,
             "circle",

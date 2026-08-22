@@ -2,7 +2,6 @@
 
 from dm_dungeon.contracts import (
     DungeonPackage,
-    DungeonPackageV2,
     PassageApproachDirection,
 )
 from dm_dungeon.contracts.geometry import (
@@ -35,7 +34,7 @@ def test_hand_authored_and_generated_packages_have_valid_geometry(
     assert generated_report.diagnostics == ()
 
 
-def test_v3_geometry_rejects_undeclared_openings_and_endpoint_doglegs(
+def test_geometry_rejects_undeclared_openings_and_endpoint_doglegs(
     layout_request: LayoutRequest,
 ) -> None:
     topology = layout_request.topology.model_copy(
@@ -49,11 +48,11 @@ def test_v3_geometry_rejects_undeclared_openings_and_endpoint_doglegs(
     )
     result = generate_layout(
         layout_request.model_copy(
-            update={"generator_version": "orthogonal-v3", "topology": topology}
+            update={"generator_version": "orthogonal-v1", "topology": topology}
         )
     )
     assert result.package is not None
-    assert isinstance(result.package, DungeonPackageV2)
+    assert isinstance(result.package, DungeonPackage)
     package = result.package
     corridor = package.corridors[0]
     opening = next(
@@ -86,7 +85,9 @@ def test_v3_geometry_rejects_undeclared_openings_and_endpoint_doglegs(
             )
         }
     )
-    missing_direct_door = package.model_copy(update={"doors": package.doors[1:]})
+    missing_direct_door = package.model_copy(
+        update={"composable_doors": package.composable_doors[1:]}
+    )
 
     assert GeometryDiagnosticCode.PASSAGE_ENDPOINT_APPROACH_INVALID in codes(
         broken_dogleg
@@ -176,7 +177,7 @@ def test_diagonal_corridor_is_reported(generated_package: DungeonPackage) -> Non
 def test_requested_corridor_width_is_enforced(
     generated_package: DungeonPackage,
 ) -> None:
-    target_id = "connection_entry_corridor"
+    target_id = generated_package.corridors[0].id
     connection = next(
         item for item in generated_package.topology.connections if item.id == target_id
     )
@@ -197,7 +198,7 @@ def test_requested_corridor_width_is_enforced(
 def test_door_must_align_with_room_wall_and_corridor(
     generated_package: DungeonPackage,
 ) -> None:
-    door = generated_package.doors[0]
+    door = generated_package.composable_doors[0]
     moved = door.model_copy(
         update={
             "segment": GridSegment(
@@ -207,10 +208,10 @@ def test_door_must_align_with_room_wall_and_corridor(
         }
     )
     broken = generated_package.model_copy(
-        update={"doors": (moved, *generated_package.doors[1:])}
+        update={"composable_doors": (moved, *generated_package.composable_doors[1:])}
     )
 
-    assert GeometryDiagnosticCode.DOOR_ALIGNMENT_INVALID in codes(broken)
+    assert GeometryDiagnosticCode.DIRECT_DOOR_NOT_SHARED_WALL in codes(broken)
 
 
 def test_stairs_and_vertical_links_must_pair_exactly(

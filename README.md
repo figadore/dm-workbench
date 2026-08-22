@@ -249,34 +249,27 @@ prompt after login completes. Provider/model/effort, campaign, seed, and title
 flags remain inspectable reproducibility overrides. Campaign roots can be
 created and switched without copying UUIDs into every command:
 
-### Dungeon intent V2 evaluation and rollback
+### Alpha dungeon V1 evaluation
 
-V2 accepts one compact `submit_dungeon_intent_v2` proposal only. Models supply
+The alpha accepts one compact `submit_dungeon_plan` proposal only. Models supply
 relative rooms, connections, objectives, and dependencies; deterministic code
 owns IDs, seed, geometry, visibility, validation, rendering, persistence, and
-approval. Run inspection remains body-free:
+approval. The temporary arbitrary-edge design is replaced by the progression
+grammar in P7-14c. Run inspection remains body-free:
 
 ```bash
 uv run --frozen dm dungeon run inspect <attempt-run-id>
 ```
 
-The frozen provider-free V2 suite is synthetic and safe for CI:
+The frozen provider-free V1 suite is synthetic and safe for CI:
 
 ```bash
 uv run --frozen pytest -q tests/evals/test_dungeon_evals.py
 ```
 
-Use the inspectable `dungeon-intent-v2-eval` policy only for an explicit,
-non-persisting V1/V2 comparison. Execute each version separately, retain only
-body-free observation hashes/metrics (tool/schema/compile/repair/semantics,
-package/secrecy, tokens, latency, and optional DM edits), and never pass either
-provider response to the other run. Live small-model runs are opt-in and occur
-only after faux contract coverage passes; they must not be added to CI. The
-current rollout decision retains V1 readers/replay compatibility and does not
-retire V1 orchestration until the documented eval, CLI/web, cancellation,
-publication, logging, and replay gates have recorded passing evidence. Roll
-back a candidate by selecting the prior saved task-profile policy; do not
-rewrite historical artifacts or lineage.
+Live small-model runs remain paused until the provider-free and faux Tier A
+gates pass. The alpha retains no compatibility readers for disposable prior
+generation contracts.
 
 ```bash
 uv run --frozen dm campaign create "Main Campaign"

@@ -7,7 +7,6 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from dm_dungeon.contracts.package import DungeonPackage
-from dm_dungeon.contracts.package_v2 import DungeonPackageV2
 from dm_dungeon.export import (
     AssemblyMode,
     PaperSize,
@@ -168,10 +167,8 @@ def _add_common_export_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--maximum-ink-basis-points", type=int, default=3500)
 
 
-def _require_renderable_package(
-    package: DungeonPackage | DungeonPackageV2,
-) -> DungeonPackage | DungeonPackageV2:
-    """Narrow the reader result to packages supported by all CLI operations."""
+def _require_renderable_package(package: DungeonPackage) -> DungeonPackage:
+    """Return the sole package type supported by all CLI operations."""
     return package
 
 

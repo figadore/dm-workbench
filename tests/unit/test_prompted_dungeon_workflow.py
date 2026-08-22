@@ -21,14 +21,14 @@ from dm_assistant.orchestration.dungeons import (
     DungeonGenerationRegressionCase,
     DungeonStudioService,
     DungeonStudioSpecification,
-    DungeonV2SubmissionService,
+    DungeonSubmissionService,
     PromptDungeonWorkflow,
 )
 from dm_assistant.orchestration.dungeons.application import _failure_code
 from dm_assistant.orchestration.dungeons.prompting import (
     DungeonProposalRejectedAfterRepair,
     _build_standalone_context,
-    _initial_v2_model_input,
+    _initial_model_input,
     _lineage,
     resolve_dungeon_prompt_profile,
 )
@@ -49,13 +49,12 @@ from dm_assistant.orchestration.modeling import (
     ModelRunAbstained,
 )
 from dm_dungeon import (
-    DungeonPackageV2,
+    CompiledDoorMechanics,
+    DungeonMechanicsPlan,
+    DungeonPackage,
     LayoutRequest,
-    RenderAudience,
-    SvgRenderRequest,
     generate_layout,
     read_dungeon_package,
-    render_svg,
 )
 
 FIXTURE_PATH = (
@@ -109,17 +108,43 @@ def _fixture_layout_request(*, topology_connections: bool = True):
     topology = package.topology
     if not topology_connections:
         topology = topology.model_copy(update={"connections": ()})
+    mechanics_plan = DungeonMechanicsPlan(
+        policy_version="dungeon-mechanics-policy-v1",
+        connection_ids=tuple(item.id for item in topology.connections),
+        room_ids=tuple(item.id for item in topology.rooms),
+        door_mechanics=tuple(
+            CompiledDoorMechanics(
+                id=door.id,
+                connection_id=door.connection_id,
+                concealed=door.mechanics.concealed,
+                gate_id=door.mechanics.gate_id,
+                gate_kind=door.mechanics.gate_kind,
+                trap_id=door.mechanics.trap_id,
+                discovery_difficulty=door.mechanics.discovery_difficulty,
+                unlock_difficulty=door.mechanics.unlock_difficulty,
+                disable_difficulty=door.mechanics.disable_difficulty,
+            )
+            for door in package.composable_doors
+            if topology_connections
+        ),
+        room_traps=(),
+        room_puzzles=(),
+        room_features=(),
+        room_objectives=(),
+        encounter_slots=(),
+    )
     return LayoutRequest(
         schema_version="1.0.0",
         package_id="package_prompted_fixture",
         brief=package.brief,
         topology=topology,
         seed=1842,
-        generator_version="orthogonal-v2",
+        generator_version="orthogonal-v1",
+        mechanics_plan=mechanics_plan,
     )
 
 
-def test_v2_prompt_explains_connection_constraints() -> None:
+def test_prompt_explains_connection_constraints() -> None:
     command = PromptDungeonWorkflow(
         campaign_id=uuid.UUID("10000000-0000-0000-0000-000000000001"),
         prompt="Synthetic hidden lower level.",
@@ -133,7 +158,7 @@ def test_v2_prompt_explains_connection_constraints() -> None:
     )
 
     message = (
-        _initial_v2_model_input(command, _build_standalone_context(command))
+        _initial_model_input(command, _build_standalone_context(command))
         .messages[0]
         .content
     )
@@ -145,15 +170,15 @@ def test_v2_prompt_explains_connection_constraints() -> None:
     assert "vertical lock, puzzle, or trap" in message
     assert "explicit endpoint_doors item" in message
     assert "target its local_ref with the dependency" in message
-    assert "design schema version 2.4.0" in message
+    assert "design schema version 1.0.0" in message
     assert "objectives[].name" in message
 
 
-def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
+def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
     proposal = {
-        "proposal_version": "2",
+        "proposal_version": "1",
         "design": {
-            "schema_version": "2.4.0",
+            "schema_version": "1.0.0",
             "title": "Salt Cellar",
             "premise": "A sealed ledger waits below the tide.",
             "themes": ["salt"],
@@ -194,7 +219,7 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
             GatewayCompletion(
                 tool_calls=(
                     ToolCall(
-                        tool_name="submit_dungeon_intent_v2",
+                        tool_name="submit_dungeon_plan",
                         call_id="submit-1",
                         arguments={"proposal": proposal},
                     ),
@@ -214,7 +239,7 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
     assert profile.token_budget == 12_000
     assert profile.override_notes["output_token_limit"] == 4_096
 
-    result = DungeonV2SubmissionService(gateway).submit(
+    result = DungeonSubmissionService(gateway).submit(
         profile=profile,
         run_input=ModelRunInput(
             messages=(PromptMessage(role="user", content="synthetic request"),)
@@ -225,9 +250,9 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
     assert result.compilation is not None and result.compilation.accepted
     assert result.layout_request is not None
     assert result.model_run.turn_count == 1
-    assert result.model_run.tool_invocations[0].tool_name == "submit_dungeon_intent_v2"
+    assert result.model_run.tool_invocations[0].tool_name == "submit_dungeon_plan"
     assert tuple(schema.name for schema in gateway.tool_schemas) == (
-        "submit_dungeon_intent_v2",
+        "submit_dungeon_plan",
     )
     assert gateway.tool_schemas[0].constrained_sampling == "prefer"
     layout = generate_layout(result.layout_request)
@@ -267,7 +292,7 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
             GatewayCompletion(
                 tool_calls=(
                     ToolCall(
-                        tool_name="submit_dungeon_intent_v2",
+                        tool_name="submit_dungeon_plan",
                         call_id="submit-invalid",
                         arguments={"proposal": invalid},
                     ),
@@ -278,7 +303,7 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
             GatewayCompletion(
                 tool_calls=(
                     ToolCall(
-                        tool_name="submit_dungeon_intent_v2",
+                        tool_name="submit_dungeon_plan",
                         call_id="submit-repair",
                         arguments={"proposal": proposal},
                     ),
@@ -288,7 +313,7 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
             ),
         )
     )
-    repaired = DungeonV2SubmissionService(repair_gateway).submit(
+    repaired = DungeonSubmissionService(repair_gateway).submit(
         profile=profile,
         run_input=ModelRunInput(
             messages=(PromptMessage(role="user", content="synthetic request"),)
@@ -308,8 +333,8 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
         repaired.model_runs[0].output_payload != repaired.model_runs[1].output_payload
     )
     first_lineage, repaired_lineage = (_lineage(run) for run in repaired.model_runs)
-    assert first_lineage.proposal_v2 is not None
-    assert first_lineage.proposal_v2 != repaired_lineage.proposal_v2
+    assert first_lineage.proposal is not None
+    assert first_lineage.proposal != repaired_lineage.proposal
     repair_document = json.loads(repair_gateway.messages[1][0].content)
     assert repair_document["diagnostics"][0]["code"] == "design.unneeded_dependency"
     assert repair_document["prompt"] == "synthetic request"
@@ -321,7 +346,7 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
             GatewayCompletion(
                 tool_calls=(
                     ToolCall(
-                        tool_name="submit_dungeon_intent_v2",
+                        tool_name="submit_dungeon_plan",
                         call_id="submit-invalid-again",
                         arguments={"proposal": invalid},
                     ),
@@ -332,7 +357,7 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
             GatewayCompletion(
                 tool_calls=(
                     ToolCall(
-                        tool_name="submit_dungeon_intent_v2",
+                        tool_name="submit_dungeon_plan",
                         call_id="submit-repair-invalid-again",
                         arguments={"proposal": invalid},
                     ),
@@ -343,7 +368,7 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
         )
     )
     with pytest.raises(DungeonProposalRejectedAfterRepair) as exhausted:
-        DungeonV2SubmissionService(exhausted_repair_gateway).submit(
+        DungeonSubmissionService(exhausted_repair_gateway).submit(
             profile=profile,
             run_input=ModelRunInput(
                 messages=(PromptMessage(role="user", content="synthetic request"),)
@@ -369,7 +394,7 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
             GatewayCompletion(
                 tool_calls=(
                     ToolCall(
-                        tool_name="submit_dungeon_intent_v2",
+                        tool_name="submit_dungeon_plan",
                         call_id="submit-schema-invalid",
                         arguments={"proposal": schema_invalid},
                     ),
@@ -380,7 +405,7 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
             GatewayCompletion(
                 tool_calls=(
                     ToolCall(
-                        tool_name="submit_dungeon_intent_v2",
+                        tool_name="submit_dungeon_plan",
                         call_id="submit-schema-repair",
                         arguments={"proposal": proposal},
                     ),
@@ -391,7 +416,7 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
         )
     )
 
-    schema_repaired = DungeonV2SubmissionService(schema_repair_gateway).submit(
+    schema_repaired = DungeonSubmissionService(schema_repair_gateway).submit(
         profile=profile,
         run_input=ModelRunInput(
             messages=(PromptMessage(role="user", content="synthetic request"),)
@@ -407,8 +432,8 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
     invalid_lineage, valid_lineage = (
         _lineage(run) for run in schema_repaired.model_runs
     )
-    assert invalid_lineage.proposal_v2 is None
-    assert valid_lineage.proposal_v2 == schema_repaired.proposal
+    assert invalid_lineage.proposal is None
+    assert valid_lineage.proposal == schema_repaired.proposal
     repair_message = schema_repair_gateway.messages[1][0].content
     assert "submission.schema_invalid" in repair_message
     assert "Salt Cellar" in repair_message
@@ -418,11 +443,11 @@ def test_v2_submits_one_compact_tool_call_without_a_second_completion() -> None:
     assert "allowed values" in schema_repair_document["diagnostics"][0]["repair"]
 
 
-def test_v2_dm_guide_retains_requested_mechanics_and_creative_details() -> None:
+def test_dm_guide_retains_requested_mechanics_and_creative_details() -> None:
     proposal = {
-        "proposal_version": "2",
+        "proposal_version": "1",
         "design": {
-            "schema_version": "2.4.0",
+            "schema_version": "1.0.0",
             "title": "Star Vault",
             "premise": "A drowned observatory seals its lens below a trapped door.",
             "themes": ["salt"],
@@ -554,7 +579,7 @@ def test_v2_dm_guide_retains_requested_mechanics_and_creative_details() -> None:
             GatewayCompletion(
                 tool_calls=(
                     ToolCall(
-                        tool_name="submit_dungeon_intent_v2",
+                        tool_name="submit_dungeon_plan",
                         call_id="submit-guide",
                         arguments={"proposal": proposal},
                     ),
@@ -571,7 +596,7 @@ def test_v2_dm_guide_retains_requested_mechanics_and_creative_details() -> None:
         context_window_tokens=16_384,
         output_token_limit=4_096,
     )
-    result = DungeonV2SubmissionService(gateway).submit(
+    result = DungeonSubmissionService(gateway).submit(
         profile=profile,
         run_input=ModelRunInput(
             messages=(PromptMessage(role="user", content="synthetic request"),)
@@ -634,16 +659,17 @@ def test_v2_dm_guide_retains_requested_mechanics_and_creative_details() -> None:
     assert complete_readiness.ready
 
     package = layout.package
-    assert isinstance(package, DungeonPackageV2)
+    assert isinstance(package, DungeonPackage)
     locked_door = _select_locks(package, (door.component_id,))
-    assert locked_door.doors[0].id == door.connection_id
+    assert locked_door.doors[0].id == door.component_id
+    assert locked_door.doors[0].connection_id == door.connection_id
     assert locked_door.doors[0].segment == package.composable_doors[0].segment
     regenerated = generate_layout(
         result.layout_request.model_copy(
             update={"seed": 999_999, "locked": locked_door}
         )
     )
-    assert isinstance(regenerated.package, DungeonPackageV2)
+    assert isinstance(regenerated.package, DungeonPackage)
     assert regenerated.package.composable_doors[0].segment == (
         package.composable_doors[0].segment
     )
@@ -744,7 +770,7 @@ def test_dm_notes_asset_uses_a_valid_plain_text_media_type() -> None:
     assert command.media_type == "text/plain"
 
 
-def test_dm_notes_are_readable_and_dm_map_callouts_never_modify_player_map() -> None:
+def test_dm_notes_are_readable_without_mutating_the_exact_package() -> None:
     package = read_dungeon_package(FIXTURE_PATH)
     request = _fixture_layout_request()
     notes = _build_dm_notes(
@@ -755,32 +781,7 @@ def test_dm_notes_are_readable_and_dm_map_callouts_never_modify_player_map() -> 
 
     assert notes.room_notes[0].name == "Entrance"
     assert "## Original request" in _dm_notes_text(request, notes)
-    presented = _dm_presentation_package(package, notes)
-    assert len(presented.labels) == len(package.labels) + len(notes.room_notes)
-    assert all(
-        label.visibility.value == "dm_only"
-        for label in presented.labels[-len(notes.room_notes) :]
-    )
-    dm_svg = render_svg(
-        presented,
-        SvgRenderRequest(
-            schema_version="1.0.0",
-            package_id=presented.id,
-            floor_id="floor_upper",
-            audience=RenderAudience.DM,
-        ),
-    )
-    player_svg = render_svg(
-        presented,
-        SvgRenderRequest(
-            schema_version="1.0.0",
-            package_id=presented.id,
-            floor_id="floor_upper",
-            audience=RenderAudience.PLAYER,
-        ),
-    )
-    assert "[1] Entrance" in (dm_svg.svg or "")
-    assert "[1] Entrance" not in (player_svg.svg or "")
+    assert _dm_presentation_package(package, notes) == package
 
 
 def test_prompt_workflow_rejects_grounded_scope_before_model_execution() -> None:

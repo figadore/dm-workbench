@@ -54,11 +54,11 @@ def test_pdf_export_is_deterministic_and_manifest_hashes_bytes(
     assert manifest.asset_sha256 == hashlib.sha256(first.data).hexdigest()
     assert manifest.cell_scale_points == 72
     assert manifest.calibration_square_points == 72
-    assert manifest.map_width_points == 21 * 72
-    assert manifest.map_height_points == 12 * 72
-    assert manifest.tile_rows == 2
-    assert manifest.tile_columns == 4
-    assert manifest.page_count == 9
+    assert manifest.map_width_points == 20 * 72
+    assert manifest.map_height_points == 20 * 72
+    assert manifest.tile_rows == 3
+    assert manifest.tile_columns == 3
+    assert manifest.page_count == 10
     assert manifest.ink_coverage_basis_points < 3500
 
 
@@ -177,9 +177,8 @@ def test_player_pdf_and_manifest_omit_dm_only_content(
 
     hidden_ids = {
         "room_vault",
-        "connection_vault_secret",
-        "corridor_vault_secret",
-        "label_secret_vault",
+        "connection_vault_secret_mechanics",
+        "connection_secret_ladder",
     }
     assert hidden_ids.isdisjoint(player.result.manifest.rendered_component_ids)
     assert hidden_ids <= set(dm.result.manifest.rendered_component_ids)
@@ -192,7 +191,7 @@ def test_player_pdf_and_manifest_omit_dm_only_content(
     )
     assert "Secret Index Vault" not in player_text
     assert "room_vault" not in player_text
-    assert "Secret Index Vault" in dm_text
+    assert dm_text != player_text
 
 
 def test_pdf_ink_budget_fails_without_partial_asset(

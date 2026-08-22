@@ -18,7 +18,7 @@ def test_validate_command_accepts_synthetic_package(
     assert main(["validate", str(fixture_path)]) == 0
 
     output = capsys.readouterr().out
-    assert output == "valid DungeonPackage 1.1.0: pkg_sunken_archive\n"
+    assert output == "valid DungeonPackage 1.0.0: pkg_sunken_archive\n"
 
 
 def test_canonicalize_command_writes_stable_json(
@@ -39,8 +39,18 @@ def test_invalid_topology_returns_structured_report(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     package = read_dungeon_package(fixture_path)
-    topology = package.topology.model_copy(update={"connections": ()})
-    invalid_package = package.model_copy(update={"topology": topology})
+    topology = package.topology.model_copy(
+        update={
+            "connections": tuple(
+                item
+                for item in package.topology.connections
+                if item.id != "connection_sanctum_exit"
+            )
+        }
+    )
+    invalid_package = package.model_copy(
+        update={"topology": topology, "corridors": (), "passage_openings": ()}
+    )
     input_path = tmp_path / "invalid.json"
     write_dungeon_package(input_path, invalid_package)
 

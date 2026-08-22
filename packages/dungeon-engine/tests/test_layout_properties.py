@@ -6,9 +6,9 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from dm_dungeon import (
-    DungeonDesignSpecV2,
+    DungeonDesignSpec,
     LayoutRequest,
-    compile_dungeon_design_v2,
+    compile_dungeon_design,
     generate_layout,
     validate_geometry,
 )
@@ -33,7 +33,7 @@ def active_chain_request(room_count: int, seed: int) -> LayoutRequest:
         for index in range(room_count)
     ]
     payload = {
-        "schema_version": "2.4.0",
+        "schema_version": "1.0.0",
         "title": "Generated Layout Property",
         "premise": "A synthetic connected dungeon with no campaign content.",
         "themes": ["synthetic"],
@@ -62,8 +62,8 @@ def active_chain_request(room_count: int, seed: int) -> LayoutRequest:
             }
         ],
     }
-    design = DungeonDesignSpecV2.model_validate_json(json.dumps(payload))
-    compiled = compile_dungeon_design_v2(design)
+    design = DungeonDesignSpec.model_validate_json(json.dumps(payload))
+    compiled = compile_dungeon_design(design)
     assert compiled.accepted
     assert compiled.brief is not None
     assert compiled.topology is not None

@@ -13,7 +13,6 @@ from pydantic import ValidationError
 
 from dm_dungeon import DungeonPackage, to_canonical_json
 from dm_dungeon.contracts import Visibility
-from dm_dungeon.contracts.topology import DoorType
 from dm_dungeon.export import (
     ExportDiagnosticCode,
     Roll20AssetRole,
@@ -64,8 +63,8 @@ def test_roll20_bundle_is_byte_deterministic_and_self_consistent(
     assert first.result.bundle_sha256 == hashlib.sha256(first.zip_data).hexdigest()
     manifest = first.result.manifest
     assert manifest.grid.model_dump() == {
-        "width_cells": 21,
-        "height_cells": 12,
+        "width_cells": 20,
+        "height_cells": 20,
         "pixels_per_cell": 20,
         "cell_scale_feet": 5,
         "origin_x_cells": 0,
@@ -78,7 +77,7 @@ def test_roll20_bundle_is_byte_deterministic_and_self_consistent(
         Roll20AssetRole.GRIDLESS_MAP,
     ]
     assert all(
-        (asset.width_pixels, asset.height_pixels) == (420, 240)
+        (asset.width_pixels, asset.height_pixels) == (400, 400)
         for asset in manifest.assets
     )
 
@@ -143,54 +142,9 @@ def test_player_manifest_omits_every_dm_only_geometry_and_metadata(
         "room_hall",
     }
     assert {door.component_id for door in manifest.door_segments} == {
-        "connection_entry_door"
+        "connection_entry_door_mechanics"
     }
     assert manifest.token_placements == ()
-
-
-def test_player_manifest_normalizes_a_one_sided_secret_door(
-    synthetic_package: DungeonPackage,
-) -> None:
-    # A visible endpoint is published as an ordinary door; only the DM export
-    # retains the concealed-side classification.
-    package = synthetic_package
-    original = next(item for item in package.doors if item.door_type is DoorType.NORMAL)
-    directional = original.model_copy(
-        update={
-            "door_type": DoorType.SECRET,
-            "to_hidden": True,
-            "visibility": Visibility.PLAYER_SAFE,
-        }
-    )
-    package = package.model_copy(
-        update={
-            "doors": tuple(
-                directional if item.id == original.id else item
-                for item in package.doors
-            )
-        }
-    )
-
-    player = export_roll20_bundle(package, roll20_request(package))
-    dm = export_roll20_bundle(
-        package,
-        roll20_request(package, audience="dm"),
-    )
-
-    assert player.result.manifest is not None
-    assert dm.result.manifest is not None
-    player_door = next(
-        item
-        for item in player.result.manifest.door_segments
-        if item.component_id == directional.id
-    )
-    dm_door = next(
-        item
-        for item in dm.result.manifest.door_segments
-        if item.component_id == directional.id
-    )
-    assert player_door.door_type is DoorType.NORMAL
-    assert dm_door.door_type is DoorType.SECRET
 
 
 def test_dm_only_metadata_changes_do_not_change_player_bundle(
@@ -234,16 +188,17 @@ def test_optional_tokens_include_only_visible_position_anchors(
     assert player.result.manifest is not None
     assert dm.result.manifest is not None
 
-    assert [item.anchor_id for item in player.result.manifest.token_placements] == [
-        "anchor_archive_exit"
-    ]
-    assert {item.anchor_id for item in dm.result.manifest.token_placements} == {
-        "anchor_guardian_start",
-        "anchor_archive_exit",
+    expected_ids = {
+        item.id
+        for item in synthetic_package.position_anchors
+        if item.floor_id == "floor_lower" and item.visibility is Visibility.PLAYER_SAFE
     }
-    exit_placement = player.result.manifest.token_placements[0]
-    assert (exit_placement.x_pixels, exit_placement.y_pixels) == (540, 120)
-    assert "anchor_guardian_start" not in to_canonical_json(player.result.manifest)
+    assert {
+        item.anchor_id for item in player.result.manifest.token_placements
+    } == expected_ids
+    assert {
+        item.anchor_id for item in dm.result.manifest.token_placements
+    } == expected_ids
 
 
 def test_request_rejects_unsafe_or_unsupported_values(

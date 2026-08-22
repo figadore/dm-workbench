@@ -10,7 +10,14 @@ from sqlalchemy import Engine, text
 from typer.testing import CliRunner
 
 from dm_assistant.cli.main import app
-from dm_dungeon import LayoutRequest, read_dungeon_package, to_canonical_json
+from dm_dungeon import (
+    CompiledDoorMechanics,
+    DungeonMechanicsPlan,
+    DungeonPackage,
+    LayoutRequest,
+    read_dungeon_package,
+    to_canonical_json,
+)
 
 pytestmark = pytest.mark.integration
 runner = CliRunner()
@@ -18,6 +25,33 @@ FIXTURE_PATH = (
     Path(__file__).parents[2]
     / "packages/dungeon-engine/tests/fixtures/sunken_archive.v1.json"
 )
+
+
+def _mechanics_plan(package: DungeonPackage) -> DungeonMechanicsPlan:
+    return DungeonMechanicsPlan(
+        policy_version="dungeon-mechanics-policy-v1",
+        connection_ids=tuple(item.id for item in package.topology.connections),
+        room_ids=tuple(item.id for item in package.topology.rooms),
+        door_mechanics=tuple(
+            CompiledDoorMechanics(
+                id=door.id,
+                connection_id=door.connection_id,
+                concealed=door.mechanics.concealed,
+                gate_id=door.mechanics.gate_id,
+                gate_kind=door.mechanics.gate_kind,
+                trap_id=door.mechanics.trap_id,
+                discovery_difficulty=door.mechanics.discovery_difficulty,
+                unlock_difficulty=door.mechanics.unlock_difficulty,
+                disable_difficulty=door.mechanics.disable_difficulty,
+            )
+            for door in package.composable_doors
+        ),
+        room_traps=(),
+        room_puzzles=(),
+        room_features=(),
+        room_objectives=(),
+        encounter_slots=(),
+    )
 
 
 class _JsonResponse:
@@ -42,8 +76,8 @@ class _SseResponse:
     def __init__(self, proposal: dict[str, object]) -> None:
         payload = json.dumps(
             {
-                "name": "submit_dungeon_intent_v2",
-                "id": "submit-cli-v2",
+                "name": "submit_dungeon_plan",
+                "id": "submit-cli-v1",
                 "arguments": {"proposal": proposal},
             },
             separators=(",", ":"),
@@ -96,7 +130,8 @@ def test_cli_generate_inspect_and_approve_use_shared_workflow(
         brief=package.brief,
         topology=package.topology,
         seed=424242,
-        generator_version="orthogonal-v2",
+        generator_version="orthogonal-v1",
+        mechanics_plan=_mechanics_plan(package),
     )
     source_root = tmp_path / "sources"
     source_root.mkdir()
@@ -219,9 +254,9 @@ def test_cli_prompt_uses_private_gateway_and_persists_package(
 ) -> None:
     package = read_dungeon_package(FIXTURE_PATH)
     proposal: dict[str, object] = {
-        "proposal_version": "2",
+        "proposal_version": "1",
         "design": {
-            "schema_version": "2.4.0",
+            "schema_version": "1.0.0",
             "title": package.brief.title,
             "premise": "A synthetic flooded archive lies beneath a lighthouse.",
             "themes": ["flooded archive"],

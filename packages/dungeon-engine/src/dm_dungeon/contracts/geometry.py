@@ -14,7 +14,6 @@ from dm_dungeon.contracts.common import (
     VisibleContract,
 )
 from dm_dungeon.contracts.topology import (
-    DoorType,
     RoomCapacity,
     RoomRole,
     StairDirection,
@@ -173,42 +172,6 @@ class CorridorLayout(FloorBoundMapElement):
     path: PolylineGeometry
     width_cells: PositiveCells
     connects_room_ids: tuple[OpaqueId, OpaqueId]
-
-
-class DoorLayout(FloorBoundMapElement):
-    """Exact segment and mechanics classification for a door."""
-
-    door_type: DoorType
-    segment: GridSegment
-    connects_room_ids: tuple[OpaqueId, OpaqueId]
-    from_hidden: bool = False
-    to_hidden: bool = False
-    gate_id: OpaqueId | None = None
-    hazard_id: OpaqueId | None = None
-
-    @model_validator(mode="after")
-    def validate_door_requirements(self) -> Self:
-        if self.door_type is DoorType.LOCKED and self.gate_id is None:
-            raise ValueError("locked doors require gate_id")
-        if self.door_type is DoorType.TRAPPED and self.hazard_id is None:
-            raise ValueError("trapped doors require hazard_id")
-        has_hidden_endpoint = self.from_hidden or self.to_hidden
-        if self.door_type is DoorType.SECRET and not has_hidden_endpoint:
-            raise ValueError("secret doors require at least one hidden endpoint")
-        if self.door_type is not DoorType.SECRET and has_hidden_endpoint:
-            raise ValueError("hidden door endpoints require secret door type")
-        if self.door_type is DoorType.TRAPPED:
-            if self.visibility is not Visibility.DM_ONLY:
-                raise ValueError("trapped doors must be dm_only")
-        if (
-            self.door_type is DoorType.SECRET
-            and self.visibility is Visibility.PLAYER_SAFE
-            and self.from_hidden == self.to_hidden
-        ):
-            raise ValueError(
-                "player_safe secret doors require exactly one visible endpoint"
-            )
-        return self
 
 
 class StairLayout(FloorBoundMapElement):

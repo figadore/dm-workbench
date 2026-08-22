@@ -500,7 +500,7 @@ def dungeon_prompt(
                 provider_id=selected_provider.id,
                 model_id=selected_model.id,
                 effort=selected_effort,
-                selection_policy="dungeon-task-baseline-v2",
+                selection_policy="dungeon-task-baseline-v1",
             )
             resolved_seed = seed if seed is not None else secrets.randbits(63)
             try:
@@ -762,7 +762,7 @@ def _resolve_dungeon_model_selection(
     allow_faux: bool,
 ) -> tuple[GatewayProvider, GatewayCatalogModel, ReasoningEffort]:
     providers = gateway.providers()
-    if saved is not None and saved.selection_policy != "dungeon-task-baseline-v2":
+    if saved is not None and saved.selection_policy != "dungeon-task-baseline-v1":
         saved = None
     requested_provider = provider_override or (
         saved.provider_id if saved is not None else None

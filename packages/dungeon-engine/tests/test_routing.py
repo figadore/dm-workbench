@@ -12,7 +12,7 @@ from dm_dungeon.layout.routing import (
 from dm_dungeon.validation.grid import cells_for_corridor
 
 
-def test_v3_passage_routes_from_explicit_openings_with_endpoint_leads() -> None:
+def test_passage_routes_from_explicit_openings_with_endpoint_leads() -> None:
     source = Rect(x=2, y=5, width=3, height=3)
     target = Rect(x=15, y=5, width=3, height=3)
     unrelated = Rect(x=9, y=4, width=3, height=5)
@@ -26,7 +26,7 @@ def test_v3_passage_routes_from_explicit_openings_with_endpoint_leads() -> None:
             height_cells=14,
         ),
         width_cells=1,
-        random_source=DeterministicRandom(7, "orthogonal-v3"),
+        random_source=DeterministicRandom(7, "orthogonal-v1"),
     )
 
     assert route is not None
@@ -88,7 +88,7 @@ def test_wide_corridor_does_not_clip_an_adjacent_unrelated_room() -> None:
             height_cells=12,
         ),
         width_cells=3,
-        random_source=DeterministicRandom(7, "orthogonal-v2"),
+        random_source=DeterministicRandom(7, "orthogonal-v1"),
     )
 
     assert route is not None
@@ -115,7 +115,7 @@ def test_corridor_leaves_clearance_from_an_unrelated_room_wall() -> None:
             height_cells=12,
         ),
         width_cells=1,
-        random_source=DeterministicRandom(7, "orthogonal-v2"),
+        random_source=DeterministicRandom(7, "orthogonal-v1"),
     )
 
     assert route is not None

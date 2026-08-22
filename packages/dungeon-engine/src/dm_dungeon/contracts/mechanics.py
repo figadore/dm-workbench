@@ -10,7 +10,7 @@ from typing import Literal
 from pydantic import Field, model_validator
 
 from dm_dungeon.contracts.common import ContractModel, OpaqueId
-from dm_dungeon.contracts.design_v2 import (
+from dm_dungeon.contracts.design import (
     BarrierIntent,
     EncounterSlotIntent,
     EndpointDoorKind,
@@ -19,12 +19,12 @@ from dm_dungeon.contracts.design_v2 import (
     VerticalEndpointSide,
 )
 
-DUNGEON_MECHANICS_POLICY_VERSION: Literal["dungeon-mechanics-policy-1"] = (
-    "dungeon-mechanics-policy-1"
+DUNGEON_MECHANICS_POLICY_VERSION: Literal["dungeon-mechanics-policy-v1"] = (
+    "dungeon-mechanics-policy-v1"
 )
 
 
-class CompiledDoorMechanicsV2(ContractModel):
+class CompiledDoorMechanics(ContractModel):
     """Exact mechanics attached to one same-floor door or vertical hatch."""
 
     id: OpaqueId
@@ -42,7 +42,7 @@ class CompiledDoorMechanicsV2(ContractModel):
     @model_validator(mode="after")
     def require_complete_mechanics_and_endpoint_shape(
         self,
-    ) -> "CompiledDoorMechanicsV2":
+    ) -> "CompiledDoorMechanics":
         if (self.endpoint is None) != (self.endpoint_kind is None):
             raise ValueError("endpoint and endpoint_kind must be present together")
         if self.concealed and self.discovery_difficulty is None:
@@ -56,14 +56,14 @@ class CompiledDoorMechanicsV2(ContractModel):
         return self
 
 
-class CompiledRoomTrapV2(ContractModel):
+class CompiledRoomTrap(ContractModel):
     id: OpaqueId
     room_id: OpaqueId
     detection_difficulty: int = Field(ge=0)
     disable_difficulty: int = Field(ge=0)
 
 
-class CompiledRoomPuzzleV2(ContractModel):
+class CompiledRoomPuzzle(ContractModel):
     """One room-local puzzle/control with deterministic marker identity."""
 
     id: OpaqueId
@@ -71,7 +71,7 @@ class CompiledRoomPuzzleV2(ContractModel):
     difficulty: int = Field(ge=0)
 
 
-class CompiledRoomFeatureV2(ContractModel):
+class CompiledRoomFeature(ContractModel):
     """One visible physical feature with deterministic marker identity."""
 
     id: OpaqueId
@@ -79,7 +79,7 @@ class CompiledRoomFeatureV2(ContractModel):
     kind: FeatureIntentKind
 
 
-class CompiledRoomObjectiveV2(ContractModel):
+class CompiledRoomObjective(ContractModel):
     """One stable objective marker derived from bounded objective intent."""
 
     id: OpaqueId
@@ -88,7 +88,7 @@ class CompiledRoomObjectiveV2(ContractModel):
     name: str
 
 
-class CompiledEncounterSlotV2(ContractModel):
+class CompiledEncounterSlot(ContractModel):
     """One stable room-local slot for later independent encounter design."""
 
     id: OpaqueId
@@ -96,21 +96,21 @@ class CompiledEncounterSlotV2(ContractModel):
     intent: EncounterSlotIntent
 
 
-class DungeonMechanicsPlanV2(ContractModel):
+class DungeonMechanicsPlan(ContractModel):
     """Stable policy-pinned mechanics consumed by exact layout and DM guidance."""
 
-    policy_version: Literal["dungeon-mechanics-policy-1"]
+    policy_version: Literal["dungeon-mechanics-policy-v1"]
     connection_ids: tuple[OpaqueId, ...]
     room_ids: tuple[OpaqueId, ...]
-    door_mechanics: tuple[CompiledDoorMechanicsV2, ...]
-    room_traps: tuple[CompiledRoomTrapV2, ...]
-    room_puzzles: tuple[CompiledRoomPuzzleV2, ...]
-    room_features: tuple[CompiledRoomFeatureV2, ...]
-    room_objectives: tuple[CompiledRoomObjectiveV2, ...]
-    encounter_slots: tuple[CompiledEncounterSlotV2, ...]
+    door_mechanics: tuple[CompiledDoorMechanics, ...]
+    room_traps: tuple[CompiledRoomTrap, ...]
+    room_puzzles: tuple[CompiledRoomPuzzle, ...]
+    room_features: tuple[CompiledRoomFeature, ...]
+    room_objectives: tuple[CompiledRoomObjective, ...]
+    encounter_slots: tuple[CompiledEncounterSlot, ...]
 
     @model_validator(mode="after")
-    def require_unique_room_mechanic_ids(self) -> "DungeonMechanicsPlanV2":
+    def require_unique_room_mechanic_ids(self) -> "DungeonMechanicsPlan":
         marker_ids = (
             *(item.id for item in self.room_traps),
             *(item.id for item in self.room_puzzles),

@@ -57,23 +57,22 @@ from dm_assistant.orchestration.dungeons.contracts import (
     RegenerateDungeonWorkflow,
 )
 from dm_dungeon import (
-    CompiledRoomFeatureV2,
-    CompiledRoomObjectiveV2,
-    CompiledRoomPuzzleV2,
-    CompiledRoomTrapV2,
-    ComposableDoorMechanicsV2,
-    DungeonDesignSpecV2,
+    CompiledRoomFeature,
+    CompiledRoomObjective,
+    CompiledRoomPuzzle,
+    CompiledRoomTrap,
+    DoorMechanics,
+    DungeonDesignSpec,
     DungeonPackage,
-    DungeonPackageV2,
     LayoutRequest,
     LockedLayoutComponents,
     PngExportRequest,
     RenderAudience,
-    RoomMechanicMarkerV2,
+    RoomMechanicMarker,
     SvgRenderRequest,
     SvgThemeName,
     build_map_key,
-    compile_dungeon_design_v2,
+    compile_dungeon_design,
     export_png,
     generate_layout,
     render_svg,
@@ -83,18 +82,10 @@ from dm_dungeon import (
 )
 from dm_dungeon.contracts import (
     DUNGEON_PACKAGE_SCHEMA_VERSION,
-    DUNGEON_PACKAGE_V2_SCHEMA_VERSION,
-    DoorConnection,
-    DoorLayout,
     EndpointDoorKind,
-    GridPoint,
-    Label,
     PassageType,
-    RenderLayer,
-    RenderLayerKind,
     RoomLayout,
     VerticalEndpointSide,
-    Visibility,
 )
 from dm_dungeon.export import (
     ROLL20_EXPORTER_VERSION,
@@ -256,7 +247,7 @@ class DungeonStudioService:
     def guide_for_version(
         self, *, campaign_id: uuid.UUID, artifact_version_id: uuid.UUID
     ) -> DungeonDmGuide | None:
-        """Return the immutable V2 DM-guide projection when the version has one."""
+        """Return the immutable V1 DM-guide projection when the version has one."""
 
         version = self._preparation.get_version(campaign_id, artifact_version_id)
         return _load_specification(version.specification).dm_guide
@@ -338,21 +329,16 @@ class DungeonStudioService:
             "dungeon_brief": request.brief.schema_version,
             "dungeon_topology": request.topology.schema_version,
             "layout_request": request.schema_version,
-            "dungeon_package": (
-                DUNGEON_PACKAGE_V2_SCHEMA_VERSION
-                if request.generator_version in {"orthogonal-v3", "orthogonal-v4"}
-                else DUNGEON_PACKAGE_SCHEMA_VERSION
-            ),
+            "dungeon_package": DUNGEON_PACKAGE_SCHEMA_VERSION,
             "dungeon_studio": _STUDIO_SCHEMA_VERSION,
         }
         generator_versions = {
             "dungeon_kernel": dm_dungeon.__version__,
             "layout": request.generator_version,
         }
-        if request.mechanics_plan is not None:
-            generator_versions["dungeon_mechanics_policy"] = (
-                request.mechanics_plan.policy_version
-            )
+        generator_versions["dungeon_mechanics_policy"] = (
+            request.mechanics_plan.policy_version
+        )
         if model_lineage:
             input_scope["model_lineage_sha256"] = canonical_json_sha256(
                 {
@@ -361,7 +347,7 @@ class DungeonStudioService:
                     ]
                 }
             )
-            schema_versions["dungeon_generation_proposal"] = "2.4.0"
+            schema_versions["dungeon_generation_proposal"] = "1.0.0"
             generator_versions["design_compiler"] = (
                 dm_dungeon.DUNGEON_DESIGN_COMPILER_VERSION
             )
@@ -717,7 +703,7 @@ def _build_dm_guide(
     package: DungeonPackage,
     model_lineage: tuple[PromptedDungeonModelLineage, ...],
 ) -> DungeonDmGuide | None:
-    """Project accepted V2 prose onto exact package IDs and shared DM callouts.
+    """Project accepted V1 prose onto exact package IDs and shared DM callouts.
 
     The pure package deliberately contains no creative prose or puzzle solution.
     This Workbench projection is created only from the accepted proposal and verifies
@@ -727,18 +713,15 @@ def _build_dm_guide(
 
     design = next(
         (
-            lineage.proposal_v2.design
+            lineage.proposal.design
             for lineage in reversed(model_lineage)
-            if lineage.proposal_v2 is not None
-            and lineage.proposal_v2.design is not None
+            if lineage.proposal is not None and lineage.proposal.design is not None
         ),
         None,
     )
     if design is None:
         return None
-    if not isinstance(package, DungeonPackageV2):
-        raise ConflictError("A V2 proposal requires a mechanics-aware dungeon package.")
-    compiled = compile_dungeon_design_v2(design)
+    compiled = compile_dungeon_design(design)
     if (
         not compiled.accepted
         or compiled.topology is None
@@ -1049,7 +1032,7 @@ def _guide_connection(
     to_room_id: str,
     endpoint: VerticalEndpointSide | None,
     endpoint_kind: EndpointDoorKind | None,
-    mechanics: ComposableDoorMechanicsV2,
+    mechanics: DoorMechanics,
     trap_trigger: str | None,
     trap_effect: str | None,
 ) -> DungeonGuideConnection:
@@ -1075,9 +1058,9 @@ def _guide_connection(
 
 
 def _guide_traps(
-    design: DungeonDesignSpecV2,
-    plans: tuple[CompiledRoomTrapV2, ...],
-    markers: dict[str, RoomMechanicMarkerV2],
+    design: DungeonDesignSpec,
+    plans: tuple[CompiledRoomTrap, ...],
+    markers: dict[str, RoomMechanicMarker],
     rooms: dict[str, RoomLayout],
     map_reference: Callable[[str, str], DungeonGuideMapReference | None],
 ) -> list[DungeonGuideTrap]:
@@ -1108,9 +1091,9 @@ def _guide_traps(
 
 
 def _guide_puzzles(
-    design: DungeonDesignSpecV2,
-    plans: tuple[CompiledRoomPuzzleV2, ...],
-    markers: dict[str, RoomMechanicMarkerV2],
+    design: DungeonDesignSpec,
+    plans: tuple[CompiledRoomPuzzle, ...],
+    markers: dict[str, RoomMechanicMarker],
     rooms: dict[str, RoomLayout],
     map_reference: Callable[[str, str], DungeonGuideMapReference | None],
     dependency_ids_by_local: dict[str, str],
@@ -1145,9 +1128,9 @@ def _guide_puzzles(
 
 
 def _guide_objectives(
-    design: DungeonDesignSpecV2,
-    plans: tuple[CompiledRoomObjectiveV2, ...],
-    markers: dict[str, RoomMechanicMarkerV2],
+    design: DungeonDesignSpec,
+    plans: tuple[CompiledRoomObjective, ...],
+    markers: dict[str, RoomMechanicMarker],
     rooms: dict[str, RoomLayout],
     map_reference: Callable[[str, str], DungeonGuideMapReference | None],
 ) -> list[DungeonGuideObjective]:
@@ -1177,9 +1160,9 @@ def _guide_objectives(
 
 
 def _guide_features(
-    design: DungeonDesignSpecV2,
-    plans: tuple[CompiledRoomFeatureV2, ...],
-    markers: dict[str, RoomMechanicMarkerV2],
+    design: DungeonDesignSpec,
+    plans: tuple[CompiledRoomFeature, ...],
+    markers: dict[str, RoomMechanicMarker],
     rooms: dict[str, RoomLayout],
     map_reference: Callable[[str, str], DungeonGuideMapReference | None],
 ) -> list[DungeonGuideFeature]:
@@ -1401,42 +1384,10 @@ def _dm_guide_text(guide: DungeonDmGuide) -> str:
 def _dm_presentation_package(
     package: DungeonPackage, dm_notes: DungeonDmNotes
 ) -> DungeonPackage:
-    """Add DM-only numbered room callouts to a render-only package copy."""
+    """Return V1 package data; its DM annotations are already exact."""
 
-    if not dm_notes.room_notes or isinstance(package, DungeonPackageV2):
-        return package
-    layer_id = "dm_room_notes"
-    layer = RenderLayer(
-        id=layer_id,
-        name="DM room-note callouts",
-        kind=RenderLayerKind.DM_ANNOTATIONS,
-        z_index=101,
-        include_in_dm_export=True,
-        include_in_player_export=False,
-        visibility=Visibility.DM_ONLY,
-    )
-    rooms = {room.id: room for room in package.rooms}
-    labels: list[Label] = list(package.labels)
-    for index, note in enumerate(dm_notes.room_notes, start=1):
-        room = rooms.get(note.room_id)
-        if room is None:
-            continue
-        points = room.boundary.points
-        x = (min(point.x for point in points) + max(point.x for point in points)) // 2
-        y = (min(point.y for point in points) + max(point.y for point in points)) // 2
-        labels.append(
-            Label(
-                id=f"dm_note_{note.room_id}",
-                layer_id=layer_id,
-                floor_id=room.floor_id,
-                visibility=Visibility.DM_ONLY,
-                text=f"[{index}] {note.name}",
-                position=GridPoint(x=x, y=y),
-            )
-        )
-    return package.model_copy(
-        update={"layers": (*package.layers, layer), "labels": tuple(labels)}
-    )
+    del dm_notes
+    return package
 
 
 def _log_generation_result(
@@ -1656,67 +1607,41 @@ def _select_locks(
     known.update(item.id for item in package.floors)
     known.update(item.id for item in package.rooms)
     known.update(item.id for item in package.corridors)
-    known.update(item.id for item in package.doors)
+    known.update(item.id for item in package.composable_doors)
     known.update(item.id for item in package.stairs)
     known.update(item.id for item in package.vertical_links)
-    if isinstance(package, DungeonPackageV2):
-        known.update(item.id for item in package.composable_doors)
-        known.update(item.id for item in package.vertical_endpoint_doors)
-        known.update(item.id for item in package.room_mechanic_markers)
+    known.update(item.id for item in package.vertical_endpoint_doors)
+    known.update(item.id for item in package.room_mechanic_markers)
     if not selected <= known:
         raise ConflictError("A requested locked component does not exist.")
 
     selected_room_ids = {item.id for item in package.rooms if item.id in selected}
     selected_links = {item.id for item in package.vertical_links if item.id in selected}
-    selected_doors = list(item for item in package.doors if item.id in selected)
-    if isinstance(package, DungeonPackageV2):
-        topology_doors = {
-            item.id: item
-            for item in package.topology.connections
-            if isinstance(item, DoorConnection)
-        }
-        for door in package.composable_doors:
-            if door.id not in selected:
-                continue
-            topology_door = topology_doors[door.connection_id]
-            selected_room_ids.update(door.connects_room_ids)
-            selected_doors.append(
-                DoorLayout(
-                    id=door.connection_id,
-                    layer_id=door.layer_id,
-                    floor_id=door.floor_id,
-                    door_type=topology_door.door_type,
-                    segment=door.segment,
-                    connects_room_ids=door.connects_room_ids,
-                    from_hidden=door.from_hidden,
-                    to_hidden=door.to_hidden,
-                    gate_id=topology_door.gate_id,
-                    hazard_id=topology_door.trap_id,
-                    visibility=door.visibility,
-                )
-            )
-        selected_endpoint_links = {
-            item.vertical_link_id
-            for item in package.vertical_endpoint_doors
-            if item.id in selected
-        }
-        selected_links.update(selected_endpoint_links)
-        selected_room_ids.update(
-            room_id
-            for connection in package.topology.connections
-            if connection.id in selected_endpoint_links
-            for room_id in (connection.from_room_id, connection.to_room_id)
-        )
-        selected_room_ids.update(
-            item.room_id
-            for item in package.room_mechanic_markers
-            if item.id in selected
-        )
+    selected_doors = tuple(
+        item for item in package.composable_doors if item.id in selected
+    )
+    for door in selected_doors:
+        selected_room_ids.update(door.connects_room_ids)
+    selected_endpoint_links = {
+        item.vertical_link_id
+        for item in package.vertical_endpoint_doors
+        if item.id in selected
+    }
+    selected_links.update(selected_endpoint_links)
+    selected_room_ids.update(
+        room_id
+        for connection in package.topology.connections
+        if connection.id in selected_endpoint_links
+        for room_id in (connection.from_room_id, connection.to_room_id)
+    )
+    selected_room_ids.update(
+        item.room_id for item in package.room_mechanic_markers if item.id in selected
+    )
     return LockedLayoutComponents(
         floors=tuple(item for item in package.floors if item.id in selected),
         rooms=tuple(item for item in package.rooms if item.id in selected_room_ids),
         corridors=tuple(item for item in package.corridors if item.id in selected),
-        doors=tuple(selected_doors),
+        doors=selected_doors,
         stairs=tuple(item for item in package.stairs if item.id in selected),
         vertical_links=tuple(
             item for item in package.vertical_links if item.id in selected_links
@@ -1730,7 +1655,6 @@ def _component_documents(package: DungeonPackage) -> dict[str, object]:
         "floors",
         "rooms",
         "corridors",
-        "doors",
         "composable_doors",
         "stairs",
         "vertical_links",

@@ -7,10 +7,11 @@
 ## Current Snapshot
 
 - **Last updated:** 2026-08-21
-- **Branch:** `fast-track-prompt-to-dungeon`, one commit ahead of origin before this WIP.
+- **Branch:** `fast-track-prompt-to-dungeon`, two commits ahead of origin before this WIP.
 - **Current task:** **P7-14b — One alpha V1 and dead-code deletion.**
-- **Task state:** first model-orchestration deletion/circular-import slice complete but
-  uncommitted; pure package/contract/generator collapse remains.
+- **Task state:** **complete in the working tree; not committed.** The model,
+  proposal/design/compiler/mechanics, package/reader, layout generator, renderer, and
+  Roll20 paths now expose one suffix-free alpha V1.
 - **Schema head:** `0008_workbench_defaults`; no migration changed.
 - **Live providers:** no call was made. Do not resume the stopped live suite during P7-14a/b.
 
@@ -129,24 +130,69 @@ mechanics, and 73 mostly blank PDF pages. No retained user artifact required the
   `export_format`, restoring the full root unit suite.
 
 This slice removes 1,100+ lines and leaves exactly one prompted dungeon orchestration
-path. It does **not** yet rename the active V2 proposal/design/package classes or remove
-`orthogonal-v2/v3/v4` package dispatch; those are the next P7-14b slice.
+path.
+
+### Sole public package and reader
+
+- Merged the mechanics-aware exact package into
+  `contracts/package.py` as the sole public `DungeonPackage` and deleted
+  `contracts/package_v2.py`/`DungeonPackageV2`.
+- Reset the package and topology roots to schema `1.0.0`; serialization now accepts
+  exactly that package root instead of dispatching retained `1.1.0` and active `1.3.0`
+  readers.
+- Removed numeric suffixes from active exact-package records (`DoorMechanics`,
+  `MechanicDoorLayout`, `RoomMechanicMarker`, and `VerticalEndpointDoorLayout`).
+- Regenerated `sunken_archive.v1.json` through the active mechanics-aware generator and
+  refreshed SVG/PNG goldens. It no longer preserves the old hand-authored package
+  geometry or known-bad output assumptions.
+- Rebased package, geometry, rendering, export, CLI, Workbench guide, and test typing on
+  the sole exact package. Added a missing invariant that composable-door visibility must
+  match its render layer.
+- Deleted three compatibility/duplicate tests, including the V3 package-dispatch test,
+  while retaining deterministic generation, geometry, secrecy, rendering, PNG/PDF,
+  Roll20, CLI, and contract coverage.
+
+### Suffix-free alpha V1 and sole layout path
+
+- Renamed `design_v2.py` and `mechanics_v2.py` to suffix-free modules and removed
+  numeric suffixes from every active design, mechanics, proposal, submission, compiler,
+  serialization, test, and eval public name.
+- Reset the design/proposal schema to `1.0.0`, proposal version to `1`, compiler pin to
+  `dungeon-design-compiler-v1`, mechanics policy to `dungeon-mechanics-policy-v1`,
+  generated IDs to `v1-*`, renderer to `svg-v1`, and Roll20 exporter to `roll20-v1`.
+- Renamed the only model tool to `submit_dungeon_plan`; CLI/web profile policies and
+  durable attempt pins now use the one alpha V1 names. The payload intentionally keeps
+  the temporary arbitrary-edge design only until P7-14c introduces `DungeonPlan`.
+- Made `LayoutRequest.generator_version` exactly `orthogonal-v1`, made
+  `mechanics_plan` required, and deleted all `orthogonal-v2/v3/v4` dispatch and fallback
+  behavior.
+- Removed the old package `doors` projection and obsolete `DoorLayout` contract. Exact
+  same-floor locks now retain `MechanicDoorLayout` directly; layout uses only a private
+  pre-mechanics geometry record.
+- Removed now-always-true package compatibility checks from geometry validation,
+  rendering, annotations, Roll20 export, CLI, and Workbench regeneration/guide code.
+- Deleted the old V1/V2 eval-comparison API/test because no retained consumer or
+  artifact requires generation-version comparison. Renamed the synthetic eval fixture
+  to `dungeon_intent.json`.
+- Regenerated `sunken_archive.v1.json` with `orthogonal-v1` and refreshed SVG/PNG
+  goldens. Updated focused PostgreSQL fixtures, README guidance, CLI/web faux gateway
+  payloads, schema/generator expectations, and preparation pins to the sole alpha V1.
 
 ## Verification
 
-Current P7-14b WIP:
+Completed P7-14b working tree:
 
 - Fresh-process direct imports of `GatewayCompletion` and `ModelWorkbenchService` →
-  passed without import-order priming.
-- Focused modeling/prompt/eval tests → `23 passed`.
-- `uv run pytest -q tests/unit` → **`169 passed`**.
-- `uv run pytest -q tests/evals` → **`5 passed`**.
-- `uv run pytest -q packages/dungeon-engine/tests` → **`206 passed`**.
-- Focused CLI/web prompt integration files → `3 skipped` because the integration
-  database gate was unavailable; no failure.
-- Strict mypy over touched modeling/dungeon/API/CLI source → passed.
-- Focused Ruff check and format over all touched Python files → passed.
-- `git diff --check` → passed before the final status edit.
+  passed without import-order priming in the first P7-14b slice.
+- `uv run pytest -q packages/dungeon-engine/tests` → **`203 passed`**.
+- `uv run pytest -q tests/unit tests/evals` → **`173 passed`**; the count decreased by
+  one because the obsolete V1/V2 comparison test was deleted.
+- Focused CLI/web/workflow/web-prompt integration files → **`6 skipped`** because the
+  integration database gate was unavailable; collection had no failure.
+- Strict mypy over the package, dungeon orchestration, and touched CLI → passed
+  (**`53` source files**).
+- Focused Ruff check and format over all changed Python files → passed (**`51` files**).
+- `git diff --check` → passed before this final status edit.
 
 A broad `ruff check src tests/unit tests/evals` also exposed six unrelated baseline
 violations in untouched Library/scope files (`modules/library/__init__.py`,
@@ -156,35 +202,33 @@ remain unresolved.
 
 ## Working Tree
 
-Uncommitted P7-14b changes:
+The complete P7-14b work remains uncommitted on a branch two commits ahead of origin.
+It includes the first model-orchestration/package-reader collapse plus the suffix-free
+contract/compiler/mechanics rename, sole generator path, old door projection deletion,
+Workbench/CLI/web updates, focused integration fixtures, README, regenerated synthetic
+fixture/goldens, tests, and this handoff.
 
-- `src/dm_assistant/api/app.py`
-- `src/dm_assistant/cli/main.py`
-- `src/dm_assistant/modules/modeling/{__init__,contracts,workbench}.py`
-- `src/dm_assistant/orchestration/dungeons/{__init__,application,contracts,prompting,service,web_prompt}.py`
-- `tests/evals/test_dungeon_evals.py`
-- `tests/integration/test_dungeon_studio_workflow.py`
-- `tests/unit/{test_prompted_dungeon_workflow,test_web_auth}.py`
-- `PROJECT_STATUS.md`
-
-No migration, provider response, real campaign content, credential, live-provider call,
-or package schema changed in this WIP.
+Deleted paths include `contracts/design_v2.py`, `contracts/mechanics_v2.py`,
+`contracts/package_v2.py`, `test_design_v2_compiler.py`, `test_package_v2.py`, and
+`tests/evals/golden/dungeon_intent_v2.json`; suffix-free replacements are present in the
+working tree. No migration, provider response, real campaign content, credential, or
+live-provider call changed in P7-14b.
 
 ## Single Next Recommended Task
 
-**Continue P7-14b — collapse the pure package and active contracts to one V1.**
+**Begin P7-14c — creative `DungeonPlan` and topology certificate.**
 
-**First concrete action:** inventory every test/fixture still read through the retained
-`DungeonPackage` 1.1 versus active `DungeonPackageV2` 1.3 dispatch, then make the active
-mechanics-aware package the sole `DungeonPackage` schema `1.0.0`. Delete the retained
-reader and regenerate only fixtures still exercising useful behavior.
+**First concrete action:** add the strict `DungeonPlan` V1 creative contract and
+provider-safe schema tests for one floor, 4–8 rooms, one entrance/objective critical
+path, bounded branches/loop, gate/dependency, secret route, and bounded room-content
+intent. Replace the temporary arbitrary model-authored edge aggregate only after the
+new contract and its reference/cardinality diagnostics are green.
 
-Then rename active design/mechanics/compiler/proposal/submission public names without
-numeric suffixes, pin them to V1, replace `submit_dungeon_intent_v2` with the sole
-`submit_dungeon_plan` name, and remove `orthogonal-v2/v3/v4` layout branching in favor
-of one generator pin. Re-run package, root unit/eval, strict mypy, focused PostgreSQL
-integration, Ruff, and `git diff --check` before P7-14c.
+Then build the deterministic series/parallel-with-spurs topology compiler and an
+independently recomputed `TopologyCertificate` with connectivity, cycle, branch,
+gate-order, public/secret reachability, room-demand, port-demand, and embedding
+witnesses. Do not start constructive geometry (P7-14d) in the same task.
 
-Suggested commit subject when all P7-14b work is complete:
+Suggested commit subject for the completed current work:
 
 `P7-14b collapse dungeon generation to one alpha V1`

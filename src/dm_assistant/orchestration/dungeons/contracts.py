@@ -11,9 +11,8 @@ from dm_assistant.modules.modeling import ModelRunRecord
 from dm_assistant.modules.preparation import GenerationContextPin, ToolRunPin
 from dm_assistant.modules.scope import TaskScope, TaskType
 from dm_dungeon import (
-    DungeonDesignSpecV2,
+    DungeonDesignSpec,
     DungeonPackage,
-    DungeonPackageV2,
     LayoutRequest,
     MapCallout,
 )
@@ -37,16 +36,16 @@ class PromptedDungeonModelLineage(WorkflowModel):
 
     model_run_id: UUID
     model_run: ModelRunRecord
-    proposal_v2: DungeonGenerationProposalV2 | None = None
+    proposal: DungeonGenerationProposal | None = None
 
     @model_validator(mode="after")
     def require_model_result_for_success(self) -> PromptedDungeonModelLineage:
         if self.model_run.status == "abstained":
-            if self.proposal_v2 is not None:
+            if self.proposal is not None:
                 raise ValueError(
                     "abstained lineage cannot claim a validated model result"
                 )
-        elif self.proposal_v2 is None:
+        elif self.proposal is None:
             raise ValueError("successful lineage requires one validated model result")
         return self
 
@@ -279,7 +278,7 @@ class DungeonStudioSpecification(WorkflowModel):
 
     schema_version: Literal["1.0.0"]
     layout_request: LayoutRequest
-    package: DungeonPackage | DungeonPackageV2
+    package: DungeonPackage
     dm_notes: DungeonDmNotes = DungeonDmNotes()
     dm_guide: DungeonDmGuide | None = None
     preparation_readiness: DungeonPreparationReadiness | None = None
@@ -293,13 +292,13 @@ class CreateDungeonWorkflow(WorkflowModel):
     created_by: str = Field(min_length=1, max_length=200)
 
 
-class DungeonProposalAbstentionV2(WorkflowModel):
-    """Safe bounded reason for declining a V2 creative design."""
+class DungeonProposalAbstention(WorkflowModel):
+    """Safe bounded reason for declining an alpha V1 creative design."""
 
     kind: Literal["insufficient_creative_direction", "conflicting_direction"]
 
 
-class DungeonGenerationProposalV2(WorkflowModel):
+class DungeonGenerationProposal(WorkflowModel):
     """Workbench-owned wrapper around pure compact creative design intent."""
 
     # Keep the design/abstention XOR visible in the exact schema sent to the
@@ -322,21 +321,21 @@ class DungeonGenerationProposalV2(WorkflowModel):
         },
     )
 
-    proposal_version: Literal["2"]
-    design: DungeonDesignSpecV2 | None = None
+    proposal_version: Literal["1"]
+    design: DungeonDesignSpec | None = None
     intent_summary: str | None = Field(default=None, min_length=1, max_length=500)
     requested_constraints: tuple[str, ...] = Field(default=(), max_length=16)
     citation_ids: tuple[str, ...] = Field(default=(), max_length=32)
     official_rule_ids: tuple[str, ...] = Field(default=(), max_length=32)
     unknowns: tuple[str, ...] = Field(default=(), max_length=16)
     conflicts: tuple[str, ...] = Field(default=(), max_length=16)
-    abstention: DungeonProposalAbstentionV2 | None = None
+    abstention: DungeonProposalAbstention | None = None
 
     @model_validator(mode="before")
     @classmethod
     def decode_pure_design(cls, value: object) -> object:
         if not isinstance(value, dict) or isinstance(
-            value.get("design"), DungeonDesignSpecV2
+            value.get("design"), DungeonDesignSpec
         ):
             return value
         document = dict(value)
@@ -344,7 +343,7 @@ class DungeonGenerationProposalV2(WorkflowModel):
         if isinstance(design, dict):
             import json
 
-            document["design"] = DungeonDesignSpecV2.model_validate_json(
+            document["design"] = DungeonDesignSpec.model_validate_json(
                 json.dumps(design)
             )
         for name in (
@@ -359,7 +358,7 @@ class DungeonGenerationProposalV2(WorkflowModel):
         return document
 
     @model_validator(mode="after")
-    def require_design_or_safe_abstention(self) -> DungeonGenerationProposalV2:
+    def require_design_or_safe_abstention(self) -> DungeonGenerationProposal:
         if (self.design is None) == (self.abstention is None):
             raise ValueError("proposal requires exactly one of design or abstention")
         if self.abstention is not None and self.intent_summary is not None:
@@ -367,10 +366,10 @@ class DungeonGenerationProposalV2(WorkflowModel):
         return self
 
 
-class SubmitDungeonIntentV2Input(WorkflowModel):
-    """The entire model-controlled input of the sole V2 submission tool."""
+class SubmitDungeonPlanInput(WorkflowModel):
+    """The entire model-controlled input of ``submit_dungeon_plan``."""
 
-    proposal: DungeonGenerationProposalV2
+    proposal: DungeonGenerationProposal
 
 
 class PromptDungeonWorkflow(WorkflowModel):

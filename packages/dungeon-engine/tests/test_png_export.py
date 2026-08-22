@@ -51,14 +51,14 @@ def test_png_export_is_deterministic_and_manifest_hashes_bytes(
     assert first.result.manifest is not None
     manifest = first.result.manifest
     assert manifest.asset_sha256 == hashlib.sha256(first.data).hexdigest()
-    assert manifest.width_pixels == 420
-    assert manifest.height_pixels == 240
+    assert manifest.width_pixels == 400
+    assert manifest.height_pixels == 400
     assert manifest.pixels_per_cell == 20
     assert manifest.dpi == 140
     assert manifest.ink_coverage_basis_points < 3500
 
     with Image.open(io.BytesIO(first.data)) as image:
-        assert image.size == (420, 240)
+        assert image.size == (400, 400)
         assert image.mode == "RGB"
         assert image.info["dpi"][0] == pytest.approx(140, abs=0.1)
 
@@ -104,9 +104,8 @@ def test_png_player_manifest_omits_dm_only_components(
 
     hidden_ids = {
         "room_vault",
-        "connection_vault_secret",
-        "corridor_vault_secret",
-        "label_secret_vault",
+        "connection_vault_secret_mechanics",
+        "connection_secret_ladder",
     }
     assert hidden_ids.isdisjoint(player.result.manifest.rendered_component_ids)
     assert hidden_ids <= set(dm.result.manifest.rendered_component_ids)

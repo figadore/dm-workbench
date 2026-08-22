@@ -58,7 +58,7 @@ def topology_payload(
     edges: Sequence[tuple[int, int]],
 ) -> dict[str, Any]:
     return {
-        "schema_version": "1.1.0",
+        "schema_version": "1.0.0",
         "id": "topology_generated",
         "visibility": "dm_only",
         "floors": [

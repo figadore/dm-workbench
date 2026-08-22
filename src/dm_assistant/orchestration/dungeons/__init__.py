@@ -8,7 +8,7 @@ from dm_assistant.orchestration.dungeons.contracts import (
     ApproveDungeonWorkflow,
     CreateDungeonWorkflow,
     CreatePromptedDungeonWorkflow,
-    DungeonGenerationProposalV2,
+    DungeonGenerationProposal,
     DungeonGenerationRegressionCase,
     DungeonStudioDetail,
     DungeonStudioSpecification,
@@ -18,12 +18,12 @@ from dm_assistant.orchestration.dungeons.contracts import (
     PromptDungeonWorkflow,
     PromptedDungeonModelLineage,
     RegenerateDungeonWorkflow,
-    SubmitDungeonIntentV2Input,
+    SubmitDungeonPlanInput,
 )
 from dm_assistant.orchestration.dungeons.prompting import (
     DungeonPromptService,
-    DungeonV2SubmissionResult,
-    DungeonV2SubmissionService,
+    DungeonSubmissionResult,
+    DungeonSubmissionService,
     resolve_dungeon_prompt_profile,
 )
 from dm_assistant.orchestration.dungeons.service import DungeonStudioService
@@ -43,9 +43,9 @@ __all__ = [
     "DungeonPromptRun",
     "DungeonPromptService",
     "DungeonPromptWorkbenchService",
-    "DungeonV2SubmissionResult",
-    "DungeonV2SubmissionService",
-    "DungeonGenerationProposalV2",
+    "DungeonSubmissionResult",
+    "DungeonSubmissionService",
+    "DungeonGenerationProposal",
     "DungeonGenerationRegressionCase",
     "DungeonStudioDetail",
     "DungeonStudioService",
@@ -55,7 +55,7 @@ __all__ = [
     "ExportDungeonWorkflow",
     "PromptDungeonWorkflow",
     "PromptedDungeonModelLineage",
-    "SubmitDungeonIntentV2Input",
+    "SubmitDungeonPlanInput",
     "RegenerateDungeonWorkflow",
     "resolve_dungeon_prompt_profile",
 ]

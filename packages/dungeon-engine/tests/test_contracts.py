@@ -44,7 +44,7 @@ def test_package_json_schema_exposes_versioned_root_and_definitions() -> None:
     schema = dungeon_package_json_schema()
 
     assert schema["title"] == "DungeonPackage"
-    assert schema["properties"]["schema_version"]["const"] == "1.1.0"
+    assert schema["properties"]["schema_version"]["const"] == "1.0.0"
     assert "DungeonBrief" in schema["$defs"]
     assert "DungeonTopology" in schema["$defs"]
     assert "RenderLayer" in schema["$defs"]
@@ -82,7 +82,7 @@ def test_unknown_nested_schema_version_fails_explicitly(fixture_path: Path) -> N
 
 def test_dm_only_element_requires_explicit_visibility(fixture_path: Path) -> None:
     payload = read_json_object(fixture_path)
-    del payload["hazards"][0]["visibility"]
+    del payload["composable_doors"][0]["visibility"]
 
     with pytest.raises(ValidationError, match="visibility"):
         load_dungeon_package_json(json.dumps(payload))
@@ -116,20 +116,6 @@ def test_player_safe_connection_cannot_reveal_dm_only_room(
         load_dungeon_package_json(json.dumps(payload))
 
 
-def test_secret_door_cannot_be_player_safe(fixture_path: Path) -> None:
-    payload = read_json_object(fixture_path)
-    secret_door = next(
-        door for door in payload["doors"] if door["door_type"] == "secret"
-    )
-    secret_door["visibility"] = "player_safe"
-    secret_door["layer_id"] = "layer_base"
-
-    with pytest.raises(
-        ValidationError, match="player_safe secret doors require exactly one"
-    ):
-        load_dungeon_package_json(json.dumps(payload))
-
-
 def test_dm_layer_cannot_enter_player_export(fixture_path: Path) -> None:
     payload = read_json_object(fixture_path)
     dm_layer = next(
@@ -146,12 +132,18 @@ def test_dm_layer_cannot_enter_player_export(fixture_path: Path) -> None:
 
 def test_layer_visibility_must_match_each_component(fixture_path: Path) -> None:
     payload = read_json_object(fixture_path)
-    player_label = next(
-        label for label in payload["labels"] if label["visibility"] == "player_safe"
+    secret_door = next(
+        door for door in payload["composable_doors"] if door["visibility"] == "dm_only"
     )
-    player_label["layer_id"] = "layer_dm_annotations"
+    secret_door["layer_id"] = next(
+        layer["id"]
+        for layer in payload["layers"]
+        if layer["visibility"] == "player_safe"
+    )
 
-    with pytest.raises(ValidationError, match="visibility does not match layer"):
+    with pytest.raises(
+        ValidationError, match="visibility does not match its render layer"
+    ):
         load_dungeon_package_json(json.dumps(payload))
 
 

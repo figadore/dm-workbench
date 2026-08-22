@@ -14,14 +14,11 @@ from dm_dungeon.contracts.geometry import (
     RectangleGeometry,
     SegmentGeometry,
 )
-from dm_dungeon.contracts.package import DungeonPackage
-from dm_dungeon.contracts.package_v2 import (
-    DoorLayoutV2,
-    DungeonPackageV2,
-    RoomMechanicMarkerKindV2,
-    VerticalEndpointDoorLayoutV2,
+from dm_dungeon.contracts.package import (
+    DungeonPackage,
+    RoomMechanicMarkerKind,
+    VerticalEndpointDoorLayout,
 )
-from dm_dungeon.contracts.topology import DoorType
 from dm_dungeon.rendering.contracts import RenderAudience
 
 MAP_KEY_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
@@ -81,7 +78,7 @@ def build_map_key(
     layers = {layer.id: layer for layer in package.layers}
 
     def visible(
-        component: LayeredMapElement | VerticalEndpointDoorLayoutV2,
+        component: LayeredMapElement | VerticalEndpointDoorLayout,
     ) -> bool:
         layer = layers[component.layer_id]
         if audience is RenderAudience.DM:
@@ -98,29 +95,19 @@ def build_map_key(
             candidates.append(
                 (MapCalloutKind.ROOM, room.id, _polygon_anchor(room.boundary), ())
             )
-    doors = (
-        package.composable_doors
-        if isinstance(package, DungeonPackageV2)
-        else package.doors
-    )
-    for door in doors:
+    for door in package.composable_doors:
         if door.floor_id == floor_id and visible(door):
             badges: tuple[str, ...] = ()
             if audience is RenderAudience.DM:
-                if isinstance(door, DoorLayoutV2):
-                    badges = tuple(
-                        badge
-                        for active, badge in (
-                            (door.mechanics.concealed, "S"),
-                            (door.mechanics.gate_id is not None, "L"),
-                            (door.mechanics.trap_id is not None, "T"),
-                        )
-                        if active
+                badges = tuple(
+                    badge
+                    for active, badge in (
+                        (door.mechanics.concealed, "S"),
+                        (door.mechanics.gate_id is not None, "L"),
+                        (door.mechanics.trap_id is not None, "T"),
                     )
-                else:
-                    badges = ({DoorType.SECRET: ("S",), DoorType.TRAPPED: ("T",)}).get(
-                        door.door_type, ()
-                    )
+                    if active
+                )
             candidates.append(
                 (
                     MapCalloutKind.DOOR,
@@ -129,31 +116,30 @@ def build_map_key(
                     badges,
                 )
             )
-    if isinstance(package, DungeonPackageV2):
-        for endpoint_door in package.vertical_endpoint_doors:
-            if endpoint_door.floor_id != floor_id or not visible(endpoint_door):
-                continue
-            badges = (
-                tuple(
-                    badge
-                    for active, badge in (
-                        (endpoint_door.mechanics.concealed, "S"),
-                        (endpoint_door.mechanics.gate_id is not None, "L"),
-                        (endpoint_door.mechanics.trap_id is not None, "T"),
-                    )
-                    if active
+    for endpoint_door in package.vertical_endpoint_doors:
+        if endpoint_door.floor_id != floor_id or not visible(endpoint_door):
+            continue
+        badges = (
+            tuple(
+                badge
+                for active, badge in (
+                    (endpoint_door.mechanics.concealed, "S"),
+                    (endpoint_door.mechanics.gate_id is not None, "L"),
+                    (endpoint_door.mechanics.trap_id is not None, "T"),
                 )
-                if audience is RenderAudience.DM
-                else ()
+                if active
             )
-            candidates.append(
-                (
-                    MapCalloutKind.DOOR,
-                    endpoint_door.id,
-                    endpoint_door.position,
-                    badges,
-                )
+            if audience is RenderAudience.DM
+            else ()
+        )
+        candidates.append(
+            (
+                MapCalloutKind.DOOR,
+                endpoint_door.id,
+                endpoint_door.position,
+                badges,
             )
+        )
     for hazard in package.hazards:
         if hazard.floor_id == floor_id and visible(hazard):
             candidates.append(
@@ -174,18 +160,17 @@ def build_map_key(
                     (),
                 )
             )
-    if isinstance(package, DungeonPackageV2):
-        marker_kinds = {
-            RoomMechanicMarkerKindV2.TRAP: MapCalloutKind.HAZARD,
-            RoomMechanicMarkerKindV2.PUZZLE: MapCalloutKind.PUZZLE,
-            RoomMechanicMarkerKindV2.FEATURE: MapCalloutKind.FEATURE,
-            RoomMechanicMarkerKindV2.OBJECTIVE: MapCalloutKind.OBJECTIVE,
-        }
-        for marker in package.room_mechanic_markers:
-            if marker.floor_id == floor_id and visible(marker):
-                candidates.append(
-                    (marker_kinds[marker.kind], marker.id, marker.position, ())
-                )
+    marker_kinds = {
+        RoomMechanicMarkerKind.TRAP: MapCalloutKind.HAZARD,
+        RoomMechanicMarkerKind.PUZZLE: MapCalloutKind.PUZZLE,
+        RoomMechanicMarkerKind.FEATURE: MapCalloutKind.FEATURE,
+        RoomMechanicMarkerKind.OBJECTIVE: MapCalloutKind.OBJECTIVE,
+    }
+    for marker in package.room_mechanic_markers:
+        if marker.floor_id == floor_id and visible(marker):
+            candidates.append(
+                (marker_kinds[marker.kind], marker.id, marker.position, ())
+            )
     stair_ids = set()
     for stair in package.stairs:
         if stair.floor_id == floor_id and visible(stair):

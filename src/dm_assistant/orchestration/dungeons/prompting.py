@@ -34,11 +34,11 @@ from dm_assistant.modules.preparation import (
 )
 from dm_assistant.orchestration.dungeons.contracts import (
     CreatePromptedDungeonWorkflow,
-    DungeonGenerationProposalV2,
+    DungeonGenerationProposal,
     DungeonWorkflowResult,
     PromptDungeonWorkflow,
     PromptedDungeonModelLineage,
-    SubmitDungeonIntentV2Input,
+    SubmitDungeonPlanInput,
 )
 from dm_assistant.orchestration.modeling import (
     GatewayClient,
@@ -53,7 +53,7 @@ from dm_dungeon import (
     DUNGEON_DESIGN_COMPILER_VERSION,
     DungeonDesignCompileResult,
     LayoutRequest,
-    compile_dungeon_design_v2,
+    compile_dungeon_design,
     generate_layout,
     validate_geometry,
     validate_topology,
@@ -61,13 +61,13 @@ from dm_dungeon import (
 from dm_dungeon.layout import ORTHOGONAL_LAYOUT_GENERATOR_VERSION
 
 _DUNGEON_CONTEXT_KIND = "dungeon_generation"
-_DUNGEON_V2_SCHEMA_NAME = "dungeon_generation_proposal_v2"
-_DUNGEON_V2_SCHEMA_VERSION = "2.4.0"
-_SUBMIT_DUNGEON_INTENT_V2_TOOL = "submit_dungeon_intent_v2"
-_MAX_V2_REPAIR_ARGUMENT_CHARACTERS = 12_000
-_V2_OUTPUT_TOKEN_LIMIT = 4_096
-_V2_CUMULATIVE_TOKEN_BUDGET = 12_000
-_V2_CONNECTION_GUIDANCE = (
+_DUNGEON_SCHEMA_NAME = "dungeon_generation_proposal"
+_DUNGEON_SCHEMA_VERSION = "1.0.0"
+_SUBMIT_DUNGEON_PLAN_TOOL = "submit_dungeon_plan"
+_MAX_REPAIR_ARGUMENT_CHARACTERS = 12_000
+_OUTPUT_TOKEN_LIMIT = 4_096
+_CUMULATIVE_TOKEN_BUDGET = 12_000
+_CONNECTION_GUIDANCE = (
     "Connection rules: use passage or door only between rooms on one floor; use "
     "stairs or ladder only between different floors. Use from_hidden and to_hidden "
     "independently; a ladder hidden under an upper-floor rug has from_hidden true "
@@ -94,12 +94,12 @@ class PromptedDungeonCreator(Protocol):
     ) -> DungeonWorkflowResult: ...
 
 
-class DungeonV2SubmissionResult(BaseModel):
-    """Restricted V2 submission outcome before Studio persistence."""
+class DungeonSubmissionResult(BaseModel):
+    """Restricted alpha V1 submission outcome before Studio persistence."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
-    proposal: DungeonGenerationProposalV2
+    proposal: DungeonGenerationProposal
     compilation: DungeonDesignCompileResult | None = None
     layout_request: LayoutRequest | None = None
     model_run: ModelRunRecord
@@ -146,17 +146,17 @@ def resolve_dungeon_prompt_profile(
     )
     task = TaskProfile(
         profile_id=uuid.UUID("77777777-7777-7777-7777-777777777712"),
-        profile_version="2.4.0",
-        task_name=_DUNGEON_V2_SCHEMA_NAME,
-        prompt_version="prompt-4",
-        instruction_version="instructions-4",
-        output_schema_name=_DUNGEON_V2_SCHEMA_NAME,
-        output_schema_version=_DUNGEON_V2_SCHEMA_VERSION,
-        allowed_tools=(_SUBMIT_DUNGEON_INTENT_V2_TOOL,),
+        profile_version="1.0.0",
+        task_name=_DUNGEON_SCHEMA_NAME,
+        prompt_version="prompt-1",
+        instruction_version="instructions-1",
+        output_schema_name=_DUNGEON_SCHEMA_NAME,
+        output_schema_version=_DUNGEON_SCHEMA_VERSION,
+        allowed_tools=(_SUBMIT_DUNGEON_PLAN_TOOL,),
         turn_budget=1,
         tool_budget=1,
         time_budget_seconds=300,
-        token_budget=min(context_window_tokens, _V2_CUMULATIVE_TOKEN_BUDGET),
+        token_budget=min(context_window_tokens, _CUMULATIVE_TOKEN_BUDGET),
         require_citation_ids=False,
         require_authorized_citations=False,
         allow_source_retrieval_tools=False,
@@ -175,12 +175,12 @@ def resolve_dungeon_prompt_profile(
         task_profile=task,
         catalog_entry=catalog,
         requested_effort=requested_effort,
-        override_notes={"output_token_limit": _V2_OUTPUT_TOKEN_LIMIT},
+        override_notes={"output_token_limit": _OUTPUT_TOKEN_LIMIT},
     )
 
 
 class DungeonProposalRejectedAfterRepair(Exception):
-    """Both bounded V2 submissions were structurally valid but not acceptable.
+    """Both bounded submissions were structurally valid but not acceptable.
 
     This is deliberately distinct from a model abstention: deterministic compiler or
     preflight diagnostics rejected the replacement proposal after the one permitted
@@ -188,8 +188,8 @@ class DungeonProposalRejectedAfterRepair(Exception):
     """
 
 
-class DungeonV2SubmissionService:
-    """One compact V2 submit call followed by pure compile and preflight only."""
+class DungeonSubmissionService:
+    """One compact V1 submit call followed by pure compile and preflight only."""
 
     def __init__(
         self,
@@ -206,25 +206,25 @@ class DungeonV2SubmissionService:
         profile: ResolvedModelRunProfile,
         run_input: ModelRunInput,
         seed: int,
-    ) -> DungeonV2SubmissionResult:
+    ) -> DungeonSubmissionResult:
         _validate_profile(profile)
         compiled: DungeonDesignCompileResult | None = None
         request: LayoutRequest | None = None
 
-        def handle(value: SubmitDungeonIntentV2Input) -> ToolResult:
+        def handle(value: SubmitDungeonPlanInput) -> ToolResult:
             nonlocal compiled, request
             proposal = value.proposal
             if proposal.abstention is not None:
                 return ToolResult(
-                    tool_name=_SUBMIT_DUNGEON_INTENT_V2_TOOL,
+                    tool_name=_SUBMIT_DUNGEON_PLAN_TOOL,
                     call_id="server_submit",
                     payload={"accepted": False, "code": "proposal.abstained"},
                 )
             assert proposal.design is not None
-            compiled = compile_dungeon_design_v2(proposal.design)
+            compiled = compile_dungeon_design(proposal.design)
             if not compiled.accepted:
                 return ToolResult(
-                    tool_name=_SUBMIT_DUNGEON_INTENT_V2_TOOL,
+                    tool_name=_SUBMIT_DUNGEON_PLAN_TOOL,
                     call_id="server_submit",
                     payload={
                         "accepted": False,
@@ -234,16 +234,16 @@ class DungeonV2SubmissionService:
                         ],
                     },
                 )
-            request = _compile_v2_layout_request(compiled, seed)
-            _, diagnostics, valid = _preflight_v2(request)
+            request = _compile_layout_request(compiled, seed)
+            _, diagnostics, valid = _preflight(request)
             if not valid:
                 return ToolResult(
-                    tool_name=_SUBMIT_DUNGEON_INTENT_V2_TOOL,
+                    tool_name=_SUBMIT_DUNGEON_PLAN_TOOL,
                     call_id="server_submit",
                     payload={"accepted": False, "diagnostics": list(diagnostics[:8])},
                 )
             return ToolResult(
-                tool_name=_SUBMIT_DUNGEON_INTENT_V2_TOOL,
+                tool_name=_SUBMIT_DUNGEON_PLAN_TOOL,
                 call_id="server_submit",
                 payload={
                     "accepted": True,
@@ -255,12 +255,12 @@ class DungeonV2SubmissionService:
 
         runner = StructuredSubmissionRunner(self._gateway_client, debug=self._debug)
         tool = StructuredSubmissionTool(
-            name=_SUBMIT_DUNGEON_INTENT_V2_TOOL,
+            name=_SUBMIT_DUNGEON_PLAN_TOOL,
             description=(
                 "Submit one compact dungeon proposal. The server owns IDs, seed, "
                 "geometry, visibility, validation, persistence, and approval."
             ),
-            input_schema=SubmitDungeonIntentV2Input,
+            input_schema=SubmitDungeonPlanInput,
         )
         deadline = time.monotonic() + profile.time_budget_seconds
         try:
@@ -278,7 +278,7 @@ class DungeonV2SubmissionService:
             try:
                 submitted, record = runner.run(
                     profile=repaired_profile,
-                    run_input=_v2_repair_model_input(
+                    run_input=_repair_model_input(
                         command=run_input,
                         prior_arguments=record.tool_invocations[0].arguments,
                         diagnostics=rejected.diagnostics,
@@ -291,11 +291,11 @@ class DungeonV2SubmissionService:
                 raise DungeonProposalRejectedAfterRepair(
                     "dungeon proposal was rejected after its one repair request"
                 ) from error
-            assert isinstance(submitted, SubmitDungeonIntentV2Input)
+            assert isinstance(submitted, SubmitDungeonPlanInput)
             runs.append(record)
             repaired = True
         else:
-            assert isinstance(submitted, SubmitDungeonIntentV2Input)
+            assert isinstance(submitted, SubmitDungeonPlanInput)
             runs = [record]
             repaired = False
             result_payload = record.tool_invocations[0].result.payload
@@ -306,7 +306,7 @@ class DungeonV2SubmissionService:
                 safe_diagnostics = result_payload.get("diagnostics", [])
                 if not isinstance(safe_diagnostics, list):
                     safe_diagnostics = []
-                repair_input = _v2_repair_model_input(
+                repair_input = _repair_model_input(
                     command=run_input,
                     prior_arguments=record.tool_invocations[0].arguments,
                     diagnostics=tuple(
@@ -328,14 +328,14 @@ class DungeonV2SubmissionService:
                     raise DungeonProposalRejectedAfterRepair(
                         "dungeon proposal was rejected after its one repair request"
                     ) from error
-                assert isinstance(submitted, SubmitDungeonIntentV2Input)
+                assert isinstance(submitted, SubmitDungeonPlanInput)
                 runs.append(record)
                 repaired = True
         if repaired and submitted.proposal.abstention is None and request is None:
             raise DungeonProposalRejectedAfterRepair(
                 "dungeon proposal was rejected after its one repair request"
             )
-        return DungeonV2SubmissionResult(
+        return DungeonSubmissionResult(
             proposal=submitted.proposal,
             compilation=compiled,
             layout_request=request,
@@ -363,16 +363,16 @@ class DungeonPromptService:
         stream_run_id: str | None = None,
         debug: Callable[[str, dict[str, object]], None] | None = None,
     ) -> DungeonWorkflowResult:
-        """Submit compact V2 intent then publish through the existing atomic Studio path."""
+        """Submit compact V1 intent then publish through the atomic Studio path."""
         context = _build_standalone_context(command)
         gateway: GatewayClient = (
             _RunBoundGatewayClient(self._gateway_client, stream_run_id)
             if stream_run_id is not None
             else self._gateway_client
         )
-        submitted = DungeonV2SubmissionService(gateway, debug=debug).submit(
+        submitted = DungeonSubmissionService(gateway, debug=debug).submit(
             profile=profile,
-            run_input=_initial_v2_model_input(command, context),
+            run_input=_initial_model_input(command, context),
             seed=command.seed,
         )
         if (
@@ -463,7 +463,7 @@ def _build_standalone_context(
     )
 
 
-def _initial_v2_model_input(
+def _initial_model_input(
     command: PromptDungeonWorkflow,
     context: GenerationContextPin,
 ) -> ModelRunInput:
@@ -473,10 +473,10 @@ def _initial_v2_model_input(
                 role="user",
                 content=_canonical_message(
                     {
-                        "task": _DUNGEON_V2_SCHEMA_NAME,
+                        "task": _DUNGEON_SCHEMA_NAME,
                         "instruction": (
-                            "Use submit_dungeon_intent_v2 exactly once with design schema "
-                            "version 2.4.0. Submit the smallest design satisfying the prompt; "
+                            "Use submit_dungeon_plan exactly once with design schema "
+                            "version 1.0.0. Submit the smallest design satisfying the prompt; "
                             "omit branches, loops, encounter slots, traps, puzzles, and "
                             "features unless requested or necessary. Every objective requires "
                             "a name: copy a specifically named final objective from the DM "
@@ -485,7 +485,7 @@ def _initial_v2_model_input(
                             "Submit compact creative intent only; the server "
                             "owns IDs, seed, geometry, visibility, validation, persistence, "
                             "and approval. "
-                            f"{_V2_CONNECTION_GUIDANCE}"
+                            f"{_CONNECTION_GUIDANCE}"
                         ),
                         "prompt": command.prompt,
                         "context": context.envelope,
@@ -496,13 +496,13 @@ def _initial_v2_model_input(
     )
 
 
-def _v2_repair_model_input(
+def _repair_model_input(
     *,
     command: ModelRunInput,
     prior_arguments: dict[str, JsonValue],
     diagnostics: tuple[dict[str, JsonValue], ...],
 ) -> ModelRunInput:
-    """Build a fresh bounded V2 repair request without losing the original task."""
+    """Build a fresh bounded repair request without losing the original task."""
     try:
         initial = json.loads(command.messages[0].content)
     except json.JSONDecodeError:
@@ -510,12 +510,12 @@ def _v2_repair_model_input(
         # prompt envelope; retain their original text as the repair task.
         initial = {"prompt": command.messages[0].content, "context": None}
     if not isinstance(initial, dict):
-        raise ValueError("V2 repair requires the original structured request")
+        raise ValueError("repair requires the original structured request")
     prior_json = _canonical_message(prior_arguments)
-    if len(prior_json) > _MAX_V2_REPAIR_ARGUMENT_CHARACTERS:
+    if len(prior_json) > _MAX_REPAIR_ARGUMENT_CHARACTERS:
         raise ModelRunAbstained("prior proposal exceeds the bounded repair context")
     repair_document = {
-        "task": _DUNGEON_V2_SCHEMA_NAME,
+        "task": _DUNGEON_SCHEMA_NAME,
         "instruction": (
             "Submit one complete corrected replacement proposal. Preserve the original "
             "requested dungeon and every valid prior field; change only fields named "
@@ -533,11 +533,11 @@ def _v2_repair_model_input(
     )
 
 
-def _compile_v2_layout_request(
+def _compile_layout_request(
     compiled: DungeonDesignCompileResult,
     seed: int,
 ) -> LayoutRequest:
-    """Turn accepted pure V2 output plus server seed into an exact kernel request."""
+    """Turn accepted pure V1 output plus server seed into an exact kernel request."""
     assert (
         compiled.accepted
         and compiled.brief is not None
@@ -557,7 +557,7 @@ def _compile_v2_layout_request(
     )
 
 
-def _preflight_v2(
+def _preflight(
     request: LayoutRequest,
 ) -> tuple[LayoutRequest, tuple[dict[str, JsonValue], ...], bool]:
     topology = validate_topology(request.topology)
@@ -589,13 +589,11 @@ def _diagnostics(values: tuple[BaseModel, ...]) -> tuple[dict[str, JsonValue], .
 
 
 def _lineage(record: ModelRunRecord) -> PromptedDungeonModelLineage:
-    proposal: DungeonGenerationProposalV2 | None = None
+    proposal: DungeonGenerationProposal | None = None
     if record.output_payload is not None:
-        proposal = SubmitDungeonIntentV2Input.model_validate(
-            record.output_payload
-        ).proposal
+        proposal = SubmitDungeonPlanInput.model_validate(record.output_payload).proposal
     return PromptedDungeonModelLineage(
-        model_run_id=uuid.uuid4(), model_run=record, proposal_v2=proposal
+        model_run_id=uuid.uuid4(), model_run=record, proposal=proposal
     )
 
 
@@ -605,7 +603,7 @@ def _tool_run_pins(
     return tuple(
         ToolRunPin(
             tool_name=invocation.tool_name,
-            schema_version=_DUNGEON_V2_SCHEMA_VERSION,
+            schema_version=_DUNGEON_SCHEMA_VERSION,
             input_sha256=canonical_json_sha256(invocation.arguments),
             output_sha256=canonical_json_sha256(
                 invocation.result.model_dump(mode="json")
@@ -621,7 +619,7 @@ def _remaining_submission_profile(
     profile: ResolvedModelRunProfile,
     record: ModelRunRecord,
 ) -> ResolvedModelRunProfile:
-    """Reserve one fresh V2 repair request from the original cumulative budget."""
+    """Reserve one fresh repair request from the original cumulative budget."""
     if not record.usage_measured:
         raise ModelRunAbstained("model usage was unavailable; repair budget is unknown")
     assert record.usage_input_tokens is not None
@@ -643,18 +641,18 @@ def _remaining_submission_profile(
 
 
 def _validate_profile(profile: ResolvedModelRunProfile) -> None:
-    if profile.output_schema_name != _DUNGEON_V2_SCHEMA_NAME:
-        raise ValueError("V2 submission requires the dungeon V2 proposal schema")
-    if profile.output_schema_version != _DUNGEON_V2_SCHEMA_VERSION:
-        raise ValueError("V2 submission requires proposal schema version 2.4.0")
-    if profile.allowed_tools != (_SUBMIT_DUNGEON_INTENT_V2_TOOL,):
-        raise ValueError("V2 submission exposes only submit_dungeon_intent_v2")
+    if profile.output_schema_name != _DUNGEON_SCHEMA_NAME:
+        raise ValueError("submission requires the dungeon proposal schema")
+    if profile.output_schema_version != _DUNGEON_SCHEMA_VERSION:
+        raise ValueError("submission requires proposal schema version 1.0.0")
+    if profile.allowed_tools != (_SUBMIT_DUNGEON_PLAN_TOOL,):
+        raise ValueError("submission exposes only submit_dungeon_plan")
     if profile.turn_budget != 1 or profile.tool_budget != 1:
-        raise ValueError("V2 submission requires exactly one turn and one tool call")
+        raise ValueError("submission requires exactly one turn and one tool call")
     if profile.require_citation_ids or profile.require_authorized_citations:
-        raise ValueError("standalone V2 submission cannot require citations")
+        raise ValueError("standalone submission cannot require citations")
     if profile.allow_source_retrieval_tools:
-        raise ValueError("standalone V2 submission cannot retrieve sources")
+        raise ValueError("standalone submission cannot retrieve sources")
 
 
 def _canonical_message(value: Mapping[str, object]) -> str:
