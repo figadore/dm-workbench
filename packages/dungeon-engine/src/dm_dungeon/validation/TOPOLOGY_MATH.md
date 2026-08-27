@@ -472,11 +472,13 @@ then a necessary capacity bound is
 P >= d * o + total separation clearance
 ```
 
-`RoomDemandWitness` now records graph degree, required port count, opening width,
-separation clearance, and minimum total boundary demand. P7-14d will strengthen this to
-side-specific assignments. If `d_N` ports are assigned to the north wall, for example,
-then `w` must fit those openings and their required separation. Width/height will be
-expanded before room placement until all assigned sides fit.
+`RoomDemandWitness` records graph degree, required port count, opening width,
+separation clearance, and minimum total boundary demand. `RoomPortAssignmentWitness`
+strengthens this to exact north/east/south/west connection lists. If `d_N` ports are
+assigned to the north wall, for example, the constructive allocator requires
+`w >= 2*d_N - 1` for one-cell openings with one-cell separation. It searches only the
+room's declared size band for the smallest width/height satisfying every assigned side
+and certified interior area; no room-placement retry is involved.
 
 Interior demand is separate. If room features reserve blocked cells and encounters need
 movement/footprint space, layout must ensure
@@ -488,9 +490,10 @@ usable interior cells
 ```
 
 These inequalities connect abstract graph degree and annotations to geometric size.
-The certificate now derives base interior area plus encounter, feature, and trap demand
-from the exact plan/mechanics projection, and its validator recomputes those values.
-P7-14d must consume them in the constructive layout and add side-specific port proofs.
+The certificate derives base interior area plus encounter, feature, and trap demand
+from the exact plan/mechanics projection, and its validator recomputes those values,
+side assignments, and `ConnectionChannelWitness` bands. Layout consumes those exact
+witnesses before emitting package cells.
 
 ## 16. Why validation remains necessary after construction
 
@@ -530,7 +533,9 @@ graph.
 | Directed SCC/cycle detection | `_strongly_connected_gate_cycles()` |
 | Monotone least-fixed-point progression | `_validate_gate_progression()` |
 | Tier A grammar/embedding certificate | `TopologyCertificate`, `validate_topology_certificate()` |
-| Port/interior demand | `RoomDemandWitness`, independently recomputed; side assignment is P7-14d |
+| Port/interior demand | `RoomDemandWitness` plus independently recomputed `RoomPortAssignmentWitness` |
+| Reserved passage bands | `ConnectionChannelWitness`; constructive channels are rasterized without shared/crossing cells |
+| Exact required bounds | `required_floor_bounds()` and `construct_tier_a_layout()` compute the same certificate-derived rectangle before package emission |
 
 ## 18. Properties future changes must preserve
 
@@ -550,5 +555,9 @@ example JSON:
   errors.
 
 P7-14c implements `DungeonPlan`, deterministic path/branch/loop construction, and the
-independently recomputed V1 certificate. P7-14d must update this document again when
-side-specific ports, exact required bounds, and constructive cells become executable.
+independently recomputed V1 graph certificate. P7-14d extends that certificate with
+side-specific ports and reserved channels, computes exact required bounds, expands
+rooms for interior/boundary demand, and materializes a spacious orthogonal baseline.
+The active generator performs no random room-placement or routing retries; the seed is
+pinned for replay and future optional compaction, whose failure must retain this proven
+baseline.

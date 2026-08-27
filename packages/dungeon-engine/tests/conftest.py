@@ -1,10 +1,16 @@
 """Synthetic fixtures for the pure dungeon package."""
 
+import json
 from pathlib import Path
 
 import pytest
 
-from dm_dungeon import DungeonPackage, read_dungeon_package
+from dm_dungeon import (
+    DungeonPackage,
+    DungeonPlan,
+    compile_dungeon_plan,
+    read_dungeon_package,
+)
 from dm_dungeon.contracts.mechanics import (
     CompiledDoorMechanics,
     DungeonMechanicsPlan,
@@ -54,15 +60,90 @@ def mechanics_plan(package: DungeonPackage) -> DungeonMechanicsPlan:
 
 
 @pytest.fixture
-def layout_request(synthetic_package: DungeonPackage) -> LayoutRequest:
+def layout_request() -> LayoutRequest:
+    plan = DungeonPlan.model_validate_json(
+        json.dumps(
+            {
+                "schema_version": "1.0.0",
+                "title": "Synthetic Constructive Archive",
+                "premise": "A synthetic proof-carrying dungeon used only by tests.",
+                "themes": ["synthetic"],
+                "rooms": [
+                    {
+                        "ref": "entry",
+                        "name": "Entry",
+                        "role": "entrance",
+                        "purpose": "Begin.",
+                    },
+                    {
+                        "ref": "hall",
+                        "name": "Hall",
+                        "role": "exploration",
+                        "purpose": "Progress.",
+                    },
+                    {
+                        "ref": "lock",
+                        "name": "Lock",
+                        "role": "puzzle",
+                        "purpose": "Challenge.",
+                    },
+                    {
+                        "ref": "goal",
+                        "name": "Goal",
+                        "role": "objective",
+                        "purpose": "Conclude.",
+                    },
+                    {
+                        "ref": "cache",
+                        "name": "Cache",
+                        "role": "optional",
+                        "purpose": "Reward.",
+                    },
+                ],
+                "critical_path": ["entry", "hall", "lock", "goal"],
+                "branches": [
+                    {"ref": "cache_branch", "from_room": "hall", "rooms": ["cache"]}
+                ],
+                "loops": [
+                    {
+                        "ref": "cache_bypass",
+                        "from_room": "cache",
+                        "to_room": "goal",
+                        "secret": True,
+                    }
+                ],
+                "gates": [
+                    {
+                        "ref": "seal_gate",
+                        "between_rooms": ["hall", "lock"],
+                        "kind": "locked",
+                        "dependency_kind": "key",
+                        "dependency_room": "cache",
+                        "dependency_name": "Synthetic Archive Key",
+                    }
+                ],
+                "room_contents": [
+                    {"room_ref": "goal", "objective": "Synthetic objective"}
+                ],
+            }
+        )
+    )
+    compiled = compile_dungeon_plan(plan)
+    assert compiled.accepted
+    assert compiled.brief is not None
+    assert compiled.topology is not None
+    assert compiled.certificate is not None
+    assert compiled.mechanics_plan is not None
     return LayoutRequest(
         schema_version="1.0.0",
         package_id="package_generated_archive",
-        brief=synthetic_package.brief,
-        topology=synthetic_package.topology,
+        brief=compiled.brief,
+        topology=compiled.topology,
+        certificate=compiled.certificate,
         seed=424242,
         generator_version="orthogonal-v1",
-        mechanics_plan=mechanics_plan(synthetic_package),
+        mechanics_plan=compiled.mechanics_plan,
+        floor_bounds=compiled.floor_bounds,
     )
 
 

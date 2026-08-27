@@ -213,6 +213,38 @@ def test_corridor_rendering_uses_the_validated_cell_footprint(
     assert fill.attrib["d"].count("M") >= 2
 
 
+def test_constructive_player_svg_omits_secret_channel_and_door(
+    generated_package: DungeonPackage,
+) -> None:
+    floor_id = generated_package.floors[0].id
+    dm = render_svg(
+        generated_package,
+        render_request(generated_package, RenderAudience.DM, floor_id),
+    )
+    player = render_svg(
+        generated_package,
+        render_request(generated_package, RenderAudience.PLAYER, floor_id),
+    )
+    assert dm.svg is not None
+    assert player.svg is not None
+    secret_connection_ids = {
+        item.id
+        for item in generated_package.topology.connections
+        if item.visibility is Visibility.DM_ONLY
+    }
+    secret_door_ids = {
+        item.id
+        for item in generated_package.composable_doors
+        if item.connection_id in secret_connection_ids
+    }
+    hidden_ids = secret_connection_ids | secret_door_ids
+
+    assert hidden_ids
+    assert hidden_ids <= xml_component_ids(dm.svg)
+    assert hidden_ids.isdisjoint(xml_component_ids(player.svg))
+    assert "dm_only" not in player.svg
+
+
 def test_player_svg_omits_every_dm_only_upper_floor_component(
     synthetic_package: DungeonPackage,
 ) -> None:

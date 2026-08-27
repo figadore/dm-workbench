@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections import deque
+from collections.abc import Mapping
 from hashlib import sha256
 
 from dm_dungeon.contracts.certificate import (
@@ -415,6 +416,38 @@ def validate_topology_certificate(
             tuple(embedding),
             "embed every topology room exactly once",
         )
+
+    expected_ports, expected_channels = _expected_physical_witnesses(
+        plan, room_ref_ids, certified_edges
+    )
+    actual_ports = {
+        item.room_id: (
+            item.north_connection_ids,
+            item.east_connection_ids,
+            item.south_connection_ids,
+            item.west_connection_ids,
+        )
+        for item in certificate.room_ports
+    }
+    if actual_ports != expected_ports:
+        reject(
+            "certificate.room_port_assignment_mismatch",
+            "/room_ports",
+            tuple(actual_ports),
+            "recompute one side-specific opening assignment per incident connection",
+        )
+    actual_channels = tuple(
+        (item.connection_id, item.kind, item.band, item.band_index)
+        for item in certificate.connection_channels
+    )
+    if actual_channels != expected_channels:
+        reject(
+            "certificate.connection_channel_mismatch",
+            "/connection_channels",
+            tuple(item.connection_id for item in certificate.connection_channels),
+            "reserve the exact backbone, branch, and loop channels",
+        )
+
     if certificate.required_bands != 1 + len(plan.branches) + len(plan.loops):
         reject(
             "certificate.required_bands_mismatch",
@@ -483,6 +516,108 @@ def validate_topology_certificate(
         topology_id=topology.id,
         valid=not ordered,
         diagnostics=ordered,
+    )
+
+
+def _expected_physical_witnesses(
+    plan: DungeonPlan,
+    room_ref_ids: dict[str, str],
+    certified_edges: Mapping[str, object],
+) -> tuple[
+    dict[
+        str, tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], tuple[str, ...]]
+    ],
+    tuple[tuple[str, str, str, int], ...],
+]:
+    sides: dict[str, dict[str, list[str]]] = {
+        room_id: {"north": [], "east": [], "south": [], "west": []}
+        for room_id in room_ref_ids.values()
+    }
+    branch_band_by_room = {
+        ref: ("upper" if branch_index % 2 == 0 else "lower")
+        for branch_index, branch in enumerate(plan.branches)
+        for ref in branch.rooms
+    }
+    channels: list[tuple[str, str, str, int]] = []
+
+    def assign(
+        edge_ref: str,
+        from_ref: str,
+        to_ref: str,
+        from_side: str,
+        to_side: str,
+        kind: str,
+        band: str,
+        band_index: int,
+    ) -> None:
+        certified = certified_edges.get(edge_ref)
+        connection_id = getattr(certified, "connection_id", "")
+        from_room_id = room_ref_ids.get(from_ref, "")
+        to_room_id = room_ref_ids.get(to_ref, "")
+        sides.setdefault(
+            from_room_id,
+            {"north": [], "east": [], "south": [], "west": []},
+        )[from_side].append(connection_id)
+        sides.setdefault(
+            to_room_id,
+            {"north": [], "east": [], "south": [], "west": []},
+        )[to_side].append(connection_id)
+        channels.append((connection_id, kind, band, band_index))
+
+    for index, (left, right) in enumerate(
+        zip(plan.critical_path, plan.critical_path[1:], strict=False)
+    ):
+        assign(
+            f"critical_{index}", left, right, "east", "west", "backbone", "backbone", 0
+        )
+    for branch_index, branch in enumerate(plan.branches):
+        band = "upper" if branch_index % 2 == 0 else "lower"
+        from_side, to_side = (
+            ("north", "south") if band == "upper" else ("south", "north")
+        )
+        previous = branch.from_room
+        for index, room_ref in enumerate(branch.rooms):
+            assign(
+                f"{branch.ref}_{index}",
+                previous,
+                room_ref,
+                from_side,
+                to_side,
+                "branch",
+                band,
+                branch_index // 2 + 1,
+            )
+            previous = room_ref
+    for loop in plan.loops:
+
+        def loop_side(ref: str) -> str:
+            band = branch_band_by_room.get(ref, "backbone")
+            if band == "backbone":
+                return "north"
+            return "east" if band == "upper" else "west"
+
+        assign(
+            loop.ref,
+            loop.from_room,
+            loop.to_room,
+            loop_side(loop.from_room),
+            loop_side(loop.to_room),
+            "loop",
+            "loop",
+            1,
+        )
+
+    return (
+        {
+            room_id: (
+                tuple(values["north"]),
+                tuple(values["east"]),
+                tuple(values["south"]),
+                tuple(values["west"]),
+            )
+            for room_id, values in sides.items()
+        },
+        tuple(channels),
     )
 
 

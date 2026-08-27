@@ -290,6 +290,7 @@ def _layout_request(result: DungeonPlanCompileResult, case_id: str) -> LayoutReq
         and result.output_hash
         and result.brief
         and result.topology
+        and result.certificate
         and result.mechanics_plan
     )
     seed = int.from_bytes(sha256(case_id.encode()).digest()[:8], "big")
@@ -298,6 +299,7 @@ def _layout_request(result: DungeonPlanCompileResult, case_id: str) -> LayoutReq
         package_id=f"eval_{result.output_hash[:24]}",
         brief=result.brief,
         topology=result.topology,
+        certificate=result.certificate,
         seed=seed,
         generator_version=ORTHOGONAL_LAYOUT_GENERATOR_VERSION,
         mechanics_plan=result.mechanics_plan,

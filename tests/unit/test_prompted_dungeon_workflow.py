@@ -46,9 +46,9 @@ from dm_assistant.orchestration.modeling import (
     ModelRunAbstained,
 )
 from dm_dungeon import (
-    CompiledDoorMechanics,
-    DungeonMechanicsPlan,
+    DungeonPlan,
     LayoutRequest,
+    compile_dungeon_plan,
     generate_layout,
     read_dungeon_package,
 )
@@ -99,45 +99,32 @@ def test_prompt_attempt_classifies_missing_usage_repair_without_abstention() -> 
     )
 
 
-def _fixture_layout_request(*, topology_connections: bool = True):
-    package = read_dungeon_package(FIXTURE_PATH)
-    topology = package.topology
-    if not topology_connections:
-        topology = topology.model_copy(update={"connections": ()})
-    mechanics_plan = DungeonMechanicsPlan(
-        policy_version="dungeon-mechanics-policy-v1",
-        connection_ids=tuple(item.id for item in topology.connections),
-        room_ids=tuple(item.id for item in topology.rooms),
-        door_mechanics=tuple(
-            CompiledDoorMechanics(
-                id=door.id,
-                connection_id=door.connection_id,
-                concealed=door.mechanics.concealed,
-                gate_id=door.mechanics.gate_id,
-                gate_kind=door.mechanics.gate_kind,
-                trap_id=door.mechanics.trap_id,
-                discovery_difficulty=door.mechanics.discovery_difficulty,
-                unlock_difficulty=door.mechanics.unlock_difficulty,
-                disable_difficulty=door.mechanics.disable_difficulty,
-            )
-            for door in package.composable_doors
-            if topology_connections
-        ),
-        room_traps=(),
-        room_puzzles=(),
-        room_features=(),
-        room_objectives=(),
-        encounter_slots=(),
-    )
-    return LayoutRequest(
+def _fixture_layout_request(*, topology_connections: bool = True) -> LayoutRequest:
+    proposal = _tier_a_proposal()
+    plan = DungeonPlan.model_validate_json(json.dumps(proposal["plan"]))
+    compiled = compile_dungeon_plan(plan)
+    assert compiled.accepted
+    assert compiled.brief is not None
+    assert compiled.topology is not None
+    assert compiled.certificate is not None
+    assert compiled.mechanics_plan is not None
+    request = LayoutRequest(
         schema_version="1.0.0",
         package_id="package_prompted_fixture",
-        brief=package.brief,
-        topology=topology,
+        brief=compiled.brief,
+        topology=compiled.topology,
+        certificate=compiled.certificate,
         seed=1842,
         generator_version="orthogonal-v1",
-        mechanics_plan=mechanics_plan,
+        mechanics_plan=compiled.mechanics_plan,
+        floor_bounds=compiled.floor_bounds,
     )
+    if topology_connections:
+        return request
+    impossible_bounds = request.floor_bounds[0].model_copy(
+        update={"width_cells": 1, "height_cells": 1, "margin_cells": 0}
+    )
+    return request.model_copy(update={"floor_bounds": (impossible_bounds,)})
 
 
 def _tier_a_proposal() -> dict[str, object]:
@@ -568,7 +555,7 @@ def test_dm_notes_are_readable_without_mutating_the_exact_package() -> None:
         package,
     )
 
-    assert notes.room_notes[0].name == "Entrance"
+    assert notes.room_notes[0].name == "Wet Steps"
     assert "## Original request" in _dm_notes_text(request, notes)
     assert _dm_presentation_package(package, notes) == package
 

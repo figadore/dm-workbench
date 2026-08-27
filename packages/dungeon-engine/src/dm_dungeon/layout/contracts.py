@@ -1,11 +1,14 @@
 """Versioned request, lock, diagnostic, and result contracts for layout."""
 
+import json
 from enum import StrEnum
+from hashlib import sha256
 from typing import Annotated, Literal, Self
 
 from pydantic import Field, model_validator
 
 from dm_dungeon.contracts.brief import DungeonBrief
+from dm_dungeon.contracts.certificate import TopologyCertificate
 from dm_dungeon.contracts.common import (
     ContractModel,
     NonEmptyText,
@@ -31,7 +34,6 @@ LAYOUT_RESULT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 ORTHOGONAL_LAYOUT_GENERATOR_VERSION: Literal["orthogonal-v1"] = "orthogonal-v1"
 PositiveCells = Annotated[int, Field(ge=1)]
 NonNegativeCells = Annotated[int, Field(ge=0)]
-PositiveAttempts = Annotated[int, Field(ge=1, le=256)]
 NonNegativeCount = Annotated[int, Field(ge=0)]
 
 
@@ -64,7 +66,7 @@ class LayoutDiagnostic(ContractModel):
 
 
 class FloorLayoutBounds(ContractModel):
-    """Optional caller-supplied floor bounds for deterministic placement."""
+    """Computed required bounds or an optional caller-supplied maximum."""
 
     floor_id: OpaqueId
     width_cells: PositiveCells
@@ -121,19 +123,33 @@ class LayoutRequest(VersionedContract):
     package_id: OpaqueId
     brief: DungeonBrief
     topology: DungeonTopology
+    certificate: TopologyCertificate
     seed: int
     generator_version: Literal["orthogonal-v1"]
     mechanics_plan: DungeonMechanicsPlan
     grid: GridSpec = GridSpec()
     floor_bounds: tuple[FloorLayoutBounds, ...] = ()
     locked: LockedLayoutComponents = LockedLayoutComponents()
-    maximum_placement_attempts: PositiveAttempts = 32
 
     @model_validator(mode="after")
     def require_unique_floor_bounds(self) -> Self:
         floor_ids = [item.floor_id for item in self.floor_bounds]
         if len(floor_ids) != len(set(floor_ids)):
             raise ValueError("floor_bounds must contain each floor at most once")
+        topology_json = json.dumps(
+            self.topology.model_dump(mode="json", round_trip=True),
+            allow_nan=False,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode()
+        if (
+            self.certificate.topology_id != self.topology.id
+            or self.certificate.topology_hash != sha256(topology_json).hexdigest()
+        ):
+            raise ValueError(
+                "certificate must be bound to the exact requested topology"
+            )
         return self
 
 

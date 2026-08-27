@@ -16,12 +16,14 @@ from dm_dungeon.contracts.certificate import (
     BranchWitness,
     CertifiedConnectionRef,
     CertifiedRoomRef,
+    ConnectionChannelWitness,
     CriticalPathWitness,
     EmbeddingRoomWitness,
     GateReachabilityWitness,
     GrammarStep,
     LoopWitness,
     RoomDemandWitness,
+    RoomPortAssignmentWitness,
     TopologyCertificate,
 )
 from dm_dungeon.contracts.common import (
@@ -68,6 +70,7 @@ from dm_dungeon.contracts.topology import (
     TopologyFloor,
     TopologyRoom,
 )
+from dm_dungeon.layout.constructive import required_floor_bounds
 from dm_dungeon.layout.contracts import FloorLayoutBounds
 from dm_dungeon.validation.certificate import validate_topology_certificate
 
@@ -342,11 +345,7 @@ def compile_dungeon_plan(plan: DungeonPlan) -> DungeonPlanCompileResult:
         floor_count=1,
         target_room_count=len(plan.rooms),
     )
-    # P7-14d replaces this generous compatibility bound with certificate-derived exact
-    # constructive bounds. It is not model-authored and is not part of the proof.
-    floor_bounds = (
-        FloorLayoutBounds(floor_id=floor_id, width_cells=56, height_cells=56),
-    )
+    floor_bounds = (required_floor_bounds(certificate, topology),)
     output_hash = _hash_json(
         {
             "brief": brief.model_dump(mode="json"),
@@ -923,6 +922,14 @@ def _compile_certificate(
             )
         )
 
+    room_ports, connection_channels = _compile_physical_witnesses(
+        edges,
+        room_ids=room_ids,
+        connection_ids=connection_ids,
+        embedding=embedding,
+        branch_witnesses=branch_witnesses,
+    )
+
     grammar_steps: list[GrammarStep] = [
         GrammarStep(
             kind="critical_path",
@@ -993,8 +1000,89 @@ def _compile_certificate(
         ),
         room_demands=tuple(demands),
         embedding_rooms=tuple(embedding),
+        room_ports=room_ports,
+        connection_channels=connection_channels,
         required_bands=1 + len(plan.branches) + len(plan.loops),
     )
+
+
+def _compile_physical_witnesses(
+    edges: tuple[_Edge, ...],
+    *,
+    room_ids: dict[str, str],
+    connection_ids: dict[str, str],
+    embedding: list[EmbeddingRoomWitness],
+    branch_witnesses: list[BranchWitness],
+) -> tuple[
+    tuple[RoomPortAssignmentWitness, ...],
+    tuple[ConnectionChannelWitness, ...],
+]:
+    """Assign wall sides and reserved bands without placing any cells."""
+
+    sides: dict[str, dict[str, list[str]]] = {
+        room_id: {"north": [], "east": [], "south": [], "west": []}
+        for room_id in room_ids.values()
+    }
+    embedding_by_room = {item.room_id: item for item in embedding}
+    branch_by_ref = {item.ref: item for item in branch_witnesses}
+    channels: list[ConnectionChannelWitness] = []
+
+    for edge in edges:
+        connection_id = connection_ids[edge.ref]
+        from_id = room_ids[edge.from_ref]
+        to_id = room_ids[edge.to_ref]
+        if edge.kind == "critical_path":
+            from_side, to_side = "east", "west"
+            channel_kind: Literal["backbone", "branch", "loop"] = "backbone"
+            band: Literal["backbone", "upper", "lower", "loop"] = "backbone"
+            band_index = 0
+        elif edge.kind == "branch":
+            assert edge.branch_ref is not None
+            branch = branch_by_ref[edge.branch_ref]
+            from_side, to_side = (
+                ("north", "south") if branch.band == "upper" else ("south", "north")
+            )
+            channel_kind = "branch"
+            band = branch.band
+            band_index = branch.band_index
+        else:
+            from_side = _loop_port_side(embedding_by_room[from_id])
+            to_side = _loop_port_side(embedding_by_room[to_id])
+            channel_kind = "loop"
+            band = "loop"
+            band_index = 1
+        sides[from_id][from_side].append(connection_id)
+        sides[to_id][to_side].append(connection_id)
+        channels.append(
+            ConnectionChannelWitness(
+                connection_id=connection_id,
+                kind=channel_kind,
+                band=band,
+                band_index=band_index,
+            )
+        )
+
+    return (
+        tuple(
+            RoomPortAssignmentWitness(
+                room_id=room_id,
+                north_connection_ids=tuple(sides[room_id]["north"]),
+                east_connection_ids=tuple(sides[room_id]["east"]),
+                south_connection_ids=tuple(sides[room_id]["south"]),
+                west_connection_ids=tuple(sides[room_id]["west"]),
+            )
+            for room_id in sorted(sides)
+        ),
+        tuple(channels),
+    )
+
+
+def _loop_port_side(
+    room: EmbeddingRoomWitness,
+) -> Literal["north", "east", "south", "west"]:
+    if room.band == "backbone":
+        return "north"
+    return "east" if room.band == "upper" else "west"
 
 
 def _edge_between(edges: tuple[_Edge, ...], left: str, right: str) -> _Edge | None:

@@ -162,6 +162,13 @@ def test_branch_loop_gate_secret_and_demand_witnesses_are_recomputed() -> None:
     assert len(certificate.full_reachable_room_ids) == 5
     assert len(certificate.public_reachable_room_ids) == 5
     assert certificate.required_bands == 3
+    assert len(certificate.room_ports) == certificate.room_count
+    assert len(certificate.connection_channels) == certificate.connection_count
+    assert {item.kind for item in certificate.connection_channels} == {
+        "backbone",
+        "branch",
+        "loop",
+    }
     stacks_id = next(item.room_id for item in certificate.rooms if item.ref == "stacks")
     demand = next(
         item for item in certificate.room_demands if item.room_id == stacks_id
@@ -182,12 +189,22 @@ def test_certificate_validator_rejects_mutated_independent_claims() -> None:
     assert result.certificate is not None
     assert result.mechanics_plan is not None
     demand = result.certificate.room_demands[0]
+    ports = result.certificate.room_ports[0]
+    channel = result.certificate.connection_channels[0]
     mutated = result.certificate.model_copy(
         update={
             "cycle_rank": 0,
             "room_demands": (
                 demand.model_copy(update={"required_ports": demand.required_ports + 1}),
                 *result.certificate.room_demands[1:],
+            ),
+            "room_ports": (
+                ports.model_copy(update={"north_connection_ids": ()}),
+                *result.certificate.room_ports[1:],
+            ),
+            "connection_channels": (
+                channel.model_copy(update={"band_index": channel.band_index + 1}),
+                *result.certificate.connection_channels[1:],
             ),
         }
     )
@@ -200,6 +217,8 @@ def test_certificate_validator_rejects_mutated_independent_claims() -> None:
     assert {item.code for item in report.diagnostics} >= {
         "certificate.graph_fact_mismatch",
         "certificate.room_demand_mismatch",
+        "certificate.room_port_assignment_mismatch",
+        "certificate.connection_channel_mismatch",
     }
 
 

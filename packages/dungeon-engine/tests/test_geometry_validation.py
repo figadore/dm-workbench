@@ -174,9 +174,22 @@ def test_diagonal_corridor_is_reported(generated_package: DungeonPackage) -> Non
     assert GeometryDiagnosticCode.CORRIDOR_NON_ORTHOGONAL in codes(broken)
 
 
-def test_requested_corridor_width_is_enforced(
+def test_corridor_crossings_are_rejected_independently(
     generated_package: DungeonPackage,
 ) -> None:
+    first, second, *remaining = generated_package.corridors
+    crossing = second.model_copy(update={"path": first.path})
+    broken = generated_package.model_copy(
+        update={"corridors": (first, crossing, *remaining)}
+    )
+
+    assert GeometryDiagnosticCode.CORRIDOR_OVERLAP in codes(broken)
+
+
+def test_requested_corridor_width_is_enforced(
+    synthetic_package: DungeonPackage,
+) -> None:
+    generated_package = synthetic_package
     target_id = generated_package.corridors[0].id
     connection = next(
         item for item in generated_package.topology.connections if item.id == target_id
@@ -215,8 +228,9 @@ def test_door_must_align_with_room_wall_and_corridor(
 
 
 def test_stairs_and_vertical_links_must_pair_exactly(
-    generated_package: DungeonPackage,
+    synthetic_package: DungeonPackage,
 ) -> None:
+    generated_package = synthetic_package
     stair = generated_package.stairs[0]
     moved_stair = stair.model_copy(
         update={"position": GridPoint(x=stair.position.x + 1, y=stair.position.y)}
@@ -245,8 +259,9 @@ def test_grid_scale_must_be_five_feet(generated_package: DungeonPackage) -> None
 
 
 def test_disconnected_walkable_regions_are_reported(
-    generated_package: DungeonPackage,
+    synthetic_package: DungeonPackage,
 ) -> None:
+    generated_package = synthetic_package
     corridors = tuple(
         corridor
         for corridor in generated_package.corridors

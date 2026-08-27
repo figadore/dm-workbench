@@ -35,7 +35,7 @@ def test_identical_request_produces_byte_equivalent_layout(
     assert first.success is True
     assert first.package is not None
     assert first.diagnostics == ()
-    assert first.random_draw_count > 0
+    assert first.random_draw_count == 0
     assert first == second
     assert to_canonical_json(first) == to_canonical_json(second)
 
@@ -49,13 +49,13 @@ def test_layout_emits_every_supported_topology_component(
 
     assert len(package.floors) == len(layout_request.topology.floors)
     assert len(package.rooms) == len(layout_request.topology.rooms)
-    assert len(package.corridors) == 1
-    assert len(package.composable_doors) == 4
-    assert len(package.stairs) == 2
-    assert len(package.vertical_links) == 2
+    assert len(package.corridors) == len(layout_request.topology.connections)
+    assert len(package.composable_doors) == len(layout_request.topology.connections)
+    assert package.stairs == ()
+    assert package.vertical_links == ()
 
 
-def test_different_seeds_produce_valid_alternatives_with_stable_room_ids(
+def test_different_seeds_fall_back_to_the_same_proven_baseline(
     layout_request: LayoutRequest,
 ) -> None:
     first = generate_layout(layout_request)
@@ -63,10 +63,8 @@ def test_different_seeds_produce_valid_alternatives_with_stable_room_ids(
 
     assert first.package is not None
     assert alternate.package is not None
-    assert first.package.rooms != alternate.package.rooms
-    assert {room.id for room in first.package.rooms} == {
-        room.id for room in alternate.package.rooms
-    }
+    assert first.package.rooms == alternate.package.rooms
+    assert first.package.corridors == alternate.package.corridors
 
 
 def test_targeted_regeneration_preserves_every_locked_component(
@@ -78,8 +76,8 @@ def test_targeted_regeneration_preserves_every_locked_component(
     locks = LockedLayoutComponents(
         floors=(original.floors[0],),
         rooms=(original.rooms[0], original.rooms[1], original.rooms[3]),
-        stairs=(original.stairs[0],),
-        vertical_links=(original.vertical_links[0],),
+        corridors=(original.corridors[0],),
+        doors=(original.composable_doors[0],),
     )
     regenerated = generate_layout(
         layout_request.model_copy(update={"seed": 888888, "locked": locks})
@@ -91,10 +89,10 @@ def test_targeted_regeneration_preserves_every_locked_component(
         assert component_by_id(package.floors, locked.id) == locked
     for locked in locks.rooms:
         assert component_by_id(package.rooms, locked.id) == locked
-    for locked in locks.stairs:
-        assert component_by_id(package.stairs, locked.id) == locked
-    for locked in locks.vertical_links:
-        assert component_by_id(package.vertical_links, locked.id) == locked
+    for locked in locks.corridors:
+        assert component_by_id(package.corridors, locked.id) == locked
+    for locked in locks.doors:
+        assert component_by_id(package.composable_doors, locked.id) == locked
 
 
 def test_generated_rooms_honor_size_constraints(layout_request: LayoutRequest) -> None:
@@ -160,11 +158,36 @@ def test_corridors_and_doors_are_orthogonal(layout_request: LayoutRequest) -> No
         )
 
 
+def test_certificate_channels_do_not_cross_or_share_cells(
+    layout_request: LayoutRequest,
+) -> None:
+    result = generate_layout(layout_request)
+    assert result.package is not None
+    occupied: set[tuple[int, int]] = set()
+    for corridor in result.package.corridors:
+        cells: set[tuple[int, int]] = set()
+        for first, second in zip(
+            corridor.path.points, corridor.path.points[1:], strict=False
+        ):
+            if first.x == second.x:
+                cells.update(
+                    (first.x, y)
+                    for y in range(min(first.y, second.y), max(first.y, second.y) + 1)
+                )
+            else:
+                cells.update(
+                    (x, first.y)
+                    for x in range(min(first.x, second.x), max(first.x, second.x) + 1)
+                )
+        assert cells.isdisjoint(occupied)
+        occupied.update(cells)
+
+
 def test_impossible_floor_bounds_fail_with_diagnostics(
     layout_request: LayoutRequest,
 ) -> None:
     bounds = FloorLayoutBounds(
-        floor_id="floor_upper",
+        floor_id=layout_request.topology.floors[0].id,
         width_cells=4,
         height_cells=4,
         margin_cells=1,
@@ -175,8 +198,50 @@ def test_impossible_floor_bounds_fail_with_diagnostics(
 
     assert result.success is False
     assert result.package is None
-    assert LayoutDiagnosticCode.ROOM_PLACEMENT_FAILED in {
+    assert LayoutDiagnosticCode.FLOOR_BOUNDS_INVALID in {
         item.code for item in result.diagnostics
+    }
+
+
+def test_larger_caller_maximum_keeps_exact_required_bounds(
+    layout_request: LayoutRequest,
+) -> None:
+    required = layout_request.floor_bounds[0]
+    maximum = required.model_copy(
+        update={
+            "width_cells": required.width_cells + 20,
+            "height_cells": required.height_cells + 20,
+        }
+    )
+
+    result = generate_layout(
+        layout_request.model_copy(update={"floor_bounds": (maximum,)})
+    )
+
+    assert result.success is True
+    assert result.package is not None
+    assert result.package.floors[0].bounds.width_cells == required.width_cells
+    assert result.package.floors[0].bounds.height_cells == required.height_cells
+
+
+def test_mutated_certificate_binding_fails_without_partial_package(
+    layout_request: LayoutRequest,
+) -> None:
+    certificate = layout_request.certificate.model_copy(
+        update={"topology_hash": "0" * 64}
+    )
+
+    result = generate_layout(
+        layout_request.model_copy(update={"certificate": certificate})
+    )
+
+    assert result.success is False
+    assert result.package is None
+    assert {item.code for item in result.diagnostics} == {
+        LayoutDiagnosticCode.TOPOLOGY_INVALID
+    }
+    assert {item.source_code for item in result.diagnostics} == {
+        "certificate.binding_mismatch"
     }
 
 

@@ -5,6 +5,7 @@ import uuid
 from pathlib import Path
 
 import pytest
+from dungeon_fixtures import synthetic_layout_request
 from sqlalchemy import Engine, select
 
 from dm_assistant.adapters.assets import LocalAssetStore
@@ -23,46 +24,9 @@ from dm_assistant.orchestration.dungeons import (
     ExportDungeonWorkflow,
     RegenerateDungeonWorkflow,
 )
-from dm_dungeon import (
-    CompiledDoorMechanics,
-    DungeonMechanicsPlan,
-    DungeonPackage,
-    LayoutRequest,
-    read_dungeon_package,
-)
+from dm_dungeon import LayoutRequest
 
 pytestmark = pytest.mark.integration
-FIXTURE_PATH = (
-    Path(__file__).parents[2]
-    / "packages/dungeon-engine/tests/fixtures/sunken_archive.v1.json"
-)
-
-
-def _mechanics_plan(package: DungeonPackage) -> DungeonMechanicsPlan:
-    return DungeonMechanicsPlan(
-        policy_version="dungeon-mechanics-policy-v1",
-        connection_ids=tuple(item.id for item in package.topology.connections),
-        room_ids=tuple(item.id for item in package.topology.rooms),
-        door_mechanics=tuple(
-            CompiledDoorMechanics(
-                id=door.id,
-                connection_id=door.connection_id,
-                concealed=door.mechanics.concealed,
-                gate_id=door.mechanics.gate_id,
-                gate_kind=door.mechanics.gate_kind,
-                trap_id=door.mechanics.trap_id,
-                discovery_difficulty=door.mechanics.discovery_difficulty,
-                unlock_difficulty=door.mechanics.unlock_difficulty,
-                disable_difficulty=door.mechanics.disable_difficulty,
-            )
-            for door in package.composable_doors
-        ),
-        room_traps=(),
-        room_puzzles=(),
-        room_features=(),
-        room_objectives=(),
-        encounter_slots=(),
-    )
 
 
 def create_campaign(engine: Engine) -> uuid.UUID:
@@ -83,16 +47,7 @@ def studio(
 
 
 def request_fixture() -> LayoutRequest:
-    package = read_dungeon_package(FIXTURE_PATH)
-    return LayoutRequest(
-        schema_version="1.0.0",
-        package_id="package_studio_archive",
-        brief=package.brief,
-        topology=package.topology,
-        seed=424242,
-        generator_version="orthogonal-v1",
-        mechanics_plan=_mechanics_plan(package),
-    )
+    return synthetic_layout_request("package_studio_archive")
 
 
 def test_failed_layout_retains_diagnostics_run_without_partial_version(

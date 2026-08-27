@@ -81,6 +81,15 @@ superseded them. This history resolves those conflicts as follows:
   layout dispatch, rendering, and exports to one suffix-free alpha V1; deleted
   disposable V2/V3/V4 paths/readers/tests and restored green focused gates
   (`1bad985`, `dd54b4e`).
+- **P7-14c:** Replaced arbitrary edge authoring with the bounded `DungeonPlan`,
+  deterministic series/parallel-with-spurs graph construction, stable semantic IDs,
+  and an independently recomputed topology/reachability/gate/demand/embedding
+  certificate (`cc02441`).
+- **P7-14d:** Replaced active random room placement/routing with a certificate-driven
+  Tier A baseline: side-specific ports, reserved noncrossing channels, demand-expanded
+  rooms, exact precomputed bounds, corridor-realized door openings, and 4–8 room
+  branch/loop/secret property coverage. Seeds now pin a zero-draw proven baseline for
+  future optional compaction rather than supply correctness retries.
 
 ### Deployment baseline
 

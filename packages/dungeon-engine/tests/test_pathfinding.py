@@ -20,8 +20,9 @@ def entrance_and_exit_ids(package: DungeonPackage) -> tuple[str, str]:
 
 
 def test_pathfinding_crosses_paired_floor_transition_deterministically(
-    generated_package: DungeonPackage,
+    synthetic_package: DungeonPackage,
 ) -> None:
+    generated_package = synthetic_package
     entrance, exit_id = entrance_and_exit_ids(generated_package)
     query = PathQuery(
         schema_version="1.0.0",
@@ -41,8 +42,9 @@ def test_pathfinding_crosses_paired_floor_transition_deterministically(
 
 
 def test_unknown_anchor_returns_structured_failure(
-    generated_package: DungeonPackage,
+    synthetic_package: DungeonPackage,
 ) -> None:
+    generated_package = synthetic_package
     _, exit_id = entrance_and_exit_ids(generated_package)
     query = PathQuery(
         schema_version="1.0.0",
@@ -59,7 +61,8 @@ def test_unknown_anchor_returns_structured_failure(
     }
 
 
-def test_large_footprint_fails_at_anchor(generated_package: DungeonPackage) -> None:
+def test_large_footprint_fails_at_anchor(synthetic_package: DungeonPackage) -> None:
+    generated_package = synthetic_package
     entrance, exit_id = entrance_and_exit_ids(generated_package)
     query = PathQuery(
         schema_version="1.0.0",
@@ -78,8 +81,9 @@ def test_large_footprint_fails_at_anchor(generated_package: DungeonPackage) -> N
 
 
 def test_removed_floor_transition_has_no_cross_floor_path(
-    generated_package: DungeonPackage,
+    synthetic_package: DungeonPackage,
 ) -> None:
+    generated_package = synthetic_package
     entrance, exit_id = entrance_and_exit_ids(generated_package)
     broken = generated_package.model_copy(update={"vertical_links": ()})
     query = PathQuery(

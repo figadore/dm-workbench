@@ -549,6 +549,7 @@ def _compile_layout_request(
         compiled.accepted
         and compiled.brief is not None
         and compiled.topology is not None
+        and compiled.certificate is not None
         and compiled.mechanics_plan is not None
     )
     assert compiled.output_hash is not None
@@ -557,6 +558,7 @@ def _compile_layout_request(
         package_id=f"dungeon_{canonical_json_sha256({'compiler_output_hash': compiled.output_hash, 'seed': seed})[:32]}",
         brief=compiled.brief,
         topology=compiled.topology,
+        certificate=compiled.certificate,
         seed=seed,
         generator_version=ORTHOGONAL_LAYOUT_GENERATOR_VERSION,
         mechanics_plan=compiled.mechanics_plan,

@@ -1,7 +1,9 @@
-"""Seeded graph-guided orthogonal dungeon layout engine."""
+"""Certificate-driven constructive orthogonal dungeon layout engine."""
 
+import json
 from collections.abc import Iterable
 from dataclasses import dataclass
+from hashlib import sha256
 
 from dm_dungeon.contracts.common import Visibility
 from dm_dungeon.contracts.geometry import (
@@ -40,6 +42,7 @@ from dm_dungeon.contracts.topology import (
     VerticalConnection,
     VerticalLinkKind,
 )
+from dm_dungeon.layout.constructive import ConstructiveLayout, construct_tier_a_layout
 from dm_dungeon.layout.contracts import (
     LAYOUT_RESULT_SCHEMA_VERSION,
     FloorLayoutBounds,
@@ -51,18 +54,11 @@ from dm_dungeon.layout.contracts import (
 from dm_dungeon.layout.identifiers import derive_component_id
 from dm_dungeon.layout.placement import (
     Rect,
-    default_floor_bounds,
-    place_floor_rooms,
     polygon_from_rect,
     rectangle_from_floor_bounds,
 )
 from dm_dungeon.layout.random_source import DeterministicRandom
-from dm_dungeon.layout.routing import (
-    PassageRoute,
-    door_segment_between_rects,
-    passage_endpoint_at_exterior_cell,
-    route_passage_between_rooms,
-)
+from dm_dungeon.layout.routing import PassageRoute
 from dm_dungeon.validation import (
     DiagnosticSeverity,
     validate_geometry,
@@ -117,7 +113,20 @@ def generate_layout(request: LayoutRequest) -> LayoutResult:
     if diagnostics:
         return _failed_result(request, random_source, diagnostics)
 
-    floor_bounds = _resolve_floor_bounds(request, diagnostics)
+    try:
+        constructive = construct_tier_a_layout(request.certificate, request.topology)
+    except (ValueError, RuntimeError) as error:
+        diagnostics.append(
+            _diagnostic(
+                LayoutDiagnosticCode.INTERNAL_CONTRACT_FAILURE,
+                (request.topology.id,),
+                f"Certified constructive layout failed: {error}",
+                "Report this deterministic generator regression; do not retry the model.",
+            )
+        )
+        return _failed_result(request, random_source, diagnostics)
+
+    floor_bounds = _resolve_floor_bounds(request, constructive, diagnostics)
     if diagnostics:
         return _failed_result(request, random_source, diagnostics)
 
@@ -125,88 +134,60 @@ def generate_layout(request: LayoutRequest) -> LayoutResult:
     locked_rooms = {item.id: item for item in request.locked.rooms}
     floors: list[FloorLayout] = []
     rooms: list[RoomLayout] = []
-    room_rects: dict[str, Rect] = {}
+    room_rects = constructive.room_rects
 
     for topology_floor in request.topology.floors:
         bounds = floor_bounds[topology_floor.id]
+        generated_floor = FloorLayout(
+            id=topology_floor.id,
+            layer_id=layer_by_visibility[topology_floor.visibility],
+            name=topology_floor.name,
+            level_index=topology_floor.level_index,
+            bounds=rectangle_from_floor_bounds(bounds),
+            visibility=topology_floor.visibility,
+        )
         locked_floor = locked_floors.get(topology_floor.id)
-        if locked_floor is not None:
-            floors.append(locked_floor)
-        else:
-            floors.append(
-                FloorLayout(
-                    id=topology_floor.id,
-                    layer_id=layer_by_visibility[topology_floor.visibility],
-                    name=topology_floor.name,
-                    level_index=topology_floor.level_index,
-                    bounds=rectangle_from_floor_bounds(bounds),
-                    visibility=topology_floor.visibility,
-                )
-            )
-
-        topology_rooms = tuple(
-            room
-            for room in request.topology.rooms
-            if room.floor_id == topology_floor.id
-        )
-        floor_locked_rooms = tuple(
-            room for room in request.locked.rooms if room.floor_id == topology_floor.id
-        )
-        placed, failure = place_floor_rooms(
-            request.topology,
-            topology_floor,
-            topology_rooms,
-            bounds,
-            floor_locked_rooms,
-            random_source,
-            request.maximum_placement_attempts,
-            direct_door_pairs=_direct_door_pairs(request, topology_floor.id),
-        )
-        if placed is None:
-            code = (
-                LayoutDiagnosticCode.LOCKED_COMPONENT_CONFLICT
-                if failure is not None and failure.startswith("Locked room")
-                else LayoutDiagnosticCode.ROOM_PLACEMENT_FAILED
-            )
+        if locked_floor is not None and locked_floor != generated_floor:
             diagnostics.append(
                 _diagnostic(
-                    code,
-                    (topology_floor.id, *(room.id for room in topology_rooms)),
-                    failure or f"Room placement failed on floor {topology_floor.id!r}.",
-                    "Increase floor bounds, relax room constraints, or unlock conflicting "
-                    "rooms.",
+                    LayoutDiagnosticCode.LOCKED_COMPONENT_CONFLICT,
+                    (locked_floor.id,),
+                    "Locked floor differs from the proven constructive baseline.",
+                    "Unlock the floor or use a lock from this certificate and generator.",
                 )
             )
-            continue
+        floors.append(locked_floor or generated_floor)
 
-        room_rects.update(placed)
-        for topology_room in topology_rooms:
-            locked_room = locked_rooms.get(topology_room.id)
-            if locked_room is not None:
-                rooms.append(locked_room)
-                continue
-            rooms.append(
-                RoomLayout(
-                    id=topology_room.id,
-                    layer_id=layer_by_visibility[topology_room.visibility],
-                    floor_id=topology_room.floor_id,
-                    role=topology_room.role,
-                    boundary=polygon_from_rect(placed[topology_room.id]),
-                    capacity=topology_room.capacity,
-                    tags=topology_room.tags,
-                    visibility=topology_room.visibility,
+    for topology_room in request.topology.rooms:
+        generated_room = RoomLayout(
+            id=topology_room.id,
+            layer_id=layer_by_visibility[topology_room.visibility],
+            floor_id=topology_room.floor_id,
+            role=topology_room.role,
+            boundary=polygon_from_rect(room_rects[topology_room.id]),
+            capacity=topology_room.capacity,
+            tags=topology_room.tags,
+            visibility=topology_room.visibility,
+        )
+        locked_room = locked_rooms.get(topology_room.id)
+        if locked_room is not None and locked_room != generated_room:
+            diagnostics.append(
+                _diagnostic(
+                    LayoutDiagnosticCode.LOCKED_COMPONENT_CONFLICT,
+                    (locked_room.id,),
+                    "Locked room differs from the proven constructive baseline.",
+                    "Unlock the room or use a lock from this certificate and generator.",
                 )
             )
+        rooms.append(locked_room or generated_room)
 
     if diagnostics:
         return _failed_result(request, random_source, diagnostics)
 
     corridors, door_geometries, passage_openings = _generate_same_floor_connections(
         request,
-        room_rects,
-        floor_bounds,
+        constructive,
         layer_by_visibility,
-        random_source,
         diagnostics,
     )
     stairs, vertical_links = _generate_floor_transitions(
@@ -316,6 +297,30 @@ def _validate_request_relationships(
     diagnostics: list[LayoutDiagnostic],
 ) -> None:
     _validate_mechanics_plan(request, diagnostics)
+    topology_payload = json.dumps(
+        request.topology.model_dump(mode="json", round_trip=True),
+        allow_nan=False,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode()
+    if (
+        request.certificate.topology_id != request.topology.id
+        or request.certificate.topology_hash != sha256(topology_payload).hexdigest()
+        or {item.room_id for item in request.certificate.rooms}
+        != {item.id for item in request.topology.rooms}
+        or {item.connection_id for item in request.certificate.connections}
+        != {item.id for item in request.topology.connections}
+    ):
+        diagnostics.append(
+            _diagnostic(
+                LayoutDiagnosticCode.TOPOLOGY_INVALID,
+                (request.topology.id,),
+                "Topology does not match its exact accepted certificate.",
+                "Use the topology and certificate from one accepted compiler result.",
+                source_code="certificate.binding_mismatch",
+            )
+        )
 
     floor_count = len(request.topology.floors)
     room_count = len(request.topology.rooms)
@@ -500,10 +505,8 @@ def _validate_locked_component_ids(
     stair_ids: set[str] = set()
     vertical_link_ids: set[str] = set()
     for connection in request.topology.connections:
-        if isinstance(connection, CorridorConnection):
+        if isinstance(connection, CorridorConnection | DoorConnection):
             corridor_ids.add(connection.id)
-        elif isinstance(connection, DoorConnection):
-            continue
         elif isinstance(connection, StairConnection):
             stair_ids.update(_stair_ids(request, connection.id))
             vertical_link_ids.add(connection.id)
@@ -664,67 +667,29 @@ def _validate_locked_layer_assignments(
 
 def _resolve_floor_bounds(
     request: LayoutRequest,
+    constructive: ConstructiveLayout,
     diagnostics: list[LayoutDiagnostic],
 ) -> dict[str, FloorLayoutBounds]:
+    """Check optional maxima, then retain the exact certificate-derived bound."""
+
     provided = {item.floor_id: item for item in request.floor_bounds}
-    locked_floors = {item.id: item for item in request.locked.floors}
-    resolved: dict[str, FloorLayoutBounds] = {}
-    for floor in request.topology.floors:
-        floor_rooms = tuple(
-            room for room in request.topology.rooms if room.floor_id == floor.id
-        )
-        requested = provided.get(floor.id)
-        locked = locked_floors.get(floor.id)
-        if locked is not None:
-            if locked.bounds.origin != GridPoint(x=0, y=0):
-                diagnostics.append(
-                    _diagnostic(
-                        LayoutDiagnosticCode.LOCKED_COMPONENT_CONFLICT,
-                        (locked.id,),
-                        f"Locked floor {locked.id!r} does not use origin (0, 0).",
-                        "Use floor-local locked geometry with origin (0, 0).",
-                    )
-                )
-                continue
-            margin = requested.margin_cells if requested is not None else 1
-            locked_bounds = FloorLayoutBounds(
-                floor_id=floor.id,
-                width_cells=locked.bounds.width_cells,
-                height_cells=locked.bounds.height_cells,
-                margin_cells=margin,
+    required = constructive.bounds
+    maximum = provided.get(required.floor_id)
+    if maximum is not None and (
+        maximum.width_cells < required.width_cells
+        or maximum.height_cells < required.height_cells
+    ):
+        diagnostics.append(
+            _diagnostic(
+                LayoutDiagnosticCode.FLOOR_BOUNDS_INVALID,
+                (required.floor_id,),
+                f"Floor maximum {maximum.width_cells}x{maximum.height_cells} cannot "
+                f"contain required constructive bounds "
+                f"{required.width_cells}x{required.height_cells}.",
+                "Increase the caller maximum to at least the reported required bounds.",
             )
-            if requested is not None and (
-                requested.width_cells != locked_bounds.width_cells
-                or requested.height_cells != locked_bounds.height_cells
-            ):
-                diagnostics.append(
-                    _diagnostic(
-                        LayoutDiagnosticCode.LOCKED_COMPONENT_CONFLICT,
-                        (floor.id,),
-                        f"Requested bounds conflict with locked floor {floor.id!r}.",
-                        "Use the locked dimensions or unlock the floor.",
-                    )
-                )
-                continue
-            resolved[floor.id] = locked_bounds
-        else:
-            resolved[floor.id] = requested or default_floor_bounds(floor, floor_rooms)
-    return resolved
-
-
-def _direct_door_pairs(
-    request: LayoutRequest,
-    floor_id: str,
-) -> frozenset[frozenset[str]]:
-    """Pairs that must share one wall under the sole V1 connection contract."""
-
-    rooms = {room.id: room for room in request.topology.rooms}
-    return frozenset(
-        frozenset((connection.from_room_id, connection.to_room_id))
-        for connection in request.topology.connections
-        if isinstance(connection, DoorConnection)
-        and rooms[connection.from_room_id].floor_id == floor_id
-    )
+        )
+    return {required.floor_id: required}
 
 
 def _endpoint_visibility(hidden: bool, room_visibility: Visibility) -> Visibility:
@@ -774,13 +739,11 @@ def _connection_layout_visibility(
 
 def _generate_same_floor_connections(
     request: LayoutRequest,
-    room_rects: dict[str, Rect],
-    floor_bounds: dict[str, FloorLayoutBounds],
+    constructive: ConstructiveLayout,
     layer_by_visibility: dict[Visibility, str],
-    random_source: DeterministicRandom,
     diagnostics: list[LayoutDiagnostic],
 ) -> tuple[list[CorridorLayout], list[_DoorGeometry], list[PassageOpening]]:
-    """Materialize V1 passages and shared-wall doors without version dispatch."""
+    """Materialize every certified edge in its preallocated passage channel."""
 
     topology_rooms = {room.id: room for room in request.topology.rooms}
     locked_corridors = {item.id: item for item in request.locked.corridors}
@@ -802,32 +765,53 @@ def _generate_same_floor_connections(
             source_room.visibility,
             target_room.visibility,
         )
+        passage_route = constructive.passage_routes[connection.id]
+        width_cells = (
+            connection.minimum_width_cells
+            if isinstance(connection, CorridorConnection)
+            else 1
+        )
+        generated_corridor = CorridorLayout(
+            id=connection.id,
+            layer_id=layer_by_visibility[layout_visibility],
+            floor_id=floor_id,
+            path=passage_route.path,
+            width_cells=width_cells,
+            connects_room_ids=(connection.from_room_id, connection.to_room_id),
+            visibility=layout_visibility,
+        )
+        locked_corridor = locked_corridors.get(connection.id)
+        if locked_corridor is not None and locked_corridor != generated_corridor:
+            diagnostics.append(
+                _diagnostic(
+                    LayoutDiagnosticCode.LOCKED_COMPONENT_CONFLICT,
+                    (connection.id,),
+                    "Locked corridor differs from its certificate-reserved channel.",
+                    "Unlock it or retain the exact constructive corridor.",
+                )
+            )
+        corridors.append(locked_corridor or generated_corridor)
+        passage_openings.extend(
+            _passage_openings_for_connection(request, connection.id, passage_route)
+        )
 
         if isinstance(connection, DoorConnection):
             locked_door = locked_doors.get(connection.id)
-            segment = (
-                locked_door.segment
-                if locked_door is not None
-                else door_segment_between_rects(
-                    room_rects[connection.from_room_id],
-                    room_rects[connection.to_room_id],
-                )
-            )
-            if segment is None:
+            segment = passage_route.from_segment
+            if locked_door is not None and locked_door.segment != segment:
                 diagnostics.append(
                     _diagnostic(
-                        LayoutDiagnosticCode.CONNECTION_ROUTING_FAILED,
-                        (connection.id, connection.from_room_id),
-                        f"Door {connection.id!r} could not align to a shared wall.",
-                        "Regenerate the route or unlock the connected rooms.",
+                        LayoutDiagnosticCode.LOCKED_COMPONENT_CONFLICT,
+                        (locked_door.id,),
+                        "Locked door differs from its certificate-assigned opening.",
+                        "Unlock it or retain the exact constructive door opening.",
                     )
                 )
-                continue
             door_geometries.append(
                 _DoorGeometry(
                     connection_id=connection.id,
                     floor_id=floor_id,
-                    segment=segment,
+                    segment=locked_door.segment if locked_door is not None else segment,
                     connects_room_ids=(
                         connection.from_room_id,
                         connection.to_room_id,
@@ -836,73 +820,6 @@ def _generate_same_floor_connections(
                     to_hidden=connection.to_hidden,
                 )
             )
-            continue
-
-        locked_corridor = locked_corridors.get(connection.id)
-        floor_rectangles = tuple(
-            room_rects[room.id]
-            for room in request.topology.rooms
-            if room.floor_id == floor_id
-        )
-        if locked_corridor is not None:
-            passage_route = _locked_passage_route(
-                locked_corridor,
-                room_rects[connection.from_room_id],
-                room_rects[connection.to_room_id],
-            )
-            if passage_route is None:
-                diagnostics.append(
-                    _diagnostic(
-                        LayoutDiagnosticCode.LOCKED_COMPONENT_CONFLICT,
-                        (locked_corridor.id,),
-                        f"Locked corridor {locked_corridor.id!r} lacks valid V1 "
-                        "endpoint openings.",
-                        "Unlock the corridor or use a lock from the V1 generator.",
-                    )
-                )
-                continue
-            corridors.append(locked_corridor)
-        else:
-            passage_route = route_passage_between_rooms(
-                room_rects[connection.from_room_id],
-                room_rects[connection.to_room_id],
-                floor_rectangles,
-                floor_bounds[floor_id],
-                connection.minimum_width_cells,
-                random_source,
-            )
-            if passage_route is None:
-                diagnostics.append(
-                    _diagnostic(
-                        LayoutDiagnosticCode.CONNECTION_ROUTING_FAILED,
-                        (
-                            connection.id,
-                            connection.from_room_id,
-                            connection.to_room_id,
-                        ),
-                        f"Could not route connection {connection.id!r} orthogonally.",
-                        "Increase floor space, move unlocked rooms, or preserve a known "
-                        "working corridor.",
-                    )
-                )
-                continue
-            corridors.append(
-                CorridorLayout(
-                    id=connection.id,
-                    layer_id=layer_by_visibility[layout_visibility],
-                    floor_id=floor_id,
-                    path=passage_route.path,
-                    width_cells=connection.minimum_width_cells,
-                    connects_room_ids=(
-                        connection.from_room_id,
-                        connection.to_room_id,
-                    ),
-                    visibility=layout_visibility,
-                )
-            )
-        passage_openings.extend(
-            _passage_openings_for_connection(request, connection.id, passage_route)
-        )
 
     return corridors, door_geometries, passage_openings
 
@@ -921,7 +838,7 @@ def _passage_openings_for_connection(
     connection = next(
         item for item in request.topology.connections if item.id == connection_id
     )
-    assert isinstance(connection, CorridorConnection)
+    assert isinstance(connection, CorridorConnection | DoorConnection)
     return (
         PassageOpening(
             id=derive_component_id(
@@ -947,27 +864,6 @@ def _passage_openings_for_connection(
             segment=to_segment,
             approach_direction=to_direction,
         ),
-    )
-
-
-def _locked_passage_route(
-    corridor: CorridorLayout,
-    source: Rect,
-    target: Rect,
-) -> PassageRoute | None:
-    """Recover explicit endpoint records while preserving a locked path verbatim."""
-    source_endpoint = passage_endpoint_at_exterior_cell(source, corridor.path.points[0])
-    target_endpoint = passage_endpoint_at_exterior_cell(
-        target, corridor.path.points[-1]
-    )
-    if source_endpoint is None or target_endpoint is None:
-        return None
-    return PassageRoute(
-        path=corridor.path,
-        from_segment=source_endpoint[0],
-        from_direction=source_endpoint[1],
-        to_segment=target_endpoint[0],
-        to_direction=target_endpoint[1],
     )
 
 
@@ -1370,7 +1266,7 @@ def _generate_role_anchors(
 ) -> tuple[PositionAnchor, ...]:
     anchors: list[PositionAnchor] = []
     for room in request.topology.rooms:
-        if room.role.value not in {"entrance", "exit"}:
+        if room.role.value not in {"entrance", "exit", "objective"}:
             continue
         kind = (
             PositionAnchorKind.ENTRANCE

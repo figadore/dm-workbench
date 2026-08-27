@@ -109,6 +109,37 @@ class EmbeddingRoomWitness(ContractModel):
     band_index: NonNegativeCount
 
 
+class RoomPortAssignmentWitness(ContractModel):
+    """Side-specific opening allocation consumed by constructive layout."""
+
+    room_id: OpaqueId
+    north_connection_ids: tuple[OpaqueId, ...] = ()
+    east_connection_ids: tuple[OpaqueId, ...] = ()
+    south_connection_ids: tuple[OpaqueId, ...] = ()
+    west_connection_ids: tuple[OpaqueId, ...] = ()
+
+    @model_validator(mode="after")
+    def require_unique_incident_connections(self) -> Self:
+        connection_ids = (
+            *self.north_connection_ids,
+            *self.east_connection_ids,
+            *self.south_connection_ids,
+            *self.west_connection_ids,
+        )
+        if len(connection_ids) != len(set(connection_ids)):
+            raise ValueError("a room connection must occupy exactly one wall side")
+        return self
+
+
+class ConnectionChannelWitness(ContractModel):
+    """One reserved noncrossing channel in the supported embedding."""
+
+    connection_id: OpaqueId
+    kind: Literal["backbone", "branch", "loop"]
+    band: Literal["backbone", "upper", "lower", "loop"]
+    band_index: NonNegativeCount
+
+
 class TopologyCertificate(ContractModel):
     """Deterministic proof data that validators recompute rather than trust."""
 
@@ -132,6 +163,8 @@ class TopologyCertificate(ContractModel):
     public_reachable_room_ids: tuple[OpaqueId, ...]
     room_demands: tuple[RoomDemandWitness, ...]
     embedding_rooms: tuple[EmbeddingRoomWitness, ...]
+    room_ports: tuple[RoomPortAssignmentWitness, ...]
+    connection_channels: tuple[ConnectionChannelWitness, ...]
     required_bands: PositiveCount
 
 

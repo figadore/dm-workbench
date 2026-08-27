@@ -304,6 +304,21 @@ def _validate_corridors(
                 )
             )
 
+    for index, first in enumerate(package.corridors):
+        for second in package.corridors[index + 1 :]:
+            if first.floor_id != second.floor_id:
+                continue
+            overlap = grid.corridor_cells[first.id] & grid.corridor_cells[second.id]
+            if overlap:
+                diagnostics.append(
+                    _diagnostic(
+                        GeometryDiagnosticCode.CORRIDOR_OVERLAP,
+                        (first.id, second.id, first.floor_id),
+                        f"Corridors {first.id!r} and {second.id!r} share exact cells.",
+                        "Use distinct reserved channels without crossings or shared cells.",
+                    )
+                )
+
 
 def _validate_passage_geometry(
     package: DungeonPackage,
@@ -427,11 +442,16 @@ def _validate_direct_doors(
     package: DungeonPackage,
     diagnostics: list[GeometryDiagnostic],
 ) -> None:
-    """Require every V1 door to be a corridor-free shared-wall opening."""
+    """Require every V1 door at a shared wall or declared passage opening."""
     rooms = {room.id: room for room in package.rooms}
     corridors_by_rooms = {
-        frozenset(item.connects_room_ids) for item in package.corridors
+        frozenset(item.connects_room_ids): item for item in package.corridors
     }
+    openings_by_corridor: dict[str, list[PassageOpening]] = {
+        item.corridor_id: [] for item in package.passage_openings
+    }
+    for opening in package.passage_openings:
+        openings_by_corridor[opening.corridor_id].append(opening)
     direct_doors = package.composable_doors
     doors_by_connection_id = {
         door.connection_id: door for door in package.composable_doors
@@ -458,13 +478,18 @@ def _validate_direct_doors(
             _segment_on_polygon_boundary(door.segment, room.boundary)
             for room in connected
         )
-        if not shared_wall or frozenset(door.connects_room_ids) in corridors_by_rooms:
+        corridor = corridors_by_rooms.get(frozenset(door.connects_room_ids))
+        passage_opening = corridor is not None and any(
+            opening.segment == door.segment
+            for opening in openings_by_corridor.get(corridor.id, [])
+        )
+        if not shared_wall and not passage_opening:
             diagnostics.append(
                 _diagnostic(
                     GeometryDiagnosticCode.DIRECT_DOOR_NOT_SHARED_WALL,
                     (door.id, *door.connects_room_ids),
-                    f"Direct door {door.id!r} is not one corridor-free shared-wall opening.",
-                    "Place adjacent rooms on a shared wall and remove any synthetic corridor.",
+                    f"Door {door.id!r} is neither a shared-wall nor passage opening.",
+                    "Place the door on a connected room wall and declared channel opening.",
                 )
             )
 
@@ -581,10 +606,13 @@ def _validate_doors(
             _segment_on_polygon_boundary(segment, room.boundary)
             for room in connected_rooms
         )
+        matching_openings = [
+            opening
+            for opening in package.passage_openings
+            if opening.corridor_id in {item.id for item in matching_corridors}
+        ]
         if not is_shared_wall_opening and not any(
-            _point_on_segment(corridor.path.points[0], segment)
-            or _point_on_segment(corridor.path.points[-1], segment)
-            for corridor in matching_corridors
+            opening.segment == segment for opening in matching_openings
         ):
             diagnostics.append(
                 _diagnostic(

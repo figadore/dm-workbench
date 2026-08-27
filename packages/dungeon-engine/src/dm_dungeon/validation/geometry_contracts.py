@@ -32,6 +32,7 @@ class GeometryDiagnosticCode(StrEnum):
     CORRIDOR_ROOM_INTERIOR_OVERLAP = "geometry.corridor_room_interior_overlap"
     CORRIDOR_UNDECLARED_WALL_CONTACT = "geometry.corridor_undeclared_wall_contact"
     CORRIDOR_NON_ORTHOGONAL = "geometry.corridor_non_orthogonal"
+    CORRIDOR_OVERLAP = "geometry.corridor_overlap"
     CORRIDOR_WIDTH_INSUFFICIENT = "geometry.corridor_width_insufficient"
     DIRECT_DOOR_NOT_SHARED_WALL = "geometry.direct_door_not_shared_wall"
     DOOR_ALIGNMENT_INVALID = "geometry.door_alignment_invalid"

@@ -360,7 +360,7 @@ class DoorMechanics(ContractModel):
 
 
 class MechanicDoorLayout(FloorBoundMapElement):
-    """Exact same-floor direct-door opening with composable mechanics."""
+    """Exact same-floor shared-wall or passage opening with composable mechanics."""
 
     connection_id: OpaqueId
     segment: GridSegment

@@ -324,7 +324,7 @@ The internal P1-02 Library service now ingests bounded strict-UTF-8 files throug
 
 ## Current Next Step
 
-Continue **P7-14d** with certificate-driven constructive Tier A geometry: allocate backbone columns, branch/loop bands, room dimensions, side ports, and reserved corridor channels from the P7-14c proof data. See [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) and [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
+Continue **P7-14e** with prompt/guide integration and the provider-free stress ladder: exercise the constructive 4–8 room Tier A path through CLI/web/faux publication, verify exact keyed guide quality and atomic draft publication, and keep live canaries paused until those gates pass. See [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) and [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
 
 ## License and Third-Party Marks
 

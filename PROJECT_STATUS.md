@@ -7,13 +7,13 @@
 ## Current Snapshot
 
 - **Last updated:** 2026-08-21
-- **Branch:** `fast-track-prompt-to-dungeon`, three commits ahead of origin before
-  this WIP (`dd54b4e` committed P7-14b).
-- **Current task:** **P7-14c — Creative `DungeonPlan` and topology certificate.**
+- **Branch:** `fast-track-prompt-to-dungeon`; `cc02441` was equal to origin before
+  this working-tree task.
+- **Current task:** **P7-14d — Constructive Tier A geometry.**
 - **Task state:** **complete in the working tree; not committed.**
 - **Schema head:** `0008_workbench_defaults`; no migration changed.
 - **Live providers:** no call was made. Keep live canaries paused until the P7-14
-  Tier A provider-free and faux gates pass.
+  provider-free and faux-provider gates pass.
 
 ## Active Direction
 
@@ -24,142 +24,116 @@ P7-13 feature/polish work remains paused. The active recovery is defined by
 one submit_dungeon_plan V1 model call
     -> deterministic critical-path/branch/loop topology compiler
     -> independently checked TopologyCertificate
-    -> constructive orthogonal layout with computed bounds
+    -> certificate-driven constructive orthogonal layout
     -> independent geometry/secrecy validation
     -> optional independently-failable guide enrichment
     -> atomic draft publication
 ```
 
-P7-14c completes the abstract creative/topology proof layer only. The existing
-place-then-route geometry implementation remains an interim compatibility seam and
-must be replaced, not given more retries, in P7-14d.
+P7-14d completes the Tier A geometry slice. The active generator no longer uses random
+room-placement or routing retries for correctness. Seeded optimization is not yet
+implemented; every seed currently uses the same zero-draw proven baseline, which is the
+required fallback for future optional compaction.
 
-## P7-14c Work Completed
+## P7-14d Work Completed
 
-### Sole bounded creative contract
+### Certificate-driven physical proof
 
-- Replaced `DungeonDesignSpec` and its model-authored floors/connections with one
-  provider-visible `DungeonPlan` schema `1.0.0`.
-- Tier A schema bounds are enforced before provider-independent compilation:
-  - one floor represented implicitly;
-  - 4–8 rooms;
-  - exactly one entrance/objective critical path;
-  - zero to two ordered optional branch paths;
-  - zero or one non-duplicate loop/secret route;
-  - zero or one gate with key/clue intent;
-  - bounded room encounter, trap, feature, and named-objective intent.
-- The schema contains no arbitrary edge list, IDs, floor geometry, coordinates,
-  dimensions, seed, numeric DC, visibility, lifecycle, or publication fields.
-- Added provider-schema tests for strict objects, cardinality bounds, unsupported
-  fields/enums, version rejection, and canonical round trips.
+- Made the exact `TopologyCertificate` a required `LayoutRequest` input and verified its
+  topology ID, canonical topology hash, room mapping, and connection mapping before
+  layout.
+- Added independently recomputed `RoomPortAssignmentWitness` records with exact
+  north/east/south/west incident connection lists.
+- Added `ConnectionChannelWitness` records for backbone, upper/lower branch, and loop
+  bands. Mutated side and channel claims are rejected by certificate validation.
+- Compiler output now carries certificate-derived exact floor bounds instead of a fixed
+  56x56 compatibility rectangle.
 
-### Deterministic graph compiler
+### Constructive Tier A baseline
 
-- Replaced `compile_dungeon_design` with `compile_dungeon_plan` pinned to
-  `dungeon-plan-compiler-v1`.
-- The compiler now constructs every graph edge from the critical path, ordered
-  branches, and optional loop. Stable IDs derive from semantic identity and the
-  compiler pin, not model prose, array position, or seed.
-- Compiler diagnostics reject duplicate/unknown/reused/unassigned refs, invalid
-  critical-path endpoints, non-optional branch rooms, duplicate/self loops,
-  unsupported branch attachments, malformed objective content, gates without a
-  constructed public edge, gate/dependency-kind mismatch, and dependency rooms not
-  publicly reachable with the gate closed.
-- Gate/key/clue, secret door/bypass, objective, encounter, trap, and feature intent
-  compile into the existing exact topology/mechanics records. The lower topology
-  validator now accepts the ordered branch witness while retaining the synthetic
-  package fixture's historical star witness.
+- Added `layout/constructive.py` for one-floor 4–8 room construction:
+  - critical-path rooms occupy ordered backbone columns;
+  - upper/lower branch rooms occupy dedicated vertical bands;
+  - room dimensions expand within their declared size bands for side-port and certified
+    interior demand;
+  - every connection receives a deterministic one-cell orthogonal passage with explicit
+    wall openings and straight endpoint leads;
+  - already reserved passage cells are blocked from later channels, including the
+    public/secret loop, so channels do not cross or share cells;
+  - exact required width/height plus rock margin is computed before package geometry.
+- Caller floor bounds now act as optional maxima: a too-small maximum fails with exact
+  required dimensions; a larger maximum still emits the exact proven bounds.
+- All same-floor door intents may be corridor-realized at a declared passage opening;
+  gate/secret mechanics remain on an exact door segment at that opening. Geometry
+  validation accepts either a shared-wall door or this explicit passage-door form and
+  independently rejects corridor crossings/shared cells.
+- Removed the inactive random room-placement/retry implementation and the obsolete
+  `maximum_placement_attempts` request field. The retained generic routing module is
+  test utility code, not part of active generation.
+- Locks are accepted only when byte-equal to the certificate-derived baseline; stale or
+  conflicting locks fail explicitly.
 
-### Proof-carrying topology certificate
+### Properties and integration fixtures
 
-- Added `TopologyCertificate` version `topology-certificate-v1` and grammar pin
-  `series-parallel-with-spurs-v1`.
-- Certificates bind exact plan/topology hashes and semantic-ref-to-ID mappings and
-  carry:
-  - grammar production steps and entrance/objective critical-path witness;
-  - connected-component, room, edge, and cycle-rank facts;
-  - ordered branch and simple-cycle loop witnesses;
-  - closed-gate dependency reachability/open order;
-  - full DM and public reachability sets;
-  - room degree, port/opening/clearance demand, and interior encounter/feature/trap
-    demand;
-  - backbone/branch embedding order, dedicated bands, and loop interval bands.
-- Added `validate_topology_certificate`, which independently reconstructs graph,
-  grammar, branch/loop/gate, public/secret reachability, demand, and embedding facts.
-  Compilation fails as an engine invariant if its newly emitted certificate does not
-  pass this independent validator.
-- Added example and Hypothesis coverage over 4–8 room Tier A plans, branches, loops,
-  secret routes, graph rank, demands, deterministic IDs, and deliberately mutated
-  certificate claims.
-
-### Workbench and synthetic evidence
-
-- Updated the sole proposal wrapper to carry `plan`, updated the prompt/tool schema,
-  compiler call, bounded repair diagnostics, eval projection, DM-guide projection,
-  run pins, faux CLI/web payloads, and integration expectations.
-- Accepted tool results now expose plan hash, compact graph counts, cycle rank,
-  secret/gate counts, certificate version, compiler pins, and bounded warnings.
-- Regenerated the provider-free dungeon eval fixture for Tier A; removed obsolete
-  multi-floor/arbitrary-edge cases.
-- Deleted `contracts/design.py` and `test_design_compiler.py`; there is no retained
-  active `DungeonDesignSpec` or `compile_dungeon_design` path.
-- Updated root guidance and `TOPOLOGY_MATH.md` to distinguish completed P7-14c proofs
-  from P7-14d side-port/exact-bounds/geometry work.
+- Expanded active Hypothesis coverage to generated 4–8 room plans across seeds, room
+  demand, upper/lower branches, public/secret loops, exact bounds, openings, and geometry
+  validity.
+- Added regressions for noncrossing reserved cells, exact-versus-maximum bounds,
+  certificate binding mutation, side/channel proof mutation, zero random draws, and
+  constructive secret-channel/player-render leakage.
+- Replaced root Dungeon Studio integration request construction with one shared
+  synthetic proof-carrying Tier A request. The historical multi-floor package fixture
+  remains only for package reader/export/pathfinding compatibility tests; active layout
+  does not generate it.
+- Updated topology math, architecture-facing README direction, and milestone history.
 
 ## Files Changed
 
 No migration changed. Main changes are in:
 
-- `packages/dungeon-engine/src/dm_dungeon/contracts/plan.py` (new)
-- `packages/dungeon-engine/src/dm_dungeon/contracts/certificate.py` (new)
+- `packages/dungeon-engine/src/dm_dungeon/contracts/{certificate,package}.py`
 - `packages/dungeon-engine/src/dm_dungeon/compiler.py`
-- `packages/dungeon-engine/src/dm_dungeon/validation/certificate.py` (new)
-- `packages/dungeon-engine/src/dm_dungeon/validation/topology.py`
-- package barrels/serialization/mechanics imports and topology math documentation
-- `src/dm_assistant/orchestration/dungeons/{contracts,prompting,service,evals}.py`
-- plan/compiler/property/workflow/eval/faux-integration tests and synthetic eval fixture
+- `packages/dungeon-engine/src/dm_dungeon/layout/{contracts,constructive,engine,placement}.py`
+- `packages/dungeon-engine/src/dm_dungeon/validation/{certificate,geometry,geometry_contracts,TOPOLOGY_MATH.md}`
+- package plan/compiler/layout/property/rendering/geometry/pathfinding tests
+- `src/dm_assistant/orchestration/dungeons/{prompting,evals}.py`
+- `tests/integration/dungeon_fixtures.py` and focused unit/integration request fixtures
 - `README.md`, `PROJECT_HISTORY.md`, and this handoff
-
-Deleted:
-
-- `packages/dungeon-engine/src/dm_dungeon/contracts/design.py`
-- `packages/dungeon-engine/tests/test_design_compiler.py`
 
 ## Verification
 
-- `uv run pytest -q packages/dungeon-engine/tests` → **129 passed**.
+- `uv run pytest -q packages/dungeon-engine/tests` → **135 passed**.
 - `uv run pytest -q tests/unit tests/evals` → **173 passed**.
-- Focused CLI/web/workflow/web-prompt/preparation integration files → **19 skipped**
+- Focused Dungeon Studio CLI/workflow/web/web-prompt integration files → **6 skipped**
   because the PostgreSQL integration gate was unavailable; collection succeeded.
-- `uv run mypy --strict packages/dungeon-engine/src/dm_dungeon src/dm_assistant/orchestration/dungeons src/dm_assistant/cli/main.py` → passed (**55 source files**).
-- Focused Ruff check/format over changed package, orchestration, unit/eval, and faux
-  integration Python files → passed.
-- `git diff --check` → passed before this final status update.
+- `uv run mypy --strict packages/dungeon-engine/src/dm_dungeon src/dm_assistant/orchestration/dungeons src/dm_assistant/cli/main.py`
+  → passed (**56 source files**).
+- Focused Ruff check over changed package, orchestration, unit, and integration Python
+  files → passed.
+- `git diff --check` → passed.
 
 Package and root tests must continue to run as separate pytest invocations: combining
-both test roots in one process causes pytest's existing duplicate module basenames
-(`test_cli.py`, `test_package.py`) to produce an import-file-mismatch collection error.
-This is not a P7-14c product failure.
+both test roots in one process causes pytest's existing duplicate module basenames to
+produce an import-file-mismatch collection error.
 
 ## Working Tree
 
-P7-14c is uncommitted on a branch three commits ahead of origin. The tree contains only
-this task's plan/compiler/certificate/orchestration/test/documentation changes. No
-migration, real campaign content, provider response, credential, live-provider call, or
-constructive geometry implementation changed.
+P7-14d is uncommitted. The tree contains this task's certificate/layout/validation,
+test-fixture, property, and documentation changes. No migration, real campaign content,
+provider response, credential, live-provider call, canonical campaign write, or
+preparation approval changed.
 
 Suggested commit subject:
 
-`P7-14c construct and certify Tier A dungeon topology`
+`P7-14d construct certified Tier A dungeon geometry`
 
 ## Single Next Recommended Task
 
-**Begin P7-14d — constructive Tier A geometry.**
+**Begin P7-14e — prompt/guide integration and provider-free stress ladder.**
 
-**First concrete action:** make the exact accepted `TopologyCertificate` a required
-layout input/pin, then add failing constructive-layout tests for certified 4–8 room
-critical paths, upper/lower branches, and one public/secret loop. Implement exact
-required bounds, backbone columns, dedicated branch/loop bands, room expansion from
-interior demand, side-specific port assignments, and reserved noncrossing channels from
-the certificate. Keep optional seeded compaction separate and fall back to the proven
-baseline; do not increase random placement/routing attempts.
+**First concrete action:** run the faux-provider prompt through the exact accepted
+certificate/layout path and add one end-to-end assertion set that an accepted
+`submit_dungeon_plan` publishes an atomic draft with DM/player SVG+PNG, exact keyed guide
+references, preparation-readiness diagnostics, and no player-visible secret channel or
+door. Keep optional guide enrichment independently failable and do not resume live
+provider calls yet.
