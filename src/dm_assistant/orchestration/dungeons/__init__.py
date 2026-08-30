@@ -23,6 +23,7 @@ from dm_assistant.orchestration.dungeons.contracts import (
     CreatePromptedDungeonExplorationWorkflow,
     CreatePromptedDungeonFeatureInteractionWorkflow,
     CreatePromptedDungeonPuzzleWorkflow,
+    CreatePromptedDungeonTrapWorkflow,
     CreatePromptedDungeonWorkflow,
     DungeonExplorationAffordance,
     DungeonExplorationAffordanceApproval,
@@ -83,11 +84,13 @@ from dm_assistant.orchestration.dungeons.contracts import (
     PromptDungeonExplorationWorkflow,
     PromptDungeonFeatureInteractionWorkflow,
     PromptDungeonPuzzleWorkflow,
+    PromptDungeonTrapWorkflow,
     PromptDungeonWorkflow,
     PromptedDungeonExplorationLineage,
     PromptedDungeonFeatureInteractionLineage,
     PromptedDungeonModelLineage,
     PromptedDungeonPuzzleLineage,
+    PromptedDungeonTrapLineage,
     RegenerateDungeonWorkflow,
 )
 from dm_assistant.orchestration.dungeons.exploration_application import (
@@ -130,6 +133,17 @@ from dm_assistant.orchestration.dungeons.puzzle_prompting import (
     resolve_dungeon_puzzle_prompt_profile,
 )
 from dm_assistant.orchestration.dungeons.service import DungeonStudioService
+from dm_assistant.orchestration.dungeons.trap_application import (
+    DungeonTrapPromptApplicationService,
+    DungeonTrapPromptAttemptResult,
+)
+from dm_assistant.orchestration.dungeons.trap_prompting import (
+    DungeonTrapPromptService,
+    DungeonTrapRejectedAfterRepair,
+    DungeonTrapSubmissionResult,
+    DungeonTrapSubmissionService,
+    resolve_dungeon_trap_prompt_profile,
+)
 from dm_assistant.orchestration.dungeons.web_prompt import (
     DungeonPromptEvent,
     DungeonPromptRun,
@@ -151,6 +165,7 @@ __all__ = [
     "CreatePromptedDungeonExplorationWorkflow",
     "CreatePromptedDungeonFeatureInteractionWorkflow",
     "CreatePromptedDungeonPuzzleWorkflow",
+    "CreatePromptedDungeonTrapWorkflow",
     "CreatePromptedDungeonWorkflow",
     "DungeonPromptApplicationService",
     "DungeonPromptAttemptResult",
@@ -231,7 +246,13 @@ __all__ = [
     "DungeonTrapEnrichmentOutput",
     "DungeonTrapIssue",
     "DungeonTrapMechanic",
+    "DungeonTrapPromptApplicationService",
+    "DungeonTrapPromptAttemptResult",
+    "DungeonTrapPromptService",
+    "DungeonTrapRejectedAfterRepair",
     "DungeonTrapRoomContext",
+    "DungeonTrapSubmissionResult",
+    "DungeonTrapSubmissionService",
     "DungeonTrapValidationResult",
     "DungeonVersionComparison",
     "DungeonWorkflowResult",
@@ -239,15 +260,18 @@ __all__ = [
     "PromptDungeonExplorationWorkflow",
     "PromptDungeonFeatureInteractionWorkflow",
     "PromptDungeonPuzzleWorkflow",
+    "PromptDungeonTrapWorkflow",
     "PromptDungeonWorkflow",
     "PromptedDungeonExplorationLineage",
     "PromptedDungeonFeatureInteractionLineage",
     "PromptedDungeonModelLineage",
     "PromptedDungeonPuzzleLineage",
+    "PromptedDungeonTrapLineage",
     "RegenerateDungeonWorkflow",
     "apply_advisory_output_cap_override",
     "resolve_dungeon_exploration_prompt_profile",
     "resolve_dungeon_feature_interaction_prompt_profile",
     "resolve_dungeon_prompt_profile",
     "resolve_dungeon_puzzle_prompt_profile",
+    "resolve_dungeon_trap_prompt_profile",
 ]

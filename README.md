@@ -279,14 +279,16 @@ code joins one exact package feature marker to its current guide entry and local
 geometry, rejects foreign IDs and cross-task mutation, and projects only observable setup,
 multiple affordances/consequences, and optional reset/retry guidance. Accepted content and
 lineage publish in one DM-only child while package/map bytes, prior enrichments, and
-unrelated blockers remain unchanged. Trap interactions now have a provider-free exact-ID
-seam over one room-trap marker, its current guide entry, local geometry, and deterministic
-detection/disable difficulties. Trap output supplies an observable warning, trigger/effect,
-detection and disable counterplay, consequences, and optional reset/recovery without
-numeric difficulty authorship; deterministic projection changes only the selected trap.
-Trap provider dispatch and publication are not wired yet. Accepted content remains
-available to the DM in the artifact, while routine attempt reports contain only compact
-operational metadata and diagnostics; raw transport capture requires explicit local debug.
+unrelated blockers remain unchanged. Trap interactions now have their own exact-ID
+contract and independently bounded faux-provider task over one room-trap marker, its
+current guide entry, local geometry, and deterministic detection/disable difficulties.
+Trap output supplies an observable warning, trigger/effect, detection and disable
+counterplay, consequences, and optional reset/recovery without numeric difficulty
+authorship. Accepted content and lineage publish atomically in a DM-only child while
+package/map bytes, prior enrichments, the other traps, and unrelated blockers remain
+unchanged; rejection leaves the parent current with body-free diagnostics. Accepted
+content remains available to the DM in the artifact, while routine attempt reports contain
+only compact operational metadata and diagnostics; raw transport capture requires explicit local debug.
 Until the remaining enrichment kinds are wired, drafts truthfully remain
 preparation-blocked. Geometry, visibility, validation, rendering, persistence, and
 approval remain server-owned. Run inspection remains body-free:
@@ -431,7 +433,7 @@ The internal P1-02 Library service now ingests bounded strict-UTF-8 files throug
 
 ## Current Next Step
 
-Continue **P7-14f** with a provider-free exact-ID trap-interaction seam over one independent synthetic case. Keep deterministic DCs, marker geometry, package/map bytes, and accepted puzzle/exploration/feature content authoritative; do not start trap provider dispatch, narrative generation, live calls, or Tier B/C in the same slice. See [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) and [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
+Continue **P7-14f** with a provider-free exact-ID objective enrichment seam over the independent Copper Tide Foundry case. Keep objective markers, package/map bytes, deterministic mechanics, and accepted puzzle/exploration/feature/trap content authoritative; do not combine it with room narrative, automatic orchestration, live calls, or Tier B/C. See [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) and [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
 
 ## License and Third-Party Marks
 

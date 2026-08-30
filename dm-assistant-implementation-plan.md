@@ -1765,15 +1765,17 @@ provider task now has its own profile/effort/prompt/schema, 6,000-token cumulati
 2,048-output budget, one budget-reserved repair, accepted-content lineage, and atomic DM-
 only child publication. Success preserves package/map bytes, accepted puzzle/exploration
 content and lineage, other feature entries, and unrelated blockers; rejection leaves the
-exploration parent current with body-free diagnostics. The provider-free trap seam joins
-one exact room-trap marker and current guide entry to local geometry plus deterministic
-detection/disable difficulties. Its strict output supplies an observable warning, actual
-trigger/effect, detection and disable counterplay, consequences, and optional reset or
-recovery while rejecting foreign IDs, structural/cross-task fields, and model-authored
-numeric DCs. Deterministic projection changes only that trap, renders every accepted trap
-field, preserves package/map state plus prior puzzle/exploration/feature content, and
-removes only the selected trap's readiness diagnostics. Trap provider dispatch,
-narrative, automatic staged orchestration, and live calls remain later slices.
+exploration parent current with body-free diagnostics. The trap seam joins one exact room-trap marker and current guide entry to local geometry
+plus deterministic detection/disable difficulties. Its strict output supplies an
+observable warning, actual trigger/effect, detection and disable counterplay,
+consequences, and optional reset or recovery while rejecting foreign IDs,
+structural/cross-task fields, and model-authored numeric DCs. One independently pinned
+faux-provider task now has its own profile/effort/prompt/schema, 6,000-token cumulative
+and 2,048-output budget, one budget-reserved repair, accepted-content lineage, and atomic
+DM-only child publication. Success changes only that trap while preserving package/map
+state, prior puzzle/exploration/feature content and lineage, the other traps, and unrelated
+blockers; rejection leaves the parent current with body-free diagnostics. Objective and
+narrative enrichment, automatic staged orchestration, and live calls remain later slices.
 
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
   Its model-visible proposal contains room identity/purpose, critical path, bounded

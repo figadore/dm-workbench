@@ -537,6 +537,23 @@ class DungeonTrapValidationResult(WorkflowModel):
         return self
 
 
+class PromptedDungeonTrapLineage(WorkflowModel):
+    """Accepted trap content retained with its authorized dungeon version."""
+
+    model_run_id: UUID
+    context_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    model_run: ModelRunRecord
+    output: DungeonTrapEnrichmentOutput
+
+    @model_validator(mode="after")
+    def require_successful_matching_output(self) -> PromptedDungeonTrapLineage:
+        if self.model_run.status != "succeeded":
+            raise ValueError("trap lineage requires a successful model run")
+        if self.model_run.output_payload != self.output.model_dump(mode="json"):
+            raise ValueError("trap lineage output must match the model run")
+        return self
+
+
 class DungeonPuzzleClueApproval(WorkflowModel):
     """Server-approved exact location selected for one puzzle context."""
 
@@ -1181,6 +1198,7 @@ class DungeonStudioSpecification(WorkflowModel):
     feature_interaction_model_lineage: tuple[
         PromptedDungeonFeatureInteractionLineage, ...
     ] = ()
+    trap_model_lineage: tuple[PromptedDungeonTrapLineage, ...] = ()
 
 
 class CreateDungeonWorkflow(WorkflowModel):
@@ -1373,6 +1391,39 @@ class CreatePromptedDungeonFeatureInteractionWorkflow(WorkflowModel):
             raise ValueError(
                 "feature interaction publication requires matching context lineage"
             )
+        return self
+
+
+class PromptDungeonTrapWorkflow(WorkflowModel):
+    """DM request for one exact-trap enrichment child version."""
+
+    campaign_id: UUID
+    artifact_id: UUID
+    parent_version_id: UUID
+    selection: DungeonTrapContextSelection
+    created_by: str = Field(min_length=1, max_length=200)
+
+
+class CreatePromptedDungeonTrapWorkflow(WorkflowModel):
+    """Accepted trap result ready for deterministic child publication."""
+
+    campaign_id: UUID
+    artifact_id: UUID
+    parent_version_id: UUID
+    context: DungeonTrapEnrichmentInput
+    validation: DungeonTrapValidationResult
+    model_task_profile_id: UUID
+    model_lineage: PromptedDungeonTrapLineage
+    tool_runs: tuple[ToolRunPin, ...] = ()
+    created_by: str = Field(min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def require_matching_accepted_lineage(self) -> CreatePromptedDungeonTrapWorkflow:
+        if self.validation.accepted_output != self.model_lineage.output:
+            raise ValueError("trap publication requires matching accepted lineage")
+        context_hash = canonical_json_sha256(self.context.model_dump(mode="json"))
+        if self.model_lineage.context_sha256 != context_hash:
+            raise ValueError("trap publication requires matching context lineage")
         return self
 
 
