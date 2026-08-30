@@ -1739,12 +1739,15 @@ creative tasks and encourages verbose contract compliance rather than coherent p
 Implement the architecture's independently failable enrichment boundary before expanding
 the topology stress ladder.
 
-Current first slice: the model-visible structural root no longer contains `guide_content`;
-its accepted tool result reports typed content-slot counts, faux publication leaves truthful
-readiness blockers, and strict exact-ID puzzle input/output plus semantic validation
-contracts exist. Provider dispatch, durable puzzle lineage, exact guide projection,
-exploration, other interactions, and narrative remain to be implemented in later bounded
-slices.
+Current provider-free slices: the model-visible structural root no longer contains
+`guide_content`; its accepted tool result reports typed content-slot counts and faux
+publication leaves truthful readiness blockers. Strict exact-ID puzzle input/output plus
+semantic validation contracts exist. Trusted context construction now slices one accepted
+package down to its selected puzzle room geometry and explicitly approved clue/objective/
+dependency IDs, and deterministic projection merges one accepted output into that exact
+room's guide without changing the package or clearing unrelated blockers. Provider
+dispatch, durable puzzle lineage, exploration, other interactions, and narrative remain to
+be implemented in later bounded slices.
 
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
   Its model-visible proposal contains room identity/purpose, critical path, bounded

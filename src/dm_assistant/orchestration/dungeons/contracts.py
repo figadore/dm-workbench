@@ -65,6 +65,50 @@ GuideContentText = Annotated[str, Field(min_length=1, max_length=2_000)]
 ExactDungeonComponentId = Annotated[str, Field(min_length=1, max_length=200)]
 
 
+class DungeonPuzzleClueApproval(WorkflowModel):
+    """Server-approved exact location selected for one puzzle context."""
+
+    location_id: ExactDungeonComponentId
+    purpose: GuideContentText
+
+
+class DungeonPuzzleObjectiveApproval(WorkflowModel):
+    """Server-approved exact objective relationship for one puzzle task."""
+
+    objective_id: ExactDungeonComponentId
+    relationship: Literal["guards_access", "reveals_access", "supports_objective"]
+
+
+class DungeonPuzzleDependencyApproval(WorkflowModel):
+    """Server-approved exact gate dependency relationship for one puzzle task."""
+
+    gate_id: ExactDungeonComponentId
+    dependency_id: ExactDungeonComponentId
+    relationship: Literal["controls_gate", "reveals_dependency", "uses_dependency"]
+
+
+class DungeonPuzzleContextSelection(WorkflowModel):
+    """Trusted IDs and policy text used to construct a model-visible context."""
+
+    room_id: ExactDungeonComponentId
+    clue_locations: tuple[DungeonPuzzleClueApproval, ...] = Field(
+        default=(), max_length=6
+    )
+    objective: DungeonPuzzleObjectiveApproval | None = None
+    dependency: DungeonPuzzleDependencyApproval | None = None
+    tone: tuple[GuideContentText, ...] = Field(default=(), max_length=4)
+    constraints: tuple[GuideContentText, ...] = Field(default=(), max_length=8)
+
+    @model_validator(mode="after")
+    def require_unique_clue_approvals(self) -> DungeonPuzzleContextSelection:
+        location_ids = [item.location_id for item in self.clue_locations]
+        if len(location_ids) != len(set(location_ids)):
+            raise ValueError(
+                "puzzle context selection requires unique clue location IDs"
+            )
+        return self
+
+
 class DungeonPuzzleRoomContext(WorkflowModel):
     """Exact local geometry exposed to one post-layout puzzle task."""
 
@@ -158,15 +202,55 @@ class DungeonPuzzleEnrichmentOutput(WorkflowModel):
     alternate_handling: tuple[DungeonPuzzleAlternateHandling, ...] = Field(
         min_length=1, max_length=3
     )
+    success_outcome: GuideContentText
     failure_consequence: GuideContentText
     reset_or_retry: GuideContentText | None = None
 
     @model_validator(mode="after")
-    def require_unique_clue_locations(self) -> DungeonPuzzleEnrichmentOutput:
+    def require_unique_clues_and_bounded_guide_projection(
+        self,
+    ) -> DungeonPuzzleEnrichmentOutput:
         location_ids = [item.location_id for item in self.clue_path]
         if len(location_ids) != len(set(location_ids)):
             raise ValueError("puzzle enrichment clue path requires unique location IDs")
+        projected_fields = (
+            self.guide_situation(),
+            self.guide_solution(),
+            self.guide_adjudication(),
+        )
+        if any(len(value) > 2_000 for value in projected_fields):
+            raise ValueError("puzzle enrichment exceeds bounded guide projection text")
         return self
+
+    def guide_situation(self) -> str:
+        """Deterministically group the complete observable puzzle setup."""
+
+        return " ".join(self.observable_elements)
+
+    def guide_solution(self) -> str:
+        """Deterministically group the ordered intended solution."""
+
+        return " ".join(
+            f"{index}. {step}"
+            for index, step in enumerate(self.solution_steps, start=1)
+        )
+
+    def guide_adjudication(self) -> str:
+        """Deterministically group clues, hints, failure, and retry behavior."""
+
+        sections = [
+            "Clue path: "
+            + " ".join(
+                f"{clue.observation} Intended inference: {clue.inference}"
+                for clue in self.clue_path
+            )
+        ]
+        if self.hints:
+            sections.append("Hints: " + " ".join(self.hints))
+        sections.append(f"Failure: {self.failure_consequence}")
+        if self.reset_or_retry is not None:
+            sections.append(f"Reset or retry: {self.reset_or_retry}")
+        return " ".join(sections)
 
 
 class DungeonPuzzleEnrichmentIssue(WorkflowModel):

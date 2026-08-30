@@ -428,6 +428,11 @@ proof-oriented diagnostics or recommend another floor; never exhaust random retr
 
 ### R5 — Task-specific enrichment and Tier A quality gate
 
+Current provider-free seam: exact-package puzzle context slicing, exact-ID output
+validation, and deterministic room-guide projection are implemented without provider
+contact or durable task lineage. Projection preserves package/map bytes and leaves every
+unrelated missing enrichment as a readiness blocker.
+
 - Add independently bounded puzzle, exploration, other interaction, and narrative tasks
   over exact package IDs; merge accepted output deterministically and preserve the map on
   partial failure.

@@ -49,6 +49,7 @@ from dm_assistant.orchestration.dungeons.contracts import (
     DungeonGuideMapReference,
     DungeonGuideObjective,
     DungeonGuideObjectiveContent,
+    DungeonGuidePlayerChoice,
     DungeonGuidePuzzle,
     DungeonGuidePuzzleContent,
     DungeonGuideRoom,
@@ -58,10 +59,18 @@ from dm_assistant.orchestration.dungeons.contracts import (
     DungeonPreparationReadiness,
     DungeonPreparationReadinessDiagnostic,
     DungeonPrintCapability,
+    DungeonPuzzleClueApproval,
+    DungeonPuzzleClueLocation,
+    DungeonPuzzleContextSelection,
+    DungeonPuzzleDependencyApproval,
+    DungeonPuzzleDependencyRelationship,
     DungeonPuzzleEnrichmentInput,
     DungeonPuzzleEnrichmentIssue,
     DungeonPuzzleEnrichmentOutput,
     DungeonPuzzleEnrichmentValidationResult,
+    DungeonPuzzleObjectiveApproval,
+    DungeonPuzzleObjectiveRelationship,
+    DungeonPuzzleRoomContext,
     DungeonRoomDmNote,
     DungeonStudioDetail,
     DungeonStudioSpecification,
@@ -79,6 +88,7 @@ from dm_dungeon import (
     LockedLayoutComponents,
     PngExportRequest,
     RenderAudience,
+    RoomMechanicMarkerKind,
     SvgRenderRequest,
     SvgThemeName,
     build_map_key,
@@ -747,6 +757,147 @@ def _build_preparation_readiness(
     )
 
 
+def build_dungeon_puzzle_enrichment_input(
+    package: DungeonPackage,
+    selection: DungeonPuzzleContextSelection,
+) -> DungeonPuzzleEnrichmentInput:
+    """Slice one trusted exact package into a narrow puzzle-only context."""
+
+    rooms_by_id = {room.id: room for room in package.rooms}
+    room = rooms_by_id.get(selection.room_id)
+    if room is None:
+        raise ConflictError("Puzzle context selected an unknown exact puzzle room.")
+    if room.role is not RoomRole.PUZZLE:
+        raise ConflictError("Puzzle context selected a room without a puzzle role.")
+
+    local_connections = tuple(
+        connection
+        for connection in package.topology.connections
+        if room.id in (connection.from_room_id, connection.to_room_id)
+    )
+    connection_ids = tuple(sorted(connection.id for connection in local_connections))
+    nearby_room_ids = {room.id}
+    for connection in local_connections:
+        nearby_room_ids.update((connection.from_room_id, connection.to_room_id))
+    feature_ids = tuple(
+        sorted(
+            [feature.id for feature in package.features if feature.room_id == room.id]
+            + [
+                marker.id
+                for marker in package.room_mechanic_markers
+                if marker.room_id == room.id
+                and marker.kind is RoomMechanicMarkerKind.FEATURE
+            ]
+        )
+    )
+
+    exact_locations: dict[str, tuple[str, str]] = {
+        package_room.id: (package_room.id, package_room.floor_id)
+        for package_room in package.rooms
+    }
+    for feature in package.features:
+        if feature.room_id is not None:
+            exact_locations[feature.id] = (feature.room_id, feature.floor_id)
+    for mechanic_marker in package.room_mechanic_markers:
+        exact_locations[mechanic_marker.id] = (
+            mechanic_marker.room_id,
+            mechanic_marker.floor_id,
+        )
+    for key in package.topology.keys:
+        location_room = rooms_by_id[key.located_in_room_id]
+        exact_locations[key.id] = (location_room.id, location_room.floor_id)
+    for clue in package.topology.clues:
+        location_room = rooms_by_id[clue.located_in_room_id]
+        exact_locations[clue.id] = (location_room.id, location_room.floor_id)
+
+    clue_locations: list[DungeonPuzzleClueLocation] = []
+    for approval in selection.clue_locations:
+        exact_location = exact_locations.get(approval.location_id)
+        if exact_location is None:
+            raise ConflictError(
+                "Puzzle context selected an unknown exact clue location."
+            )
+        clue_room_id, clue_floor_id = exact_location
+        if clue_room_id not in nearby_room_ids:
+            raise ConflictError(
+                "Puzzle context selected a clue location outside the local puzzle neighborhood."
+            )
+        clue_locations.append(
+            DungeonPuzzleClueLocation(
+                location_id=approval.location_id,
+                room_id=clue_room_id,
+                floor_id=clue_floor_id,
+                purpose=approval.purpose,
+            )
+        )
+
+    objective_relationship = None
+    if selection.objective is not None:
+        marker = next(
+            (
+                item
+                for item in package.room_mechanic_markers
+                if item.id == selection.objective.objective_id
+                and item.kind is RoomMechanicMarkerKind.OBJECTIVE
+            ),
+            None,
+        )
+        if marker is None:
+            raise ConflictError("Puzzle context selected an unknown exact objective.")
+        objective_relationship = DungeonPuzzleObjectiveRelationship(
+            objective_id=marker.id,
+            objective_room_id=marker.room_id,
+            relationship=selection.objective.relationship,
+        )
+
+    dependency_relationship = None
+    if selection.dependency is not None:
+        gate = next(
+            (
+                item
+                for item in package.topology.gates
+                if item.id == selection.dependency.gate_id
+            ),
+            None,
+        )
+        dependency_ids = {item.id for item in package.topology.keys} | {
+            item.id for item in package.topology.clues
+        }
+        if gate is None or selection.dependency.dependency_id not in dependency_ids:
+            raise ConflictError(
+                "Puzzle context selected an unknown exact gate dependency."
+            )
+        if selection.dependency.dependency_id not in {
+            item.target_id for item in gate.requires_all
+        }:
+            raise ConflictError(
+                "Puzzle context selected a dependency not required by the exact gate."
+            )
+        dependency_relationship = DungeonPuzzleDependencyRelationship(
+            gate_id=gate.id,
+            dependency_id=selection.dependency.dependency_id,
+            relationship=selection.dependency.relationship,
+        )
+
+    return DungeonPuzzleEnrichmentInput(
+        schema_version="1.0.0",
+        package_id=package.id,
+        room=DungeonPuzzleRoomContext(
+            room_id=room.id,
+            floor_id=room.floor_id,
+            boundary=room.boundary,
+            capacity=room.capacity,
+            connection_ids=connection_ids,
+            feature_ids=feature_ids,
+        ),
+        objective_relationship=objective_relationship,
+        dependency_relationship=dependency_relationship,
+        clue_locations=tuple(clue_locations),
+        tone=selection.tone,
+        constraints=selection.constraints,
+    )
+
+
 def validate_dungeon_puzzle_enrichment(
     context: DungeonPuzzleEnrichmentInput,
     output: DungeonPuzzleEnrichmentOutput,
@@ -785,6 +936,135 @@ def validate_dungeon_puzzle_enrichment(
         accepted_output=None if issues else output,
         issues=tuple(issues),
     )
+
+
+def project_dungeon_puzzle_enrichment(
+    guide: DungeonDmGuide,
+    *,
+    plan: DungeonPlan,
+    package: DungeonPackage,
+    context: DungeonPuzzleEnrichmentInput,
+    validation: DungeonPuzzleEnrichmentValidationResult,
+) -> DungeonDmGuide:
+    """Merge one accepted exact-ID puzzle without changing package-owned state."""
+
+    rebuilt_context = build_dungeon_puzzle_enrichment_input(
+        package,
+        DungeonPuzzleContextSelection(
+            room_id=context.room.room_id,
+            clue_locations=tuple(
+                DungeonPuzzleClueApproval(
+                    location_id=item.location_id,
+                    purpose=item.purpose,
+                )
+                for item in context.clue_locations
+            ),
+            objective=(
+                DungeonPuzzleObjectiveApproval(
+                    objective_id=context.objective_relationship.objective_id,
+                    relationship=context.objective_relationship.relationship,
+                )
+                if context.objective_relationship is not None
+                else None
+            ),
+            dependency=(
+                DungeonPuzzleDependencyApproval(
+                    gate_id=context.dependency_relationship.gate_id,
+                    dependency_id=context.dependency_relationship.dependency_id,
+                    relationship=context.dependency_relationship.relationship,
+                )
+                if context.dependency_relationship is not None
+                else None
+            ),
+            tone=context.tone,
+            constraints=context.constraints,
+        ),
+    )
+    if rebuilt_context != context:
+        raise ConflictError(
+            "Puzzle enrichment context does not match the accepted exact package."
+        )
+
+    output = validation.accepted_output
+    if output is None:
+        raise ConflictError("Rejected puzzle enrichment cannot be projected.")
+    authoritative_validation = validate_dungeon_puzzle_enrichment(context, output)
+    if authoritative_validation.accepted_output is None:
+        raise ConflictError("Puzzle enrichment failed exact-ID semantic validation.")
+
+    compiled = compile_dungeon_plan(plan)
+    if (
+        not compiled.accepted
+        or compiled.certificate is None
+        or compiled.topology is None
+        or package.topology != compiled.topology
+    ):
+        raise ConflictError(
+            "Accepted puzzle enrichment does not match the generated dungeon plan."
+        )
+    room_ref_by_id = {item.room_id: item.ref for item in compiled.certificate.rooms}
+    room_ref = room_ref_by_id.get(output.room_id)
+    if room_ref is None:
+        raise ConflictError("Puzzle enrichment targets an unknown planned room.")
+    planned_room = next(room for room in plan.rooms if room.ref == room_ref)
+    if planned_room.role is not RoomRole.PUZZLE:
+        raise ConflictError("Puzzle enrichment targets a room without a puzzle role.")
+
+    guide_room = next(
+        (room for room in guide.rooms if room.room_id == output.room_id), None
+    )
+    if guide_room is None:
+        raise ConflictError("Puzzle enrichment targets a room outside the exact guide.")
+    if any(puzzle.room_id == output.room_id for puzzle in guide.puzzles):
+        raise ConflictError("Puzzle enrichment cannot replace accepted puzzle content.")
+
+    player_choices = (
+        DungeonGuidePlayerChoice(
+            action=output.guide_solution(),
+            outcome=output.success_outcome,
+        ),
+        *(
+            DungeonGuidePlayerChoice(
+                action=alternate.approach,
+                outcome=alternate.adjudication,
+            )
+            for alternate in output.alternate_handling
+        ),
+    )
+    puzzle = DungeonGuidePuzzle(
+        content_ref=room_ref,
+        room_id=output.room_id,
+        map_reference=guide_room.map_reference,
+        name=output.name,
+        solution=output.guide_solution(),
+        content=DungeonGuideRunnableContent(
+            situation=output.guide_situation(),
+            adjudication=output.guide_adjudication(),
+            player_choices=player_choices,
+        ),
+    )
+    presentation_by_room = {
+        room.room_id: room.presentation_number for room in guide.rooms
+    }
+    puzzles = tuple(
+        sorted(
+            (*guide.puzzles, puzzle),
+            key=lambda item: presentation_by_room[item.room_id],
+        )
+    )
+    content_issues = tuple(
+        issue
+        for issue in guide.content_issues
+        if not (
+            issue.code == "guide_content.required_missing"
+            and issue.kind == "puzzle"
+            and issue.room_ref == room_ref
+        )
+    )
+    document = guide.model_dump(mode="python")
+    document["puzzles"] = puzzles
+    document["content_issues"] = content_issues
+    return DungeonDmGuide.model_validate(document)
 
 
 def validate_dungeon_guide_content(

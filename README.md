@@ -259,10 +259,13 @@ loop, one gate, and typed content slots with conservative demand. Deterministic 
 constructs all edges and IDs and emits an independently recomputed
 `TopologyCertificate` covering connectivity, cycle/branch/gate/secret witnesses,
 room/port demand, and embedding bands. Detailed puzzle, exploration, interaction, and
-narrative work belongs to separate post-geometry tasks over exact IDs; until those tasks
-are wired to providers, structural drafts truthfully remain preparation-blocked. Geometry,
-visibility, validation, rendering, persistence, and approval remain server-owned. Run
-inspection remains body-free:
+narrative work belongs to separate post-geometry tasks over exact IDs. The provider-free
+puzzle seam now constructs one narrow context from accepted package geometry and explicit
+clue/objective/dependency approvals, validates the exact-ID result, and projects it into the
+matching room guide without changing the package or clearing unrelated blockers. Until the
+remaining tasks are wired through bounded provider orchestration, structural drafts
+truthfully remain preparation-blocked. Geometry, visibility, validation, rendering,
+persistence, and approval remain server-owned. Run inspection remains body-free:
 
 ```bash
 uv run --frozen dm dungeon run inspect <attempt-run-id>

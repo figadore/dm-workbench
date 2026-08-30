@@ -8,19 +8,21 @@
 
 - **Last updated:** 2026-09-08
 - **Branch:** `fast-track-prompt-to-dungeon`; P7-14d is at `a816d6a`, P7-14e is at
-  `5dc7d80`, and the committed P7-14f anti-overfitting cleanup is at `ea812d6`.
+  `5dc7d80`, the P7-14f anti-overfitting cleanup is at `ea812d6`, and the structural/
+  puzzle-contract separation is at `ae6d406`.
 - **Current task:** **P7-14f — Staged Tier A authoring and anti-overfitting evaluation.**
-- **Task state:** **WIP; the first structural/enrichment contract slice is complete.
-  `submit_dungeon_plan` is now model-visible structural intent only: its root has no
-  `guide_content`, its prompt reserves typed content slots and conservative demand, and
-  faux CLI/browser publication preserves a valid map while recording truthful preparation
-  blockers. New strict Workbench-owned puzzle-enrichment input/output contracts carry only
-  exact package/room/geometry, approved objective/dependency/clue context, and bounded
-  puzzle design; provider-free semantic validation rejects package, room, clue-location,
-  and cross-task mutation mismatches. No puzzle provider task, durable enrichment run,
-  deterministic guide merge, exploration contract, or narrative task exists yet. The
-  archive guide-content contract remains only for provider-free review/renderer regression,
-  not in model lineage. Live calls and Tier B/C remain deferred.**
+- **Task state:** **WIP; the provider-free structural/puzzle boundary now reaches exact
+  guide projection. `submit_dungeon_plan` remains model-visible structural intent only.
+  Trusted context construction selects one puzzle-role room from an accepted exact package,
+  exposes only its authoritative geometry/connection/feature IDs plus explicitly approved
+  clue/objective/dependency IDs, and rejects foreign IDs. Strict output validation rejects
+  package, room, clue-location, and cross-task mutation mismatches. One accepted puzzle can
+  now be projected deterministically into that exact room's guide with a bounded success
+  state, solution, clues, alternatives, failure, and retry behavior; package/map state is
+  unchanged and all unrelated missing enrichments remain readiness blockers. No puzzle
+  provider task, durable enrichment run, exploration contract, or narrative task exists
+  yet. The archive guide-content contract remains only for provider-free review/renderer
+  regression, not in model lineage. Live calls and Tier B/C remain deferred.**
 - **Schema head:** `0008_workbench_defaults`; no migration changed.
 - **Retention gate:** **not crossed.** There is no retained real-user artifact, external
   consumer, non-disposable deployment, or promised replay requirement; active V1 labels
@@ -68,11 +70,12 @@ reserved. Live provider calls, Tier B/C, and P7-13 output/print work remain paus
   named objective, and bounded typed content slots/reserved demand. It will not author the
   full puzzle, exploration challenge, trap/feature interaction, and room narrative.
 - Puzzle and exploration generation will be different Workbench task calls after exact
-  geometry exists. The first puzzle input/output and semantic validation contracts now
-  exist, keyed to exact package/room/clue/objective/dependency IDs and local geometry, but
-  provider dispatch, durable lineage, and deterministic guide projection remain next.
-  Exploration still has no contract. Neither task may modify topology, visibility,
-  arithmetic, or the other task's accepted proposal.
+  geometry exists. Puzzle input/output and semantic validation contracts are keyed to exact
+  package/room/clue/objective/dependency IDs and local geometry. Provider-free context
+  slicing and deterministic guide projection now exist and preserve unrelated readiness
+  blockers; provider dispatch and durable lineage remain next. Exploration still has no
+  contract. Neither task may modify topology, visibility, arithmetic, or the other task's
+  accepted proposal.
 - Narrative generation occurs after mechanics are accepted and receives their
   player-observable projection, preventing read-aloud from silently redefining or leaking
   the interaction.
@@ -494,11 +497,10 @@ reserved. Live provider calls, Tier B/C, and P7-13 output/print work remain paus
 ## Files Changed
 
 No migration changed. The committed P7-14e slice touched the files below. Building on
-committed cleanup `ea812d6`, the current P7-14f working tree includes status/architecture/
-implementation-plan and README updates, the structural proposal and puzzle-enrichment
-contracts/validation, focused unit regressions, and faux CLI/browser fixture expectations.
-New files include
-`tests/unit/test_dungeon_puzzle_enrichment_contract.py`:
+committed P7-14f separation `ae6d406`, the current working tree adds trusted exact-package
+puzzle context construction, bounded success/projection semantics, deterministic exact-room
+guide projection, a non-archive generated-package regression, and matching status/
+architecture/plan/README updates. The broader P7-14e/P7-14f file inventory remains:
 
 - `AGENTS.md`
 - `Makefile`
@@ -732,6 +734,19 @@ New files include
   dungeon source modules passed. Ruff formatting was applied to two integration files.
 - Final `git diff --check` passed; Markdown fence counts are balanced across all five
   active direction/readme/status documents.
+- Added the non-archive Windglass Shrine regression failing-first; collection initially
+  failed because the trusted puzzle-context approval contracts did not exist. After
+  implementation, `uv run pytest -q tests/unit/test_dungeon_puzzle_enrichment_contract.py
+  tests/unit/test_dungeon_guide_content_contract.py
+  tests/unit/test_prompted_dungeon_workflow.py` -> **19 passed**.
+- `uv run pytest -q tests/unit tests/evals` -> **189 passed** with exact-package context
+  slicing, foreign room/clue rejection, bounded puzzle success projection, unchanged
+  package/map assertions, and unrelated readiness blockers preserved.
+- `uv run pytest -q packages/dungeon-engine/tests` -> **139 passed**; package and root
+  tests remained separate.
+- Focused CLI/web/workflow integration gate -> **5 passed** against disposable PostgreSQL.
+- Focused Ruff lint/format and strict mypy over the changed dungeon sources passed; final
+  `git diff --check` passed. No provider was contacted.
 
 Package and root tests must continue to run as separate pytest invocations: combining
 both test roots in one process causes pytest's existing duplicate module basenames to
@@ -739,32 +754,30 @@ produce an import-file-mismatch collection error.
 
 ## Working Tree
 
-P7-14d is committed at `a816d6a`, P7-14e at `5dc7d80`, and the P7-14f prompt/canary
-cleanup at `ea812d6`. This handoff builds on that commit. The model-visible
-structural runtime contract is now separated from guide authoring, and the first exact-ID
-puzzle input/output contract exists, but no enrichment provider orchestration or guide
-merge has been added. Prompted faux drafts therefore succeed structurally and remain
-preparation-blocked. No migration, generated review packet, provider response, credential,
-canonical campaign write, preparation approval, pure package change, or live provider call
-changed. The generated review directories remain ignored. The filled fifth packet remains
-preserved at `generated/dungeon-guide-review.before-diagrammable-mechanisms/`; the blank
-sixth packet may remain as an optional visual regression aid but is no longer a phase gate.
-Do not claim a complete staged runtime yet: only the structural submission and puzzle
-contract boundary exist.
+P7-14d is committed at `a816d6a`, P7-14e at `5dc7d80`, the P7-14f prompt/canary cleanup
+at `ea812d6`, and structural/puzzle contract separation at `ae6d406`. This working tree
+adds provider-free exact-package puzzle context construction and deterministic exact-room
+guide projection. The non-archive regression proves foreign room/clue IDs fail, accepted
+puzzle output leaves package/map state unchanged, and all other missing content remains a
+readiness blocker. Prompted faux drafts still do not invoke this seam and therefore remain
+structurally successful but preparation-blocked. No migration, generated review packet,
+provider response, credential, canonical campaign write, preparation approval, pure package
+change, or live provider call changed. The generated review directories remain ignored.
+Do not claim a complete staged runtime: puzzle provider orchestration and durable lineage,
+exploration, other interactions, and narrative are still absent.
 
 Suggested commit subject:
 
-`P7-14f separate structural planning from puzzle enrichment`
+`P7-14f construct and project exact puzzle context`
 
 ## Single Next Recommended Task
 
-**Implement provider-free exact-ID puzzle context construction and deterministic guide
-projection, still without adding a provider call.**
+**Wire the exact-ID puzzle seam through one independently bounded faux-provider task and
+durable enrichment lineage, still without adding exploration or a live call.**
 
-**First concrete action:** add a failing non-archive regression that selects a puzzle-role
-room from an accepted exact package, projects only that room's geometry plus explicitly
-approved clue/objective/dependency IDs into `DungeonPuzzleEnrichmentInput`, and rejects a
-foreign room or clue ID. Then map one semantically accepted puzzle output into the exact
-room-centric guide while preserving the same map/package and leaving all other missing
-enrichments as readiness blockers. Do not add exploration/provider dispatch, run live,
-start Tier B/C, or remove the archive renderer regression in this slice.
+**First concrete action:** add a failing faux-gateway orchestration regression proving the
+puzzle task receives only `DungeonPuzzleEnrichmentInput`, uses its own prompt/profile/
+effort and token/repair budget, records body-safe task lineage, and projects an accepted
+result without rerunning or mutating the structural package. Preserve the valid map and
+puzzle-specific readiness blocker on task failure. Do not add exploration, run live, start
+Tier B/C, or remove the archive renderer regression in this slice.
