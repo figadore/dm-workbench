@@ -1786,8 +1786,16 @@ cumulative and 2,048-output budget, one budget-reserved repair, accepted-content
 and atomic DM-only child publication. Success preserves package/map bytes, all accepted
 puzzle/exploration/feature/trap content and lineage, objective identity/kind, other guide
 entries, and unrelated blockers; rejection or publication failure leaves the trap parent
-current with body-free diagnostics. Narrative enrichment, automatic staged orchestration,
-and live calls remain later slices.
+current with body-free diagnostics. The provider-free homogeneous room-narrative seam now
+builds a bounded exact-room context from local geometry, existing room guide state,
+tone/constraints, and player-observable summaries copied from accepted local puzzle,
+exploration, feature, trap, and objective content. Its strict exact-ID output can add only
+concise read-aloud and observable room framing. Semantic validation rejects foreign,
+duplicate, or omitted rooms, and deterministic projection changes only selected blank
+room narratives plus their exact readiness blockers while preserving package/map state,
+accepted mechanics/objectives, other guide entries, and unrelated blockers. Narrative
+provider dispatch/publication, automatic staged orchestration, and live calls remain later
+slices.
 
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
   Its model-visible proposal contains room identity/purpose, critical path, bounded

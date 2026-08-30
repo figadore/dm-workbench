@@ -439,11 +439,11 @@ The internal P1-02 Library service now ingests bounded strict-UTF-8 files throug
 
 ## Current Next Step
 
-Continue **P7-14f** with a provider-free exact-ID room-narrative contract over the
-objective child. The bounded homogeneous task should receive accepted mechanics and their
-player-observable projections, add concise read-aloud and room framing only, and be unable
-to invent or mutate mechanics, package/map state, or preparation approval. Do not combine
-it with provider dispatch, automatic orchestration, live calls, or Tier B/C. See
+Continue **P7-14f** by adding independently pinned faux-provider dispatch and atomic
+DM-only child publication for the exact-ID room-narrative contract. Preserve its bounded
+homogeneous context, observable-only output, exact-room validation, prior mechanics and
+lineage, package/map bytes, other guide entries, and unrelated blockers. Do not combine it
+with automatic staged orchestration, live calls, Tier B/C, or a migration. See
 [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) and
 [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
 

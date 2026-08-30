@@ -38,6 +38,7 @@ DUNGEON_GENERATION_PROPOSAL_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 DUNGEON_EXPLORATION_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 DUNGEON_FEATURE_INTERACTION_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 DUNGEON_OBJECTIVE_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
+DUNGEON_ROOM_NARRATIVE_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 DUNGEON_TRAP_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 DUNGEON_PUZZLE_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 
@@ -746,6 +747,147 @@ class PromptedDungeonObjectiveLineage(WorkflowModel):
             raise ValueError("objective lineage requires a successful model run")
         if self.model_run.output_payload != self.output.model_dump(mode="json"):
             raise ValueError("objective lineage output must match the model run")
+        return self
+
+
+DungeonRoomNarrativeText = Annotated[str, Field(min_length=1, max_length=1_000)]
+DungeonRoomFramingText = Annotated[str, Field(min_length=1, max_length=500)]
+
+
+class DungeonRoomNarrativeContextSelection(WorkflowModel):
+    """Trusted exact room set and bounded style policy for one narrative task."""
+
+    room_ids: tuple[ExactDungeonComponentId, ...] = Field(min_length=1, max_length=8)
+    tone: tuple[GuideContentText, ...] = Field(default=(), max_length=4)
+    constraints: tuple[GuideContentText, ...] = Field(default=(), max_length=8)
+
+    @model_validator(mode="after")
+    def require_unique_room_ids(self) -> DungeonRoomNarrativeContextSelection:
+        if len(self.room_ids) != len(set(self.room_ids)):
+            raise ValueError("room narrative context requires unique exact room IDs")
+        return self
+
+
+class DungeonRoomNarrativeAcceptedMechanic(WorkflowModel):
+    """Player-observable projection copied from one accepted local mechanic."""
+
+    mechanic_id: ExactDungeonComponentId
+    room_id: ExactDungeonComponentId
+    kind: Literal["puzzle", "exploration", "feature", "trap", "objective"]
+    name: str = Field(min_length=1, max_length=200)
+    observable_summary: GuideContentText
+
+
+class DungeonRoomNarrativeRoomContext(WorkflowModel):
+    """Exact geometry and observable guide state for one selected room."""
+
+    room_id: ExactDungeonComponentId
+    floor_id: ExactDungeonComponentId
+    boundary: PolygonGeometry
+    capacity: RoomCapacity
+    presentation_number: int = Field(ge=1, le=8)
+    name: str = Field(min_length=1, max_length=200)
+    role: RoomRole
+    tags: tuple[str, ...] = Field(default=(), max_length=16)
+    current_read_aloud: GuideContentText | None = None
+    current_observable_framing: tuple[GuideContentText, ...] = Field(
+        default=(), max_length=4
+    )
+    accepted_mechanics: tuple[DungeonRoomNarrativeAcceptedMechanic, ...] = Field(
+        default=(), max_length=8
+    )
+
+    @model_validator(mode="after")
+    def require_local_unique_accepted_mechanics(
+        self,
+    ) -> DungeonRoomNarrativeRoomContext:
+        mechanic_ids = [item.mechanic_id for item in self.accepted_mechanics]
+        if len(mechanic_ids) != len(set(mechanic_ids)):
+            raise ValueError(
+                "room narrative context requires unique accepted mechanic IDs"
+            )
+        if any(item.room_id != self.room_id for item in self.accepted_mechanics):
+            raise ValueError(
+                "room narrative accepted mechanics must belong to the exact room"
+            )
+        if (self.current_read_aloud is None) != (not self.current_observable_framing):
+            raise ValueError(
+                "existing room narrative state must be present as one complete set"
+            )
+        return self
+
+
+class DungeonRoomNarrativeEnrichmentInput(WorkflowModel):
+    """Homogeneous narrative context built only after exact mechanics exist."""
+
+    schema_version: Literal["1.0.0"]
+    package_id: ExactDungeonComponentId
+    rooms: tuple[DungeonRoomNarrativeRoomContext, ...] = Field(
+        min_length=1, max_length=8
+    )
+    tone: tuple[GuideContentText, ...] = Field(default=(), max_length=4)
+    constraints: tuple[GuideContentText, ...] = Field(default=(), max_length=8)
+
+    @model_validator(mode="after")
+    def require_unique_room_ids(self) -> DungeonRoomNarrativeEnrichmentInput:
+        room_ids = [item.room_id for item in self.rooms]
+        if len(room_ids) != len(set(room_ids)):
+            raise ValueError("room narrative context requires unique exact room IDs")
+        return self
+
+
+class DungeonRoomNarrativeRoomOutput(WorkflowModel):
+    """Concise observable prose for one exact room and no mechanic fields."""
+
+    room_id: ExactDungeonComponentId
+    read_aloud: DungeonRoomNarrativeText
+    observable_framing: tuple[DungeonRoomFramingText, ...] = Field(
+        min_length=2, max_length=4
+    )
+
+
+class DungeonRoomNarrativeEnrichmentOutput(WorkflowModel):
+    """Narrative-only proposal over a bounded homogeneous exact-room set."""
+
+    schema_version: Literal["1.0.0"]
+    package_id: ExactDungeonComponentId
+    rooms: tuple[DungeonRoomNarrativeRoomOutput, ...] = Field(
+        min_length=1, max_length=8
+    )
+
+    @model_validator(mode="after")
+    def require_unique_room_ids(self) -> DungeonRoomNarrativeEnrichmentOutput:
+        room_ids = [item.room_id for item in self.rooms]
+        if len(room_ids) != len(set(room_ids)):
+            raise ValueError("room narrative output requires unique exact room IDs")
+        return self
+
+
+class DungeonRoomNarrativeIssue(WorkflowModel):
+    """Body-free exact-target mismatch that blocks narrative projection."""
+
+    code: Literal[
+        "room_narrative_enrichment.package_mismatch",
+        "room_narrative_enrichment.room_invalid",
+        "room_narrative_enrichment.room_missing",
+    ]
+    component_id: ExactDungeonComponentId
+    message: str = Field(min_length=1, max_length=300)
+
+
+class DungeonRoomNarrativeValidationResult(WorkflowModel):
+    """Provider-free semantic validation for one homogeneous narrative result."""
+
+    schema_version: Literal["1.0.0"]
+    accepted_output: DungeonRoomNarrativeEnrichmentOutput | None = None
+    issues: tuple[DungeonRoomNarrativeIssue, ...] = ()
+
+    @model_validator(mode="after")
+    def require_acceptance_to_match_issues(
+        self,
+    ) -> DungeonRoomNarrativeValidationResult:
+        if (self.accepted_output is not None) == bool(self.issues):
+            raise ValueError("accepted room narratives must match semantic issues")
         return self
 
 

@@ -465,8 +465,16 @@ a task-specific profile, prompt/schema, 6,000-token cumulative and 2,048-output 
 and one budget-reserved repair. Accepted content and lineage publish atomically in a
 DM-only child while preserving package/map state, prior content and lineage, other guide
 entries, and unrelated blockers; rejection or publication failure leaves the trap parent
-current and stores no rejected body. No live provider was contacted, and no
-redaction/logging subsystem or new persistence store was added.
+current and stores no rejected body. The provider-free homogeneous room-narrative seam
+now slices up to eight exact rooms to local geometry, bounded existing room guide state,
+tone/constraints, and only player-observable summaries copied from accepted puzzle,
+exploration, feature, trap, and objective content. Its strict output contains only concise
+read-aloud and observable framing. Validation rejects foreign, duplicate, or omitted
+rooms, and projection fills only selected blank narratives and removes only their room
+blockers while preserving all mechanics, objective content, package/map state, other
+guide entries, and unrelated blockers. Narrative provider dispatch is not wired. No live
+provider was contacted, and no redaction/logging subsystem or new persistence store was
+added.
 
 - Add independently bounded puzzle, exploration, other interaction, and narrative tasks
   over exact package IDs; merge accepted output deterministically and preserve the map on

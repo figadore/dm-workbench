@@ -36,6 +36,7 @@ from dm_assistant.orchestration.dungeons.contracts import (
     DUNGEON_GENERATION_PROPOSAL_SCHEMA_VERSION,
     DUNGEON_OBJECTIVE_ENRICHMENT_SCHEMA_VERSION,
     DUNGEON_PUZZLE_ENRICHMENT_SCHEMA_VERSION,
+    DUNGEON_ROOM_NARRATIVE_ENRICHMENT_SCHEMA_VERSION,
     DUNGEON_TRAP_ENRICHMENT_SCHEMA_VERSION,
     CreateDungeonWorkflow,
     CreatePromptedDungeonExplorationWorkflow,
@@ -107,6 +108,13 @@ from dm_assistant.orchestration.dungeons.contracts import (
     DungeonPuzzleObjectiveRelationship,
     DungeonPuzzleRoomContext,
     DungeonRoomDmNote,
+    DungeonRoomNarrativeAcceptedMechanic,
+    DungeonRoomNarrativeContextSelection,
+    DungeonRoomNarrativeEnrichmentInput,
+    DungeonRoomNarrativeEnrichmentOutput,
+    DungeonRoomNarrativeIssue,
+    DungeonRoomNarrativeRoomContext,
+    DungeonRoomNarrativeValidationResult,
     DungeonStudioDetail,
     DungeonStudioSpecification,
     DungeonTrapContextSelection,
@@ -3118,6 +3126,258 @@ def project_dungeon_objective_enrichment(
     )
     document = guide.model_dump(mode="python")
     document["objectives"] = objectives
+    document["content_issues"] = content_issues
+    return DungeonDmGuide.model_validate(document)
+
+
+def build_dungeon_room_narrative_enrichment_input(
+    package: DungeonPackage,
+    guide: DungeonDmGuide,
+    selection: DungeonRoomNarrativeContextSelection,
+) -> DungeonRoomNarrativeEnrichmentInput:
+    """Build a homogeneous room-prose context from exact observable state."""
+
+    package_rooms_by_id = {room.id: room for room in package.rooms}
+    guide_rooms_by_id = {room.room_id: room for room in guide.rooms}
+    accepted_mechanics = _accepted_room_narrative_mechanics(package, guide)
+    rooms: list[DungeonRoomNarrativeRoomContext] = []
+    for room_id in selection.room_ids:
+        package_room = package_rooms_by_id.get(room_id)
+        if package_room is None:
+            raise ConflictError(
+                "Room narrative context selected an unknown exact narrative room."
+            )
+        guide_room = guide_rooms_by_id.get(room_id)
+        if guide_room is None:
+            raise ConflictError(
+                "Room narrative context selected a room outside the exact guide."
+            )
+        if (
+            guide_room.floor_id != package_room.floor_id
+            or guide_room.role is not package_room.role
+        ):
+            raise ConflictError(
+                "Room narrative guide state does not match the exact package room."
+            )
+        local_mechanics = accepted_mechanics.get(room_id, ())
+        required_kinds: set[str] = set()
+        if package_room.role is RoomRole.PUZZLE:
+            required_kinds.add("puzzle")
+        if guide_room.encounter_slot is EncounterSlotIntent.EXPLORATION:
+            required_kinds.add("exploration")
+        if any(item.room_id == room_id for item in guide.features):
+            required_kinds.add("feature")
+        if any(item.room_id == room_id for item in guide.traps):
+            required_kinds.add("trap")
+        if any(item.room_id == room_id for item in guide.objectives):
+            required_kinds.add("objective")
+        accepted_kinds = {item.kind for item in local_mechanics}
+        if not required_kinds.issubset(accepted_kinds):
+            raise ConflictError(
+                "Room narrative context requires accepted local mechanics before narrative authoring."
+            )
+        rooms.append(
+            DungeonRoomNarrativeRoomContext(
+                room_id=package_room.id,
+                floor_id=package_room.floor_id,
+                boundary=package_room.boundary,
+                capacity=package_room.capacity,
+                presentation_number=guide_room.presentation_number,
+                name=guide_room.name,
+                role=guide_room.role,
+                tags=guide_room.tags,
+                current_read_aloud=guide_room.read_aloud,
+                current_observable_framing=guide_room.sensory_details,
+                accepted_mechanics=local_mechanics,
+            )
+        )
+    return DungeonRoomNarrativeEnrichmentInput(
+        schema_version=DUNGEON_ROOM_NARRATIVE_ENRICHMENT_SCHEMA_VERSION,
+        package_id=package.id,
+        rooms=tuple(rooms),
+        tone=selection.tone,
+        constraints=selection.constraints,
+    )
+
+
+def _accepted_room_narrative_mechanics(
+    package: DungeonPackage,
+    guide: DungeonDmGuide,
+) -> dict[str, tuple[DungeonRoomNarrativeAcceptedMechanic, ...]]:
+    """Copy only player-observable summaries from complete exact mechanics."""
+
+    mechanics: list[DungeonRoomNarrativeAcceptedMechanic] = [
+        DungeonRoomNarrativeAcceptedMechanic(
+            mechanic_id=item.mechanic_id,
+            room_id=item.room_id,
+            kind=item.kind,
+            name=item.name,
+            observable_summary=item.observable_summary,
+        )
+        for item in _accepted_objective_mechanics(package, guide).values()
+    ]
+    objective_markers = {
+        marker.id: marker
+        for marker in package.room_mechanic_markers
+        if marker.kind is RoomMechanicMarkerKind.OBJECTIVE
+    }
+    for objective in guide.objectives:
+        marker = objective_markers.get(objective.marker_id)
+        if (
+            objective.content is None
+            or marker is None
+            or marker.room_id != objective.room_id
+        ):
+            continue
+        mechanics.append(
+            DungeonRoomNarrativeAcceptedMechanic(
+                mechanic_id=objective.marker_id,
+                room_id=objective.room_id,
+                kind="objective",
+                name=objective.name,
+                observable_summary=objective.content.situation,
+            )
+        )
+
+    grouped: dict[str, list[DungeonRoomNarrativeAcceptedMechanic]] = {}
+    for mechanic in mechanics:
+        grouped.setdefault(mechanic.room_id, []).append(mechanic)
+    return {
+        room_id: tuple(sorted(items, key=lambda item: (item.kind, item.mechanic_id)))
+        for room_id, items in grouped.items()
+    }
+
+
+def validate_dungeon_room_narrative_enrichment(
+    context: DungeonRoomNarrativeEnrichmentInput,
+    output: DungeonRoomNarrativeEnrichmentOutput,
+) -> DungeonRoomNarrativeValidationResult:
+    """Require the output to cover exactly the trusted selected room set."""
+
+    issues: list[DungeonRoomNarrativeIssue] = []
+    if output.package_id != context.package_id:
+        issues.append(
+            DungeonRoomNarrativeIssue(
+                code="room_narrative_enrichment.package_mismatch",
+                component_id=output.package_id,
+                message=(
+                    "Room narrative enrichment targets a different dungeon package."
+                ),
+            )
+        )
+    selected_room_ids = {room.room_id for room in context.rooms}
+    output_room_ids = {room.room_id for room in output.rooms}
+    issues.extend(
+        DungeonRoomNarrativeIssue(
+            code="room_narrative_enrichment.room_invalid",
+            component_id=room.room_id,
+            message=(
+                "Room narrative enrichment targets a room outside the selected context."
+            ),
+        )
+        for room in output.rooms
+        if room.room_id not in selected_room_ids
+    )
+    issues.extend(
+        DungeonRoomNarrativeIssue(
+            code="room_narrative_enrichment.room_missing",
+            component_id=room.room_id,
+            message="Room narrative enrichment omits a selected exact room.",
+        )
+        for room in context.rooms
+        if room.room_id not in output_room_ids
+    )
+    return DungeonRoomNarrativeValidationResult(
+        schema_version=DUNGEON_ROOM_NARRATIVE_ENRICHMENT_SCHEMA_VERSION,
+        accepted_output=None if issues else output,
+        issues=tuple(issues),
+    )
+
+
+def project_dungeon_room_narrative_enrichment(
+    guide: DungeonDmGuide,
+    *,
+    plan: DungeonPlan,
+    package: DungeonPackage,
+    context: DungeonRoomNarrativeEnrichmentInput,
+    validation: DungeonRoomNarrativeValidationResult,
+) -> DungeonDmGuide:
+    """Merge accepted observable prose into only the selected exact rooms."""
+
+    selected_room_ids = {room.room_id for room in context.rooms}
+    if any(
+        room.room_id in selected_room_ids and room.read_aloud is not None
+        for room in guide.rooms
+    ):
+        raise ConflictError(
+            "Room narrative enrichment cannot replace accepted room narrative content."
+        )
+
+    rebuilt_context = build_dungeon_room_narrative_enrichment_input(
+        package,
+        guide,
+        DungeonRoomNarrativeContextSelection(
+            room_ids=tuple(room.room_id for room in context.rooms),
+            tone=context.tone,
+            constraints=context.constraints,
+        ),
+    )
+    if rebuilt_context != context:
+        raise ConflictError(
+            "Room narrative context does not match the accepted exact package and guide."
+        )
+
+    output = validation.accepted_output
+    if output is None:
+        raise ConflictError("Rejected room narrative enrichment cannot be projected.")
+    authoritative_validation = validate_dungeon_room_narrative_enrichment(
+        context, output
+    )
+    if authoritative_validation.accepted_output is None:
+        raise ConflictError(
+            "Room narrative enrichment failed exact-ID semantic validation."
+        )
+
+    compiled = compile_dungeon_plan(plan)
+    if (
+        not compiled.accepted
+        or compiled.certificate is None
+        or compiled.topology is None
+        or package.topology != compiled.topology
+    ):
+        raise ConflictError(
+            "Accepted room narratives do not match the generated dungeon plan."
+        )
+    room_ref_by_id = {item.room_id: item.ref for item in compiled.certificate.rooms}
+    if not selected_room_ids.issubset(room_ref_by_id):
+        raise ConflictError(
+            "Room narrative enrichment targets a room outside the accepted plan."
+        )
+
+    output_by_room_id = {room.room_id: room for room in output.rooms}
+    rooms = tuple(
+        room.model_copy(
+            update={
+                "read_aloud": output_by_room_id[room.room_id].read_aloud,
+                "sensory_details": output_by_room_id[room.room_id].observable_framing,
+            }
+        )
+        if room.room_id in selected_room_ids
+        else room
+        for room in guide.rooms
+    )
+    selected_room_refs = {room_ref_by_id[room_id] for room_id in selected_room_ids}
+    content_issues = tuple(
+        issue
+        for issue in guide.content_issues
+        if not (
+            issue.code == "guide_content.required_missing"
+            and issue.kind == "room"
+            and issue.room_ref in selected_room_refs
+        )
+    )
+    document = guide.model_dump(mode="python")
+    document["rooms"] = rooms
     document["content_issues"] = content_issues
     return DungeonDmGuide.model_validate(document)
 
