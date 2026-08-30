@@ -72,6 +72,13 @@ Before stopping—especially when context or credits are low—update `PROJECT_S
 - working-tree state;
 - the **single next recommended task** and its first concrete action.
 
+Keep `PROJECT_STATUS.md` as a bounded active handoff: no more than **150 lines or
+12 KB**. Rewrite its current sections instead of appending chronology. Move completed
+milestones, superseded handoffs, review iterations, and old verification runs to
+`PROJECT_HISTORY.md` in compact form. Do not duplicate Git history or retain a broad
+repository file inventory; identify only current-task or uncommitted files and let agents
+use Git for older detail.
+
 If stopping mid-task, include the failing command/output summary and identify incomplete or unsafe code. Never leave the next agent to infer whether a migration or canonical-write path is partially implemented.
 
 Run at least `git diff --check` before handoff. Run the phase-specific gate commands whenever the environment supports them.

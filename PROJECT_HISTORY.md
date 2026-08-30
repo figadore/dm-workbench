@@ -9,22 +9,19 @@
 ## Reconciliation Notes
 
 The former status file mixed live handoff data with sequential WIP notes. That
-made several old statements appear current even after later commits completed or
-superseded them. This history resolves those conflicts as follows:
+made old next-task, working-tree, and test statements appear current after later
+commits superseded them. This file preserves only compact milestone history:
 
-- The completed task is P7-12f (`ad1687d`, 2026-08-16); P7-12g is next. Older
-  recommendations for P7-10b, P3-01, P7-12a–f, rebuilds, or live retries are
-  superseded.
-- The repository working tree was clean when this history was consolidated.
-  Old “modified/uncommitted” descriptions were point-in-time handoffs, not
-  current state.
-- V2 is implemented through shared CLI/web durable-attempt integration. Its
-  rollout and any V1 retirement remain undecided pending P7-12g evaluation.
-- P3-01 and P5-02 remain unstarted. P3-01 is not a prerequisite for standalone
-  preparation generation; it is required only for promotion to campaign canon.
-- Historical live-provider IDs, failure details, and environment-specific test
-  notes are omitted here because they are neither current operational guidance
-  nor needed for implementation.
+- Current task priority, working-tree state, and verification live exclusively in
+  `PROJECT_STATUS.md`; no statement below is a resume instruction.
+- Old recommendations for P7-10b, P7-12, P3-01, rebuilds, or live retries are
+  superseded. P7-14b later removed the disposable V2/V3/V4 generation paths and
+  restored one active alpha V1 path.
+- P3-01 remains unnecessary for standalone preparation generation; it is required
+  only before promotion into campaign canon.
+- Historical provider IDs, response bodies, detailed review chronology, and
+  environment-specific logs are omitted. Git retains the original handoffs when
+  archaeology is necessary.
 
 ## Delivered Milestones
 
@@ -90,6 +87,24 @@ superseded them. This history resolves those conflicts as follows:
   rooms, exact precomputed bounds, corridor-realized door openings, and 4–8 room
   branch/loop/secret property coverage. Seeds now pin a zero-draw proven baseline for
   future optional compaction rather than supply correctness retries.
+- **P7-14e:** Characterized the one-call structural/guide workflow through shared
+  CLI, browser, faux-provider, review-packet, renderer, and secrecy gates. Repeated
+  human review made the fixed synthetic guide runnable but exposed fixture-specific
+  overfitting and the need to separate creative responsibilities. The direct-root
+  `submit_dungeon_plan` contract, measured token enforcement, bounded repair input
+  reservation, durable body-free diagnostics, and frozen Tier A canary policy were
+  established. Codex ordinary live use remained paused because the pinned transport
+  did not send a hard output limit.
+- **P7-14f staged enrichment through feature dispatch:** Removed prose-heavy guide
+  content from the structural proposal and retained truthful readiness blockers
+  (`ae6d406`). Added exact-package puzzle context/projection (`088568d`) and bounded
+  puzzle dispatch (`edc6245`); exact-ID exploration contracts and bounded atomic child
+  publication (`edc6245`, `6667148`); and exact-ID feature-interaction contracts plus
+  bounded dispatch/publication (`95af1c2`, `7387d29`). Every accepted child preserves
+  package/map bytes and prior task content; rejection leaves its parent current with
+  compact body-free diagnostics. The anti-overfitting prompt/canary cleanup is at
+  `ea812d6`. Trap, narrative, automatic staged orchestration, and staged live evaluation
+  remained incomplete at this milestone.
 
 ### Deployment baseline
 
@@ -103,7 +118,8 @@ Milestone-specific focused Python, Node, formatting, type-checking, migration,
 and disposable PostgreSQL/Compose checks were recorded as passing when their
 respective tasks completed. Some older broad gates also recorded unrelated
 Library/schema failures or local `.env` fixture conflicts. Those records are
-not evidence about the current task; rerun the relevant P7-12g gates instead.
+not evidence about the current task; use and rerun the gates named in
+`PROJECT_STATUS.md`.
 
 ## Persistent Design Decisions
 
