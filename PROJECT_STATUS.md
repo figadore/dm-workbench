@@ -10,21 +10,23 @@
 - **Branch:** `fast-track-prompt-to-dungeon`; P7-14d is at `a816d6a`, P7-14e is at
   `5dc7d80`, the P7-14f anti-overfitting cleanup is at `ea812d6`, structural/puzzle
   separation is at `ae6d406`, exact puzzle context/projection is at `088568d`, bounded
-  puzzle dispatch plus the exploration contract is at `edc6245`, and bounded exploration
-  dispatch/publication is at `6667148`.
+  puzzle dispatch plus the exploration contract is at `edc6245`, bounded exploration
+  dispatch/publication is at `6667148`, and the provider-free feature-interaction seam is
+  at `95af1c2`.
 - **Current task:** **P7-14f — Staged Tier A authoring and anti-overfitting evaluation.**
-- **Task state:** **WIP; puzzle and exploration both reach independently bounded faux-
-  provider orchestration and atomic DM-only child publication, and feature interaction now
-  reaches its provider-free exact-ID contract/context/validation/projection boundary.
-  Trusted code joins one exact package feature marker to its current guide entry and local
-  geometry. The proposal can author only observable setup, two to four affordances and
-  consequences, and optional reset/retry guidance; foreign package/room/feature IDs plus
-  structural and cross-task fields are rejected. Deterministic projection replaces only
-  that feature's readiness blocker while preserving package state, accepted puzzle and
-  exploration content, every unrelated guide entry, and unrelated blockers. Feature
-  prompt dispatch/repair, model lineage, and atomic child publication remain absent, as do
-  traps, narrative, full staged initial orchestration, and live calls; no migration
-  changed, and Tier B/C remain deferred.**
+- **Task state:** **WIP; puzzle, exploration, and feature interaction now each reach
+  independently bounded faux-provider orchestration and atomic DM-only child publication.
+  The feature task joins one exact package marker to its current guide entry and local
+  geometry, exposes only observable setup, two to four affordances/consequences, and
+  optional reset/retry guidance, and rejects foreign package/room/feature IDs plus
+  structural or cross-task fields. It has independent profile/effort/prompt/schema pins,
+  a 6,000-token cumulative and 2,048-output budget, one input-reserved repair, accepted
+  model lineage, body-free durable diagnostics, and deterministic projection. Success
+  preserves package/map hashes, accepted puzzle/exploration content and lineage, every
+  unrelated feature/guide entry, and unrelated blockers while removing only the selected
+  feature blocker; failure leaves the exploration parent current. Traps, narrative, full
+  staged initial orchestration, and live calls remain absent; no migration changed, and
+  Tier B/C remain deferred.**
 - **Schema head:** `0008_workbench_defaults`; no migration changed.
 - **Retention gate:** **not crossed.** There is no retained real-user artifact, external
   consumer, non-disposable deployment, or promised replay requirement; active V1 labels
@@ -71,13 +73,14 @@ reserved. Live provider calls, Tier B/C, and P7-13 output/print work remain paus
 - The structural call will retain only room identity/purpose, path/branch/loop/gate intent,
   named objective, and bounded typed content slots/reserved demand. It will not author the
   full puzzle, exploration challenge, trap/feature interaction, and room narrative.
-- Puzzle and exploration generation are different Workbench task calls after exact
-  geometry exists. Both now have strict input/output validation, trusted exact-room
-  context slicing, independently bounded faux dispatch/repair, accepted-content lineage,
-  deterministic projection, and atomic child publication. Accepted bodies live in the
-  DM-only artifact; routine logs and attempt reports keep only compact operational
-  metadata and diagnostics, while raw capture is explicit transient debug. Neither task
-  may modify topology, visibility, arithmetic, or another task's accepted proposal.
+- Puzzle, exploration, and feature-interaction generation are separate Workbench task
+  calls after exact geometry exists. All three now have strict input/output validation,
+  trusted task-local context slicing, independently bounded faux dispatch/repair,
+  accepted-content lineage, deterministic projection, and atomic child publication.
+  Accepted bodies live in the DM-only artifact; routine logs and attempt reports keep only
+  compact operational metadata and diagnostics, while raw capture is explicit transient
+  debug. No task may modify topology, visibility, arithmetic, or another task's accepted
+  proposal.
 - Narrative generation occurs after mechanics are accepted and receives their
   player-observable projection, preventing read-aloud from silently redefining or leaking
   the interaction.
@@ -498,17 +501,19 @@ reserved. Live provider calls, Tier B/C, and P7-13 output/print work remain paus
 
 ## Files Changed
 
-No migration changed. Building on committed bounded exploration dispatch/publication
-`6667148`, the current working tree adds the provider-free feature-interaction schema,
-trusted exact package/guide context builder, semantic validator, and deterministic guide
-projection. The non-archive Skyroot regression now includes a nursery Mistwheel Console
-selected from a guide that already contains accepted puzzle and exploration content. It
-proves foreign IDs and structural/cross-task fields fail, package state and all accepted
-cross-task content remain unchanged, only the exact feature receives setup, affordances,
-consequences, and reset/retry guidance, and only its readiness blocker is removed. Matching
-architecture, implementation/recovery-plan, README, and status updates describe this
-provider-free seam without claiming feature dispatch, lineage, publication, or complete
-staged orchestration. No new file was added. The broader P7 inventory remains:
+No migration changed. Building on committed provider-free feature interaction `95af1c2`,
+the current working tree adds a task-specific feature prompt/submission service, durable
+attempt application service, accepted lineage/workflow contracts, and atomic Studio child
+publication. The integration Skyroot plan now includes the nursery Mistwheel Console and
+builds structural, puzzle, then exploration versions before the feature task. Its repaired
+success preserves exact package/map hashes, accepted puzzle/exploration content and
+lineage, all unrelated feature entries and blockers, and persists only the accepted feature
+body in the DM-only child; its exhausted-repair case leaves the exploration parent current
+and keeps rejected IDs/content out of durable reports. Matching architecture,
+implementation/recovery-plan, README, and status updates describe bounded feature dispatch
+without claiming trap/narrative tasks or complete staged orchestration. New files are
+`feature_interaction_prompting.py` and `feature_interaction_application.py`. The broader P7
+inventory remains:
 
 - `AGENTS.md`
 - `Makefile`
@@ -522,6 +527,8 @@ staged orchestration. No new file was added. The broader P7 inventory remains:
 - `src/dm_assistant/orchestration/dungeons/evals.py`
 - `src/dm_assistant/orchestration/dungeons/exploration_application.py`
 - `src/dm_assistant/orchestration/dungeons/exploration_prompting.py`
+- `src/dm_assistant/orchestration/dungeons/feature_interaction_application.py`
+- `src/dm_assistant/orchestration/dungeons/feature_interaction_prompting.py`
 - `src/dm_assistant/orchestration/dungeons/prompting.py`
 - `src/dm_assistant/orchestration/dungeons/puzzle_application.py`
 - `src/dm_assistant/orchestration/dungeons/puzzle_prompting.py`
@@ -811,6 +818,22 @@ staged orchestration. No new file was added. The broader P7 inventory remains:
   `uv run pytest -q packages/dungeon-engine/tests` -> **139 passed** in separate runs.
   Focused Ruff format/lint and strict mypy over the changed dungeon source modules passed;
   `git diff --check` and Markdown fence checks passed. No live provider was contacted.
+- Added the faux feature dispatch/publication assertions failing-first; integration test
+  collection initially failed because `DungeonFeatureInteractionPromptApplicationService`
+  did not exist. After the task-specific prompt/application services, lineage/workflow
+  contracts, and Studio publication path were implemented,
+  `make test-integration PYTEST_ARGS='-q tests/integration/test_dungeon_exploration_prompt.py'`
+  -> **4 passed**, covering repaired success and exhausted-repair failure over an accepted
+  exploration child.
+- Focused feature/exploration/puzzle/CLI/workflow/web integration -> **11 passed** against
+  disposable PostgreSQL. The success case proves independent pins/budgets/repair, accepted
+  feature lineage, puzzle/exploration content and lineage preservation, byte-identical map
+  hashes, exact blocker removal, and rejected-body exclusion; the failure case proves the
+  exploration parent remains current with compact diagnostics only.
+- `uv run pytest -q tests/unit tests/evals` -> **193 passed** and
+  `uv run pytest -q packages/dungeon-engine/tests` -> **139 passed** in separate runs.
+  The focused 19-test contract gate passed; focused Ruff lint/format and strict mypy over
+  the changed feature/dungeon sources passed. No live provider was contacted.
 
 Package and root tests must continue to run as separate pytest invocations: combining
 both test roots in one process causes pytest's existing duplicate module basenames to
@@ -821,33 +844,34 @@ produce an import-file-mismatch collection error.
 P7-14d is committed at `a816d6a`, P7-14e at `5dc7d80`, prompt/canary cleanup at
 `ea812d6`, structural/puzzle separation at `ae6d406`, provider-free puzzle context/
 projection at `088568d`, bounded puzzle dispatch plus the provider-free exploration
-contract at `edc6245`, and bounded exploration dispatch/publication at `6667148`. This
-working tree adds only the provider-free exact feature-interaction contracts, trusted
-package/guide context construction, semantic validation, deterministic guide projection,
-non-archive unit coverage, and matching documentation. The exact feature projection
-preserves package geometry, accepted puzzle/exploration guide content, other feature
-entries, and unrelated blockers; feature provider dispatch, model lineage, generation
-runs, and child publication are not implemented yet.
+contract at `edc6245`, bounded exploration dispatch/publication at `6667148`, and the
+provider-free feature-interaction seam at `95af1c2`. This working tree adds the bounded
+feature task profile/tool, one input-reserved repair, accepted lineage, durable body-free
+attempt lifecycle, atomic Studio child publication, expanded Skyroot faux integration
+coverage, and matching documentation. The exact feature child preserves package geometry
+and map hashes, accepted puzzle/exploration guide content and lineage, all other feature
+entries, and unrelated blockers; failure leaves the exploration parent current.
 
 No migration, live provider response, credential, canonical campaign write, preparation
 approval, pure package change, redaction subsystem, second store, or live call changed.
 Generated review directories remain ignored. Do not claim a complete staged runtime: trap
-and narrative tasks, automatic initial context selection/orchestration, feature dispatch/
-publication, and a staged live result are still absent.
+and narrative tasks, automatic initial context selection/orchestration, and a staged live
+result are still absent.
 
 Suggested commit subject:
 
-`P7-14f add exact feature interaction contract`
+`P7-14f add bounded feature interaction dispatch`
 
 ## Single Next Recommended Task
 
-**Add independently bounded faux-provider dispatch, repair, accepted model lineage, and
-atomic DM-only child publication for the exact-ID feature-interaction contract.**
+**Add the provider-free exact-ID contract/context/validation/projection seam for one trap
+interaction in an independent synthetic case.**
 
-**First concrete action:** add a failing Skyroot integration regression starting from the
-exploration-enriched child, submit one exact Mistwheel Console feature interaction through
-a task-specific faux tool/profile, and prove success preserves package/map hashes plus
-accepted puzzle/exploration content and lineage while removing only the nursery feature
-blocker. Pair it with an exhausted-repair case that leaves the exploration parent current
-and persists no rejected body. Do not run live, start trap/narrative work or Tier B/C, or
-generalize the task-specific contexts into one universal optional payload.
+**First concrete action:** add a failing non-archive unit regression that joins one exact
+package trap marker and its current guide entry to local geometry and deterministic trap
+mechanics. Require a trap-only output for observable warning, trigger/effect narration,
+reasonable detection/disable counterplay without numeric DC authorship, consequences, and
+reset/recovery when applicable; reject foreign IDs and structural/cross-task mutation, and
+prove projection removes only that trap blocker while preserving package/map state plus
+accepted puzzle/exploration/feature content. Do not add trap provider dispatch, narrative
+work, live calls, Tier B/C, or a universal optional-field context in the same slice.

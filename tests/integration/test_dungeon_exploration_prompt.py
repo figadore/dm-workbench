@@ -24,6 +24,9 @@ from dm_assistant.orchestration.dungeons import (
     DungeonExplorationContextSelection,
     DungeonExplorationPromptApplicationService,
     DungeonExplorationPromptService,
+    DungeonFeatureInteractionContextSelection,
+    DungeonFeatureInteractionPromptApplicationService,
+    DungeonFeatureInteractionPromptService,
     DungeonPromptService,
     DungeonPuzzleClueApproval,
     DungeonPuzzleContextSelection,
@@ -32,9 +35,11 @@ from dm_assistant.orchestration.dungeons import (
     DungeonStudioService,
     DungeonStudioSpecification,
     PromptDungeonExplorationWorkflow,
+    PromptDungeonFeatureInteractionWorkflow,
     PromptDungeonPuzzleWorkflow,
     PromptDungeonWorkflow,
     resolve_dungeon_exploration_prompt_profile,
+    resolve_dungeon_feature_interaction_prompt_profile,
     resolve_dungeon_prompt_profile,
     resolve_dungeon_puzzle_prompt_profile,
 )
@@ -136,7 +141,15 @@ def _structural_proposal() -> dict[str, object]:
                         "description": "A fixed prism catches light from surviving roof panes.",
                     },
                 },
-                {"room_ref": "nursery", "objective": "Cloud-Pine Cutting"},
+                {
+                    "room_ref": "nursery",
+                    "feature": {
+                        "kind": "other",
+                        "name": "Mistwheel Console",
+                        "description": "A handwheel and two sight glasses regulate mist around the cloud-pine bed.",
+                    },
+                    "objective": "Cloud-Pine Cutting",
+                },
             ],
         },
     }
@@ -609,6 +622,413 @@ def test_failed_faux_exploration_keeps_puzzle_child_and_body_free_diagnostics(
     assert "exploration_enrichment.encounter_slot_mismatch" in report_text
     assert "foreign_rejected_slot" not in report_text
     assert "REJECTED_FAILURE_BODY" not in report_text
+    assert len(gateway.messages) == 2
+    assert gateway.profiles[1].token_budget == gateway.profiles[0].token_budget - 700
+    estimated_input = gateway.profiles[1].override_notes["estimated_input_tokens"]
+    assert isinstance(estimated_input, int) and estimated_input > 0
+    assert gateway.profiles[1].override_notes["output_token_limit"] <= (
+        gateway.profiles[1].token_budget - estimated_input
+    )
+    repair_document = json.loads(gateway.messages[1][0].content)
+    assert repair_document["previous_arguments"] == invalid
+
+
+@dataclass(frozen=True)
+class PreparedExploredSkyroot:
+    base: PreparedSkyroot
+    version_id: uuid.UUID
+    specification: DungeonStudioSpecification
+    profile: ResolvedModelRunProfile
+
+
+def _prepare_explored_skyroot(
+    engine: Engine, tmp_path: Path
+) -> PreparedExploredSkyroot:
+    prepared = _prepare_skyroot(engine, tmp_path)
+    selection = _selection(prepared)
+    context = prepared.studio.build_exploration_context(
+        PromptDungeonExplorationWorkflow(
+            campaign_id=prepared.campaign_id,
+            artifact_id=prepared.artifact_id,
+            parent_version_id=prepared.puzzle_version_id,
+            selection=selection,
+            created_by="synthetic-dm",
+        )
+    )
+    gateway = FakeGatewayClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_exploration",
+                        call_id="skyroot-exploration",
+                        arguments=_exploration_output(
+                            package_id=prepared.puzzle_specification.package.id,
+                            room_id=prepared.room_ids["gallery"],
+                            encounter_slot_id=context.room.encounter_slot_id,
+                            affordance_id=selection.affordances[0].affordance_id,
+                        ),
+                    ),
+                ),
+                input_tokens=190,
+                output_tokens=330,
+            ),
+        )
+    )
+    profile = resolve_dungeon_exploration_prompt_profile(
+        provider_id="faux",
+        model_id="faux_deterministic_v1",
+        capabilities=("text", "tool_calls", "thinking"),
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+        requested_effort=ReasoningEffort.FAST,
+    )
+    attempt = DungeonExplorationPromptApplicationService(
+        prepared.preparation,
+        DungeonExplorationPromptService(prepared.studio, gateway),
+    ).execute(
+        PromptDungeonExplorationWorkflow(
+            campaign_id=prepared.campaign_id,
+            artifact_id=prepared.artifact_id,
+            parent_version_id=prepared.puzzle_version_id,
+            selection=selection,
+            created_by="synthetic-dm",
+        ),
+        profile,
+        surface="integration-setup",
+    )
+    assert attempt.result is not None
+    assert attempt.result.artifact_version_id is not None
+    version = prepared.preparation.get_version(
+        prepared.campaign_id, attempt.result.artifact_version_id
+    )
+    return PreparedExploredSkyroot(
+        base=prepared,
+        version_id=attempt.result.artifact_version_id,
+        specification=DungeonStudioSpecification.model_validate_json(
+            json.dumps(version.specification)
+        ),
+        profile=profile,
+    )
+
+
+def _feature_selection(
+    prepared: PreparedExploredSkyroot,
+) -> DungeonFeatureInteractionContextSelection:
+    room_id = prepared.base.room_ids["nursery"]
+    return DungeonFeatureInteractionContextSelection(
+        room_id=room_id,
+        feature_id=prepared.base.feature_ids[room_id],
+        interaction_goal="Let the party stabilize the nursery mist before handling the cutting.",
+        stakes="A careless adjustment drenches the cutting but never destroys or permanently blocks it.",
+        constraints=(
+            "Keep the handwheel and two sight glasses as the complete apparatus",
+            "Do not invent numeric difficulty values",
+            "Allow more than one reasonable adjustment method",
+        ),
+    )
+
+
+def _feature_output(
+    *, package_id: str, room_id: str, feature_id: str
+) -> dict[str, object]:
+    return {
+        "schema_version": "1.0.0",
+        "package_id": package_id,
+        "room_id": room_id,
+        "feature_id": feature_id,
+        "observable_setup": [
+            "The left sight glass is empty while the right glass pulses with cloudy water.",
+            "Turning the handwheel changes both water levels in opposite directions.",
+        ],
+        "affordances": [
+            {
+                "action": "Turn the wheel until both sight glasses hold the same level.",
+                "adjudication": "Slow adjustments reveal the levels settling toward the center marks.",
+                "consequence": "Balanced flow parts the mist around the cutting bed.",
+            },
+            {
+                "action": "Clamp one feed line while another character feathers the wheel.",
+                "adjudication": "A secure soft clamp can hold either line without prescribing one tool.",
+                "consequence": "The mist clears, but the clamped line must be released before the cutting is removed.",
+            },
+        ],
+        "reset_or_retry": "Opening the drain lever empties both glasses and returns the wheel to its starting mark.",
+    }
+
+
+def test_faux_feature_task_repairs_and_preserves_exploration_child(
+    db_engine: Engine, tmp_path: Path
+) -> None:
+    prepared = _prepare_explored_skyroot(db_engine, tmp_path)
+    selection = _feature_selection(prepared)
+    valid = _feature_output(
+        package_id=prepared.specification.package.id,
+        room_id=selection.room_id,
+        feature_id=selection.feature_id,
+    )
+    rejected = deepcopy(valid)
+    rejected["feature_id"] = "rejected_foreign_feature"
+    affordances = rejected["affordances"]
+    assert isinstance(affordances, list)
+    affordances[0]["action"] = "REJECTED_FEATURE_BODY"
+    gateway = FakeGatewayClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_feature_interaction",
+                        call_id="invalid-feature",
+                        arguments=rejected,
+                    ),
+                ),
+                input_tokens=220,
+                output_tokens=320,
+            ),
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_feature_interaction",
+                        call_id="repaired-feature",
+                        arguments=valid,
+                    ),
+                ),
+                input_tokens=290,
+                output_tokens=430,
+            ),
+        )
+    )
+    profile = resolve_dungeon_feature_interaction_prompt_profile(
+        provider_id="faux",
+        model_id="faux_deterministic_v1",
+        capabilities=("text", "tool_calls", "thinking"),
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+        requested_effort=ReasoningEffort.FAST,
+    )
+    attempt = DungeonFeatureInteractionPromptApplicationService(
+        prepared.base.preparation,
+        DungeonFeatureInteractionPromptService(prepared.base.studio, gateway),
+    ).execute(
+        PromptDungeonFeatureInteractionWorkflow(
+            campaign_id=prepared.base.campaign_id,
+            artifact_id=prepared.base.artifact_id,
+            parent_version_id=prepared.version_id,
+            selection=selection,
+            created_by="synthetic-dm",
+        ),
+        profile,
+        surface="integration",
+    )
+
+    assert attempt.public_code == "dungeon_feature_interaction_prompt_completed"
+    assert attempt.result is not None and attempt.result.success
+    assert attempt.result.artifact_version_id is not None
+    child = prepared.base.preparation.get_version(
+        prepared.base.campaign_id, attempt.result.artifact_version_id
+    )
+    child_spec = DungeonStudioSpecification.model_validate_json(
+        json.dumps(child.specification)
+    )
+    assert child.parent_version_id == prepared.version_id
+    assert to_canonical_json(child_spec.package) == to_canonical_json(
+        prepared.specification.package
+    )
+    assert (
+        child_spec.puzzle_model_lineage == prepared.specification.puzzle_model_lineage
+    )
+    assert (
+        child_spec.exploration_model_lineage
+        == prepared.specification.exploration_model_lineage
+    )
+    assert child_spec.dm_guide is not None
+    assert prepared.specification.dm_guide is not None
+    assert child_spec.dm_guide.puzzles == prepared.specification.dm_guide.puzzles
+    assert child_spec.dm_guide.rooms == prepared.specification.dm_guide.rooms
+    assert child_spec.feature_interaction_model_lineage[-1].output.reset_or_retry
+    target = next(
+        item
+        for item in child_spec.dm_guide.features
+        if item.marker_id == selection.feature_id
+    )
+    assert target.content is not None
+    assert len(target.content.player_choices) == 2
+    child_text = json.dumps(child.specification)
+    assert "rejected_foreign_feature" not in child_text
+    assert "REJECTED_FEATURE_BODY" not in child_text
+    parent_target = next(
+        item
+        for item in prepared.specification.dm_guide.features
+        if item.marker_id == selection.feature_id
+    )
+    assert parent_target.content is None
+    removed_issue = next(
+        issue
+        for issue in prepared.specification.dm_guide.content_issues
+        if issue.kind == "feature" and issue.room_ref == "nursery"
+    )
+    assert child_spec.dm_guide.content_issues == tuple(
+        issue
+        for issue in prepared.specification.dm_guide.content_issues
+        if issue != removed_issue
+    )
+    assert all(
+        item
+        == next(
+            prior
+            for prior in prepared.specification.dm_guide.features
+            if prior.marker_id == item.marker_id
+        )
+        for item in child_spec.dm_guide.features
+        if item.marker_id != selection.feature_id
+    )
+
+    assert gateway.allowed_tools == [
+        ("submit_dungeon_feature_interaction",),
+        ("submit_dungeon_feature_interaction",),
+    ]
+    schema_text = json.dumps(gateway.tool_schemas[0][0].parameters)
+    assert gateway.tool_schemas[0][0].name == "submit_dungeon_feature_interaction"
+    assert "DungeonFeatureInteractionEnrichmentOutput" in schema_text
+    assert "DungeonPlan" not in schema_text
+    assert "DungeonPuzzle" not in schema_text
+    prompt_document = json.loads(gateway.messages[0][0].content)
+    assert prompt_document["context"]["feature"]["feature_id"] == selection.feature_id
+    assert "plan" not in prompt_document["context"]
+    repair_document = json.loads(gateway.messages[1][0].content)
+    assert repair_document["previous_arguments"] == rejected
+    assert (
+        repair_document["diagnostics"][0]["code"]
+        == "feature_interaction.feature_mismatch"
+    )
+    assert profile.task_profile_id not in {
+        prepared.base.puzzle_profile.task_profile_id,
+        prepared.profile.task_profile_id,
+    }
+    assert profile.requested_effort is ReasoningEffort.FAST
+    assert profile.override_notes == {"output_token_limit": 2048, "repair_limit": 1}
+
+    attempt_run = prepared.base.preparation.get_generation_run(
+        prepared.base.campaign_id, attempt.attempt_run_id
+    )
+    report_text = json.dumps(attempt_run.validation_report)
+    assert (
+        attempt_run.validation_report["code"]
+        == "dungeon_feature_interaction_prompt_completed"
+    )
+    assert "Opening the drain lever" not in report_text
+    assert "observable_setup" not in report_text
+    artifact_run = prepared.base.preparation.get_generation_run(
+        prepared.base.campaign_id, attempt.result.generation_run_id
+    )
+    assert artifact_run.generation_kind == "dungeon_feature_interaction_enrichment"
+    assert artifact_run.model_task_profile_id == profile.task_profile_id
+    assert (
+        artifact_run.tool_runs[0]["tool_name"] == "submit_dungeon_feature_interaction"
+    )
+
+    parent_assets = prepared.base.preparation.list_assets(
+        prepared.base.campaign_id, prepared.version_id
+    )
+    child_assets = prepared.base.preparation.list_assets(
+        prepared.base.campaign_id, child.id
+    )
+    map_roles = {
+        ArtifactAssetRole.DM_SVG,
+        ArtifactAssetRole.PLAYER_SVG,
+        ArtifactAssetRole.DM_PNG,
+        ArtifactAssetRole.PLAYER_PNG,
+        ArtifactAssetRole.MANIFEST,
+    }
+    assert {
+        (item.role, item.ordinal, item.sha256)
+        for item in parent_assets
+        if item.role in map_roles
+    } == {
+        (item.role, item.ordinal, item.sha256)
+        for item in child_assets
+        if item.role in map_roles
+    }
+
+
+def test_failed_faux_feature_keeps_exploration_child_and_body_free_diagnostics(
+    db_engine: Engine, tmp_path: Path
+) -> None:
+    prepared = _prepare_explored_skyroot(db_engine, tmp_path)
+    selection = _feature_selection(prepared)
+    invalid = _feature_output(
+        package_id=prepared.specification.package.id,
+        room_id=selection.room_id,
+        feature_id="foreign_rejected_feature",
+    )
+    invalid["observable_setup"] = [
+        "REJECTED_FEATURE_FAILURE_BODY",
+        "REJECTED_FEATURE_FAILURE_BODY_TWO",
+    ]
+
+    def completion(call_id: str) -> GatewayCompletion:
+        return GatewayCompletion(
+            tool_calls=(
+                ToolCall(
+                    tool_name="submit_dungeon_feature_interaction",
+                    call_id=call_id,
+                    arguments=invalid,
+                ),
+            ),
+            input_tokens=300,
+            output_tokens=400,
+        )
+
+    gateway = FakeGatewayClient(
+        (completion("invalid-initial"), completion("invalid-repair"))
+    )
+    attempt = DungeonFeatureInteractionPromptApplicationService(
+        prepared.base.preparation,
+        DungeonFeatureInteractionPromptService(prepared.base.studio, gateway),
+    ).execute(
+        PromptDungeonFeatureInteractionWorkflow(
+            campaign_id=prepared.base.campaign_id,
+            artifact_id=prepared.base.artifact_id,
+            parent_version_id=prepared.version_id,
+            selection=selection,
+            created_by="synthetic-dm",
+        ),
+        resolve_dungeon_feature_interaction_prompt_profile(
+            provider_id="faux",
+            model_id="faux_deterministic_v1",
+            capabilities=("text", "tool_calls"),
+            context_window_tokens=16_384,
+            output_token_limit=4_096,
+        ),
+        surface="integration",
+    )
+
+    assert attempt.result is None
+    assert (
+        attempt.public_code
+        == "dungeon_feature_interaction_prompt_rejected_after_repair"
+    )
+    artifact = prepared.base.preparation.get_artifact(
+        prepared.base.campaign_id, prepared.base.artifact_id
+    )
+    assert artifact.current_version_id == prepared.version_id
+    assert (
+        len(
+            prepared.base.preparation.list_versions(
+                prepared.base.campaign_id, prepared.base.artifact_id
+            )
+        )
+        == 3
+    )
+    run = prepared.base.preparation.get_generation_run(
+        prepared.base.campaign_id, attempt.attempt_run_id
+    )
+    assert run.status.value == "failed"
+    assert run.validation_report["repair_attempted"] is True
+    report_text = json.dumps(run.validation_report)
+    assert "feature_interaction.feature_mismatch" in report_text
+    assert "foreign_rejected_feature" not in report_text
+    assert "REJECTED_FEATURE_FAILURE_BODY" not in report_text
     assert len(gateway.messages) == 2
     assert gateway.profiles[1].token_budget == gateway.profiles[0].token_budget - 700
     estimated_input = gateway.profiles[1].override_notes["estimated_input_tokens"]

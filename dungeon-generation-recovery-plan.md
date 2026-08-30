@@ -438,13 +438,17 @@ context builder, semantic validator, independently pinned faux-provider dispatch
 budget-reserved repair, accepted-content lineage, deterministic guide projection, and
 atomic DM-only child publication. Success preserves package/map hashes, accepted puzzle
 content/lineage, and unrelated blockers; failure leaves the puzzle parent current and
-persists only compact diagnostics. A separate provider-free feature-interaction contract
-now joins one exact package feature marker to its current guide entry and local room
-geometry, rejects foreign package/room/feature IDs and cross-task mutation, and projects
-setup, multiple affordances/consequences, and optional reset/retry guidance into only that
-feature while preserving accepted puzzle/exploration content and unrelated blockers.
-Feature dispatch, lineage, and publication remain absent. No live provider was contacted,
-and no redaction/logging subsystem or new persistence store was added.
+persists only compact diagnostics. The separate feature-interaction contract joins one
+exact package feature marker to its current guide entry and local room geometry, rejects
+foreign package/room/feature IDs and cross-task mutation, and projects setup, multiple
+affordances/consequences, and optional reset/retry guidance into only that feature. Its
+independently pinned faux-provider dispatch has a task-specific profile, prompt/schema,
+6,000-token cumulative and 2,048-output budget, and one budget-reserved repair. Accepted
+content and lineage publish atomically in a DM-only child while preserving package/map
+hashes, accepted puzzle/exploration content and lineage, other features, and unrelated
+blockers; failure leaves the exploration parent current and stores no rejected body. No
+live provider was contacted, and no redaction/logging subsystem or new persistence store
+was added.
 
 - Add independently bounded puzzle, exploration, other interaction, and narrative tasks
   over exact package IDs; merge accepted output deterministically and preserve the map on

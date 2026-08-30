@@ -426,7 +426,7 @@ The internal P1-02 Library service now ingests bounded strict-UTF-8 files throug
 
 ## Current Next Step
 
-Continue **P7-14f** by adding independently bounded faux-provider dispatch, repair, accepted lineage, and atomic child publication for the exact-ID feature-interaction contract. Preserve package/map bytes, accepted puzzle/exploration content and lineage, and unrelated readiness blockers on both success and failure. Do not run a live provider or start Tier B/C. See [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) and [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
+Continue **P7-14f** with a provider-free exact-ID trap-interaction seam over one independent synthetic case. Keep deterministic DCs, marker geometry, package/map bytes, and accepted puzzle/exploration/feature content authoritative; do not start trap provider dispatch, narrative generation, live calls, or Tier B/C in the same slice. See [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) and [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
 
 ## License and Third-Party Marks
 
