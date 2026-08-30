@@ -175,17 +175,12 @@ def test_browser_prompt_faux_gateway_persists_draft(
             assert "Room mechanics:" not in detail.text
             assert "discovery DC 13; check method is DM-adjudicated" in detail.text
             assert "unlock DC 13" in detail.text
-            assert "Three-Button Vault Lock" in detail.text
-            assert "broken front-left foot" in detail.text
-            assert "rear-right floor pivot" in detail.text
-            assert "Detect:</strong> DC 13" in detail.text
-            assert "hairline seam around the pivoting threshold plate" in detail.text
-            assert "Disable:</strong> DC 13" in detail.text
-            assert "locks the buttons for 10 minutes" in detail.text
-            assert "No guard or creature responds" in detail.text
-            assert "Situation:" in detail.text
-            assert "Run it:" in detail.text
-            assert "Choices and consequences:" in detail.text
+            assert "Preparation incomplete:" in detail.text
+            assert "Runnable details are missing." in detail.text
+            assert "Three-Button Vault Lock" not in detail.text
+            assert "Situation:" not in detail.text
+            assert "Run it:" not in detail.text
+            assert "Choices and consequences:" not in detail.text
             assert "Synthetic Objective" in detail.text
 
     asyncio.run(flow())
@@ -249,8 +244,8 @@ def test_browser_prompt_faux_gateway_persists_draft(
     assert len(guide.rooms) == 5
     assert len(guide.dependencies) == 1
     assert guide.dependencies[0].name == "Three-Wave Brass Key"
-    assert guide.dependencies[0].content is not None
-    assert guide.dependencies[0].discovery is not None
+    assert guide.dependencies[0].content is None
+    assert guide.dependencies[0].discovery is None
     assert guide.traps[0].effect == (
         "The trip lever rings the bell and its clockwork bolt locks the buttons for 10 "
         "minutes. On the first ring only, the hammer's lower arm flips the full ink cup "
@@ -262,24 +257,25 @@ def test_browser_prompt_faux_gateway_persists_draft(
     )
     assert guide.traps[0].disable is not None
     assert "pull out its coupling pin" in guide.traps[0].disable
-    assert len(guide.puzzles) == 1
-    assert guide.puzzles[0].name == "Three-Button Vault Lock"
+    assert guide.puzzles == ()
     assert guide.features[0].name == "Instruction Pedestal"
-    assert guide.features[0].content is not None
+    assert guide.features[0].content is None
     assert guide.objectives[0].name == "Synthetic Objective"
-    assert guide.objectives[0].content is not None
-    assert sum(room.encounter_content is not None for room in guide.rooms) == 1
-    assert guide.content_issues == ()
-    assert all(item.map_reference is not None for item in guide.connections)
-    assert readiness is not None and readiness.ready
-    assert readiness.diagnostics == ()
-    assert persisted_version.validation_report["preparation_readiness"] == {
-        "schema_version": "1.0.0",
-        "ready": True,
-        "diagnostics": [],
+    assert guide.objectives[0].content is None
+    assert all(room.encounter_content is None for room in guide.rooms)
+    assert {item.code for item in guide.content_issues} == {
+        "guide_content.required_missing"
     }
+    assert all(item.map_reference is not None for item in guide.connections)
+    assert readiness is not None and not readiness.ready
+    assert {item.code for item in readiness.diagnostics} == {
+        "dungeon_preparation.guide_content_missing"
+    }
+    assert (
+        persisted_version.validation_report["preparation_readiness"]["ready"] is False
+    )
     quality = evaluate_dungeon_guide_quality(specification)
-    assert quality.automated_pass
+    assert not quality.automated_pass
     assert quality.human_review_required
     assert {item.dimension for item in quality.checks} == {
         "progression",
@@ -288,7 +284,7 @@ def test_browser_prompt_faux_gateway_persists_draft(
         "prep_usefulness",
     }
     quality_report = render_dungeon_guide_quality_report(quality)
-    assert "automated checks: pass" in quality_report
+    assert "automated checks: fail" in quality_report
     assert "human DM review: required" in quality_report
     assert "Synthetic" not in quality_report
 

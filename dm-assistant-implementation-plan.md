@@ -1739,6 +1739,13 @@ creative tasks and encourages verbose contract compliance rather than coherent p
 Implement the architecture's independently failable enrichment boundary before expanding
 the topology stress ladder.
 
+Current first slice: the model-visible structural root no longer contains `guide_content`;
+its accepted tool result reports typed content-slot counts, faux publication leaves truthful
+readiness blockers, and strict exact-ID puzzle input/output plus semantic validation
+contracts exist. Provider dispatch, durable puzzle lineage, exact guide projection,
+exploration, other interactions, and narrative remain to be implemented in later bounded
+slices.
+
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
   Its model-visible proposal contains room identity/purpose, critical path, bounded
   branches/loop, gate/dependency placement, named objective, and typed content slots with

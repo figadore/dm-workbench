@@ -251,15 +251,18 @@ created and switched without copying UUIDs into every command:
 
 ### Alpha dungeon V1 evaluation
 
-The alpha accepts one compact `submit_dungeon_plan` proposal only. Proposal fields
-(`proposal_version`, `plan`, and optional guide content) are the tool arguments directly;
-there is no additional `proposal` wrapper. Models supply a bounded `DungeonPlan`: 4–8
-relative rooms, one critical path, up to two branches, one loop, one gate, and bounded
-room content. Deterministic code constructs all
-edges and IDs and emits an independently recomputed `TopologyCertificate` covering
-connectivity, cycle/branch/gate/secret witnesses, room/port demand, and embedding
-bands. Geometry, visibility, validation, rendering, persistence, and approval
-remain server-owned. Run inspection remains body-free:
+The alpha accepts one compact structural `submit_dungeon_plan` proposal only. Proposal
+fields (`proposal_version` and `plan`) are the tool arguments directly; there is no
+additional `proposal` wrapper or model-visible guide-content payload. Models supply a
+bounded `DungeonPlan`: 4–8 relative rooms, one critical path, up to two branches, one
+loop, one gate, and typed content slots with conservative demand. Deterministic code
+constructs all edges and IDs and emits an independently recomputed
+`TopologyCertificate` covering connectivity, cycle/branch/gate/secret witnesses,
+room/port demand, and embedding bands. Detailed puzzle, exploration, interaction, and
+narrative work belongs to separate post-geometry tasks over exact IDs; until those tasks
+are wired to providers, structural drafts truthfully remain preparation-blocked. Geometry,
+visibility, validation, rendering, persistence, and approval remain server-owned. Run
+inspection remains body-free:
 
 ```bash
 uv run --frozen dm dungeon run inspect <attempt-run-id>
@@ -276,8 +279,9 @@ when the measured remaining budget cannot fit that input. Use transient `--debug
 only when sensitive bodies are explicitly needed for local diagnosis.
 
 The current live canary is a committed one-floor Tier A prompt with seed `714000001`,
-exposed only through `dm dungeon canary`; provider and model must be explicit. Do not run
-it until the human guide review and provider-free Tier B/C gates pass. For the known
+exposed only through `dm dungeon canary`; provider and model must be explicit. Keep live
+use paused until the staged enrichment path passes provider-free/faux gates and requested
+output limits are enforced by the transport; Tier B/C remain deferred. For the known
 non-production Codex transport limitation, one operator may explicitly acknowledge that
 the requested output cap is advisory:
 

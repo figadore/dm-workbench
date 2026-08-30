@@ -52,6 +52,7 @@ from dm_assistant.orchestration.modeling import (
 )
 from dm_dungeon import (
     DUNGEON_PLAN_COMPILER_VERSION,
+    DungeonPlan,
     DungeonPlanCompileResult,
     LayoutRequest,
     compile_dungeon_plan,
@@ -59,6 +60,7 @@ from dm_dungeon import (
     validate_geometry,
     validate_topology,
 )
+from dm_dungeon.contracts import EncounterSlotIntent, RoomRole
 from dm_dungeon.layout import ORTHOGONAL_LAYOUT_GENERATOR_VERSION
 
 _DUNGEON_CONTEXT_KIND = "dungeon_generation"
@@ -77,24 +79,13 @@ _PLAN_GUIDANCE = (
     "role. Add at most one loop between non-adjacent rooms and mark it secret only "
     "when concealment is intended. Add at most one gate on a constructed public path "
     "edge; put its key or clue in a public room reachable before that gate. Name the "
-    "final objective in exactly one room_contents record for the objective room. "
-    "Add one guide_content room_narrative for every room, with one short read-aloud "
-    "paragraph and two to four distinct sensory details that do not merely repeat it. Limit "
-    "read-aloud to what players can observe; keep hidden mechanisms in adjudication. When a "
-    "plan includes a gate dependency, encounter slot, puzzle-role room, feature, or objective, "
-    "add one matching guide_content entry with a concise runnable situation, explicit "
-    "adjudication, and two to four player action/outcome choices; include gate discovery and "
-    "puzzle solution in their typed fields. Keep guide content concise and table-ready. For "
-    "puzzles and exploration scenes, state player-observable clues or affordances, stakes, and "
-    "consequences; support reasonable player approaches instead of prescribing one exact "
-    "physical manipulation unless the prompt calls for it. State only the mechanics needed to "
-    "adjudicate play, and include reset or retry behavior only when it matters. Do not invent "
-    "linked machinery or alarm systems merely to connect otherwise independent content. For "
-    "traps, separate a visible trap warning from the concealed trigger and describe what "
-    "detection and disable checks find or manipulate. Use plain language, do not repeat "
-    "map-visible connectivity, and do not duplicate one interaction across entries. Make clues, "
-    "triggers, checks, and consequences actionable. Do not author edges, IDs, floors, "
-    "coordinates, dimensions, seeds, or numeric DCs."
+    "final objective in exactly one room_contents[].objective field for the objective "
+    "room. Use room roles, encounter intent, and room_contents only as typed content "
+    "slots with conservative spatial demand. Keep their structural descriptions brief. "
+    "Do not design puzzle solutions, exploration approaches or outcomes, room narratives, "
+    "read-aloud, or complete trap and feature interactions in this call. Later bounded "
+    "tasks receive exact server IDs and geometry for that work. Do not author edges, IDs, "
+    "floors, coordinates, dimensions, seeds, or numeric DCs."
 )
 
 
@@ -302,6 +293,7 @@ class DungeonSubmissionService:
                         "gates": len(compiled.certificate.gates),
                     },
                     "certificate_version": compiled.certificate.certificate_version,
+                    "content_slots": _content_slot_summary(proposal.plan),
                     "compiler_version": DUNGEON_PLAN_COMPILER_VERSION,
                     "compiler_output_hash": compiled.output_hash or "",
                     "package_id": request.package_id,
@@ -315,8 +307,9 @@ class DungeonSubmissionService:
         tool = StructuredSubmissionTool(
             name=_SUBMIT_DUNGEON_PLAN_TOOL,
             description=(
-                "Submit one compact dungeon proposal. The server owns IDs, seed, "
-                "geometry, visibility, validation, persistence, and approval."
+                "Submit one compact structural dungeon proposal. The server owns IDs, "
+                "seed, geometry, detailed enrichment, visibility, validation, "
+                "persistence, and approval."
             ),
             input_schema=DungeonGenerationProposal,
         )
@@ -553,9 +546,9 @@ def _initial_model_input(
                     {
                         "task": _DUNGEON_SCHEMA_NAME,
                         "instruction": (
-                            "Use submit_dungeon_plan exactly once with proposal_version, "
-                            "plan, and optional guide_content directly at the tool-argument "
-                            "root; do not add a proposal envelope. Use DungeonPlan schema "
+                            "Use submit_dungeon_plan exactly once with proposal_version "
+                            "and plan directly at the tool-argument root; do not add a "
+                            "proposal envelope or guide content. Use DungeonPlan schema "
                             "version 1.0.0. Submit the smallest Tier A plan satisfying the "
                             "prompt. Copy a specifically named final objective from the DM "
                             "prompt exactly into room_contents[].objective; never substitute "
@@ -608,6 +601,25 @@ def _repair_model_input(
             PromptMessage(role="user", content=_canonical_message(repair_document)),
         )
     )
+
+
+def _content_slot_summary(plan: DungeonPlan) -> dict[str, JsonValue]:
+    """Project structural content-slot counts without accepting guide prose."""
+
+    exploration_challenges = sum(
+        room.encounter is EncounterSlotIntent.EXPLORATION for room in plan.rooms
+    )
+    return {
+        "puzzles": sum(room.role is RoomRole.PUZZLE for room in plan.rooms),
+        "exploration_challenges": exploration_challenges,
+        "other_encounters": sum(room.encounter is not None for room in plan.rooms)
+        - exploration_challenges,
+        "traps": sum(content.trap is not None for content in plan.room_contents),
+        "features": sum(content.feature is not None for content in plan.room_contents),
+        "objectives": sum(
+            content.objective is not None for content in plan.room_contents
+        ),
+    }
 
 
 def _compile_layout_request(

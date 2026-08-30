@@ -203,19 +203,11 @@ def test_prompt_explains_tier_a_plan_constraints() -> None:
     assert "do not add a proposal envelope" in message
     assert "DungeonPlan schema version 1.0.0" in message
     assert "room_contents[].objective" in message
-    assert "add one matching guide_content entry" in message
-    assert "two to four player action/outcome choices" in message
-    assert "Keep guide content concise and table-ready" in message
-    assert "player-observable clues or affordances" in message
-    assert "support reasonable player approaches" in message
-    assert "reset or retry behavior only when it matters" in message
-    assert "Do not invent linked machinery or alarm systems" in message
-    assert "read-aloud to what players can observe" in message
-    assert "visible trap warning from the concealed trigger" in message
-    assert "describe what detection and disable checks find or manipulate" in message
-    assert "do not repeat map-visible connectivity" in message
-    assert "physical setup, trigger, effect, recovery" not in message
-    assert "whether an alarm has a responder" not in message
+    assert "typed content slots" in message
+    assert "conservative spatial demand" in message
+    assert "Do not design puzzle solutions" in message
+    assert "exploration approaches or outcomes" in message
+    assert "guide_content" not in message
 
 
 def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
@@ -269,6 +261,14 @@ def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
         "secret_routes": 0,
         "gates": 0,
     }
+    assert tool_payload["content_slots"] == {
+        "puzzles": 0,
+        "exploration_challenges": 0,
+        "other_encounters": 0,
+        "traps": 0,
+        "features": 0,
+        "objectives": 1,
+    }
     assert tuple(schema.name for schema in gateway.tool_schemas) == (
         "submit_dungeon_plan",
     )
@@ -276,8 +276,9 @@ def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
     schema_document = gateway.tool_schemas[0].parameters
     schema_text = json.dumps(schema_document)
     assert "DungeonPlan" in schema_text
-    assert "DungeonGuideContentPlan" in schema_text
-    assert '"guide_content"' in schema_text
+    assert "DungeonGuideContentPlan" not in schema_text
+    assert '"guide_content"' not in schema_text
+    assert "DungeonGuidePuzzleContent" not in schema_text
     assert '"connections"' not in schema_text
     assert "proposal" not in schema_document["properties"]
     assert "plan" in schema_document["properties"]
@@ -490,7 +491,7 @@ def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
     assert "allowed values" in final_schema_diagnostic["repair"]
 
 
-def test_direct_schema_repair_preserves_root_proposal_fields() -> None:
+def test_structural_schema_repair_removes_legacy_guide_content_only() -> None:
     proposal = _tier_a_proposal()
     malformed = deepcopy(proposal)
     malformed["guide_content"] = {"schema_version": "1.0.0", "entries": []}
@@ -540,13 +541,14 @@ def test_direct_schema_repair_preserves_root_proposal_fields() -> None:
     repair_document = json.loads(gateway.messages[1][0].content)
     assert repair_document["previous_arguments"] == malformed
     diagnostics = repair_document["diagnostics"]
-    assert any(item["path"] == "/guide_content/room_narratives" for item in diagnostics)
+    assert any(item["path"] == "/guide_content" for item in diagnostics)
     assert all(not item["path"].startswith("/proposal") for item in diagnostics)
-    assert all(
+    assert any(
         item.get("repair")
-        != "remove this field because it is not in the submitted schema"
+        == "remove this field because it is not in the submitted schema"
         for item in diagnostics
     )
+    assert repair_document["previous_arguments"]["plan"] == proposal["plan"]
 
 
 def test_structured_submission_fails_closed_on_measured_token_overages() -> None:

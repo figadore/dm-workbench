@@ -58,6 +58,10 @@ from dm_assistant.orchestration.dungeons.contracts import (
     DungeonPreparationReadiness,
     DungeonPreparationReadinessDiagnostic,
     DungeonPrintCapability,
+    DungeonPuzzleEnrichmentInput,
+    DungeonPuzzleEnrichmentIssue,
+    DungeonPuzzleEnrichmentOutput,
+    DungeonPuzzleEnrichmentValidationResult,
     DungeonRoomDmNote,
     DungeonStudioDetail,
     DungeonStudioSpecification,
@@ -743,6 +747,46 @@ def _build_preparation_readiness(
     )
 
 
+def validate_dungeon_puzzle_enrichment(
+    context: DungeonPuzzleEnrichmentInput,
+    output: DungeonPuzzleEnrichmentOutput,
+) -> DungeonPuzzleEnrichmentValidationResult:
+    """Check one puzzle-only proposal against its exact server-authored context."""
+
+    issues: list[DungeonPuzzleEnrichmentIssue] = []
+    if output.package_id != context.package_id:
+        issues.append(
+            DungeonPuzzleEnrichmentIssue(
+                code="puzzle_enrichment.package_mismatch",
+                component_id=output.package_id,
+                message="Puzzle enrichment targets a different dungeon package.",
+            )
+        )
+    if output.room_id != context.room.room_id:
+        issues.append(
+            DungeonPuzzleEnrichmentIssue(
+                code="puzzle_enrichment.room_mismatch",
+                component_id=output.room_id,
+                message="Puzzle enrichment targets a different exact room.",
+            )
+        )
+    allowed_clue_ids = {item.location_id for item in context.clue_locations}
+    for clue in output.clue_path:
+        if clue.location_id not in allowed_clue_ids:
+            issues.append(
+                DungeonPuzzleEnrichmentIssue(
+                    code="puzzle_enrichment.clue_location_invalid",
+                    component_id=clue.location_id,
+                    message="Puzzle clue uses a location outside the approved context.",
+                )
+            )
+    return DungeonPuzzleEnrichmentValidationResult(
+        schema_version="1.0.0",
+        accepted_output=None if issues else output,
+        issues=tuple(issues),
+    )
+
+
 def validate_dungeon_guide_content(
     plan: DungeonPlan,
     content_plan: DungeonGuideContentPlan | None,
@@ -915,9 +959,7 @@ def _build_dm_guide(
     )
     if proposal is None or proposal.plan is None:
         return None
-    return build_dungeon_dm_guide(
-        request, package, proposal.plan, proposal.guide_content
-    )
+    return build_dungeon_dm_guide(request, package, proposal.plan)
 
 
 def build_dungeon_dm_guide(

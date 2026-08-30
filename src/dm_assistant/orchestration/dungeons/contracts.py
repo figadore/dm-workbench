@@ -22,11 +22,14 @@ from dm_dungeon.contracts import (
     EndpointDoorKind,
     FeatureIntentKind,
     ObjectiveKind,
+    PolygonGeometry,
+    RoomCapacity,
     RoomRole,
     VerticalEndpointSide,
 )
 
 DUNGEON_GENERATION_PROPOSAL_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
+DUNGEON_PUZZLE_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 
 
 class WorkflowModel(BaseModel):
@@ -57,6 +60,141 @@ GuideLocalRef = Annotated[
     Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_-]*$"),
 ]
 GuideContentText = Annotated[str, Field(min_length=1, max_length=2_000)]
+
+
+ExactDungeonComponentId = Annotated[str, Field(min_length=1, max_length=200)]
+
+
+class DungeonPuzzleRoomContext(WorkflowModel):
+    """Exact local geometry exposed to one post-layout puzzle task."""
+
+    room_id: ExactDungeonComponentId
+    floor_id: ExactDungeonComponentId
+    boundary: PolygonGeometry
+    capacity: RoomCapacity
+    connection_ids: tuple[ExactDungeonComponentId, ...] = Field(max_length=8)
+    feature_ids: tuple[ExactDungeonComponentId, ...] = Field(max_length=8)
+
+
+class DungeonPuzzleClueLocation(WorkflowModel):
+    """One server-approved exact location where puzzle evidence may appear."""
+
+    location_id: ExactDungeonComponentId
+    room_id: ExactDungeonComponentId
+    floor_id: ExactDungeonComponentId
+    purpose: GuideContentText
+
+
+class DungeonPuzzleObjectiveRelationship(WorkflowModel):
+    """Approved relationship between the puzzle slot and an exact objective."""
+
+    objective_id: ExactDungeonComponentId
+    objective_room_id: ExactDungeonComponentId
+    relationship: Literal["guards_access", "reveals_access", "supports_objective"]
+
+
+class DungeonPuzzleDependencyRelationship(WorkflowModel):
+    """Approved relationship between the puzzle slot and an exact gate dependency."""
+
+    gate_id: ExactDungeonComponentId
+    dependency_id: ExactDungeonComponentId
+    relationship: Literal["controls_gate", "reveals_dependency", "uses_dependency"]
+
+
+class DungeonPuzzleEnrichmentInput(WorkflowModel):
+    """Narrow Workbench payload for puzzle design after exact geometry exists."""
+
+    schema_version: Literal["1.0.0"]
+    package_id: ExactDungeonComponentId
+    room: DungeonPuzzleRoomContext
+    objective_relationship: DungeonPuzzleObjectiveRelationship | None = None
+    dependency_relationship: DungeonPuzzleDependencyRelationship | None = None
+    clue_locations: tuple[DungeonPuzzleClueLocation, ...] = Field(
+        default=(), max_length=6
+    )
+    tone: tuple[GuideContentText, ...] = Field(default=(), max_length=4)
+    constraints: tuple[GuideContentText, ...] = Field(default=(), max_length=8)
+
+    @model_validator(mode="after")
+    def require_unique_exact_context_ids(self) -> DungeonPuzzleEnrichmentInput:
+        for label, values in (
+            ("connection", self.room.connection_ids),
+            ("feature", self.room.feature_ids),
+            ("clue location", tuple(item.location_id for item in self.clue_locations)),
+        ):
+            if len(values) != len(set(values)):
+                raise ValueError(f"puzzle enrichment requires unique {label} IDs")
+        return self
+
+
+class DungeonPuzzleClue(WorkflowModel):
+    """One ordered observable clue and its intended inference."""
+
+    location_id: ExactDungeonComponentId
+    observation: GuideContentText
+    inference: GuideContentText
+
+
+class DungeonPuzzleAlternateHandling(WorkflowModel):
+    """One reasonable non-primary approach and deterministic adjudication guidance."""
+
+    approach: GuideContentText
+    adjudication: GuideContentText
+
+
+class DungeonPuzzleEnrichmentOutput(WorkflowModel):
+    """Puzzle-only proposal that cannot mutate package structure or arithmetic."""
+
+    schema_version: Literal["1.0.0"]
+    package_id: ExactDungeonComponentId
+    room_id: ExactDungeonComponentId
+    name: str = Field(min_length=1, max_length=200)
+    observable_elements: tuple[GuideContentText, ...] = Field(
+        min_length=2, max_length=6
+    )
+    solution_steps: tuple[GuideContentText, ...] = Field(min_length=1, max_length=6)
+    clue_path: tuple[DungeonPuzzleClue, ...] = Field(min_length=1, max_length=6)
+    hints: tuple[GuideContentText, ...] = Field(default=(), max_length=3)
+    alternate_handling: tuple[DungeonPuzzleAlternateHandling, ...] = Field(
+        min_length=1, max_length=3
+    )
+    failure_consequence: GuideContentText
+    reset_or_retry: GuideContentText | None = None
+
+    @model_validator(mode="after")
+    def require_unique_clue_locations(self) -> DungeonPuzzleEnrichmentOutput:
+        location_ids = [item.location_id for item in self.clue_path]
+        if len(location_ids) != len(set(location_ids)):
+            raise ValueError("puzzle enrichment clue path requires unique location IDs")
+        return self
+
+
+class DungeonPuzzleEnrichmentIssue(WorkflowModel):
+    """Body-free exact-ID mismatch that blocks accepting puzzle enrichment."""
+
+    code: Literal[
+        "puzzle_enrichment.package_mismatch",
+        "puzzle_enrichment.room_mismatch",
+        "puzzle_enrichment.clue_location_invalid",
+    ]
+    component_id: ExactDungeonComponentId
+    message: str = Field(min_length=1, max_length=300)
+
+
+class DungeonPuzzleEnrichmentValidationResult(WorkflowModel):
+    """Provider-free semantic validation of one puzzle-only proposal."""
+
+    schema_version: Literal["1.0.0"]
+    accepted_output: DungeonPuzzleEnrichmentOutput | None = None
+    issues: tuple[DungeonPuzzleEnrichmentIssue, ...] = ()
+
+    @model_validator(mode="after")
+    def require_acceptance_to_match_issues(
+        self,
+    ) -> DungeonPuzzleEnrichmentValidationResult:
+        if (self.accepted_output is not None) == bool(self.issues):
+            raise ValueError("accepted puzzle enrichment must match semantic issues")
+        return self
 
 
 class DungeonGuidePlayerChoice(WorkflowModel):
@@ -478,7 +616,7 @@ class DungeonProposalAbstention(WorkflowModel):
 
 
 class DungeonGenerationProposal(WorkflowModel):
-    """Workbench-owned wrapper around pure compact creative design intent."""
+    """Workbench-owned structural submission around compact creative intent."""
 
     # Keep the design/abstention XOR visible in the exact schema sent to the
     # gateway; the runtime validator remains authoritative fallback.
@@ -502,7 +640,6 @@ class DungeonGenerationProposal(WorkflowModel):
 
     proposal_version: Literal["1"]
     plan: DungeonPlan | None = None
-    guide_content: DungeonGuideContentPlan | None = None
     intent_summary: str | None = Field(default=None, min_length=1, max_length=500)
     requested_constraints: tuple[str, ...] = Field(default=(), max_length=16)
     citation_ids: tuple[str, ...] = Field(default=(), max_length=32)
@@ -539,8 +676,6 @@ class DungeonGenerationProposal(WorkflowModel):
             raise ValueError("proposal requires exactly one of plan or abstention")
         if self.abstention is not None and self.intent_summary is not None:
             raise ValueError("abstention cannot include an intent summary")
-        if self.abstention is not None and self.guide_content is not None:
-            raise ValueError("abstention cannot include runnable guide content")
         return self
 
 

@@ -8,9 +8,6 @@ from dm_dungeon import DungeonPlan, LayoutRequest, compile_dungeon_plan
 _REVIEW_PLAN_PATH = (
     Path(__file__).parents[1] / "evals/golden/dungeon_guide_quality_plan.json"
 )
-_REVIEW_CONTENT_PATH = (
-    Path(__file__).parents[1] / "evals/golden/dungeon_guide_quality_content.json"
-)
 
 
 def _synthetic_plan() -> dict[str, object]:
@@ -20,14 +17,11 @@ def _synthetic_plan() -> dict[str, object]:
 
 
 def synthetic_prompt_proposal() -> dict[str, object]:
-    """Return a disposable model-shaped proposal for faux-provider integration."""
+    """Return a disposable structural proposal for faux-provider integration."""
 
-    guide_content = json.loads(_REVIEW_CONTENT_PATH.read_text(encoding="utf-8"))
-    assert isinstance(guide_content, dict)
     return {
         "proposal_version": "1",
         "plan": _synthetic_plan(),
-        "guide_content": guide_content,
     }
 
 

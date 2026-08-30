@@ -347,8 +347,13 @@ def test_cli_prompt_uses_private_gateway_and_persists_package(
     assert len(preparation.list_assets(uuid.UUID(campaign_id), version.id)) == 9
     assert specification.dm_guide is not None
     assert specification.preparation_readiness is not None
-    assert specification.preparation_readiness.ready
-    assert evaluate_dungeon_guide_quality(specification).automated_pass
+    assert not specification.preparation_readiness.ready
+    assert {item.code for item in specification.preparation_readiness.diagnostics} == {
+        "dungeon_preparation.guide_content_missing"
+    }
+    assert not evaluate_dungeon_guide_quality(specification).automated_pass
+    assert specification.model_lineage[0].proposal is not None
+    assert "guide_content" not in specification.model_lineage[0].proposal.model_dump()
     assert version.generation_run_id is not None
     run = preparation.get_generation_run(
         uuid.UUID(campaign_id), version.generation_run_id
