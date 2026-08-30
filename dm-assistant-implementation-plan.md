@@ -1749,12 +1749,16 @@ its own effort, prompt/schema, 6,000-token cumulative/2,048-output budget, and o
 reserved repair. Accepted puzzle content is projected into that exact room and atomically
 published in a DM-only child version without changing package/map bytes or clearing
 unrelated blockers; failure leaves the parent unchanged with safe durable diagnostics.
-The provider-free exploration seam separately slices one exploration-role room to its
-local geometry, exact exploration slot, approved local feature affordances, pacing role,
-stakes, and constraints; validates exact output IDs; and deterministically projects
-observable cues, multiple approaches/consequences, and escalation/recovery without
-replacing accepted puzzle content or clearing unrelated blockers. Exploration provider
-dispatch/publication, other interactions, narrative, and live calls remain later slices.
+The exploration seam separately slices one exploration-role room to its local geometry,
+exact exploration slot, approved local feature affordances, pacing role, stakes, and
+constraints. One independently pinned faux-provider task now validates exact output IDs,
+uses its own profile/effort/prompt/schema and 6,000-token cumulative/2,048-output budget
+with one budget-reserved repair, retains accepted content/lineage, and atomically publishes
+a DM-only child. Deterministic projection adds observable cues, multiple approaches/
+consequences, and escalation/recovery without replacing accepted puzzle content, changing
+package/map bytes, or clearing unrelated blockers. Rejection leaves the puzzle parent
+current with body-free diagnostics. Other interactions, narrative, automatic staged
+orchestration, and live calls remain later slices.
 
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
   Its model-visible proposal contains room identity/purpose, critical path, bounded

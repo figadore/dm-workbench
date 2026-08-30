@@ -244,6 +244,25 @@ class DungeonExplorationEnrichmentValidationResult(WorkflowModel):
         return self
 
 
+class PromptedDungeonExplorationLineage(WorkflowModel):
+    """Accepted exploration content retained with its authorized dungeon version."""
+
+    model_run_id: UUID
+    context_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    model_run: ModelRunRecord
+    output: DungeonExplorationEnrichmentOutput
+
+    @model_validator(mode="after")
+    def require_successful_matching_output(
+        self,
+    ) -> PromptedDungeonExplorationLineage:
+        if self.model_run.status != "succeeded":
+            raise ValueError("exploration lineage requires a successful model run")
+        if self.model_run.output_payload != self.output.model_dump(mode="json"):
+            raise ValueError("exploration lineage output must match the model run")
+        return self
+
+
 class DungeonPuzzleClueApproval(WorkflowModel):
     """Server-approved exact location selected for one puzzle context."""
 
@@ -881,6 +900,7 @@ class DungeonStudioSpecification(WorkflowModel):
     preparation_readiness: DungeonPreparationReadiness | None = None
     model_lineage: tuple[PromptedDungeonModelLineage, ...] = ()
     puzzle_model_lineage: tuple[PromptedDungeonPuzzleLineage, ...] = ()
+    exploration_model_lineage: tuple[PromptedDungeonExplorationLineage, ...] = ()
 
 
 class CreateDungeonWorkflow(WorkflowModel):
@@ -996,6 +1016,45 @@ class CreatePromptedDungeonWorkflow(WorkflowModel):
     model_lineage: tuple[PromptedDungeonModelLineage, ...] = Field(min_length=1)
     tool_runs: tuple[ToolRunPin, ...] = ()
     source_prompt: str = Field(min_length=1, max_length=4_000)
+
+
+class PromptDungeonExplorationWorkflow(WorkflowModel):
+    """DM request for one exact-room exploration enrichment child version."""
+
+    campaign_id: UUID
+    artifact_id: UUID
+    parent_version_id: UUID
+    selection: DungeonExplorationContextSelection
+    created_by: str = Field(min_length=1, max_length=200)
+
+
+class CreatePromptedDungeonExplorationWorkflow(WorkflowModel):
+    """Accepted exploration result ready for deterministic child publication."""
+
+    campaign_id: UUID
+    artifact_id: UUID
+    parent_version_id: UUID
+    context: DungeonExplorationEnrichmentInput
+    validation: DungeonExplorationEnrichmentValidationResult
+    model_task_profile_id: UUID
+    model_lineage: PromptedDungeonExplorationLineage
+    tool_runs: tuple[ToolRunPin, ...] = ()
+    created_by: str = Field(min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def require_matching_accepted_lineage(
+        self,
+    ) -> CreatePromptedDungeonExplorationWorkflow:
+        if self.validation.accepted_output != self.model_lineage.output:
+            raise ValueError(
+                "exploration publication requires matching accepted lineage"
+            )
+        context_hash = canonical_json_sha256(self.context.model_dump(mode="json"))
+        if self.model_lineage.context_sha256 != context_hash:
+            raise ValueError(
+                "exploration publication requires matching context lineage"
+            )
+        return self
 
 
 class PromptDungeonPuzzleWorkflow(WorkflowModel):

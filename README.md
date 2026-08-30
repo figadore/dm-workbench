@@ -266,14 +266,17 @@ prompt/schema, 6,000-token cumulative/2,048-output budget, and one budget-reserv
 Accepted faux-provider content is projected into the matching room guide and atomically
 published as a DM-only child version without changing package/map bytes or clearing
 unrelated blockers; task failure leaves the parent unchanged. Exploration has a separate
-provider-free exact-ID contract: trusted code exposes only one exploration-role room's
-local geometry, exact slot, approved room-local feature affordances, pacing role, stakes,
-and constraints. Its validator rejects foreign IDs, and deterministic projection adds
-observable cues, multiple approaches/consequences, and escalation/recovery while
-preserving accepted puzzle content and unrelated blockers. Exploration provider dispatch
-and publication are not wired yet. Accepted content remains available to the DM in the
-artifact, while routine attempt reports contain only compact operational metadata and
-diagnostics; raw transport capture requires explicit local debug. Until the remaining
+exact-ID contract: trusted code exposes only one exploration-role room's local geometry,
+exact slot, approved room-local feature affordances, pacing role, stakes, and constraints.
+Its independently pinned tool call has its own effort/profile, prompt/schema, 6,000-token
+cumulative/2,048-output budget, and one budget-reserved repair. Validation rejects foreign
+IDs; accepted content and lineage are retained in a DM-only atomic child whose projection
+adds observable cues, multiple approaches/consequences, and escalation/recovery while
+preserving package/map hashes, accepted puzzle content/lineage, and unrelated blockers.
+Failure leaves the puzzle parent current with body-free diagnostics. Accepted content
+remains available to the DM in the artifact, while routine attempt reports contain only
+compact operational metadata and diagnostics; raw transport capture requires explicit
+local debug. Until the remaining
 enrichment kinds are wired, drafts truthfully remain preparation-blocked. Geometry,
 visibility, validation, rendering, persistence, and approval remain server-owned. Run
 inspection remains body-free:

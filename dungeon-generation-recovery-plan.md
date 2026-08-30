@@ -433,11 +433,13 @@ and deterministic room-guide projection are implemented. One independently pinne
 provider puzzle task has its own effort/profile, schema, token/output budget, and one
 budget-reserved repair. Accepted content is retained in a DM-only atomic child version;
 failed attempts keep the parent/map and persist only compact diagnostics on the existing
-run surface. Exploration separately has a provider-free exact-ID contract, trusted local-
-geometry/affordance context builder, semantic validator, and deterministic guide
-projection that preserves accepted puzzle content and unrelated blockers; provider
-dispatch/publication is not yet implemented. No live provider was contacted, and no
-redaction/logging subsystem or new persistence store was added.
+run surface. Exploration separately has an exact-ID contract, trusted local-geometry/affordance
+context builder, semantic validator, independently pinned faux-provider dispatch and one
+budget-reserved repair, accepted-content lineage, deterministic guide projection, and
+atomic DM-only child publication. Success preserves package/map hashes, accepted puzzle
+content/lineage, and unrelated blockers; failure leaves the puzzle parent current and
+persists only compact diagnostics. No live provider was contacted, and no redaction/
+logging subsystem or new persistence store was added.
 
 - Add independently bounded puzzle, exploration, other interaction, and narrative tasks
   over exact package IDs; merge accepted output deterministically and preserve the map on
