@@ -84,12 +84,17 @@ _PLAN_GUIDANCE = (
     "plan includes a gate dependency, encounter slot, puzzle-role room, feature, or objective, "
     "add one matching guide_content entry with a concise runnable situation, explicit "
     "adjudication, and two to four player action/outcome choices; include gate discovery and "
-    "puzzle solution in their typed fields. Use ordinary language for concrete objects and "
-    "operations. Give each interaction one consistent physical setup, trigger, effect, recovery, "
-    "and repeated-failure consequence when relevant. For traps, separate a visible trap warning from the concealed trigger and describe what detection and disable checks find or manipulate. Explain shared or cross-room state exactly, including whether an alarm has a responder, avoid undefined setting jargon, and do not "
-    "repeat map-visible connectivity or duplicate one interaction across entries. Make clues, "
-    "triggers, checks, and consequences actionable. Do not author edges, IDs, floors, coordinates, "
-    "dimensions, seeds, or numeric DCs."
+    "puzzle solution in their typed fields. Keep guide content concise and table-ready. For "
+    "puzzles and exploration scenes, state player-observable clues or affordances, stakes, and "
+    "consequences; support reasonable player approaches instead of prescribing one exact "
+    "physical manipulation unless the prompt calls for it. State only the mechanics needed to "
+    "adjudicate play, and include reset or retry behavior only when it matters. Do not invent "
+    "linked machinery or alarm systems merely to connect otherwise independent content. For "
+    "traps, separate a visible trap warning from the concealed trigger and describe what "
+    "detection and disable checks find or manipulate. Use plain language, do not repeat "
+    "map-visible connectivity, and do not duplicate one interaction across entries. Make clues, "
+    "triggers, checks, and consequences actionable. Do not author edges, IDs, floors, "
+    "coordinates, dimensions, seeds, or numeric DCs."
 )
 
 

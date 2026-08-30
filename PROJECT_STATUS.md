@@ -8,17 +8,21 @@
 
 - **Last updated:** 2026-09-08
 - **Branch:** `fast-track-prompt-to-dungeon`; P7-14d is at `a816d6a`, followed by the
-  committed P7-14e guide/canary slice described here.
-- **Current task:** **P7-14e — Prompt/guide integration and stress ladder.**
-- **Task state:** **WIP; the bounded sixth guide correction is implemented and a fresh
-  human-review packet is ready. The Annex now has one drawable shelf pivot/support/wire
-  sequence, while the Hall has one wall-mounted button/drum/bell/ink/lockout assembly and
-  a concealed threshold plate with concrete detect/disable methods. The frozen one-floor
-  `tier-a-live-canary-v1` prompt/seed and a non-production Codex-only advisory output-cap
-  acknowledgement are implemented with durable attempt/model lineage and tests. All
-  package, unit/eval, focused integration, Ruff, strict source-mypy, packet, and diff gates
-  pass. Tier B/C stress work and any actual live call remain blocked until Reese completes
-  the sixth worksheet and it explicitly meets the quality gate.**
+  committed P7-14e guide/canary slice at `5dc7d80`.
+- **Current task:** **P7-14f — Staged Tier A authoring and anti-overfitting evaluation.**
+- **Task state:** **WIP; the first anti-overfitting prompt cleanup is complete, while the
+  staged contract/orchestration split has not started. Review of the repeated Synthetic
+  Constructive Archive worksheets showed that P7-14e proved renderer, secrecy,
+  deterministic guide assembly, and contract expressiveness, but not model generation
+  quality. Active prompt guidance no longer requires every interaction to be a fully
+  diagrammed setup/trigger/effect/recovery chain, calls out cross-room alarms/responders,
+  or freezes the canary to a flooded archive. It now prioritizes observable clues and
+  affordances, meaningful stakes/consequences, reasonable approaches, and only the
+  mechanism/reset detail needed for that scene. The active code still asks one
+  `submit_dungeon_plan` call to choose progression and author all detailed guide content;
+  P7-14f must still split structural intent from exact-ID puzzle, exploration, interaction,
+  and narrative enrichment. The blank sixth worksheet is no longer a phase gate, and Tier
+  B/C are deferred until staged live Tier A works.**
 - **Schema head:** `0008_workbench_defaults`; no migration changed.
 - **Retention gate:** **not crossed.** There is no retained real-user artifact, external
   consumer, non-disposable deployment, or promised replay requirement; active V1 labels
@@ -28,12 +32,12 @@
   preparation-blocked; body content remains only in restricted disposable lineage and was
   not copied into fixtures. Provider-reported usage was 19,467 measured tokens across two
   requests against a 12,000 cumulative ceiling, and the initial/repair output reports
-  exceeded their requested caps. No provider call was made in this slice. Keep live use
-  paused until the sixth human review passes and provider-free Tier B/C gates pass. After
-  those gates, the documented non-production `openai-codex` exception permits at most one
-  stop-on-failure frozen canary with explicit acknowledgement: output-cap acceptance is
-  advisory, but the requested cap, 12,000 measured cumulative publication ceiling, repair
-  reservation, validation, and durable policy lineage remain enforced.
+  exceeded their requested caps. A later attempt consumed 3,971 input plus 11,115 output
+  tokens and failed safely before validation/publication. No provider call was made in
+  this direction-correction slice. Keep live use paused until the staged contracts pass
+  provider-free/faux gates and output-cap transport is fixed or replaced. The existing
+  acknowledged Codex canary exception remains documented operator risk, not a substitute
+  for hard transport enforcement.
 
 ## Active Direction
 
@@ -41,21 +45,57 @@ P7-13 feature/polish work remains paused. The active recovery is defined by
 [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md):
 
 ```text
-one submit_dungeon_plan V1 model call
+one structural submit_dungeon_plan V1 model call
     -> deterministic critical-path/branch/loop topology compiler
     -> independently checked TopologyCertificate
     -> certificate-driven constructive orthogonal layout
     -> independent geometry/secrecy validation
-    -> optional independently-failable guide enrichment
-    -> atomic draft publication
+    -> separately bounded exact-ID puzzle / exploration / interaction enrichments
+    -> observable room narrative over accepted mechanics
+    -> deterministic guide assembly and atomic draft publication
 ```
 
-P7-14d is committed at `a816d6a`. P7-14e now proves that the accepted model-shaped
-submission reaches exact guide construction, deterministic previews, and atomic draft
-publication through the CLI and browser adapters. Its model-facing contract is the
-proposal itself at the `submit_dungeon_plan` argument root, matching the recovery plan;
-there is no `SubmitDungeonPlanInput {proposal: ...}` envelope. Live provider calls and
-P7-13 output/print work remain paused.
+P7-14d is committed at `a816d6a`, and the one-call P7-14e characterization is committed at
+`5dc7d80`. The direct-root correction remains valid: structural proposal fields belong at
+the `submit_dungeon_plan` argument root with no redundant `proposal` envelope. P7-14f now
+implements the optional post-geometry enrichment boundary that the architecture already
+reserved. Live provider calls, Tier B/C, and P7-13 output/print work remain paused.
+
+## P7-14f Direction Correction
+
+- The current implementation is **not already separated**: optional `guide_content` is
+  still part of the same model-visible proposal as `DungeonPlan`, so one response must do
+  structural progression and detailed experience/guide authoring.
+- The structural call will retain only room identity/purpose, path/branch/loop/gate intent,
+  named objective, and bounded typed content slots/reserved demand. It will not author the
+  full puzzle, exploration challenge, trap/feature interaction, and room narrative.
+- Puzzle and exploration generation will be different Workbench task calls after exact
+  geometry exists. Each receives only the relevant package IDs, local geometry, approved
+  dependency/pacing facts, and its strict domain payload. Neither can modify topology,
+  visibility, arithmetic, or the other task's accepted proposal.
+- Narrative generation occurs after mechanics are accepted and receives their
+  player-observable projection, preventing read-aloud from silently redefining or leaking
+  the interaction.
+- Every enrichment has independent model/effort selection, prompt pin, token/time/tool
+  budgets, bounded repair, diagnostics, and durable lineage. Partial failure preserves the
+  valid map and records preparation-readiness blockers.
+- The Synthetic Constructive Archive packet remains useful for renderer/secrecy/assembly
+  regressions, but repeated hand-edits to it stop here. New prompt/schema rules require a
+  general invariant or reproduction in another independent case.
+- Removed archive-derived prompt prescriptions that required a physical
+  setup/trigger/effect/recovery/repeated-failure sequence and explicit alarm responders for
+  every relevant interaction. Current guidance asks for clear observable clues or
+  affordances, stakes, consequences, reasonable approaches, and reset/retry information
+  only when useful; it explicitly discourages invented linked machinery and alarm systems.
+- Evolved the disposable pre-retention Tier A canary in place from a flooded archive with
+  the **Lantern Ledger** to an abandoned mountain shrine with the **Windglass Seed**. It
+  retains the same canary ID, seed, structural demands, trap/puzzle/exploration coverage,
+  and budget policy, but no longer demands a three-step mechanism, diagrammable machinery,
+  repeated-failure behavior, or a no-responder alarm state.
+- Model quality will be evaluated over at least three materially different synthetic Tier
+  A cases plus a staged live canary, using blinded ratings and measured prompt/model/effort,
+  validity, repair, latency, and token comparisons. Tier B/C test scalability and no
+  longer block the first usable live Tier A artifact.
 
 ## P7-14e Work Completed So Far
 
@@ -380,8 +420,10 @@ P7-13 output/print work remain paused.
 ### Frozen Tier A canary and narrow manual budget policy
 
 - Added committed `tier-a-live-canary-v1`: one exact synthetic one-floor/five-room prompt,
-  named **Lantern Ledger** objective, Tier A branch/gate/secret-loop/content demands, and
-  fixed seed `714000001`. A hash regression freezes the prompt text.
+  Tier A branch/gate/secret-loop/content demands, and fixed seed `714000001`. Under the
+  pre-retention policy, the current prompt now uses an abandoned mountain shrine and named
+  **Windglass Seed** objective instead of the archive-derived flooded branch and Lantern
+  Ledger; its updated text remains hash-frozen.
 - Added `dm dungeon canary --provider ... --model ...`. The command always supplies that
   exact prompt/seed, defaults to fast effort, marks the durable attempt surface with the
   canary ID, and tells the operator to stop on the first result.
@@ -451,7 +493,10 @@ P7-13 output/print work remain paused.
 
 ## Files Changed
 
-No migration changed. Current changes are in:
+No migration changed. The committed P7-14e slice touched the files below. The current
+P7-14f working tree includes the four direction documents plus prompt/canary cleanup and
+focused regressions in `src/dm_assistant/orchestration/dungeons/{prompting,canary}.py` and
+`tests/unit/test_{prompted_dungeon_workflow,dungeon_canary}.py`:
 
 - `AGENTS.md`
 - `Makefile`
@@ -654,6 +699,17 @@ No migration changed. Current changes are in:
 - `uv run pytest -q packages/dungeon-engine/tests` -> **139 passed**.
 - Focused Ruff format/lint and strict mypy over the changed source modules -> passed;
   `git diff --check` -> passed.
+- P7-14f direction correction initially changed documentation only; `git diff --check`
+  passed and all four modified Markdown files had balanced code fences.
+- Prompt anti-overfitting tests were added first and failed on the archive-derived
+  guidance/canary. After cleanup,
+  `uv run pytest -q tests/unit/test_prompted_dungeon_workflow.py
+  tests/unit/test_dungeon_canary.py` -> **14 passed**.
+- Focused Ruff lint and format checks over the two changed source and two changed test
+  modules -> passed.
+- `uv run pytest -q tests/unit/test_dungeon_canary.py tests/unit/test_cli.py
+  tests/unit/test_prompted_dungeon_workflow.py` -> **35 passed**; strict mypy over the two
+  changed source modules passed. Final `git diff --check` and Markdown fence checks passed.
 
 Package and root tests must continue to run as separate pytest invocations: combining
 both test roots in one process causes pytest's existing duplicate module basenames to
@@ -661,34 +717,31 @@ produce an import-file-mismatch collection error.
 
 ## Working Tree
 
-P7-14d is committed at `a816d6a`; the P7-14e guide/canary slice is committed after it.
-The generated review directories remain ignored. The filled fifth packet is preserved at
-`generated/dungeon-guide-review.before-diagrammable-mechanisms/`; the current packet has
-a blank sixth worksheet. No migration, real campaign content, provider response,
-credential, canonical campaign write, preparation approval, or live provider call was
-added. The local historical live failure remains disposable and was not copied into
-fixtures. The alpha V1 trap schema evolved in place before the retention gate; missing
-concrete trap methods now block readiness rather than invalidating geometry. Atomic draft
-publication and lifecycle behavior remain unchanged. The committed canary and faux
-integration contain synthetic content only. Quality worksheets are evidence, not
-preparation approval or canon.
+P7-14d is committed at `a816d6a`; P7-14e is committed at `5dc7d80`. This handoff modifies
+the architecture/recovery/implementation/status direction plus active prompt guidance,
+the disposable pre-retention canary prompt, and focused regressions. It does not yet split
+the one-call runtime contract or orchestration. No migration, generated review packet,
+provider response, credential, canonical campaign write, preparation approval, or live
+provider call changed. The generated review directories remain ignored. The filled fifth
+packet remains preserved at
+`generated/dungeon-guide-review.before-diagrammable-mechanisms/`; the blank sixth packet
+may remain as an optional visual regression aid but is no longer a phase gate. The current
+runtime is still the coupled one-call path and must not be described as staged until
+P7-14f implementation/tests pass.
 
-Commit subject:
+Suggested commit subject:
 
-`P7-14e add reviewed guides and bounded Tier A canary`
+`P7-14f remove archive-overfit prompt guidance`
 
 ## Single Next Recommended Task
 
-**Complete the sixth human DM quality review; only an explicit pass unlocks provider-free
-Tier B/C stress work.**
+**Implement the first P7-14f contract slice: make `submit_dungeon_plan` structural-only
+without yet adding provider calls.**
 
-**First concrete action:** Reese should open
-`generated/dungeon-guide-review/dm-guide.md`, `dm-map.png`, and `player-map.png`, then
-fill every decision/rating plus the overall decision in
-`generated/dungeon-guide-review/review-worksheet.md`. Check especially whether the shelf
-pivot/reset, wall panel, concealed threshold plate, F1 interaction, and DC 13 methods are
-now physically understandable without DM invention. If and only if the worksheet meets
-the quality gate, preserve it and implement the provider-free Tier B vertical-composition
-characterization before Tier C dense supported-graph cases. Run no live provider first;
-after Tier B/C and faux gates pass, use the frozen acknowledged canary for at most one
-stop-on-failure non-production run.
+**First concrete action:** add a failing model-visible schema regression proving the
+structural `submit_dungeon_plan` root has no `guide_content`, while retaining room
+progression, named objective, typed content slots, and conservative demand. Then split the
+existing Workbench guide contracts into the first exact-ID puzzle-enrichment input/output
+without changing the pure package boundary or publication lifecycle. Exercise this slice
+with provider-free/faux tests; do not run live, start Tier B/C, or delete the current
+archive renderer regression.

@@ -544,14 +544,14 @@ The alpha reset replaces model-authored arbitrary topology and place-then-route 
 DM request + GenerationContextEnvelope<DungeonGenerationContext> + server seed
     |
     v
-one model tool call: submit_dungeon_plan(DungeonGenerationProposal V1 root)
+one structural model tool call: submit_dungeon_plan(structural proposal V1 root)
     |
     v
 pure topology compiler
     |-- critical path -> connected backbone
     |-- branches -> attached paths
     |-- loops -> supported series/parallel bypasses
-    |-- gates/secrets/content -> typed annotations and demand
+    |-- gates/secrets/content slots -> typed annotations and reserved demand
     `-- TopologyCertificate V1
     |
     v
@@ -563,9 +563,17 @@ constructive orthogonal layout
     v
 independent topology/geometry/secrecy validation
     |
-    +--> deterministic SVG / PNG
-    +--> optional later exports
-    `--> atomic Workbench draft publication
+    v
+separately bounded Workbench enrichment tasks over exact package IDs
+    |-- puzzle design
+    |-- exploration challenge design
+    |-- other requested interaction kinds
+    `-- player-observable room narrative after mechanics are accepted
+    |
+    v
+deterministic guide assembly + SVG / PNG + readiness validation
+    |
+    `--> atomic Workbench draft publication; failed enrichment leaves explicit blockers
 ```
 
 The normative staged design and stress ladder are in [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md). P7-13 output/print work is paused until its Tier A gate passes.
@@ -578,7 +586,11 @@ There are no retained user dungeons or external consumers. The alpha therefore c
 
 **Retention-gate version policy:** until `PROJECT_STATUS.md` and this architecture explicitly declare the retention gate crossed, active V1 schema, prompt, compiler, generator, renderer, exporter, fixture, and review-packet labels are updated in place. Synthetic fixtures, ignored review packets, disposable alpha database rows, and provider canaries do not justify a version bump or compatibility reader. The gate must be declared no later than the first intentionally retained real-user artifact/campaign, external consumer, non-disposable deployment, or promised replay requirement. At that point the retained pins are frozen and reader/migration/rollback policy must be documented before incompatible changes. After the gate, a version changes only when retained data or consumers need a distinguishable implementation for correct reading, replay, migration, or rollback—not merely because code changed.
 
-Geometry-affecting features, exact markers, door mechanics, and encounter-space demand belong in `DungeonPackage`; prose-heavy guide content remains in the Workbench and references exact IDs. Before exact IDs exist, runnable prose uses a separate versioned Workbench-owned `DungeonGuideContentPlan` keyed only to `DungeonPlan` local refs. It requires one bounded sensory/read-aloud narrative per plan room; its discriminated gate-dependency, encounter, puzzle, feature, and objective entries each require a bounded situation, explicit adjudication guidance, and two to four player choice/outcome pairs. The Workbench validates those refs against the accepted plan and projects them onto exact package IDs only after geometry succeeds. The rendered guide assigns entry-first sequential presentation numbers independent of stable package/map IDs, then emits concise valid Markdown/HTML with one useful read-aloud block and locally grouped actionable door state, checks, clues, scene pressure, triggers, consequences, features, puzzles, and objectives. It omits ordinary map-visible connectivity plus separate sensory/purpose repetition; read-aloud is limited to player-observable information, while hidden operation stays in DM adjudication. Setting-specific terms must resolve to concrete player-visible objects and operations. Each interaction uses one noncontradictory physical sequence with setup, trigger, effect, recovery, and repeated-failure outcome where relevant; cross-room state and whether an alarm has a responder must be explicit. A trap separately describes its observable warning, actual trigger, detection method, disable operation, and effect; deterministic policy still owns the numeric difficulties. Guide content never enters topology, room-demand, layout, or rendering arithmetic. Missing or invalid guide content may block preparation readiness without invalidating proven geometry or causing deterministic regeneration. On success, deterministic preparation renders and validates every required asset, stages blobs, and atomically publishes the artifact/version/assets/run. No model can approve the result or make it canon.
+Geometry-affecting features, exact markers, door mechanics, content slots, and encounter-space demand belong in `DungeonPackage`; prose-heavy guide content remains in the Workbench and references exact IDs. The structural submission reserves only the requested content kind and spatial demand. It does not author complete puzzle mechanics, exploration scenes, traps, features, objectives, and room narratives in the same call that chooses room progression.
+
+After exact IDs and geometry exist, the Workbench dispatches separately bounded, task-specific enrichment calls only for requested content slots. A puzzle task receives the local room geometry, its approved gate/objective relationship, nearby approved clue locations, tone, and puzzle-specific constraints; it returns only a typed solution model, clue path, hint/alternate handling, failure/reset behavior, and player-observable elements. An exploration task receives its local geometry, approved environmental affordances, stakes, pacing role, and constraints; it returns only actionable approaches, consequences, escalation/recovery, and observable cues. Other interaction kinds use equally narrow contracts, and a later narrative task receives accepted mechanics plus their player-observable projection rather than inventing or changing those mechanics. These payloads use the common generation-context envelope but remain strict domain contexts; they never become one universal optional-field guide context.
+
+The Workbench validates every enrichment against exact package IDs and the accepted structural slots. No enrichment may change topology, geometry, visibility, deterministic DCs, reserved demand, or another task's accepted content. The rendered guide assigns entry-first sequential presentation numbers independent of stable package/map IDs, then emits concise valid Markdown/HTML with one useful read-aloud block and locally grouped actionable door state, checks, clues, scene pressure, triggers, consequences, features, puzzles, and objectives. It omits ordinary map-visible connectivity plus separate sensory/purpose repetition; read-aloud is limited to player-observable information, while hidden operation stays in DM adjudication. Missing, invalid, or subjectively rejected enrichment blocks preparation readiness without invalidating proven geometry or asking the structural model to try another topology. On success, deterministic preparation renders and validates every required asset, stages blobs, and atomically publishes the artifact/version/assets/run. No model can approve the result or make it canon.
 
 ### Dungeon Specification Layers
 
@@ -626,17 +638,19 @@ Independent topology, raster geometry, pathfinding, capacity, and secrecy valida
 
 ### Dungeon Primitives and Model Tools
 
-Alpha V1 exposes exactly one structured submission:
+Alpha V1 exposes exactly one **structural** submission tool:
 
 ```text
-submit_dungeon_plan(proposal_version, plan, guide_content?, ...)
+submit_dungeon_plan(proposal_version, plan, ...)
 ```
 
-Those fields are one `DungeonGenerationProposal` at the tool-argument root; there is no nested `proposal` property. The tool validates that proposal, invokes pure `DungeonPlan` topology compilation/certification and constructive preflight, and returns a compact accepted plan hash, graph counts, cycle rank, certificate version, and warnings—or at most eight stable code/path/ref/repair diagnostics. The accepted arguments are the model result; no duplicate final text is requested. The tool neither persists nor approves anything.
+Those fields are one structural `DungeonGenerationProposal` at the tool-argument root; there is no nested `proposal` property and no prose-heavy `guide_content` payload. The tool validates that proposal, invokes pure `DungeonPlan` topology compilation/certification and constructive preflight, and returns a compact accepted plan hash, graph counts, cycle rank, certificate version, content-slot summary, and warnings—or at most eight stable code/path/ref/repair diagnostics. The accepted arguments are the structural model result; no duplicate final text is requested. The tool neither persists nor approves anything.
 
-The model declares room purposes plus critical path, branches, bounded loops, secrets, gates, and content intent. The root Workbench proposal may also carry `DungeonGuideContentPlan`; the pure compiler receives only `DungeonPlan`. After geometry succeeds, Workbench semantic validation resolves guide room/gate/encounter/feature/objective refs, projects accepted content onto exact map/package IDs, and records missing or mismatched entries as preparation-readiness blockers without rerunning structural generation. It does not author the exact graph edge aggregate, coordinates, dimensions, ports, IDs, visibility layers, or arithmetic. Code computes a realizable graph and exact layout. One schema-invalid plan may receive one bounded repair. A valid structural draft with missing optional prose remains a readiness-blocked draft; it is not regenerated randomly.
+The structural model declares room purposes plus critical path, branches, bounded loops, secrets, gates, a named objective, and bounded content slots/demand. It does not design the complete puzzle, exploration challenge, trap interaction, feature interaction, and room prose concurrently. Code computes the realizable graph and exact layout. One schema-invalid structural plan may receive one bounded repair. Deterministic topology or geometry bugs never trigger another model topology.
 
-Targeted editing/regeneration remains a later authenticated DM operation. Optional guide enrichment occurs only after exact geometry exists, references server IDs, and may fail independently. Initial structural generation remains one model call plus at most one schema repair.
+After geometry succeeds, Workbench-owned task-specific tools accept typed puzzle, exploration, interaction, and narrative proposals keyed to exact server IDs. Each enrichment call has its own narrow context, schema, effort/profile pin, output and cumulative budget, repair policy, diagnostics, and durable lineage. A call may cover one homogeneous bounded responsibility, such as all short room narratives, but it must not combine structural planning with puzzle and exploration authoring. Accepted enrichment is merged deterministically; a failed or missing task leaves a structurally valid readiness-blocked draft and cannot erase another accepted task.
+
+Targeted editing/regeneration remains a later authenticated DM operation. Initial structural generation remains one model call plus at most one schema repair; enrichment calls are independently skippable/failable and occur only after exact geometry exists.
 
 ### Deterministic Dungeon Validation
 

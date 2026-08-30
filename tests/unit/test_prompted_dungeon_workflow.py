@@ -205,13 +205,17 @@ def test_prompt_explains_tier_a_plan_constraints() -> None:
     assert "room_contents[].objective" in message
     assert "add one matching guide_content entry" in message
     assert "two to four player action/outcome choices" in message
-    assert "Use ordinary language for concrete objects and operations" in message
+    assert "Keep guide content concise and table-ready" in message
+    assert "player-observable clues or affordances" in message
+    assert "support reasonable player approaches" in message
+    assert "reset or retry behavior only when it matters" in message
+    assert "Do not invent linked machinery or alarm systems" in message
     assert "read-aloud to what players can observe" in message
-    assert "physical setup, trigger, effect, recovery" in message
     assert "visible trap warning from the concealed trigger" in message
     assert "describe what detection and disable checks find or manipulate" in message
-    assert "whether an alarm has a responder" in message
     assert "do not repeat map-visible connectivity" in message
+    assert "physical setup, trigger, effect, recovery" not in message
+    assert "whether an alarm has a responder" not in message
 
 
 def test_submits_one_compact_tool_call_without_a_second_completion() -> None:

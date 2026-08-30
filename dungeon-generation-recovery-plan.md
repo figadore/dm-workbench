@@ -9,16 +9,20 @@
 
 The next milestone is not “support every dungeon primitive.” It is:
 
-> One bounded model submission reliably becomes a coherent, connected, playable,
-> secrecy-clean Tier A dungeon through deterministic construction.
+> One bounded structural model submission plus separately bounded, task-specific
+> enrichments reliably become a coherent, connected, playable, secrecy-clean Tier A
+> dungeon through deterministic construction.
 
 Keep the pure `dm_dungeon` package, Workbench/preparation boundary, private model
 transport, deterministic validation/rendering, and atomic publication. Replace the
 model-authored arbitrary graph and place-then-route layout strategy.
 
 Pause asset-catalog polish, print re-enable, additional mechanics, campaign grounding,
-and live-provider suite execution until Tier A passes provider-free and faux-provider
-gates. Do not compensate with more retries or a larger model.
+and broad live-provider suite execution until Tier A passes provider-free and
+faux-provider gates. Do not compensate for a coupled or defective workflow with more
+retries or an unmeasured larger model. Controlled model/effort comparisons are part of
+the staged Tier A quality evaluation after structural and enrichment responsibilities are
+separated.
 
 ## 2. One alpha V1
 
@@ -69,19 +73,19 @@ block the gate.
 ## 4. End-to-end flow
 
 ```text
-DM prompt + authorized narrow context + server seed
+DM prompt + authorized narrow structural context + server seed
     |
     v
-one model tool call: submit_dungeon_plan(proposal fields at root, including plan)
+one structural model tool call: submit_dungeon_plan(proposal fields at root)
     |
     v
-validate the small creative contract
+validate the small progression/content-slot contract
     |
     v
 deterministic topology compiler
     |-- build graph from critical path / branches / loop grammar
     |-- assign IDs and connection semantics
-    |-- place gates, keys, secrets, traps, features, encounter intent
+    |-- place gates, keys, secrets, and reserved content demand
     `-- emit TopologyCertificate
     |
     v
@@ -95,25 +99,36 @@ constructive orthogonal layout
 independent topology + geometry + secrecy validation
     |
     v
-optional independently-failable DM-guide enrichment
+independently bounded enrichment calls over exact package IDs
+    |-- puzzle task with puzzle-only context and contract
+    |-- exploration task with exploration-only context and contract
+    |-- other requested interaction tasks
+    `-- observable room narratives after mechanics are accepted
+    |
+    v
+deterministic guide assembly and readiness validation
     |
     v
 atomic preview/assets/specification publication as a draft
 ```
 
-The accepted tool arguments are the model result. The model is not asked for a second
-text answer. A schema-invalid call may receive at most one bounded repair with the
-original request and safe diagnostics. A structurally accepted plan is not sent back to
-the model for topology or geometry repair: code owns those steps.
+The accepted structural tool arguments are the first model result. The model is not asked
+for a duplicate text answer. A schema-invalid structural call may receive at most one
+bounded repair with the original request and safe diagnostics. A structurally accepted
+plan is not sent back to the model for topology or geometry repair: code owns those
+steps. Each enrichment has a separate typed task context, schema, budget, repair policy,
+and lineage; it cannot alter topology or another accepted enrichment and may fail with a
+truthful readiness blocker while preserving the valid map.
 
 ## 5. Model tool contract
 
-The model expresses narrative identity and progression, not an arbitrary edge list. The
+The structural model expresses narrative identity, progression, and bounded content slots,
+not an arbitrary edge list or complete guide. The structural
 `DungeonGenerationProposal` fields are the `submit_dungeon_plan` tool arguments directly;
-there is no additional `proposal` envelope around them. Schema diagnostics and the one
-bounded repair therefore operate on `/plan`, `/guide_content`, and other actual root paths
-and must never tell the model to delete a valid proposal merely because an adapter added
-an avoidable wrapper.
+there is no additional `proposal` envelope and no prose-heavy `guide_content` field around
+or beside them. Structural schema diagnostics and the one bounded repair therefore
+operate on `/plan` and other actual structural root paths and must never tell the model to
+delete a valid proposal merely because an adapter added an avoidable wrapper.
 
 Illustrative input:
 
@@ -304,20 +319,28 @@ story is interesting. Coherence is handled in layers:
 - features reserve typed spatial demand and receive deterministic anchors;
 - the guide is keyed to exact server IDs after geometry exists, but uses separate entry-first sequential presentation numbers;
 - every room receives a concise read-aloud block and locally grouped actionable door state, checks, clues, scene pressure, triggers, consequences, features, puzzles, and objectives; ordinary map-visible connectivity and separate sensory/purpose repetition are omitted;
-- read-aloud contains only player-observable information; setting terms resolve to concrete player-visible objects and operations; every interaction has one physical setup, trigger, effect, recovery, and repeated-failure result where relevant; traps distinguish visible warning, actual trigger, detection method, disable operation, and effect while code owns numeric difficulty; and any cross-room mechanism states its exact shared state plus whether an alarm has a responder;
+- read-aloud contains only player-observable information; puzzles and exploration scenes expose understandable clues or affordances, meaningful stakes/consequences, and room for reasonable approaches; interaction prose includes only the mechanism and reset/retry details needed to adjudicate that scene rather than defaulting to linked devices, alarms, or one prescribed manipulation; traps distinguish visible warning, actual trigger, detection method, disable operation, and effect while code owns numeric difficulty;
 - fixed-prompt DM rubrics measure progression, variety, clue logic, and prep usefulness.
 
-Optional guide enrichment is separate from structural generation. Its failure leaves a
-valid draft with explicit readiness blockers rather than deleting the map.
+Guide enrichment is separate from structural generation and separated again by creative
+responsibility. Puzzle and exploration design never share the structural call or each
+other's broad context. Their failure leaves a valid draft with explicit readiness blockers
+rather than deleting the map.
 
-The fixed dungeon-guide review packet is the bridge between structural correctness and
-actual DM usefulness. It freezes one synthetic prompt, plan, seed, exact guide, DM map,
-and player map so human review can identify whether a technically valid draft is readable,
-secret-safe, coherent, and runnable without inventing missing material at the table.
-Worksheet findings become bounded code/content corrections and objective regression tests;
-the packet itself is neither user campaign content nor a long-term publication format.
-Passing it justifies proceeding to Tier B/C stress and later live-model canaries—it does
-not claim universal dungeon quality.
+The fixed dungeon-guide review packet remains a renderer, secrecy, deterministic assembly,
+and contract-expressiveness regression. It is no longer the quality oracle: repeated
+human rewrites of one synthetic archive prove only that the contract can represent
+hand-authored content and risk overfitting prompts and fields to one mechanism. Do not add
+a prompt rule or schema field solely because that fixture needed it unless the rule is a
+general invariant or reproduces in another independent case.
+
+Actual generation quality is measured over at least three materially different synthetic
+Tier A settings/interaction styles and at least one staged live Tier A artifact. Blinded
+human review compares prompt variants, supported effort levels, and model sizes for clue
+logic, player agency, puzzle comprehensibility, exploration quality, prep usefulness,
+latency, token use, schema validity, and repair rate. A larger model or deeper effort is
+selected only when those measurements justify it. Tier B/C test scalability and remain
+deferred until this staged Tier A path produces a usable live artifact.
 
 ## 9. Stress ladder
 
@@ -392,26 +415,31 @@ proof-oriented diagnostics or recommend another floor; never exhaust random retr
 - Keep optional seeded compaction separate from the guaranteed baseline.
 - Require 100% success and zero exceptions across generated Tier A plans/seeds.
 
-### R4 — Prompt and guide integration
+### R4 — Structural prompt integration
 
-- Expose only `submit_dungeon_plan`, with direct proposal fields at the tool root and no
-  redundant proposal wrapper.
-- Remove arbitrary edge authoring and topology repair from the model prompt.
-- Build the exact guide after package generation; optional enrichment fails
-  independently.
+- Expose only structural `submit_dungeon_plan`, with direct proposal fields at the tool
+  root, no redundant proposal wrapper, and no prose-heavy guide payload.
+- Remove arbitrary edge authoring, detailed puzzle/exploration authoring, and topology
+  repair from the structural model prompt.
 - Characterize schema failures against the actual model-visible root, preserve all valid
   prior content through the one repair, and fail before publication on measured output or
   cumulative token overage.
-- Exercise CLI/web/faux-provider atomic publication.
+- Exercise CLI/web/faux-provider structural publication with truthful readiness blockers.
 
-### R5 — Quality and stress gate
+### R5 — Task-specific enrichment and Tier A quality gate
 
-- Add fixed prompt semantic/DM rubrics and the Tier B/C stress ladder.
-- Resume opt-in live canaries only after provider-free and faux gates pass and the human
-  review worksheet records explicit pass/fail decisions for every dimension. Ordinary
-  rollout also requires evidence that requested output ceilings bound reported usage;
-  the sole exception is one frozen, explicitly acknowledged, non-production Tier A
-  canary that retains the measured cumulative ceiling and durable override lineage.
+- Add independently bounded puzzle, exploration, other interaction, and narrative tasks
+  over exact package IDs; merge accepted output deterministically and preserve the map on
+  partial failure.
+- Replace single-archive prompt iteration with multi-case semantic/DM rubrics and blinded
+  prompt/model/effort comparisons. Keep the archive packet only as a technical regression.
+- Resolve hard provider output-cap behavior, then run the frozen staged Tier A canary after
+  provider-free and faux gates pass. Ordinary rollout requires evidence that requested
+  output ceilings bound reported usage; the sole exception remains one frozen, explicitly
+  acknowledged, non-production Tier A canary that retains the measured cumulative ceiling
+  and durable override lineage.
+- Defer Tier B/C until the staged live Tier A path produces a usable preparation-ready
+  artifact and the bounded Tier A evaluation set is dependable.
 - Resume asset/print polish only after Tier A is dependable.
 
 ## 11. Stop/handoff rule

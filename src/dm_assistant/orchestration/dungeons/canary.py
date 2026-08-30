@@ -13,15 +13,17 @@ from dm_assistant.orchestration.modeling import (
 DUNGEON_TIER_A_CANARY_ID = "tier-a-live-canary-v1"
 DUNGEON_TIER_A_CANARY_SEED = 714_000_001
 DUNGEON_TIER_A_CANARY_PROMPT = (
-    "Create a one-floor archive dungeon with exactly five rooms. The critical path "
-    "must begin at one entrance and end at the Lantern Ledger, which must be the named "
-    "final objective. Include one optional flooded branch containing a key for one "
-    "locked critical-path door, plus one optional secret loop from that branch to the "
-    "objective room. Include one runnable exploration challenge in the branch, one "
-    "moderate room trap, and one concrete three-step puzzle in a critical-path room. "
-    "Make every guide interaction physically diagrammable, distinguish visible trap "
-    "warnings from concealed triggers, and state exact recovery and repeated-failure "
-    "outcomes. No creature or alarm responder is present."
+    "Create a one-floor abandoned mountain shrine dungeon with exactly five rooms. The "
+    "critical path must begin at one entrance and end at the Windglass Seed, which must "
+    "be the named final objective. Include one optional windswept branch containing a "
+    "key for one locked critical-path door, plus one optional secret loop from that "
+    "branch to the objective room. Include one runnable exploration challenge in the "
+    "branch, one moderate room trap, and one concise puzzle in a critical-path room. "
+    "Give the puzzle and exploration challenge clear player-observable clues and "
+    "affordances, meaningful stakes and consequences, and reasonable approaches. Include "
+    "reset or retry details only where useful, and keep hidden information out of "
+    "read-aloud. Do not default to elaborate linked machinery, alarm systems, or one "
+    "prescribed physical manipulation unless the premise calls for it."
 )
 
 ADVISORY_OUTPUT_CAP_POLICY = ADVISORY_STRUCTURED_OUTPUT_CAP_POLICY

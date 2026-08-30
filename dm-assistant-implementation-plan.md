@@ -1716,16 +1716,106 @@ and resumable slices are in
   presentation numbers and concise valid Markdown/HTML with useful read-aloud text plus
   locally grouped actionable state, checks, clues, triggers, and consequences. Omit
   ordinary map-visible connectivity and separate sensory/purpose repetition; limit
-  read-aloud to observable information, resolve setting terms to concrete objects, and
-  give each interaction one causal physical sequence (setup, trigger, effect, recovery,
-  and repeated-failure result). Trap intent separately states its visible warning or
-  clue, actual trigger, detection method, disable operation, and effect while code owns
-  numeric difficulties. Cross-room state and alarm responders or their explicit
-  absence must be stated exactly. Optional enrichment fails independently and cannot
-  erase a valid draft.
-- Pass CLI/web/faux publication, fixed-prompt DM quality rubrics, then Tier B multi-floor
-  and Tier C dense hub/nested-loop/port/interior-demand stress cases before resuming live
-  canaries or P7-13 polish.
+  read-aloud to observable information. Puzzle and exploration guidance emphasizes clear
+  player-observable clues and affordances, meaningful stakes/consequences, and reasonable
+  approaches rather than requiring one prescribed physical manipulation. Describe only
+  the mechanism and reset/retry behavior needed to adjudicate the particular scene; do
+  not default unrelated content to linked machinery or alarm systems. Trap intent still
+  distinguishes warning, trigger, detection, disable operation, and effect while code
+  owns numeric difficulties. Optional enrichment fails independently and cannot erase a
+  valid draft.
+- Pass CLI/web/faux structural publication and use the fixed review packet to characterize
+  renderer, secrecy, guide assembly, and contract expressiveness. Do not treat repeated
+  rewrites or a passing worksheet for one synthetic archive as evidence that a model can
+  generate fun, coherent content. The committed one-call guide path is characterization
+  for the staged split below, not the final live Tier A authoring workflow.
+
+#### P7-14f — Staged Tier A authoring and anti-overfitting evaluation
+
+The one-call experiment has now supplied the measurement anticipated by P7-13d.1: asking
+one model submission to choose progression while also writing every room narrative,
+puzzle, exploration challenge, trap/feature interaction, and objective couples distinct
+creative tasks and encourages verbose contract compliance rather than coherent play.
+Implement the architecture's independently failable enrichment boundary before expanding
+the topology stress ladder.
+
+- Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
+  Its model-visible proposal contains room identity/purpose, critical path, bounded
+  branches/loop, gate/dependency placement, named objective, and typed content slots with
+  conservative spatial demand. Remove prose-heavy `guide_content` from this structural
+  root in place under the pre-retention V1 policy. The structural model does not write a
+  complete puzzle, exploration encounter, trap/feature interaction, and room prose in the
+  same response.
+- Compile, certify, lay out, and independently validate that structural result before any
+  enrichment. Deterministic code owns exact topology, IDs, geometry, visibility, room
+  demand, map references, DC policy, rendering, and publication. An enrichment failure
+  must never request another random topology or erase a valid map.
+- Add separate Workbench-owned typed enrichment tasks over exact package IDs. At minimum,
+  puzzle generation and exploration-challenge generation are different model calls with
+  different task profiles and strict domain contexts:
+  - a puzzle call receives only the relevant room geometry, approved dependency/objective
+    relationship, nearby approved clue locations, tone, and puzzle constraints, and
+    proposes a solution model, clue path, bounded hints/alternate handling, failure/reset
+    behavior, and player-observable elements;
+  - an exploration call receives only its local geometry, approved environmental
+    affordances, pacing role, stakes, and constraints, and proposes observable cues,
+    multiple approaches, consequences, and escalation/recovery;
+  - trap, feature, objective, and narrative work use similarly narrow typed tasks when
+    model authorship is required. A homogeneous narrative task may cover the bounded room
+    set only after accepted mechanics exist; it cannot invent or change those mechanics.
+- Give every enrichment task its own prompt/instruction pin, model/effort selection,
+  output and cumulative token budget, bounded repair policy, diagnostics, and durable
+  lineage. Reuse only the small common scope/provenance/visibility/citation/hash envelope;
+  do not create a universal optional-field guide context. Enrichment proposals cannot
+  alter topology, geometry, another task's accepted content, deterministic arithmetic,
+  preparation approval, or canon.
+- Merge accepted enrichments deterministically into the exact room-centric guide. Missing,
+  invalid, or human-rejected content leaves explicit preparation-readiness blockers while
+  preserving the structurally valid draft and secrecy-clean maps. Subjective evaluation
+  remains evidence, not a model or code approval operation.
+- Retain the current Synthetic Constructive Archive packet as a renderer/secrecy/contract
+  regression, not the quality oracle. Stop adding prompt rules or schema fields solely to
+  repair that fixture. A new rule must express a general invariant or reproduce across at
+  least two independent cases.
+- Replace single-fixture iteration with a small synthetic evaluation set spanning at least
+  three materially different, non-copyrighted settings and interaction styles. Compare
+  prompt variants, supported effort levels, and model sizes with blinded human ratings for
+  progression, clue logic, player agency, puzzle comprehensibility, exploration quality,
+  prep usefulness, latency, token use, first-pass schema validity, and repair rate. Do not
+  promote a larger model or deeper effort without measured quality improvement.
+- Fix or replace the live transport so requested output limits are enforced before
+  ordinary provider use. Then run the frozen staged Tier A canary before Tier B/C. Tier A
+  must produce one accepted structural plan, valid topology/geometry, independently
+  accepted required enrichments, a preparation-ready guide, secrecy-clean assets, bounded
+  usage, and one atomic draft. The existing advisory Codex exception remains a narrowly
+  recorded operator-risk escape hatch, not a substitute for the transport fix.
+- Defer Tier B vertical composition and Tier C dense graphs until the staged live Tier A
+  path has produced a usable artifact and the bounded Tier A evaluation set demonstrates
+  dependable generation. B/C test scalability; they are not prerequisites for proving
+  Tier A generation quality.
+
+**Tests**
+
+- Model-visible schema tests prove `submit_dungeon_plan` has no `guide_content` field and
+  that no one request schema combines structural planning, puzzle design, and exploration
+  design.
+- Provider-free/faux orchestration tests prove exact-ID context slicing, independent task
+  budgets/repairs/lineage, deterministic merge, no cross-task mutation, readiness blockers
+  on partial enrichment, and atomic publication on complete enrichment.
+- Puzzle and exploration contract tests use positive and negative cases that are not
+  derived from the archive fixture. Eval reports preserve scores and safe measurements,
+  never provider response bodies or copyrighted content.
+
+**Done when**
+
+- A DM prompt is not sent to one model call that must simultaneously solve structural
+  planning and all detailed guide-content responsibilities.
+- At least one frozen live Tier A run on the staged path produces a preparation-ready,
+  human-usable artifact within the enforced workflow budget; failure is still safe and
+  body-free.
+- The multi-case Tier A evaluation shows which prompt/model/effort profile improves
+  puzzle and exploration quality without relying on repeated edits to one fixture.
+- Tier B/C remain deferred until these Tier A conditions hold.
 
 **Phase gate P7-14 Tier A**
 
@@ -1735,12 +1825,16 @@ and resumable slices are in
   its computed bounds. Validator failures are regressions, never normal random misses.
 - Active properties cover 4–8 rooms across seeds with zero exceptions and 100% valid
   topology/geometry; clean output has zero DM-only leaks.
-- One bounded `submit_dungeon_plan` call preserves fixed-prompt semantics and produces a
-  playable draft with a human-reviewed room progression and guide. The completed review
-  worksheet records an explicit decision and rating for every required dimension.
-- Measured output or cumulative usage over a pinned ceiling cannot publish a draft, and
-  no repair starts when its estimated complete input cannot fit the measured remaining
-  budget.
+- One bounded structural `submit_dungeon_plan` call preserves fixed-prompt semantics and
+  produces a valid certified package without also authoring detailed puzzles,
+  exploration challenges, and room prose. Separately bounded typed enrichments over exact
+  package IDs produce the runnable guide and cannot mutate the package.
+- Human quality evidence comes from materially different Tier A cases, including at least
+  one staged live artifact, rather than repeated rewrites of one fixed archive fixture.
+  Every evaluated case records explicit decisions and ratings for the required dimensions.
+- Measured output or cumulative usage over each task's pinned ceiling cannot publish its
+  result, and no repair starts when its estimated complete input cannot fit the measured
+  remaining budget.
 - There is one V1 path and no dormant V2/V3/V4 generation or package dispatch.
 
 **Phase gate P7**
