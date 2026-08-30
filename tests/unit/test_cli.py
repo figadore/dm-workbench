@@ -24,6 +24,7 @@ from dm_assistant.cli.main import (
     app,
 )
 from dm_assistant.modules.modeling import ReasoningEffort
+from dm_assistant.orchestration.dungeons import DUNGEON_TIER_A_CANARY
 from dm_assistant.orchestration.modeling import ModelRunAbstained
 
 runner = CliRunner()
@@ -107,11 +108,44 @@ def test_help_lists_foundation_commands() -> None:
     dungeon_help = runner.invoke(app, ["dungeon", "--help"])
     assert dungeon_help.exit_code == 0
     assert "prompt" in dungeon_help.output
+    assert "canary" in dungeon_help.output
 
     model_help = runner.invoke(app, ["model", "--help"])
     assert model_help.exit_code == 0
     assert "providers" in model_help.output
     assert "login" in model_help.output
+
+
+def test_canary_command_pins_exact_prompt_seed_and_explicit_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def capture(**kwargs: object) -> None:
+        captured.update(kwargs)
+
+    monkeypatch.setattr("dm_assistant.cli.main.dungeon_prompt", capture)
+    result = runner.invoke(
+        app,
+        [
+            "dungeon",
+            "canary",
+            "--provider",
+            "openai-codex",
+            "--model",
+            "gpt-synthetic",
+            "--acknowledge-advisory-output-cap",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["prompt"] == DUNGEON_TIER_A_CANARY.prompt
+    assert captured["seed"] == DUNGEON_TIER_A_CANARY.seed
+    assert captured["provider"] == "openai-codex"
+    assert captured["model"] == "gpt-synthetic"
+    assert captured["effort"] is ReasoningEffort.FAST
+    assert captured["acknowledge_advisory_output_cap"] is True
+    assert "Stop on the first failure" in result.output
 
 
 def test_provider_smoke_profile_is_short_lived_and_tool_free() -> None:
@@ -275,6 +309,10 @@ def test_first_login_offers_subscription_provider_choice(
         (
             "dungeon_prompt_rejected_after_repair",
             "This was not a model abstention.",
+        ),
+        (
+            "dungeon_prompt_token_budget_exhausted",
+            "exceeded the dungeon run token ceiling reported by the gateway",
         ),
         (
             "a provider supplied response that must not be shown",

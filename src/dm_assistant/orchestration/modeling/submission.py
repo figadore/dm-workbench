@@ -29,6 +29,8 @@ from dm_assistant.orchestration.modeling.service import (
 
 SubmissionModel = TypeVar("SubmissionModel", bound=BaseModel)
 
+ADVISORY_STRUCTURED_OUTPUT_CAP_POLICY = "advisory_manual_canary"
+
 
 @dataclass(frozen=True, slots=True)
 class StructuredSubmissionTool:
@@ -44,6 +46,24 @@ class StructuredSubmissionTool:
             description=self.description,
             parameters=json.loads(json.dumps(self.input_schema.model_json_schema())),
         )
+
+
+class StructuredSubmissionBudgetExceeded(ModelRunAbstained):
+    """Measured provider usage exceeded a structured request's pinned ceiling."""
+
+    def __init__(
+        self,
+        *,
+        limit_kind: Literal["output", "cumulative"],
+        token_limit: int,
+        input_tokens: int,
+        output_tokens: int,
+    ) -> None:
+        super().__init__("token budget exhausted before completion")
+        self.limit_kind = limit_kind
+        self.token_limit = token_limit
+        self.input_tokens = input_tokens
+        self.output_tokens = output_tokens
 
 
 class StructuredSubmissionRejected(ModelRunAbstained):
@@ -127,6 +147,7 @@ class StructuredSubmissionRunner:
             raise ModelRunAbstained(
                 "model run cancelled or timed out during submission"
             )
+        _enforce_measured_usage(profile, completion)
         if len(completion.tool_calls) != 1:
             raise ModelRunAbstained("model must submit exactly one structured call")
         call = completion.tool_calls[0]
@@ -189,6 +210,37 @@ class StructuredSubmissionRunner:
             status="succeeded",
         )
         return typed_submission, record
+
+
+def _enforce_measured_usage(
+    profile: ResolvedModelRunProfile, completion: GatewayCompletion
+) -> None:
+    """Fail before validation/publication when measured request usage exceeds a pin."""
+    if completion.input_tokens is None or completion.output_tokens is None:
+        return
+    configured_output = profile.override_notes.get("output_token_limit")
+    advisory_output_cap = (
+        profile.override_notes.get("output_cap_enforcement")
+        == ADVISORY_STRUCTURED_OUTPUT_CAP_POLICY
+    )
+    if (
+        not advisory_output_cap
+        and isinstance(configured_output, int)
+        and completion.output_tokens > min(configured_output, profile.token_budget)
+    ):
+        raise StructuredSubmissionBudgetExceeded(
+            limit_kind="output",
+            token_limit=min(configured_output, profile.token_budget),
+            input_tokens=completion.input_tokens,
+            output_tokens=completion.output_tokens,
+        )
+    if completion.input_tokens + completion.output_tokens > profile.token_budget:
+        raise StructuredSubmissionBudgetExceeded(
+            limit_kind="cumulative",
+            token_limit=profile.token_budget,
+            input_tokens=completion.input_tokens,
+            output_tokens=completion.output_tokens,
+        )
 
 
 def _schema_repair_hint(detail: Mapping[str, object]) -> str:

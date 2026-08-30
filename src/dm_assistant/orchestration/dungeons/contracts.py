@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
@@ -26,6 +26,8 @@ from dm_dungeon.contracts import (
     VerticalEndpointSide,
 )
 
+DUNGEON_GENERATION_PROPOSAL_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
+
 
 class WorkflowModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=False)
@@ -48,6 +50,159 @@ class PromptedDungeonModelLineage(WorkflowModel):
         elif self.proposal is None:
             raise ValueError("successful lineage requires one validated model result")
         return self
+
+
+GuideLocalRef = Annotated[
+    str,
+    Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_-]*$"),
+]
+GuideContentText = Annotated[str, Field(min_length=1, max_length=2_000)]
+
+
+class DungeonGuidePlayerChoice(WorkflowModel):
+    """One runnable player approach and its table-facing result."""
+
+    action: GuideContentText
+    outcome: GuideContentText
+
+
+class DungeonGuideRunnableContent(WorkflowModel):
+    """Validated table-facing play content after target resolution."""
+
+    situation: GuideContentText
+    adjudication: GuideContentText
+    player_choices: tuple[DungeonGuidePlayerChoice, ...] = Field(
+        min_length=2, max_length=4
+    )
+
+
+class _DungeonGuideContentEntry(WorkflowModel):
+    """Common bounded play content before exact package IDs exist."""
+
+    ref: GuideLocalRef
+    room_ref: GuideLocalRef
+    situation: GuideContentText
+    adjudication: GuideContentText
+    player_choices: tuple[DungeonGuidePlayerChoice, ...] = Field(
+        min_length=2, max_length=4
+    )
+
+
+class DungeonGuideGateContent(_DungeonGuideContentEntry):
+    """Runnable discovery and use of one gate dependency."""
+
+    kind: Literal["gate_dependency"]
+    gate_ref: GuideLocalRef
+    dependency_name: str = Field(min_length=1, max_length=200)
+    discovery: GuideContentText
+
+
+class DungeonGuideEncounterContent(_DungeonGuideContentEntry):
+    """Runnable content for a reserved encounter slot, not an encounter package."""
+
+    kind: Literal["encounter"]
+    encounter_intent: EncounterSlotIntent
+
+
+class DungeonGuidePuzzleContent(_DungeonGuideContentEntry):
+    """Runnable room puzzle with an explicit solution."""
+
+    kind: Literal["puzzle"]
+    name: str = Field(min_length=1, max_length=200)
+    solution: GuideContentText
+
+
+class DungeonGuideFeatureContent(_DungeonGuideContentEntry):
+    """Runnable interaction with one named room feature."""
+
+    kind: Literal["feature"]
+    feature_name: str = Field(min_length=1, max_length=200)
+
+
+class DungeonGuideObjectiveContent(_DungeonGuideContentEntry):
+    """Runnable resolution choices for the named final objective."""
+
+    kind: Literal["objective"]
+    objective_name: str = Field(min_length=1, max_length=200)
+
+
+DungeonGuideContentEntry = Annotated[
+    DungeonGuideGateContent
+    | DungeonGuideEncounterContent
+    | DungeonGuidePuzzleContent
+    | DungeonGuideFeatureContent
+    | DungeonGuideObjectiveContent,
+    Field(discriminator="kind"),
+]
+
+
+class DungeonGuideRoomNarrative(WorkflowModel):
+    """Sensory arrival material for one plan-local room."""
+
+    room_ref: GuideLocalRef
+    read_aloud: GuideContentText
+    sensory_details: tuple[GuideContentText, ...] = Field(min_length=2, max_length=4)
+
+
+class DungeonGuideContentPlan(WorkflowModel):
+    """Workbench-owned runnable prose keyed to ``DungeonPlan`` local refs.
+
+    The server validates and projects this content onto exact package IDs only after
+    geometry exists. It never enters topology, demand, layout, or rendering decisions.
+    Missing or invalid content leaves a structurally valid draft with truthful review
+    blockers instead of causing deterministic regeneration.
+    """
+
+    schema_version: Literal["1.0.0"]
+    room_narratives: tuple[DungeonGuideRoomNarrative, ...] = Field(
+        min_length=1, max_length=8
+    )
+    entries: tuple[DungeonGuideContentEntry, ...] = Field(min_length=1, max_length=16)
+
+    @model_validator(mode="after")
+    def require_unique_refs_and_targets(self) -> DungeonGuideContentPlan:
+        room_refs = [item.room_ref for item in self.room_narratives]
+        if len(room_refs) != len(set(room_refs)):
+            raise ValueError("guide room narratives require unique room refs")
+        refs = [entry.ref for entry in self.entries]
+        if len(refs) != len(set(refs)):
+            raise ValueError("guide content entries require unique local refs")
+        targets = [(entry.kind, entry.room_ref) for entry in self.entries]
+        if len(targets) != len(set(targets)):
+            raise ValueError(
+                "guide content permits at most one entry of each kind per room"
+            )
+        return self
+
+
+class DungeonGuideContentIssue(WorkflowModel):
+    """Body-free semantic failure that cannot invalidate structural generation."""
+
+    code: Literal[
+        "guide_content.required_missing",
+        "guide_content.target_invalid",
+    ]
+    kind: Literal[
+        "room",
+        "gate_dependency",
+        "encounter",
+        "puzzle",
+        "feature",
+        "objective",
+    ]
+    entry_ref: GuideLocalRef | None = None
+    room_ref: GuideLocalRef
+    target_ref: GuideLocalRef | None = None
+    message: str = Field(min_length=1, max_length=300)
+
+
+class DungeonGuideContentValidationResult(WorkflowModel):
+    """Accepted guide entries plus independently blocking semantic issues."""
+
+    schema_version: Literal["1.0.0"]
+    accepted_room_narratives: tuple[DungeonGuideRoomNarrative, ...]
+    accepted_entries: tuple[DungeonGuideContentEntry, ...]
+    issues: tuple[DungeonGuideContentIssue, ...]
 
 
 class DungeonRoomDmNote(WorkflowModel):
@@ -77,18 +232,30 @@ class DungeonGuideRoom(WorkflowModel):
     room_id: str = Field(min_length=1, max_length=200)
     floor_id: str = Field(min_length=1, max_length=200)
     map_reference: DungeonGuideMapReference
+    presentation_number: int = Field(ge=1)
     name: str = Field(min_length=1, max_length=200)
     role: RoomRole
     tags: tuple[str, ...] = ()
+    read_aloud: str | None = Field(default=None, min_length=1, max_length=2_000)
+    sensory_details: tuple[str, ...] = Field(default=(), max_length=4)
     preparation_note: str | None = Field(default=None, min_length=1, max_length=4_000)
     encounter_slot: EncounterSlotIntent | None = None
     encounter_slot_id: str | None = Field(default=None, min_length=1, max_length=200)
+    encounter_content: DungeonGuideRunnableContent | None = None
 
     @model_validator(mode="after")
     def require_encounter_slot_id_with_intent(self) -> DungeonGuideRoom:
         if (self.encounter_slot is None) != (self.encounter_slot_id is None):
             raise ValueError(
                 "encounter slot intent and stable ID must be present together"
+            )
+        if self.encounter_content is not None and self.encounter_slot is None:
+            raise ValueError("encounter content requires a reserved encounter slot")
+        if self.read_aloud is None and self.sensory_details:
+            raise ValueError("sensory details require room read-aloud material")
+        if self.read_aloud is not None and len(self.sensory_details) < 2:
+            raise ValueError(
+                "room read-aloud material requires at least two sensory details"
             )
         return self
 
@@ -143,6 +310,8 @@ class DungeonGuideDependency(WorkflowModel):
     kind: str = Field(min_length=1, max_length=32)
     room_id: str = Field(min_length=1, max_length=200)
     room_map_reference: DungeonGuideMapReference
+    discovery: str | None = Field(default=None, min_length=1, max_length=2_000)
+    content: DungeonGuideRunnableContent | None = None
 
 
 class DungeonGuideTrap(WorkflowModel):
@@ -152,20 +321,19 @@ class DungeonGuideTrap(WorkflowModel):
     name: str = Field(min_length=1, max_length=200)
     trigger: str | None = Field(default=None, min_length=1, max_length=4_000)
     effect: str | None = Field(default=None, min_length=1, max_length=4_000)
+    detection: str | None = Field(default=None, min_length=1, max_length=4_000)
+    disable: str | None = Field(default=None, min_length=1, max_length=4_000)
     detection_difficulty: int = Field(ge=0)
     disable_difficulty: int = Field(ge=0)
 
 
 class DungeonGuidePuzzle(WorkflowModel):
-    marker_id: str = Field(min_length=1, max_length=200)
+    content_ref: GuideLocalRef
     room_id: str = Field(min_length=1, max_length=200)
     map_reference: DungeonGuideMapReference
     name: str = Field(min_length=1, max_length=200)
-    mechanism: str | None = Field(default=None, min_length=1, max_length=4_000)
-    clue_dependency_ids: tuple[str, ...] = ()
-    solution: str | None = Field(default=None, min_length=1, max_length=4_000)
-    consequence: str | None = Field(default=None, min_length=1, max_length=4_000)
-    difficulty: int = Field(ge=0)
+    solution: str = Field(min_length=1, max_length=2_000)
+    content: DungeonGuideRunnableContent
 
 
 class DungeonGuideObjective(WorkflowModel):
@@ -174,6 +342,7 @@ class DungeonGuideObjective(WorkflowModel):
     map_reference: DungeonGuideMapReference
     kind: ObjectiveKind
     name: str = Field(min_length=1, max_length=200)
+    content: DungeonGuideRunnableContent | None = None
 
 
 class DungeonGuideFeature(WorkflowModel):
@@ -183,6 +352,7 @@ class DungeonGuideFeature(WorkflowModel):
     kind: FeatureIntentKind
     name: str = Field(min_length=1, max_length=200)
     description: str = Field(min_length=1, max_length=4_000)
+    content: DungeonGuideRunnableContent | None = None
 
 
 class DungeonPreparationReadinessDiagnostic(WorkflowModel):
@@ -191,7 +361,10 @@ class DungeonPreparationReadinessDiagnostic(WorkflowModel):
     code: Literal[
         "dungeon_preparation.lock_dependency_missing",
         "dungeon_preparation.trap_effect_unknown",
+        "dungeon_preparation.trap_method_unknown",
         "dungeon_preparation.puzzle_solution_unknown",
+        "dungeon_preparation.guide_content_missing",
+        "dungeon_preparation.guide_content_invalid",
     ]
     component_id: str = Field(min_length=1, max_length=200)
     map_reference: DungeonGuideMapReference | None = None
@@ -226,14 +399,20 @@ class DungeonDmGuide(WorkflowModel):
     puzzles: tuple[DungeonGuidePuzzle, ...]
     objectives: tuple[DungeonGuideObjective, ...]
     features: tuple[DungeonGuideFeature, ...]
+    content_issues: tuple[DungeonGuideContentIssue, ...] = ()
 
     @model_validator(mode="after")
     def require_unique_entries_and_resolved_callouts(self) -> DungeonDmGuide:
+        presentation_numbers = [item.presentation_number for item in self.rooms]
+        if presentation_numbers != list(range(1, len(self.rooms) + 1)):
+            raise ValueError(
+                "DM guide rooms require entry-first sequential presentation numbers"
+            )
         ids = [
             *(item.room_id for item in self.rooms),
             *(item.component_id for item in self.connections),
             *(item.marker_id for item in self.traps),
-            *(item.marker_id for item in self.puzzles),
+            *(f"guide_puzzle:{item.content_ref}" for item in self.puzzles),
             *(item.marker_id for item in self.objectives),
             *(item.marker_id for item in self.features),
         ]
@@ -323,6 +502,7 @@ class DungeonGenerationProposal(WorkflowModel):
 
     proposal_version: Literal["1"]
     plan: DungeonPlan | None = None
+    guide_content: DungeonGuideContentPlan | None = None
     intent_summary: str | None = Field(default=None, min_length=1, max_length=500)
     requested_constraints: tuple[str, ...] = Field(default=(), max_length=16)
     citation_ids: tuple[str, ...] = Field(default=(), max_length=32)
@@ -359,13 +539,9 @@ class DungeonGenerationProposal(WorkflowModel):
             raise ValueError("proposal requires exactly one of plan or abstention")
         if self.abstention is not None and self.intent_summary is not None:
             raise ValueError("abstention cannot include an intent summary")
+        if self.abstention is not None and self.guide_content is not None:
+            raise ValueError("abstention cannot include runnable guide content")
         return self
-
-
-class SubmitDungeonPlanInput(WorkflowModel):
-    """The entire model-controlled input of ``submit_dungeon_plan``."""
-
-    proposal: DungeonGenerationProposal
 
 
 class PromptDungeonWorkflow(WorkflowModel):

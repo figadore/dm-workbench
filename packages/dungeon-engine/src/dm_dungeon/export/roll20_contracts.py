@@ -119,7 +119,7 @@ class Roll20DoorSegment(ContractModel):
 
 
 class Roll20TokenPlacement(ContractModel):
-    """Explicitly visible stable anchor converted to pixel coordinates."""
+    """Explicitly published technical anchor converted to pixel coordinates."""
 
     anchor_id: OpaqueId
     kind: PositionAnchorKind
@@ -172,12 +172,14 @@ class Roll20ExportManifest(VersionedContract):
         geometry_ids = [
             *(wall.component_id for wall in self.wall_polygons),
             *(door.component_id for door in self.door_segments),
-            *(token.anchor_id for token in self.token_placements),
         ]
         if len(set(geometry_ids)) != len(geometry_ids):
-            raise ValueError("Roll20 geometry/token component IDs must be unique")
+            raise ValueError("Roll20 geometry component IDs must be unique")
         if not set(geometry_ids) <= visible_ids:
-            raise ValueError("Roll20 geometry/token IDs must be rendered and visible")
+            raise ValueError("Roll20 geometry IDs must be rendered and visible")
+        token_ids = [token.anchor_id for token in self.token_placements]
+        if len(set(token_ids)) != len(token_ids):
+            raise ValueError("Roll20 token anchor IDs must be unique")
         if any(wall.floor_id != self.floor_id for wall in self.wall_polygons) or any(
             door.floor_id != self.floor_id for door in self.door_segments
         ):

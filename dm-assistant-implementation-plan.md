@@ -1673,6 +1673,11 @@ and resumable slices are in
   and compatibility tests because no user artifact or external consumer exists.
 - Recreate only useful synthetic V1 fixtures, break circular imports, and require a green
   package/unit gate. Do not rewrite Git history.
+- Update active V1 labels in place until the architecture/status explicitly declare the
+  retention gate crossed. Synthetic fixtures, ignored review packets, disposable alpha
+  rows, and provider canaries do not trigger version bumps or compatibility readers; the
+  gate must be declared no later than first retained real-user data, external use,
+  non-disposable deployment, or a promised replay obligation.
 
 #### P7-14c — Creative plan and topology certificate
 
@@ -1693,8 +1698,31 @@ and resumable slices are in
 #### P7-14e — Prompt/guide integration and stress ladder
 
 - Expose only `submit_dungeon_plan`; one accepted tool call is the structural result.
-- Build exact keyed guide content after geometry; optional enrichment fails
-  independently and cannot erase a valid draft.
+  Put `DungeonGenerationProposal` fields directly at the tool-argument root rather than
+  behind a redundant `proposal` envelope. Schema diagnostics and repair paths must refer
+  to the actual root and preserve every valid prior field.
+- Before a repair, estimate its complete canonical message plus tool-schema input and
+  reduce the output allowance from the measured remaining cumulative budget. Check every
+  completed structured response against both its pinned output ceiling and measured total
+  request budget before validation/publication; persist only body-free overage metadata.
+  Do not resume ordinary use of a provider whose reported usage exceeds the requested
+  transport cap until that behavior is resolved or the budget policy is explicitly
+  remeasured and revised. Freeze one current one-floor Tier A canary prompt and seed. Its
+  non-production CLI-only acknowledged override may make only the output-cap acceptance
+  check advisory for one stop-on-failure `openai-codex` canary; retain the requested cap,
+  measured 12,000-token cumulative publication ceiling, repair reservation, body-free
+  attempt policy, and accepted model lineage.
+- Build exact keyed guide content after geometry; use separate entry-first sequential
+  presentation numbers and concise valid Markdown/HTML with useful read-aloud text plus
+  locally grouped actionable state, checks, clues, triggers, and consequences. Omit
+  ordinary map-visible connectivity and separate sensory/purpose repetition; limit
+  read-aloud to observable information, resolve setting terms to concrete objects, and
+  give each interaction one causal physical sequence (setup, trigger, effect, recovery,
+  and repeated-failure result). Trap intent separately states its visible warning or
+  clue, actual trigger, detection method, disable operation, and effect while code owns
+  numeric difficulties. Cross-room state and alarm responders or their explicit
+  absence must be stated exactly. Optional enrichment fails independently and cannot
+  erase a valid draft.
 - Pass CLI/web/faux publication, fixed-prompt DM quality rubrics, then Tier B multi-floor
   and Tier C dense hub/nested-loop/port/interior-demand stress cases before resuming live
   canaries or P7-13 polish.
@@ -1708,7 +1736,11 @@ and resumable slices are in
 - Active properties cover 4–8 rooms across seeds with zero exceptions and 100% valid
   topology/geometry; clean output has zero DM-only leaks.
 - One bounded `submit_dungeon_plan` call preserves fixed-prompt semantics and produces a
-  playable draft with a human-reviewed room progression and guide.
+  playable draft with a human-reviewed room progression and guide. The completed review
+  worksheet records an explicit decision and rating for every required dimension.
+- Measured output or cumulative usage over a pinned ceiling cannot publish a draft, and
+  no repair starts when its estimated complete input cannot fit the measured remaining
+  budget.
 - There is one V1 path and no dormant V2/V3/V4 generation or package dispatch.
 
 **Phase gate P7**

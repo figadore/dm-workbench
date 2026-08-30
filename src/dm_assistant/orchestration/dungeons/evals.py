@@ -12,7 +12,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from dm_assistant.orchestration.dungeons.contracts import DungeonGenerationProposal
+from dm_assistant.orchestration.dungeons.contracts import (
+    DungeonGenerationProposal,
+    DungeonStudioSpecification,
+)
 from dm_dungeon import (
     DungeonPlanCompileResult,
     LayoutRequest,
@@ -71,6 +74,234 @@ class DungeonIntentEvalSummary(_EvalModel):
     player_secret_leak_count: int
     expected_outcome_match: bool
     passes_synthetic_thresholds: bool
+
+
+DungeonGuideQualityDimension = Literal[
+    "progression",
+    "variety",
+    "clue_logic",
+    "prep_usefulness",
+]
+
+
+class DungeonGuideQualityCheck(_EvalModel):
+    """One objective check in the fixed-prompt DM-review rubric."""
+
+    dimension: DungeonGuideQualityDimension
+    passed: bool
+    diagnostics: tuple[str, ...] = ()
+
+
+class DungeonGuideQualityResult(_EvalModel):
+    """Automated evidence that still requires a DM's qualitative review."""
+
+    rubric_version: Literal["dungeon-guide-quality-rubric-v1"]
+    checks: tuple[DungeonGuideQualityCheck, ...] = Field(min_length=4, max_length=4)
+    automated_pass: bool
+    human_review_required: Literal[True] = True
+
+
+def evaluate_dungeon_guide_quality(
+    specification: DungeonStudioSpecification,
+) -> DungeonGuideQualityResult:
+    """Score a fixed prompted draft without pretending to replace DM judgment."""
+
+    guide = specification.dm_guide
+    if guide is None:
+        dimensions: tuple[DungeonGuideQualityDimension, ...] = (
+            "progression",
+            "variety",
+            "clue_logic",
+            "prep_usefulness",
+        )
+        checks = tuple(
+            DungeonGuideQualityCheck(
+                dimension=dimension,
+                passed=False,
+                diagnostics=("guide_quality.guide_missing",),
+            )
+            for dimension in dimensions
+        )
+        return DungeonGuideQualityResult(
+            rubric_version="dungeon-guide-quality-rubric-v1",
+            checks=checks,
+            automated_pass=False,
+        )
+
+    certificate = specification.layout_request.certificate
+    guide_rooms = {item.room_id: item for item in guide.rooms}
+    guide_connections = {item.connection_id: item for item in guide.connections}
+
+    progression: list[str] = []
+    if [item.presentation_number for item in guide.rooms] != list(
+        range(1, len(guide.rooms) + 1)
+    ):
+        progression.append("guide_quality.progression.presentation_order_invalid")
+    critical_room_ids = certificate.critical_path.room_ids
+    if not set(critical_room_ids) <= set(guide_rooms):
+        progression.append("guide_quality.progression.room_missing")
+    if not set(certificate.critical_path.connection_ids) <= set(guide_connections):
+        progression.append("guide_quality.progression.connection_missing")
+    if critical_room_ids and set(critical_room_ids) <= set(guide_rooms):
+        if (
+            guide_rooms[critical_room_ids[0]].role.value != "entrance"
+            or guide_rooms[critical_room_ids[-1]].role.value != "objective"
+        ):
+            progression.append("guide_quality.progression.endpoints_invalid")
+        if any(
+            _unknown_quality_text(guide_rooms[room_id].preparation_note)
+            for room_id in critical_room_ids
+        ):
+            progression.append("guide_quality.progression.purpose_unknown")
+
+    variety: list[str] = []
+    role_count = len({item.role for item in guide.rooms})
+    if role_count < 3:
+        variety.append("guide_quality.variety.room_roles_narrow")
+    content_modes: set[str] = set()
+    if any(item.encounter_slot is not None for item in guide.rooms):
+        content_modes.add("encounter")
+    if any(item.role.value == "optional" for item in guide.rooms):
+        content_modes.add("optional")
+    if guide.traps:
+        content_modes.add("trap")
+    if guide.features:
+        content_modes.add("feature")
+    if guide.objectives:
+        content_modes.add("objective")
+    if any(item.gate_id is not None for item in guide.connections):
+        content_modes.add("gate")
+    if any(item.concealed for item in guide.connections):
+        content_modes.add("secret")
+    if len(content_modes) < 3:
+        variety.append("guide_quality.variety.content_modes_narrow")
+    distinct_purposes = {
+        item.preparation_note.strip().casefold()
+        for item in guide.rooms
+        if not _unknown_quality_text(item.preparation_note)
+        and item.preparation_note is not None
+    }
+    if len(distinct_purposes) < min(3, len(guide.rooms)):
+        variety.append("guide_quality.variety.room_purposes_repetitive")
+
+    clue_logic: list[str] = []
+    gate_connections = {
+        item.gate_id: item for item in guide.connections if item.gate_id is not None
+    }
+    dependencies = {item.target_gate_id: item for item in guide.dependencies}
+    witnesses = {item.gate_id: item for item in certificate.gates}
+    if not witnesses:
+        clue_logic.append("guide_quality.clue_logic.not_exercised")
+    if set(gate_connections) != set(witnesses):
+        clue_logic.append("guide_quality.clue_logic.gate_projection_mismatch")
+    if set(dependencies) != set(witnesses):
+        clue_logic.append("guide_quality.clue_logic.dependency_missing")
+    for gate_id, witness in witnesses.items():
+        dependency = dependencies.get(gate_id)
+        if dependency is None:
+            continue
+        if (
+            dependency.dependency_id != witness.dependency_id
+            or dependency.room_id != witness.dependency_room_id
+        ):
+            clue_logic.append("guide_quality.clue_logic.dependency_mismatch")
+        if dependency.room_id not in witness.reachable_before_gate_room_ids:
+            clue_logic.append("guide_quality.clue_logic.dependency_unreachable")
+        if (
+            dependency.room_map_reference.component_id != dependency.room_id
+            or dependency.room_map_reference.component_id not in guide_rooms
+        ):
+            clue_logic.append("guide_quality.clue_logic.map_reference_invalid")
+
+    prep: list[str] = []
+    readiness = specification.preparation_readiness
+    if readiness is None or not readiness.ready:
+        prep.append("guide_quality.prep.readiness_blocked")
+    if len(guide.objectives) != 1:
+        prep.append("guide_quality.prep.final_objective_missing")
+    if any(_unknown_quality_text(item.preparation_note) for item in guide.rooms):
+        prep.append("guide_quality.prep.room_note_unknown")
+    if any(
+        _unknown_quality_text(item.read_aloud) or len(item.sensory_details) < 2
+        for item in guide.rooms
+    ):
+        prep.append("guide_quality.prep.room_narrative_missing")
+    if any(item.map_reference is None for item in guide.connections):
+        prep.append("guide_quality.prep.connection_reference_missing")
+    if any(
+        _unknown_quality_text(item.trigger) or _unknown_quality_text(item.effect)
+        for item in guide.traps
+    ):
+        prep.append("guide_quality.prep.trap_incomplete")
+    if any(
+        issue.code == "guide_content.target_invalid" for issue in guide.content_issues
+    ):
+        prep.append("guide_quality.prep.runnable_content_invalid")
+    if any(
+        room.encounter_slot is not None and room.encounter_content is None
+        for room in guide.rooms
+    ):
+        prep.append("guide_quality.prep.encounter_content_missing")
+    if any(
+        dependency.discovery is None or dependency.content is None
+        for dependency in guide.dependencies
+    ):
+        prep.append("guide_quality.prep.dependency_content_missing")
+    puzzle_room_ids = {
+        room.room_id for room in guide.rooms if room.role.value == "puzzle"
+    }
+    if puzzle_room_ids != {puzzle.room_id for puzzle in guide.puzzles}:
+        prep.append("guide_quality.prep.puzzle_content_missing")
+    if any(feature.content is None for feature in guide.features):
+        prep.append("guide_quality.prep.feature_content_missing")
+    if any(objective.content is None for objective in guide.objectives):
+        prep.append("guide_quality.prep.objective_content_missing")
+
+    diagnostic_sets: tuple[tuple[DungeonGuideQualityDimension, list[str]], ...] = (
+        ("progression", progression),
+        ("variety", variety),
+        ("clue_logic", clue_logic),
+        ("prep_usefulness", prep),
+    )
+    checks = tuple(
+        DungeonGuideQualityCheck(
+            dimension=dimension,
+            passed=not diagnostics,
+            diagnostics=tuple(sorted(set(diagnostics))),
+        )
+        for dimension, diagnostics in diagnostic_sets
+    )
+    return DungeonGuideQualityResult(
+        rubric_version="dungeon-guide-quality-rubric-v1",
+        checks=checks,
+        automated_pass=all(item.passed for item in checks),
+    )
+
+
+def render_dungeon_guide_quality_report(result: DungeonGuideQualityResult) -> str:
+    """Render body-free automated evidence and an explicit human-review warning."""
+
+    lines = [
+        f"Dungeon guide quality rubric {result.rubric_version}",
+        *(
+            f"{item.dimension}: {'pass' if item.passed else 'fail'}"
+            for item in result.checks
+        ),
+        f"automated checks: {'pass' if result.automated_pass else 'fail'}",
+        "human DM review: required",
+    ]
+    return "\n".join(lines)
+
+
+def _unknown_quality_text(value: str | None) -> bool:
+    if value is None:
+        return True
+    return value.strip().casefold() in {
+        "unknown",
+        "unspecified",
+        "not specified",
+        "tbd",
+    }
 
 
 def evaluate_dungeon_intent_cases(

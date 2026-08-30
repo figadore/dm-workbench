@@ -1,0 +1,144 @@
+{
+  "schema_version": "1.0.0",
+  "entries": [
+    {
+      "kind": "gate_dependency",
+      "ref": "cache_key_interaction",
+      "room_ref": "cache",
+      "gate_ref": "seal_gate",
+      "dependency_name": "Three-Wave Brass Key",
+      "situation": "The matching key hangs in the exposed, unlatched cabinet; it was not visible from the doorway.",
+      "discovery": "Open the exposed cabinet.",
+      "adjudication": "The key opens D1 without a check; its unlock DC remains available.",
+      "player_choices": [
+        {
+          "action": "Take the key to D1",
+          "outcome": "Open D1 without a check."
+        },
+        {
+          "action": "Leave the key",
+          "outcome": "Use D1's unlock DC instead."
+        }
+      ]
+    },
+    {
+      "kind": "encounter",
+      "ref": "cache_exploration",
+      "room_ref": "cache",
+      "encounter_intent": "exploration",
+      "situation": "The shelf's rear-right upright turns on a floor pivot. A crate supports its broken front-left foot; a clipped wire links its upper-left corner to the wall.",
+      "adjudication": "Support the broken corner with one person or a lever, unclip the wire, pull out the crate, then rotate the shelf 90 degrees clockwise on its rear-right floor pivot; no check. Pulling the crate first drops the shelf across the cabinet and yanks the wire. Two people or a lever can lift and reset it without a check; record one bell ring.",
+      "player_choices": [
+        {
+          "action": "Support, unclip, remove crate, rotate shelf",
+          "outcome": "Expose the cabinet without ringing the bell."
+        },
+        {
+          "action": "Pull the crate out first",
+          "outcome": "Shelf blocks the cabinet and rings the bell; lift and reset it to retry."
+        }
+      ]
+    },
+    {
+      "kind": "puzzle",
+      "ref": "sealed_hall_button_puzzle",
+      "room_ref": "seal",
+      "name": "Three-Button Vault Lock",
+      "situation": "In the wall panel immediately left of the vault door, each pressed button latches down and advances a three-step drum. The correct third press retracts the vault bolt; a wrong third press trips the bell and resets the drum.",
+      "solution": "Press doorway, shelves, chest—the order shown at the Entry and stated on F1.",
+      "adjudication": "No check. Any trigger swings the hammer: its upper arm rings the bell, its lower arm flips the full ink cup, and a clockwork bolt locks the buttons for 10 minutes. Wipe away the first spill; later rings find the cup empty. Every ring restarts the lockout. No guard or creature responds; ink and lockout are the only consequences.",
+      "player_choices": [
+        {
+          "action": "Press doorway, shelves, then chest",
+          "outcome": "The vault door unlocks and opens."
+        },
+        {
+          "action": "Complete another order",
+          "outcome": "Reset buttons, ring bell, and start a 10-minute lockout."
+        },
+        {
+          "action": "Wipe symbols and wait",
+          "outcome": "Reveal the symbols; retry after 10 minutes."
+        }
+      ]
+    },
+    {
+      "kind": "feature",
+      "ref": "instruction_pedestal_interaction",
+      "room_ref": "seal",
+      "feature_name": "Instruction Pedestal",
+      "situation": "F1 reads, 'Press where a record ENTERS, is SORTED, then is STORED.' Doorway, shelves, and chest symbols sit below those verbs.",
+      "adjudication": "No check. A service diagram traces three covered conduits to the shared bell trip lever: Annex shelf, concealed threshold plate T1, and button drum. Tracing it automatically identifies the threshold plate; disabling its coupling still requires T1's DC 13 check.",
+      "player_choices": [
+        {
+          "action": "Read or copy the inscription",
+          "outcome": "Learn the doorway-shelves-chest sequence."
+        },
+        {
+          "action": "Trace the diagram",
+          "outcome": "Identify all three bell triggers and automatically detect T1's concealed threshold plate."
+        }
+      ]
+    },
+    {
+      "kind": "objective",
+      "ref": "vault_objective_resolution",
+      "room_ref": "vault",
+      "objective_name": "Synthetic Objective",
+      "situation": "Solving the hall lock released the cradle's hidden catch; its clear panel now opens by hand.",
+      "adjudication": "No check. Record the choice as prepared, not automatically canonical.",
+      "player_choices": [
+        {
+          "action": "Remove O1",
+          "outcome": "Complete the prepared retrieval objective."
+        },
+        {
+          "action": "Document O1 and leave it",
+          "outcome": "Gain evidence but do not complete retrieval."
+        }
+      ]
+    }
+  ],
+  "room_narratives": [
+    {
+      "room_ref": "entry",
+      "read_aloud": "Dry steps end at a wall diagram. Three arrow-linked pictures show an exterior doorway, records being sorted onto shelves, and a record locked in a chest.",
+      "sensory_details": [
+        "The three pictures are clean and easy to see.",
+        "Water can be heard ahead."
+      ]
+    },
+    {
+      "room_ref": "gallery",
+      "read_aloud": "Cabinets form narrow aisles. Water laps through the north doorway. The locked hall door bears a brass emblem of three wavy lines.",
+      "sensory_details": [
+        "The north floor is wet.",
+        "The three-wave emblem is palm-sized."
+      ]
+    },
+    {
+      "room_ref": "cache",
+      "read_aloud": "A tall shelf stands one pace in front of a wave-marked wall cabinet. Its broken front-left foot rests on a waterlogged crate; a brass wire clips to its upper-left corner and enters the wall.",
+      "sensory_details": [
+        "The shelf's rear-right upright sits on a round floor pivot.",
+        "The closed cabinet's contents cannot be seen."
+      ]
+    },
+    {
+      "room_ref": "seal",
+      "read_aloud": "Three labeled buttons fill a wall panel immediately left of the vault door. Above them, a two-armed hammer rests against a brass bell, with its lower arm beneath a full ink cup. Three wire ends emerge from covered conduits and join one trip lever.",
+      "sensory_details": [
+        "The button symbols are visible from the doorway.",
+        "The covered conduits hide where the three wires begin."
+      ]
+    },
+    {
+      "room_ref": "vault",
+      "read_aloud": "A clear-panelled cradle holds the Synthetic Objective. From the doorway, the panel looks seamless against its frame.",
+      "sensory_details": [
+        "The objective is plainly visible.",
+        "The clear panel sits flush with the cradle frame."
+      ]
+    }
+  ]
+}

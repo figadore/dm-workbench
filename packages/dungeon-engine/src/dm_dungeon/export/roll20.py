@@ -5,6 +5,8 @@ import io
 import zipfile
 from collections.abc import Iterable
 
+from dm_dungeon.contracts.common import Visibility
+from dm_dungeon.contracts.geometry import PositionAnchor
 from dm_dungeon.contracts.package import DungeonPackage, MechanicDoorLayout
 from dm_dungeon.contracts.topology import DoorType
 from dm_dungeon.export.contracts import (
@@ -49,6 +51,23 @@ def _roll20_door_type(
     if door.mechanics.gate_id is not None:
         return DoorType.LOCKED
     return DoorType.NORMAL
+
+
+def _anchor_publishable(
+    package: DungeonPackage,
+    anchor: PositionAnchor,
+    audience: RenderAudience,
+) -> bool:
+    """Apply the SVG audience policy to explicitly requested anchor metadata."""
+
+    layer = next(item for item in package.layers if item.id == anchor.layer_id)
+    if audience is RenderAudience.DM:
+        return layer.include_in_dm_export
+    return (
+        anchor.visibility is Visibility.PLAYER_SAFE
+        and layer.visibility is Visibility.PLAYER_SAFE
+        and layer.include_in_player_export
+    )
 
 
 def export_roll20_bundle(
@@ -139,7 +158,8 @@ def export_roll20_bundle(
                 y_pixels=anchor.position.y * request.pixels_per_cell,
             )
             for anchor in package.position_anchors
-            if anchor.floor_id == request.floor_id and anchor.id in allowed_ids
+            if anchor.floor_id == request.floor_id
+            and _anchor_publishable(package, anchor, request.audience)
         )
         if request.include_token_placements
         else ()

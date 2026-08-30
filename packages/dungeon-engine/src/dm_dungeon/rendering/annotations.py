@@ -1,5 +1,6 @@
 """Code-owned short-callout allocation and collision-free map annotation layout."""
 
+from collections.abc import Callable
 from enum import StrEnum
 from typing import Literal
 
@@ -11,6 +12,7 @@ from dm_dungeon.contracts.geometry import (
     PointGeometry,
     PolygonGeometry,
     PolylineGeometry,
+    PositionAnchorKind,
     RectangleGeometry,
     SegmentGeometry,
 )
@@ -36,6 +38,16 @@ class MapCalloutKind(StrEnum):
     TRANSITION = "transition"
 
 
+class MapCalloutBadge(ContractModel):
+    """One collision-tested mechanics badge placed beside a map callout."""
+
+    token: str
+    label_x: float
+    label_y: float
+    width: float
+    height: float
+
+
 class MapCallout(ContractModel):
     """One stable key entry and its collision-tested SVG placement."""
 
@@ -48,8 +60,10 @@ class MapCallout(ContractModel):
     label_y: float
     width: float
     height: float
+    text_width: float
+    text_height: float
     leader_required: bool
-    badges: tuple[str, ...] = ()
+    badges: tuple[MapCalloutBadge, ...] = ()
 
 
 class MapKey(VersionedContract):
@@ -211,10 +225,16 @@ def build_map_key(
             )
             numbered.append((kind, component_id, anchor, token, badges))
 
-    occupied: list[tuple[float, float, float, float]] = []
+    occupied = _marker_exclusion_boxes(
+        package,
+        floor_id,
+        scale=scale,
+        visible=visible,
+    )
     entries: list[MapCallout] = []
-    for kind, component_id, anchor, token, badges in numbered:
-        width, height = _text_bounds(token, scale)
+    for kind, component_id, anchor, token, badge_tokens in numbered:
+        text_width, text_height = _text_bounds(token, scale)
+        width, height = _callout_bounds(kind, text_width, text_height)
         anchor_x, anchor_y = anchor.x * scale, anchor.y * scale
         positions = (
             (0, 0),
@@ -226,12 +246,25 @@ def build_map_key(
             (-0.6, -0.55),
         )
         chosen: tuple[float, float] | None = None
+        chosen_badges: tuple[MapCalloutBadge, ...] = ()
         leader = False
         for dx, dy in positions:
             x, y = anchor_x + dx * scale, anchor_y + dy * scale
-            box = _box(x, y, width, height)
-            if not any(_intersects(box, prior) for prior in occupied):
-                chosen = (x, y)
+            badge_placements = _place_badges(badge_tokens, x, y, width, scale)
+            boxes = (
+                _box(x, y, width, height),
+                *(
+                    _box(
+                        badge.label_x,
+                        badge.label_y,
+                        badge.width,
+                        badge.height,
+                    )
+                    for badge in badge_placements
+                ),
+            )
+            if not any(_intersects(box, prior) for box in boxes for prior in occupied):
+                chosen, chosen_badges = (x, y), badge_placements
                 break
         if chosen is None:
             # A deterministic outer ring is collision-free for finite inputs; the
@@ -245,14 +278,45 @@ def build_map_key(
                     (-ring, -ring),
                 ):
                     x, y = anchor_x + dx * scale, anchor_y + dy * scale
-                    box = _box(x, y, width, height)
-                    if not any(_intersects(box, prior) for prior in occupied):
-                        chosen, leader = (x, y), True
+                    badge_placements = _place_badges(badge_tokens, x, y, width, scale)
+                    boxes = (
+                        _box(x, y, width, height),
+                        *(
+                            _box(
+                                badge.label_x,
+                                badge.label_y,
+                                badge.width,
+                                badge.height,
+                            )
+                            for badge in badge_placements
+                        ),
+                    )
+                    if not any(
+                        _intersects(box, prior) for box in boxes for prior in occupied
+                    ):
+                        chosen, chosen_badges, leader = (
+                            (x, y),
+                            badge_placements,
+                            True,
+                        )
                         break
                 ring += 1
         assert chosen is not None
         label_x, label_y = chosen
-        occupied.append(_box(label_x, label_y, width, height))
+        occupied.extend(
+            (
+                _box(label_x, label_y, width, height),
+                *(
+                    _box(
+                        badge.label_x,
+                        badge.label_y,
+                        badge.width,
+                        badge.height,
+                    )
+                    for badge in chosen_badges
+                ),
+            )
+        )
         entries.append(
             MapCallout(
                 component_id=component_id,
@@ -264,8 +328,10 @@ def build_map_key(
                 label_y=label_y,
                 width=width,
                 height=height,
+                text_width=text_width,
+                text_height=text_height,
                 leader_required=leader,
-                badges=badges,
+                badges=chosen_badges,
             )
         )
     return MapKey(
@@ -277,12 +343,87 @@ def build_map_key(
 
 
 def _text_bounds(token: str, scale: int) -> tuple[float, float]:
-    """Pinned font-metric approximation, including a circle/marker clearance."""
-    font_size = max(9, min(14, round(scale * 0.24)))
+    """Pinned font-metric approximation for trusted short callouts."""
+    font_size = max(9, min(16, round(scale * 0.24)))
     return (
         max(font_size * 1.4, font_size * (0.62 * len(token) + 0.7)),
         font_size * 1.45,
     )
+
+
+def _callout_bounds(
+    kind: MapCalloutKind,
+    text_width: float,
+    text_height: float,
+) -> tuple[float, float]:
+    diameter = max(text_width, text_height)
+    multiplier = {
+        MapCalloutKind.HAZARD: 1.1,
+        MapCalloutKind.PUZZLE: 1.1,
+        MapCalloutKind.FEATURE: 0.9,
+        MapCalloutKind.OBJECTIVE: 1.36,
+    }.get(kind, 1.16)
+    size = diameter * multiplier
+    return size, size
+
+
+def _place_badges(
+    tokens: tuple[str, ...],
+    label_x: float,
+    label_y: float,
+    callout_width: float,
+    scale: int,
+) -> tuple[MapCalloutBadge, ...]:
+    badge_size = max(12.0, min(18.0, scale * 0.24))
+    gap = max(3.0, scale * 0.06)
+    first_x = label_x + callout_width / 2 + gap + badge_size / 2
+    return tuple(
+        MapCalloutBadge(
+            token=token,
+            label_x=first_x + index * (badge_size + gap),
+            label_y=label_y,
+            width=badge_size,
+            height=badge_size,
+        )
+        for index, token in enumerate(tokens)
+    )
+
+
+def _marker_exclusion_boxes(
+    package: DungeonPackage,
+    floor_id: str,
+    *,
+    scale: int,
+    visible: Callable[[LayeredMapElement | VerticalEndpointDoorLayout], bool],
+) -> list[tuple[float, float, float, float]]:
+    """Reserve raw anchor/encounter symbols before placing semantic callouts."""
+    boxes: list[tuple[float, float, float, float]] = []
+    anchors = {anchor.id: anchor for anchor in package.position_anchors}
+    for anchor in package.position_anchors:
+        if (
+            anchor.floor_id == floor_id
+            and anchor.kind is PositionAnchorKind.ENTRANCE
+            and visible(anchor)
+        ):
+            diameter = scale * 0.56
+            boxes.append(
+                _box(
+                    anchor.position.x * scale,
+                    anchor.position.y * scale,
+                    diameter,
+                    diameter,
+                )
+            )
+    rooms = {room.id: room for room in package.rooms}
+    for slot in package.encounter_slots:
+        if slot.floor_id != floor_id or not visible(slot):
+            continue
+        position = anchors[slot.anchor_ids[0]].position if slot.anchor_ids else None
+        if position is None:
+            position = _polygon_anchor(rooms[slot.room_id].boundary)
+        diameter = scale * 0.52
+        boxes.append(_box(position.x * scale, position.y * scale, diameter, diameter))
+    return boxes
 
 
 def _box(

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from dm_assistant.config import RuntimeEnvironment
 from dm_assistant.errors import ConflictError
 from dm_assistant.modules.modeling import (
     ModelRunInput,
@@ -21,8 +22,13 @@ from dm_assistant.orchestration.dungeons import (
     DungeonStudioSpecification,
     DungeonSubmissionService,
     PromptDungeonWorkflow,
+    apply_advisory_output_cap_override,
 )
-from dm_assistant.orchestration.dungeons.application import _failure_code
+from dm_assistant.orchestration.dungeons.application import (
+    _failure_code,
+    _failure_report,
+)
+from dm_assistant.orchestration.dungeons.evals import evaluate_dungeon_guide_quality
 from dm_assistant.orchestration.dungeons.prompting import (
     DungeonProposalRejectedAfterRepair,
     _build_standalone_context,
@@ -44,6 +50,7 @@ from dm_assistant.orchestration.modeling import (
     GatewayCompletion,
     GatewayToolSchema,
     ModelRunAbstained,
+    StructuredSubmissionBudgetExceeded,
 )
 from dm_dungeon import (
     DungeonPlan,
@@ -192,8 +199,19 @@ def test_prompt_explains_tier_a_plan_constraints() -> None:
     assert "at most one loop" in message
     assert "key or clue" in message
     assert "Do not author edges" in message
+    assert "directly at the tool-argument root" in message
+    assert "do not add a proposal envelope" in message
     assert "DungeonPlan schema version 1.0.0" in message
     assert "room_contents[].objective" in message
+    assert "add one matching guide_content entry" in message
+    assert "two to four player action/outcome choices" in message
+    assert "Use ordinary language for concrete objects and operations" in message
+    assert "read-aloud to what players can observe" in message
+    assert "physical setup, trigger, effect, recovery" in message
+    assert "visible trap warning from the concealed trigger" in message
+    assert "describe what detection and disable checks find or manipulate" in message
+    assert "whether an alarm has a responder" in message
+    assert "do not repeat map-visible connectivity" in message
 
 
 def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
@@ -205,7 +223,7 @@ def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
                     ToolCall(
                         tool_name="submit_dungeon_plan",
                         call_id="submit-1",
-                        arguments={"proposal": proposal},
+                        arguments=proposal,
                     ),
                 ),
                 input_tokens=10,
@@ -220,6 +238,9 @@ def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
         context_window_tokens=16_384,
         output_token_limit=4_096,
     )
+    assert profile.output_schema_version == "1.0.0"
+    assert profile.prompt_version == "prompt-1"
+    assert profile.instruction_version == "instructions-1"
 
     result = DungeonSubmissionService(gateway).submit(
         profile=profile,
@@ -248,9 +269,14 @@ def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
         "submit_dungeon_plan",
     )
     assert gateway.tool_schemas[0].constrained_sampling == "prefer"
-    schema_text = json.dumps(gateway.tool_schemas[0].parameters)
+    schema_document = gateway.tool_schemas[0].parameters
+    schema_text = json.dumps(schema_document)
     assert "DungeonPlan" in schema_text
+    assert "DungeonGuideContentPlan" in schema_text
+    assert '"guide_content"' in schema_text
     assert '"connections"' not in schema_text
+    assert "proposal" not in schema_document["properties"]
+    assert "plan" in schema_document["properties"]
     layout = generate_layout(result.layout_request)
     assert layout.success and layout.package is not None
     guide = _build_dm_guide(
@@ -280,7 +306,7 @@ def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
                     ToolCall(
                         tool_name="submit_dungeon_plan",
                         call_id="submit-invalid",
-                        arguments={"proposal": invalid},
+                        arguments=invalid,
                     ),
                 ),
                 input_tokens=10,
@@ -291,7 +317,7 @@ def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
                     ToolCall(
                         tool_name="submit_dungeon_plan",
                         call_id="submit-repair",
-                        arguments={"proposal": proposal},
+                        arguments=proposal,
                     ),
                 ),
                 input_tokens=10,
@@ -312,7 +338,13 @@ def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
     assert (
         repair_document["diagnostics"][0]["code"] == "plan.gate_dependency_unreachable"
     )
-    assert repair_document["previous_arguments"] == {"proposal": invalid}
+    assert repair_document["previous_arguments"] == invalid
+    repair_profile = repair_gateway.profiles[1]
+    estimated_input = repair_profile.override_notes["estimated_input_tokens"]
+    assert isinstance(estimated_input, int) and estimated_input > 0
+    assert repair_profile.override_notes["output_token_limit"] <= (
+        repair_profile.token_budget - estimated_input
+    )
 
     exhausted_gateway = FakeGatewayClient(
         (
@@ -321,7 +353,7 @@ def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
                     ToolCall(
                         tool_name="submit_dungeon_plan",
                         call_id="bad-1",
-                        arguments={"proposal": invalid},
+                        arguments=invalid,
                     ),
                 ),
                 input_tokens=10,
@@ -332,7 +364,7 @@ def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
                     ToolCall(
                         tool_name="submit_dungeon_plan",
                         call_id="bad-2",
-                        arguments={"proposal": invalid},
+                        arguments=invalid,
                     ),
                 ),
                 input_tokens=10,
@@ -340,7 +372,7 @@ def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
             ),
         )
     )
-    with pytest.raises(DungeonProposalRejectedAfterRepair):
+    with pytest.raises(DungeonProposalRejectedAfterRepair) as rejected:
         DungeonSubmissionService(exhausted_gateway).submit(
             profile=profile,
             run_input=ModelRunInput(
@@ -348,6 +380,24 @@ def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
             ),
             seed=1842,
         )
+    assert [failure.attempt for failure in rejected.value.failures] == [
+        "initial",
+        "repair",
+    ]
+    assert [failure.stage for failure in rejected.value.failures] == [
+        "intent_compile",
+        "intent_compile",
+    ]
+    assert all(
+        failure.diagnostics[0]["code"] == "plan.gate_dependency_unreachable"
+        for failure in rejected.value.failures
+    )
+    report = _failure_report(rejected.value, "dungeon_prompt_rejected_after_repair")
+    assert report["stage"] == "intent_compile"
+    assert report["repair_attempted"] is True
+    attempts = report["submission_attempts"]
+    assert isinstance(attempts, list)
+    assert attempts[1]["diagnostics"][0]["code"] == ("plan.gate_dependency_unreachable")
 
     schema_invalid = deepcopy(proposal)
     schema_plan = schema_invalid["plan"]
@@ -362,7 +412,7 @@ def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
                     ToolCall(
                         tool_name="submit_dungeon_plan",
                         call_id="schema-bad",
-                        arguments={"proposal": schema_invalid},
+                        arguments=schema_invalid,
                     ),
                 ),
                 input_tokens=10,
@@ -373,7 +423,7 @@ def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
                     ToolCall(
                         tool_name="submit_dungeon_plan",
                         call_id="schema-repair",
-                        arguments={"proposal": proposal},
+                        arguments=proposal,
                     ),
                 ),
                 input_tokens=10,
@@ -391,6 +441,273 @@ def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
     assert schema_repaired.repaired
     assert schema_repaired.model_runs[0].status == "abstained"
     assert "submission.schema_invalid" in schema_gateway.messages[1][0].content
+
+    schema_exhausted_gateway = FakeGatewayClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_plan",
+                        call_id="schema-bad-initial",
+                        arguments=schema_invalid,
+                    ),
+                ),
+                input_tokens=10,
+                output_tokens=10,
+            ),
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_plan",
+                        call_id="schema-bad-repair",
+                        arguments=schema_invalid,
+                    ),
+                ),
+                input_tokens=10,
+                output_tokens=10,
+            ),
+        )
+    )
+    with pytest.raises(DungeonProposalRejectedAfterRepair) as schema_rejected:
+        DungeonSubmissionService(schema_exhausted_gateway).submit(
+            profile=profile,
+            run_input=ModelRunInput(
+                messages=(PromptMessage(role="user", content="synthetic request"),)
+            ),
+            seed=1842,
+        )
+    assert [failure.stage for failure in schema_rejected.value.failures] == [
+        "model_submission",
+        "model_submission",
+    ]
+    final_schema_diagnostic = schema_rejected.value.failures[1].diagnostics[0]
+    assert final_schema_diagnostic["code"] == "submission.schema_invalid"
+    assert final_schema_diagnostic["path"].endswith("/encounter")
+    assert "allowed values" in final_schema_diagnostic["repair"]
+
+
+def test_direct_schema_repair_preserves_root_proposal_fields() -> None:
+    proposal = _tier_a_proposal()
+    malformed = deepcopy(proposal)
+    malformed["guide_content"] = {"schema_version": "1.0.0", "entries": []}
+    gateway = FakeGatewayClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_plan",
+                        call_id="guide-shape-bad",
+                        arguments=malformed,
+                    ),
+                ),
+                input_tokens=10,
+                output_tokens=10,
+            ),
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_plan",
+                        call_id="guide-shape-repair",
+                        arguments=proposal,
+                    ),
+                ),
+                input_tokens=10,
+                output_tokens=10,
+            ),
+        )
+    )
+    profile = resolve_dungeon_prompt_profile(
+        provider_id="faux",
+        model_id="faux_deterministic_v1",
+        capabilities=("text", "tool_calls"),
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+    )
+
+    result = DungeonSubmissionService(gateway).submit(
+        profile=profile,
+        run_input=ModelRunInput(
+            messages=(PromptMessage(role="user", content="synthetic request"),)
+        ),
+        seed=1842,
+    )
+
+    assert result.repaired
+    repair_document = json.loads(gateway.messages[1][0].content)
+    assert repair_document["previous_arguments"] == malformed
+    diagnostics = repair_document["diagnostics"]
+    assert any(item["path"] == "/guide_content/room_narratives" for item in diagnostics)
+    assert all(not item["path"].startswith("/proposal") for item in diagnostics)
+    assert all(
+        item.get("repair")
+        != "remove this field because it is not in the submitted schema"
+        for item in diagnostics
+    )
+
+
+def test_structured_submission_fails_closed_on_measured_token_overages() -> None:
+    proposal = _tier_a_proposal()
+    profile = resolve_dungeon_prompt_profile(
+        provider_id="faux",
+        model_id="faux_deterministic_v1",
+        capabilities=("text", "tool_calls"),
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+    )
+
+    for input_tokens, output_tokens, expected_kind in (
+        (3_885, 7_747, "output"),
+        (9_000, 3_500, "cumulative"),
+    ):
+        gateway = FakeGatewayClient(
+            (
+                GatewayCompletion(
+                    tool_calls=(
+                        ToolCall(
+                            tool_name="submit_dungeon_plan",
+                            call_id=f"over-{expected_kind}",
+                            arguments=proposal,
+                        ),
+                    ),
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                ),
+            )
+        )
+        with pytest.raises(StructuredSubmissionBudgetExceeded) as captured:
+            DungeonSubmissionService(gateway).submit(
+                profile=profile,
+                run_input=ModelRunInput(
+                    messages=(PromptMessage(role="user", content="synthetic request"),)
+                ),
+                seed=1842,
+            )
+        assert captured.value.limit_kind == expected_kind
+        assert _failure_code(captured.value) == "dungeon_prompt_token_budget_exhausted"
+        report = _failure_report(
+            captured.value, "dungeon_prompt_token_budget_exhausted"
+        )
+        assert report["usage"]["input_tokens"] == input_tokens
+        assert report["usage"]["output_tokens"] == output_tokens
+
+
+def test_manual_canary_override_keeps_cumulative_limit_and_durable_profile() -> None:
+    proposal = _tier_a_proposal()
+    profile = apply_advisory_output_cap_override(
+        resolve_dungeon_prompt_profile(
+            provider_id="openai-codex",
+            model_id="synthetic-codex",
+            capabilities=("text", "tool_calls"),
+            context_window_tokens=128_000,
+            output_token_limit=16_384,
+        ),
+        environment=RuntimeEnvironment.DEVELOPMENT,
+    )
+    accepted_gateway = FakeGatewayClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_plan",
+                        call_id="advisory-output-overage",
+                        arguments=proposal,
+                    ),
+                ),
+                input_tokens=3_885,
+                output_tokens=7_747,
+            ),
+        )
+    )
+
+    accepted = DungeonSubmissionService(accepted_gateway).submit(
+        profile=profile,
+        run_input=ModelRunInput(
+            messages=(PromptMessage(role="user", content="synthetic request"),)
+        ),
+        seed=1842,
+    )
+
+    assert accepted.model_run.resolved_profile.override_notes == profile.override_notes
+    assert accepted.model_run.usage_input_tokens == 3_885
+    assert accepted.model_run.usage_output_tokens == 7_747
+    policy_report = _failure_report(
+        ModelRunAbstained("synthetic failure"),
+        "dungeon_prompt_failed",
+        profile=profile,
+    )
+    assert policy_report["run_policy"] == {
+        "canary_id": "tier-a-live-canary-v1",
+        "output_cap_enforcement": "advisory_manual_canary",
+        "requested_output_token_limit": 4096,
+        "cumulative_token_limit": 12_000,
+    }
+
+    cumulative_gateway = FakeGatewayClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_plan",
+                        call_id="advisory-cumulative-overage",
+                        arguments=proposal,
+                    ),
+                ),
+                input_tokens=9_000,
+                output_tokens=3_500,
+            ),
+        )
+    )
+    with pytest.raises(StructuredSubmissionBudgetExceeded) as captured:
+        DungeonSubmissionService(cumulative_gateway).submit(
+            profile=profile,
+            run_input=ModelRunInput(
+                messages=(PromptMessage(role="user", content="synthetic request"),)
+            ),
+            seed=1842,
+        )
+    assert captured.value.limit_kind == "cumulative"
+
+
+def test_repair_does_not_start_when_estimated_input_cannot_fit() -> None:
+    proposal = _tier_a_proposal()
+    malformed = deepcopy(proposal)
+    malformed["unexpected"] = "schema error"
+    gateway = FakeGatewayClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_plan",
+                        call_id="nearly-exhausted",
+                        arguments=malformed,
+                    ),
+                ),
+                input_tokens=7_900,
+                output_tokens=3_700,
+            ),
+        )
+    )
+    profile = resolve_dungeon_prompt_profile(
+        provider_id="faux",
+        model_id="faux_deterministic_v1",
+        capabilities=("text", "tool_calls"),
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+    )
+
+    with pytest.raises(
+        ModelRunAbstained,
+        match="no budget remains for deterministic diagnostic repair",
+    ):
+        DungeonSubmissionService(gateway).submit(
+            profile=profile,
+            run_input=ModelRunInput(
+                messages=(PromptMessage(role="user", content="synthetic request"),)
+            ),
+            seed=1842,
+        )
+
+    assert len(gateway.messages) == 1
 
 
 def test_dm_guide_retains_tier_a_gate_content_and_creative_details() -> None:
@@ -419,6 +736,8 @@ def test_dm_guide_retains_tier_a_gate_content_and_creative_details() -> None:
                 "name": "Thunder Glyph",
                 "trigger": "Touch the chained folio.",
                 "effect": "A thunderous ward sounds.",
+                "detection": "Notice a hairline glyph around the chain staple.",
+                "disable": "Lift the staple while grounding the copper chain.",
                 "challenge": "high",
             },
             "feature": {
@@ -436,7 +755,7 @@ def test_dm_guide_retains_tier_a_gate_content_and_creative_details() -> None:
                     ToolCall(
                         tool_name="submit_dungeon_plan",
                         call_id="submit-guide",
-                        arguments={"proposal": proposal},
+                        arguments=proposal,
                     ),
                 ),
                 input_tokens=10,
@@ -476,14 +795,49 @@ def test_dm_guide_retains_tier_a_gate_content_and_creative_details() -> None:
     assert guide.dependencies[0].name == "Brass Key"
     assert guide.traps[0].trigger == "Touch the chained folio."
     assert guide.traps[0].effect == "A thunderous ward sounds."
+    assert guide.traps[0].detection == (
+        "Notice a hairline glyph around the chain staple."
+    )
+    assert guide.traps[0].disable == (
+        "Lift the staple while grounding the copper chain."
+    )
     assert guide.traps[0].detection_difficulty == 16
     assert guide.features[0].name == "Fallen Lens"
     assert guide.objectives[0].name == "Astral Lens"
     text = _dm_guide_text(guide)
-    assert "## Objectives" in text
-    assert "Effect: A thunderous ward sounds." in text
+    assert "## Room-by-room guide" in text
+    assert "Astral Lens" in text
+    assert "#### Ambush scene pressure" in text
+    assert "not yet populated" not in text
+    assert "unlock DC 13" in text
+    assert "**Consequence:** A thunderous ward sounds." in text
     readiness = _build_preparation_readiness(guide)
-    assert readiness is not None and readiness.ready
+    assert readiness is not None and not readiness.ready
+    assert len(readiness.diagnostics) == len(guide.content_issues)
+    assert {item.code for item in readiness.diagnostics} == {
+        "dungeon_preparation.guide_content_missing"
+    }
+    ready_specification = DungeonStudioSpecification(
+        schema_version="1.0.0",
+        layout_request=result.layout_request,
+        package=layout.package,
+        dm_guide=guide,
+        preparation_readiness=readiness,
+        model_lineage=(_lineage(result.model_run),),
+    )
+    quality = evaluate_dungeon_guide_quality(ready_specification)
+    assert not quality.automated_pass
+    prep_check = next(
+        item for item in quality.checks if item.dimension == "prep_usefulness"
+    )
+    assert prep_check.diagnostics == (
+        "guide_quality.prep.dependency_content_missing",
+        "guide_quality.prep.encounter_content_missing",
+        "guide_quality.prep.feature_content_missing",
+        "guide_quality.prep.objective_content_missing",
+        "guide_quality.prep.readiness_blocked",
+        "guide_quality.prep.room_narrative_missing",
+    )
 
     incomplete = guide.model_copy(
         update={
@@ -494,6 +848,7 @@ def test_dm_guide_retains_tier_a_gate_content_and_creative_details() -> None:
     blocked = _build_preparation_readiness(incomplete)
     assert blocked is not None and not blocked.ready
     assert {item.code for item in blocked.diagnostics} == {
+        "dungeon_preparation.guide_content_missing",
         "dungeon_preparation.lock_dependency_missing",
         "dungeon_preparation.trap_effect_unknown",
     }
@@ -505,6 +860,10 @@ def test_dm_guide_retains_tier_a_gate_content_and_creative_details() -> None:
         preparation_readiness=blocked,
         model_lineage=(_lineage(result.model_run),),
     )
+    quality = evaluate_dungeon_guide_quality(specification)
+    assert not quality.automated_pass
+    failed_dimensions = {item.dimension for item in quality.checks if not item.passed}
+    assert failed_dimensions == {"clue_logic", "prep_usefulness"}
     with pytest.raises(ConflictError, match="preparation is incomplete"):
         _require_preparation_ready(specification)
 

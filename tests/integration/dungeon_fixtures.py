@@ -1,72 +1,38 @@
 """Shared synthetic proof-carrying Tier A requests for root test suites."""
 
 import json
+from pathlib import Path
 
 from dm_dungeon import DungeonPlan, LayoutRequest, compile_dungeon_plan
 
-_SYNTHETIC_PLAN = {
-    "schema_version": "1.0.0",
-    "title": "Synthetic Constructive Archive",
-    "premise": "A synthetic archive used only to test deterministic preparation.",
-    "themes": ["synthetic"],
-    "rooms": [
-        {
-            "ref": "entry",
-            "name": "Archive Entry",
-            "role": "entrance",
-            "purpose": "Establish the synthetic route.",
-        },
-        {
-            "ref": "gallery",
-            "name": "Record Gallery",
-            "role": "exploration",
-            "purpose": "Provide a progression junction.",
-        },
-        {
-            "ref": "seal",
-            "name": "Sealed Hall",
-            "role": "puzzle",
-            "purpose": "Test deterministic progression.",
-        },
-        {
-            "ref": "vault",
-            "name": "Synthetic Vault",
-            "role": "objective",
-            "purpose": "Hold the synthetic objective.",
-        },
-        {
-            "ref": "cache",
-            "name": "Optional Cache",
-            "role": "optional",
-            "purpose": "Provide an upper branch and secret bypass.",
-        },
-    ],
-    "critical_path": ["entry", "gallery", "seal", "vault"],
-    "branches": [{"ref": "cache_branch", "from_room": "gallery", "rooms": ["cache"]}],
-    "loops": [
-        {
-            "ref": "cache_bypass",
-            "from_room": "cache",
-            "to_room": "vault",
-            "secret": True,
-        }
-    ],
-    "gates": [
-        {
-            "ref": "seal_gate",
-            "between_rooms": ["gallery", "seal"],
-            "kind": "locked",
-            "dependency_kind": "key",
-            "dependency_room": "cache",
-            "dependency_name": "Synthetic Archive Key",
-        }
-    ],
-    "room_contents": [{"room_ref": "vault", "objective": "Synthetic Objective"}],
-}
+_REVIEW_PLAN_PATH = (
+    Path(__file__).parents[1] / "evals/golden/dungeon_guide_quality_plan.json"
+)
+_REVIEW_CONTENT_PATH = (
+    Path(__file__).parents[1] / "evals/golden/dungeon_guide_quality_content.json"
+)
+
+
+def _synthetic_plan() -> dict[str, object]:
+    value = json.loads(_REVIEW_PLAN_PATH.read_text(encoding="utf-8"))
+    assert isinstance(value, dict)
+    return value
+
+
+def synthetic_prompt_proposal() -> dict[str, object]:
+    """Return a disposable model-shaped proposal for faux-provider integration."""
+
+    guide_content = json.loads(_REVIEW_CONTENT_PATH.read_text(encoding="utf-8"))
+    assert isinstance(guide_content, dict)
+    return {
+        "proposal_version": "1",
+        "plan": _synthetic_plan(),
+        "guide_content": guide_content,
+    }
 
 
 def synthetic_layout_request(package_id: str, *, seed: int = 424242) -> LayoutRequest:
-    plan = DungeonPlan.model_validate_json(json.dumps(_SYNTHETIC_PLAN))
+    plan = DungeonPlan.model_validate_json(_REVIEW_PLAN_PATH.read_bytes())
     compiled = compile_dungeon_plan(plan)
     assert compiled.accepted
     assert compiled.brief is not None

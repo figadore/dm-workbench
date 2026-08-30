@@ -63,10 +63,12 @@ from dm_assistant.modules.modeling import (
 )
 from dm_assistant.modules.scope import TaskType, resolve_task_scope
 from dm_assistant.orchestration.dungeons import (
+    DUNGEON_TIER_A_CANARY,
     CreateDungeonWorkflow,
     ExportDungeonWorkflow,
     PromptDungeonWorkflow,
     RegenerateDungeonWorkflow,
+    apply_advisory_output_cap_override,
     resolve_dungeon_prompt_profile,
 )
 from dm_assistant.orchestration.modeling import ModelRunAbstained
@@ -464,6 +466,13 @@ def dungeon_prompt(
             help="Stream the model/harness exchange to stderr; it is not persisted.",
         ),
     ] = False,
+    acknowledge_advisory_output_cap: Annotated[
+        bool,
+        typer.Option(
+            "--acknowledge-advisory-output-cap",
+            help="Frozen Tier A canary only: accept measured output above the requested provider cap while retaining the cumulative ceiling.",
+        ),
+    ] = False,
     created_by: Annotated[str, typer.Option("--created-by")] = "dm",
 ) -> None:
     """Generate a standalone draft with active campaign and model defaults."""
@@ -503,6 +512,21 @@ def dungeon_prompt(
                 selection_policy="dungeon-task-baseline-v1",
             )
             resolved_seed = seed if seed is not None else secrets.randbits(63)
+            is_frozen_canary = (
+                prompt == DUNGEON_TIER_A_CANARY.prompt
+                and resolved_seed == DUNGEON_TIER_A_CANARY.seed
+            )
+            if acknowledge_advisory_output_cap and not is_frozen_canary:
+                raise InvalidInputError(
+                    "The advisory output-cap override is restricted to the frozen Tier A canary prompt and seed."
+                )
+            if acknowledge_advisory_output_cap and (
+                runtime.settings.environment is RuntimeEnvironment.PRODUCTION
+                or selected_provider.id != "openai-codex"
+            ):
+                raise InvalidInputError(
+                    "The advisory output-cap override requires non-production openai-codex."
+                )
             try:
                 profile = resolve_dungeon_prompt_profile(
                     provider_id=selected_provider.id,
@@ -512,6 +536,15 @@ def dungeon_prompt(
                     output_token_limit=selected_model.max_output_tokens,
                     requested_effort=selected_effort,
                 )
+                if acknowledge_advisory_output_cap:
+                    profile = apply_advisory_output_cap_override(
+                        profile,
+                        environment=runtime.settings.environment,
+                    )
+                    typer.echo(
+                        "WARNING: provider output-cap enforcement is advisory for this one canary; the 12,000 measured-token cumulative publication ceiling remains enforced. Stop after this attempt.",
+                        err=True,
+                    )
                 attempt = prompted.execute(
                     PromptDungeonWorkflow(
                         campaign_id=resolved_campaign_id,
@@ -527,10 +560,18 @@ def dungeon_prompt(
                         requested_constraints=tuple(constraint or ()),
                     ),
                     profile,
-                    surface="cli",
+                    surface=(
+                        DUNGEON_TIER_A_CANARY.canary_id if is_frozen_canary else "cli"
+                    ),
                     debug=_emit_debug_event if debug else None,
                 )
                 if attempt.result is None:
+                    typer.echo(f"Attempt run: {attempt.attempt_run_id}", err=True)
+                    typer.echo(
+                        "Inspect with: dm dungeon run inspect "
+                        f"{attempt.attempt_run_id}",
+                        err=True,
+                    )
                     raise ModelRunAbstained(attempt.public_code)
                 result = attempt.result
             except ModelGatewayTransportError as error:
@@ -568,6 +609,49 @@ def dungeon_prompt(
             if not result.success:
                 _emit_dungeon_failure_summary(result.diagnostics)
                 raise typer.Exit(code=1)
+
+
+@dungeon_app.command("canary")
+def dungeon_canary(
+    provider: Annotated[str, typer.Option("--provider")],
+    model: Annotated[str, typer.Option("--model")],
+    campaign_id: Annotated[UUID | None, typer.Option("--campaign")] = None,
+    effort: Annotated[ReasoningEffort, typer.Option("--effort")] = ReasoningEffort.FAST,
+    acknowledge_advisory_output_cap: Annotated[
+        bool,
+        typer.Option(
+            "--acknowledge-advisory-output-cap",
+            help="Acknowledge the known Codex transport cap limitation for this one frozen canary.",
+        ),
+    ] = False,
+    debug: Annotated[
+        bool,
+        typer.Option(
+            "--debug",
+            help="Stream the model/harness exchange to stderr; it is not persisted.",
+        ),
+    ] = False,
+    created_by: Annotated[str, typer.Option("--created-by")] = "dm",
+) -> None:
+    """Run the frozen one-floor Tier A prompt and seed exactly once."""
+    typer.echo(
+        f"Canary {DUNGEON_TIER_A_CANARY.canary_id}; seed "
+        f"{DUNGEON_TIER_A_CANARY.seed}. Stop on the first failure.",
+        err=True,
+    )
+    dungeon_prompt(
+        prompt=DUNGEON_TIER_A_CANARY.prompt,
+        campaign_id=campaign_id,
+        provider=provider,
+        model=model,
+        seed=DUNGEON_TIER_A_CANARY.seed,
+        title=None,
+        effort=effort,
+        constraint=None,
+        debug=debug,
+        acknowledge_advisory_output_cap=acknowledge_advisory_output_cap,
+        created_by=created_by,
+    )
 
 
 @run_app.command("inspect")
@@ -1159,6 +1243,11 @@ def _model_run_rejected_error(error: ModelRunAbstained) -> ModelRunRejectedError
             "model gateway did not report token usage, so the safe automatic repair "
             "could not run. No draft was saved; retry after gateway usage reporting "
             "is available or use the hand-authored Dungeon Studio workflow."
+        ),
+        "dungeon_prompt_token_budget_exhausted": (
+            "The selected model exceeded the dungeon run token ceiling reported by "
+            "the gateway. No draft was saved; inspect the durable attempt before "
+            "changing the measured task budget."
         ),
         "dungeon_prompt_rejected_after_repair": (
             "The generated dungeon did not pass deterministic validation after its "

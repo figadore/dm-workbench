@@ -111,6 +111,8 @@ class PlanTrap(ContractModel):
     name: ShortText
     trigger: NonEmptyText | None = None
     effect: NonEmptyText | None = None
+    detection: NonEmptyText | None = None
+    disable: NonEmptyText | None = None
     challenge: ChallengeBand = ChallengeBand.MODERATE
 
 

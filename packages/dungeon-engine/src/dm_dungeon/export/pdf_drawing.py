@@ -79,7 +79,9 @@ def draw_svg(canvas: Canvas, svg: str) -> None:
 def _draw_text(canvas: Canvas, element: ET.Element, css_classes: set[str]) -> None:
     x = float(element.attrib.get("x", "0"))
     y = float(element.attrib.get("y", "0"))
-    size = 10 if "annotation" in css_classes else 12
+    size = float(
+        element.attrib.get("font-size", "10" if "annotation" in css_classes else "12")
+    )
     canvas.saveState()
     canvas.translate(x, y)
     canvas.scale(1, -1)
@@ -104,6 +106,8 @@ def _set_line_style(
     if "grid-line" in css_classes:
         canvas.setStrokeColor(colors.HexColor("#d2d2d2"))
         canvas.setLineWidth(0.5)
+    elif "passage-opening" in css_classes:
+        canvas.setStrokeColor(colors.white)
     elif "corridor" in css_classes and "corridor-outline" not in css_classes:
         canvas.setStrokeColor(colors.white)
     elif "door-secret" in css_classes:
@@ -121,13 +125,26 @@ def _shape_style(
 ) -> tuple[str | None, str | None, float]:
     if "map-background" in css_classes:
         return "#ffffff", None, 1
+    if "map-legend-panel" in css_classes:
+        return "#ffffff", "#111111", 1.5
     if "room" in css_classes:
         return None, "#111111", 2
+    if "corridor" in css_classes and "corridor-outline" not in css_classes:
+        return "#ffffff", None, 1
     if "terrain" in css_classes:
         return "#eeeeee", "#777777", 1
     if "zone" in css_classes:
         return None, "#777777", 1
-    if css_classes & {"feature", "marker", "stair"}:
+    if css_classes & {
+        "feature",
+        "marker",
+        "stair",
+        "room-callout",
+        "component-callout",
+        "feature-callout",
+        "callout-badge-shape",
+        "legend-symbol",
+    }:
         return "#ffffff", "#111111", 1.5
     if "hazard" in css_classes:
         return None, "#111111", 2

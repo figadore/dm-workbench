@@ -25,12 +25,12 @@ LOW_INK_THEME = SvgTheme(
         ".room{fill:none;stroke:#111;stroke-width:2;vector-effect:non-scaling-stroke}"
         ".corridor-outline{fill:none;stroke:#111;stroke-linecap:square;vector-effect:non-scaling-stroke}"
         ".corridor{fill:#fff;stroke:none}"
-        ".door{stroke:#111;stroke-width:3;vector-effect:non-scaling-stroke}"
+        ".door{stroke:#111;stroke-width:6;vector-effect:non-scaling-stroke}"
         ".door-secret{stroke:#555;stroke-dasharray:4 3}"
         ".door-trapped{stroke:#111;stroke-dasharray:2 2}"
         ".terrain{fill:#eee;stroke:#777;stroke-width:1;vector-effect:non-scaling-stroke}"
         ".zone{fill:none;stroke:#777;stroke-width:1;stroke-dasharray:4 3;vector-effect:non-scaling-stroke}"
-        ".feature,.marker,.stair{fill:#fff;stroke:#111;stroke-width:1.5;vector-effect:non-scaling-stroke}"
+        ".feature,.marker,.stair,.start-marker{fill:#fff;stroke:#111;stroke-width:1.5;vector-effect:non-scaling-stroke}"
         ".hazard{fill:none;stroke:#111;stroke-width:2;vector-effect:non-scaling-stroke}"
         ".label{fill:#111;font-family:system-ui,sans-serif;font-size:12px}"
         ".annotation{fill:#111;font-family:monospace;font-size:10px}"
@@ -44,8 +44,12 @@ LOW_INK_THEME = SvgTheme(
         ".room-callout,.component-callout{fill:#fff;stroke:#111;stroke-width:1.5;vector-effect:non-scaling-stroke}"
         ".hazard-callout{fill:#fff;stroke:#111;stroke-width:1.5;vector-effect:non-scaling-stroke}"
         ".feature-callout{fill:#fff;stroke:#111;stroke-width:1.5;vector-effect:non-scaling-stroke}"
-        ".callout-text,.callout-badge{fill:#111;font-family:system-ui,sans-serif;font-size:10px;font-weight:bold}"
+        ".callout-badge-shape{fill:#fff;stroke:#111;stroke-width:1.5;vector-effect:non-scaling-stroke}"
+        ".callout-text,.callout-badge{fill:#111;font-family:system-ui,sans-serif;font-weight:bold}"
         ".callout-leader{stroke:#777;stroke-width:1;vector-effect:non-scaling-stroke}"
+        ".map-legend-panel{fill:#fff;stroke:#111;stroke-width:1.5;vector-effect:non-scaling-stroke}"
+        ".legend-title,.legend-text,.legend-symbol-text{fill:#111;font-family:system-ui,sans-serif;font-weight:bold}"
+        ".legend-symbol{fill:#fff;stroke:#111;stroke-width:1.5;vector-effect:non-scaling-stroke}"
     ),
 )
 
@@ -56,10 +60,10 @@ DRAFT_THEME = SvgTheme(
         ".room{fill:none;stroke:#444;stroke-width:1;vector-effect:non-scaling-stroke}"
         ".corridor-outline{fill:none;stroke:#777;stroke-linecap:square;vector-effect:non-scaling-stroke}"
         ".corridor{fill:#fff;stroke:none}"
-        ".door{stroke:#444;stroke-width:2;vector-effect:non-scaling-stroke}"
+        ".door{stroke:#444;stroke-width:5;vector-effect:non-scaling-stroke}"
         ".door-secret,.door-trapped{stroke-dasharray:3 3}"
         ".terrain,.zone{fill:none;stroke:#aaa;stroke-width:1;vector-effect:non-scaling-stroke}"
-        ".feature,.marker,.stair,.hazard{fill:#fff;stroke:#666;stroke-width:1;vector-effect:non-scaling-stroke}"
+        ".feature,.marker,.stair,.hazard,.start-marker{fill:#fff;stroke:#666;stroke-width:1;vector-effect:non-scaling-stroke}"
         ".label{fill:#333;font-family:system-ui,sans-serif;font-size:11px}"
         ".annotation{fill:#555;font-family:monospace;font-size:9px}"
     ),
@@ -69,9 +73,12 @@ DRAFT_THEME = SvgTheme(
     secret_stroke="#666",
     annotation_stroke="#aaa",
     callout_css=(
-        ".room-callout,.component-callout,.hazard-callout,.feature-callout{fill:#fff;stroke:#555;stroke-width:1;vector-effect:non-scaling-stroke}"
-        ".callout-text,.callout-badge{fill:#333;font-family:system-ui,sans-serif;font-size:9px;font-weight:bold}"
+        ".room-callout,.component-callout,.hazard-callout,.feature-callout,.callout-badge-shape{fill:#fff;stroke:#555;stroke-width:1;vector-effect:non-scaling-stroke}"
+        ".callout-text,.callout-badge{fill:#333;font-family:system-ui,sans-serif;font-weight:bold}"
         ".callout-leader{stroke:#999;stroke-width:1;vector-effect:non-scaling-stroke}"
+        ".map-legend-panel{fill:#fff;stroke:#555;stroke-width:1;vector-effect:non-scaling-stroke}"
+        ".legend-title,.legend-text,.legend-symbol-text{fill:#333;font-family:system-ui,sans-serif;font-weight:bold}"
+        ".legend-symbol{fill:#fff;stroke:#555;stroke-width:1;vector-effect:non-scaling-stroke}"
     ),
 )
 

@@ -25,6 +25,12 @@ from dm_assistant.orchestration.dungeons import (
     RegenerateDungeonWorkflow,
 )
 from dm_dungeon import LayoutRequest
+from dm_dungeon.export import (
+    ROLL20_EXPORTER_VERSION,
+    PngExportManifest,
+    Roll20ExportManifest,
+)
+from dm_dungeon.rendering import RenderAudience
 
 pytestmark = pytest.mark.integration
 
@@ -57,13 +63,18 @@ def test_failed_layout_retains_diagnostics_run_without_partial_version(
     campaign_id = create_campaign(db_engine)
     dungeon_studio, preparation = studio(db_engine, tmp_path)
     request = request_fixture()
-    broken_topology = request.topology.model_copy(update={"connections": ()})
+    required_bounds = request.floor_bounds[0]
+    impossible_bounds = required_bounds.model_copy(
+        update={"width_cells": 4, "height_cells": 4, "margin_cells": 1}
+    )
 
     result = dungeon_studio.create(
         CreateDungeonWorkflow(
             campaign_id=campaign_id,
             title="Invalid Synthetic Layout",
-            layout_request=request.model_copy(update={"topology": broken_topology}),
+            layout_request=request.model_copy(
+                update={"floor_bounds": (impossible_bounds,)}
+            ),
             created_by="synthetic-dm",
         )
     )
@@ -113,7 +124,7 @@ def test_provider_free_dungeon_workflow_persists_previews_exports_and_approval(
     assert first_version.validation_report["valid"] is True
     assert first_specification.package.metadata.seed == 424242
     first_assets = preparation.list_assets(campaign_id, first_version.id)
-    assert len(first_assets) == 15
+    assert len(first_assets) == 9
     assert {item.role for item in first_assets} >= {
         ArtifactAssetRole.SPECIFICATION,
         ArtifactAssetRole.VALIDATION_REPORT,
@@ -132,9 +143,32 @@ def test_provider_free_dungeon_workflow_persists_previews_exports_and_approval(
     )
     _, player_bytes = preparation.read_asset(campaign_id, player_svg.asset_id)
     _, dm_bytes = preparation.read_asset(campaign_id, dm_svg.asset_id)
-    assert b"room_vault" not in player_bytes
-    assert b"connection_vault_secret" not in player_bytes
-    assert b"room_vault" in dm_bytes
+    dm_only_layout_ids = {
+        item.id
+        for components in (
+            first_specification.package.rooms,
+            first_specification.package.corridors,
+            first_specification.package.composable_doors,
+        )
+        for item in components
+        if item.visibility.value == "dm_only"
+    }
+    assert dm_only_layout_ids
+    for component_id in dm_only_layout_ids:
+        assert component_id.encode() not in player_bytes
+        assert component_id.encode() in dm_bytes
+
+    png_manifests = tuple(
+        PngExportManifest.model_validate_json(
+            preparation.read_asset(campaign_id, asset.asset_id)[1]
+        )
+        for asset in first_assets
+        if asset.role is ArtifactAssetRole.MANIFEST
+    )
+    player_png_manifest = next(
+        item for item in png_manifests if item.audience is RenderAudience.PLAYER
+    )
+    assert not dm_only_layout_ids & set(player_png_manifest.rendered_component_ids)
 
     original = first_specification.package
     locked_ids = (
@@ -176,7 +210,9 @@ def test_provider_free_dungeon_workflow_persists_previews_exports_and_approval(
     assert comparison.left_version_id == first_version.id
     assert comparison.right_version_id == second_version.id
     assert set(locked_ids) <= set(comparison.unchanged_component_ids)
-    assert comparison.changed_component_ids
+    # The constructive baseline is intentionally seed-independent until optional
+    # compaction/variation exists, so changing only the seed preserves all components.
+    assert comparison.changed_component_ids == ()
 
     assert dungeon_studio.print_capability.status == "disabled"
     with pytest.raises(DungeonPrintExportDisabledError) as disabled:
@@ -196,7 +232,7 @@ def test_provider_free_dungeon_workflow_persists_previews_exports_and_approval(
             export_format="roll20",
         )
     )
-    assert len(exported_asset_ids) == 8
+    assert len(exported_asset_ids) == 4
     all_assets = preparation.list_assets(campaign_id, second_version.id)
     assert {item.role for item in all_assets} >= {
         ArtifactAssetRole.DM_ROLL20_BUNDLE,
@@ -206,11 +242,23 @@ def test_provider_free_dungeon_workflow_persists_previews_exports_and_approval(
         ArtifactAssetRole.DM_PRINT_PDF,
         ArtifactAssetRole.PLAYER_PRINT_PDF,
     } & {item.role for item in all_assets}
+    roll20_manifests: dict[RenderAudience, Roll20ExportManifest] = {}
     for asset in all_assets:
-        if asset.role is ArtifactAssetRole.PLAYER_ROLL20_BUNDLE:
-            _, data = preparation.read_asset(campaign_id, asset.asset_id)
-            assert b"room_vault" not in data
-            assert b"connection_vault_secret" not in data
+        if asset.role is not ArtifactAssetRole.MANIFEST:
+            continue
+        _, data = preparation.read_asset(campaign_id, asset.asset_id)
+        payload = json.loads(data)
+        if payload.get("exporter_version") != ROLL20_EXPORTER_VERSION:
+            continue
+        manifest = Roll20ExportManifest.model_validate_json(data)
+        roll20_manifests[manifest.audience] = manifest
+    assert set(roll20_manifests) == {RenderAudience.DM, RenderAudience.PLAYER}
+    assert dm_only_layout_ids <= set(
+        roll20_manifests[RenderAudience.DM].rendered_component_ids
+    )
+    assert not dm_only_layout_ids & set(
+        roll20_manifests[RenderAudience.PLAYER].rendered_component_ids
+    )
 
     detail = dungeon_studio.approve(
         campaign_id=campaign_id,

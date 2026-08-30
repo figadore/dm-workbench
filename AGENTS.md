@@ -12,6 +12,21 @@ Before changing code or schema:
 
 The live next task is defined by `PROJECT_STATUS.md`, not by guessing from the directory tree.
 
+## Alpha Versioning and the Retention Gate
+
+- Until the project explicitly declares the **retention gate** crossed in both
+  `PROJECT_STATUS.md` and the architecture, evolve active V1 schemas, prompts,
+  generators, renderers, exporters, fixtures, and review-packet formats **in place**.
+  Do not bump labels or add compatibility readers for synthetic fixtures, ignored review
+  packets, disposable alpha databases, or provider canaries.
+- Declare the retention gate no later than the first intentionally retained real-user
+  campaign/artifact, external consumer, non-disposable deployment, or promised replay
+  requirement. At that point, freeze the retained pins and document reader/migration and
+  compatibility policy before making incompatible changes.
+- After the retention gate, version changes only when retained data or consumers need a
+  distinguishable contract/implementation for correct reading, replay, migration, or
+  rollback. A code change alone is not a reason to increment a version.
+
 ## Non-Negotiable Invariants
 
 - A model can write canonical proposals only; it can never commit canonical campaign state or approve preparation artifacts.

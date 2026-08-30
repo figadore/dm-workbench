@@ -14,6 +14,7 @@ from dm_dungeon.export import (
     export_png,
     write_png_artifact,
 )
+from dm_dungeon.export.raster import rasterize_svg
 from dm_dungeon.rendering import RenderAudience
 
 GOLDEN_ROOT = Path(__file__).parent / "golden"
@@ -35,6 +36,25 @@ def png_request(
         show_labels=True,
         show_markers=True,
     )
+
+
+def test_raster_text_honors_svg_baseline_instead_of_sinking_below_it() -> None:
+    data = rasterize_svg(
+        '<svg width="80" height="80"><text x="40" y="45" '
+        'text-anchor="middle" font-size="20">F1</text></svg>',
+        dpi=140,
+    )
+
+    with Image.open(io.BytesIO(data)) as image:
+        grayscale = image.convert("L")
+        dark_rows = [
+            y
+            for y in range(image.height)
+            if any(grayscale.getpixel((x, y)) < 100 for x in range(image.width))
+        ]
+    assert dark_rows
+    assert max(dark_rows) <= 45
+    assert (min(dark_rows) + max(dark_rows)) / 2 < 42
 
 
 def test_png_export_is_deterministic_and_manifest_hashes_bytes(
@@ -61,6 +81,39 @@ def test_png_export_is_deterministic_and_manifest_hashes_bytes(
         assert image.size == (400, 400)
         assert image.mode == "RGB"
         assert image.info["dpi"][0] == pytest.approx(140, abs=0.1)
+
+
+def test_player_png_renders_doors_thicker_than_walls_and_grid(
+    synthetic_package: DungeonPackage,
+) -> None:
+    artifact = export_png(
+        synthetic_package,
+        png_request(synthetic_package, include_grid=True),
+    )
+
+    assert artifact.data is not None
+    door = next(
+        item
+        for item in synthetic_package.composable_doors
+        if item.floor_id == "floor_upper" and item.visibility.value == "player_safe"
+    )
+    start = door.segment.start
+    end = door.segment.end
+    midpoint_x = (start.x + end.x) * 20 // 2
+    midpoint_y = (start.y + end.y) * 20 // 2
+    with Image.open(io.BytesIO(artifact.data)) as image:
+        grayscale = image.convert("L")
+        if start.x == end.x:
+            cross_section = [
+                grayscale.getpixel((midpoint_x + offset, midpoint_y))
+                for offset in range(-5, 6)
+            ]
+        else:
+            cross_section = [
+                grayscale.getpixel((midpoint_x, midpoint_y + offset))
+                for offset in range(-5, 6)
+            ]
+    assert sum(pixel < 80 for pixel in cross_section) >= 6
 
 
 def test_grid_on_and_gridless_png_keep_dimensions_but_change_pixels(

@@ -251,9 +251,11 @@ created and switched without copying UUIDs into every command:
 
 ### Alpha dungeon V1 evaluation
 
-The alpha accepts one compact `submit_dungeon_plan` proposal only. Models supply a
-bounded `DungeonPlan`: 4–8 relative rooms, one critical path, up to two branches,
-one loop, one gate, and bounded room content. Deterministic code constructs all
+The alpha accepts one compact `submit_dungeon_plan` proposal only. Proposal fields
+(`proposal_version`, `plan`, and optional guide content) are the tool arguments directly;
+there is no additional `proposal` wrapper. Models supply a bounded `DungeonPlan`: 4–8
+relative rooms, one critical path, up to two branches, one loop, one gate, and bounded
+room content. Deterministic code constructs all
 edges and IDs and emits an independently recomputed `TopologyCertificate` covering
 connectivity, cycle/branch/gate/secret witnesses, room/port demand, and embedding
 bands. Geometry, visibility, validation, rendering, persistence, and approval
@@ -263,11 +265,85 @@ remain server-owned. Run inspection remains body-free:
 uv run --frozen dm dungeon run inspect <attempt-run-id>
 ```
 
+When both the initial structured submission and its one repair are rejected, the CLI
+prints the durable attempt UUID and the inspection command. The attempt report records
+each attempt's safe stage plus bounded server-authored diagnostic codes, JSON paths, and
+repair hints. It never stores the prompt, submitted proposal, provider response, or
+reasoning. Measured output or total request usage above the pinned token ceiling also
+fails before publication and stores only safe counts/limit kind. Before the one repair,
+the Workbench estimates its complete canonical message and tool-schema input and skips it
+when the measured remaining budget cannot fit that input. Use transient `--debug` capture
+only when sensitive bodies are explicitly needed for local diagnosis.
+
+The current live canary is a committed one-floor Tier A prompt with seed `714000001`,
+exposed only through `dm dungeon canary`; provider and model must be explicit. Do not run
+it until the human guide review and provider-free Tier B/C gates pass. For the known
+non-production Codex transport limitation, one operator may explicitly acknowledge that
+the requested output cap is advisory:
+
+```bash
+uv run --frozen dm dungeon canary \
+  --provider openai-codex \
+  --model <contract-tested-model-id> \
+  --acknowledge-advisory-output-cap
+```
+
+That flag is rejected for ordinary prompts, other providers, or production. It does not
+raise or disable the 12,000 measured-token cumulative publication ceiling, repair-input
+reservation, validation, secrecy, or atomic-publication gates. The attempt report and any
+accepted model lineage record the canary ID and policy. Stop after this one attempt on
+success or failure; post-response checks cannot recover provider tokens already consumed.
+
 The frozen provider-free V1 suite is synthetic and safe for CI:
 
 ```bash
 uv run --frozen pytest -q tests/evals/test_dungeon_evals.py
 ```
+
+Generate the fixed synthetic human DM quality-review packet without PostgreSQL or a
+model provider:
+
+```bash
+make dungeon-review-packet
+open generated/dungeon-guide-review/dm-map.png
+open generated/dungeon-guide-review/dm-guide.md
+open generated/dungeon-guide-review/review-worksheet.md
+```
+
+The ignored packet contains DM/player maps, the exact keyed guide, its typed runnable
+content input, automated rubric, reproducibility manifest, and a blank human worksheet.
+The concise Markdown guide uses entry-first sequential presentation numbers while
+preserving exact map callouts. It gives every room read-aloud material and groups only
+actionable door state, checks, clues, triggers, consequences, challenges, features,
+puzzles, and objectives in that room; ordinary map-visible connectivity and separate
+sensory/purpose repetition are omitted. Each runnable gate dependency, scene pressure,
+puzzle, feature, and objective includes a situation, adjudication guidance, and bounded
+player choice/outcome pairs. Read-aloud is limited to what players can observe; hidden
+mechanics stay in DM adjudication. Runnable interactions use concrete physical setups,
+triggers, effects, recovery, and repeated-failure outcomes, and cross-room alarms state
+both their shared state and whether anything responds.
+The DM map includes visible
+corridor boundaries, collision-tested mechanics badges, and a compact symbol key.
+Player output defaults to geometry only: no room/door/feature keys, objective, start, or
+encounter markers; visible ordinary doors use a heavy slab line rather than blending
+into the light grid, and explicitly player-safe physical features retain only their
+unlabelled shape. The single entrance is projected on the DM map as a distinct start flag; other
+technical pathfinding anchors stay in package
+lineage and optional VTT metadata rather than appearing as unexplained map glyphs.
+Generation fails when the
+output directory already exists so a completed worksheet is not overwritten; use
+`REVIEW_OUTPUT=generated/<another-name>` for another review. Completing the worksheet
+records quality evidence only—it does not approve preparation or write campaign canon.
+
+This packet is a development quality gate, not a campaign-content feature or final
+product format. It holds one synthetic prompt and seed constant so a DM can judge the
+whole prompt-to-draft result—map readability, player secrecy, progression, clues, and
+whether the guide is runnable without improvising missing material. The worksheet turns
+subjective table-readiness feedback into concrete corrections; automated regressions then
+preserve the objective parts of those corrections. A passing packet demonstrates that it
+is worth moving on to harder topology stress cases and eventually live-model canaries. It
+does not prove every future dungeon is good, and it is not intended to become a library
+of authored adventures.
 
 Live small-model runs remain paused until the provider-free and faux Tier A
 gates pass. The alpha retains no compatibility readers for disposable prior
@@ -324,7 +400,7 @@ The internal P1-02 Library service now ingests bounded strict-UTF-8 files throug
 
 ## Current Next Step
 
-Continue **P7-14e** with prompt/guide integration and the provider-free stress ladder: exercise the constructive 4–8 room Tier A path through CLI/web/faux publication, verify exact keyed guide quality and atomic draft publication, and keep live canaries paused until those gates pass. See [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) and [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
+Continue **P7-14e** with human DM review of the regenerated fixed Tier A packet after the physical-causality correction. If every quality dimension and player secrecy pass, record the evidence and begin provider-free Tier B/C stress-ladder design; otherwise make only the next bounded fixture/renderer correction. Keep live canaries paused. See [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) and [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
 
 ## License and Third-Party Marks
 

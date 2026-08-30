@@ -13,7 +13,7 @@ def rasterize_svg(svg: str, dpi: int) -> bytes:
     height = int(root.attrib["height"])
     image = Image.new("RGB", (width, height), "white")
     draw = ImageDraw.Draw(image)
-    font = ImageFont.load_default()
+    default_font = ImageFont.load_default()
 
     for element in root.iter():
         tag = _local_name(element.tag)
@@ -84,7 +84,13 @@ def rasterize_svg(svg: str, dpi: int) -> bytes:
             x = float(element.attrib.get("x", "0"))
             y = float(element.attrib.get("y", "0"))
             color = "#111111" if "annotation" not in css_classes else "#444444"
-            anchor = "mm" if element.attrib.get("text-anchor") == "middle" else "ls"
+            anchor = "ms" if element.attrib.get("text-anchor") == "middle" else "ls"
+            font_size = element.attrib.get("font-size")
+            font = (
+                ImageFont.load_default(size=float(font_size))
+                if font_size is not None
+                else default_font
+            )
             try:
                 draw.text((x, y), element.text, fill=color, font=font, anchor=anchor)
             except UnicodeEncodeError:
@@ -139,6 +145,8 @@ def _line_style(
     width = max(1, round(requested_width))
     if "grid-line" in css_classes:
         return "#d2d2d2", 1
+    if "passage-opening" in css_classes:
+        return "#ffffff", width
     if "corridor" in css_classes and "corridor-outline" not in css_classes:
         return "#ffffff", width
     if "door-secret" in css_classes:
@@ -149,8 +157,12 @@ def _line_style(
 def _shape_style(css_classes: set[str]) -> tuple[str | None, str | None, int]:
     if "map-background" in css_classes:
         return "#ffffff", None, 1
+    if "map-legend-panel" in css_classes:
+        return "#ffffff", "#111111", 2
     if "room" in css_classes:
         return None, "#111111", 2
+    if "corridor" in css_classes and "corridor-outline" not in css_classes:
+        return "#ffffff", None, 1
     if "terrain" in css_classes:
         return "#eeeeee", "#777777", 1
     if "zone" in css_classes:
@@ -162,6 +174,8 @@ def _shape_style(css_classes: set[str]) -> tuple[str | None, str | None, int]:
         "room-callout",
         "component-callout",
         "feature-callout",
+        "callout-badge-shape",
+        "legend-symbol",
     }:
         return "#ffffff", "#111111", 2
     if "hazard" in css_classes or "hazard-callout" in css_classes:

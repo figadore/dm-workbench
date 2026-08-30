@@ -30,17 +30,30 @@ from dm_assistant.modules.preparation import (
 )
 from dm_assistant.observability import bind_log_context, get_logger
 from dm_assistant.orchestration.dungeons.contracts import (
+    DUNGEON_GENERATION_PROPOSAL_SCHEMA_VERSION,
     CreateDungeonWorkflow,
     CreatePromptedDungeonWorkflow,
     DungeonDmGuide,
     DungeonDmNotes,
     DungeonGenerationRegressionCase,
     DungeonGuideConnection,
+    DungeonGuideContentEntry,
+    DungeonGuideContentIssue,
+    DungeonGuideContentPlan,
+    DungeonGuideContentValidationResult,
     DungeonGuideDependency,
+    DungeonGuideEncounterContent,
     DungeonGuideFeature,
+    DungeonGuideFeatureContent,
+    DungeonGuideGateContent,
     DungeonGuideMapReference,
     DungeonGuideObjective,
+    DungeonGuideObjectiveContent,
+    DungeonGuidePuzzle,
+    DungeonGuidePuzzleContent,
     DungeonGuideRoom,
+    DungeonGuideRoomNarrative,
+    DungeonGuideRunnableContent,
     DungeonGuideTrap,
     DungeonPreparationReadiness,
     DungeonPreparationReadinessDiagnostic,
@@ -57,6 +70,7 @@ from dm_assistant.orchestration.dungeons.contracts import (
 from dm_dungeon import (
     DoorMechanics,
     DungeonPackage,
+    DungeonPlan,
     LayoutRequest,
     LockedLayoutComponents,
     PngExportRequest,
@@ -74,10 +88,14 @@ from dm_dungeon import (
 )
 from dm_dungeon.contracts import (
     DUNGEON_PACKAGE_SCHEMA_VERSION,
+    EncounterSlotIntent,
     EndpointDoorKind,
+    RoomRole,
     VerticalEndpointSide,
 )
 from dm_dungeon.export import (
+    PDF_EXPORTER_VERSION,
+    PNG_EXPORTER_VERSION,
     ROLL20_EXPORTER_VERSION,
     Roll20Artifact,
     Roll20ExportRequest,
@@ -337,7 +355,9 @@ class DungeonStudioService:
                     ]
                 }
             )
-            schema_versions["dungeon_generation_proposal"] = "1.0.0"
+            schema_versions["dungeon_generation_proposal"] = (
+                DUNGEON_GENERATION_PROPOSAL_SCHEMA_VERSION
+            )
             generator_versions["plan_compiler"] = (
                 dm_dungeon.DUNGEON_PLAN_COMPILER_VERSION
             )
@@ -353,8 +373,8 @@ class DungeonStudioService:
                 generator_versions=generator_versions,
                 renderer_versions={
                     "svg": SVG_RENDERER_VERSION,
-                    "png": "png-v1",
-                    "pdf": "pdf-v1",
+                    "png": PNG_EXPORTER_VERSION,
+                    "pdf": PDF_EXPORTER_VERSION,
                     "roll20": ROLL20_EXPORTER_VERSION,
                 },
                 model_task_profile_id=model_task_profile_id,
@@ -616,6 +636,14 @@ def _is_unknown_preparation_text(value: str | None) -> bool:
     }
 
 
+def build_dungeon_preparation_readiness(
+    guide: DungeonDmGuide | None,
+) -> DungeonPreparationReadiness | None:
+    """Build provider-free readiness evidence for an exact DM guide."""
+
+    return _build_preparation_readiness(guide)
+
+
 def _build_preparation_readiness(
     guide: DungeonDmGuide | None,
 ) -> DungeonPreparationReadiness | None:
@@ -668,23 +696,206 @@ def _build_preparation_readiness(
                     message="This trap's trigger/effect is unknown and needs DM completion.",
                 )
             )
+        if _is_unknown_preparation_text(trap.detection) or _is_unknown_preparation_text(
+            trap.disable
+        ):
+            diagnostics.append(
+                DungeonPreparationReadinessDiagnostic(
+                    code="dungeon_preparation.trap_method_unknown",
+                    component_id=trap.marker_id,
+                    map_reference=trap.map_reference,
+                    message="This trap needs concrete detection and disable methods.",
+                )
+            )
     for puzzle in guide.puzzles:
         if any(
             _is_unknown_preparation_text(value)
-            for value in (puzzle.mechanism, puzzle.solution, puzzle.consequence)
+            for value in (
+                puzzle.solution,
+                puzzle.content.situation,
+                puzzle.content.adjudication,
+            )
         ):
             diagnostics.append(
                 DungeonPreparationReadinessDiagnostic(
                     code="dungeon_preparation.puzzle_solution_unknown",
-                    component_id=puzzle.marker_id,
+                    component_id=puzzle.room_id,
                     map_reference=puzzle.map_reference,
                     message="This puzzle has unknown play details and needs DM completion.",
                 )
             )
+    for issue in guide.content_issues:
+        diagnostics.append(
+            DungeonPreparationReadinessDiagnostic(
+                code=(
+                    "dungeon_preparation.guide_content_missing"
+                    if issue.code == "guide_content.required_missing"
+                    else "dungeon_preparation.guide_content_invalid"
+                ),
+                component_id=issue.entry_ref or issue.target_ref or issue.room_ref,
+                message=issue.message,
+            )
+        )
     return DungeonPreparationReadiness(
         schema_version="1.0.0",
         ready=not diagnostics,
         diagnostics=tuple(diagnostics),
+    )
+
+
+def validate_dungeon_guide_content(
+    plan: DungeonPlan,
+    content_plan: DungeonGuideContentPlan | None,
+) -> DungeonGuideContentValidationResult:
+    """Validate optional runnable prose without invoking the pure compiler or layout."""
+
+    rooms = {room.ref: room for room in plan.rooms}
+    gates = {gate.ref: gate for gate in plan.gates}
+    room_contents = {content.room_ref: content for content in plan.room_contents}
+    accepted_room_narratives: list[DungeonGuideRoomNarrative] = []
+    accepted: list[DungeonGuideContentEntry] = []
+    issues: list[DungeonGuideContentIssue] = []
+    supplied_targets: set[tuple[str, str]] = set()
+    room_narratives = content_plan.room_narratives if content_plan is not None else ()
+    content_entries = content_plan.entries if content_plan is not None else ()
+
+    for narrative in room_narratives:
+        if narrative.room_ref in rooms:
+            accepted_room_narratives.append(narrative)
+        else:
+            issues.append(
+                DungeonGuideContentIssue(
+                    code="guide_content.target_invalid",
+                    kind="room",
+                    entry_ref=narrative.room_ref,
+                    room_ref=narrative.room_ref,
+                    target_ref=narrative.room_ref,
+                    message="Room narrative does not match an accepted dungeon plan room.",
+                )
+            )
+    accepted_narrative_refs = {
+        narrative.room_ref for narrative in accepted_room_narratives
+    }
+    for room_ref in rooms:
+        if room_ref in accepted_narrative_refs:
+            continue
+        issues.append(
+            DungeonGuideContentIssue(
+                code="guide_content.required_missing",
+                kind="room",
+                room_ref=room_ref,
+                target_ref=room_ref,
+                message="The accepted dungeon plan requires sensory read-aloud material for this room.",
+            )
+        )
+
+    for entry in content_entries:
+        target_ref = (
+            entry.gate_ref
+            if isinstance(entry, DungeonGuideGateContent)
+            else entry.room_ref
+        )
+        supplied_targets.add((entry.kind, target_ref))
+        room = rooms.get(entry.room_ref)
+        valid = room is not None
+        if isinstance(entry, DungeonGuideGateContent):
+            gate = gates.get(entry.gate_ref)
+            valid = valid and gate is not None
+            if gate is not None:
+                valid = valid and gate.dependency_room == entry.room_ref
+                valid = valid and gate.dependency_name == entry.dependency_name
+        elif isinstance(entry, DungeonGuideEncounterContent):
+            valid = (
+                valid and room is not None and room.encounter == entry.encounter_intent
+            )
+        elif isinstance(entry, DungeonGuidePuzzleContent):
+            valid = valid and room is not None and room.role is RoomRole.PUZZLE
+        elif isinstance(entry, DungeonGuideFeatureContent):
+            planned = room_contents.get(entry.room_ref)
+            valid = (
+                valid
+                and planned is not None
+                and planned.feature is not None
+                and planned.feature.name == entry.feature_name
+            )
+        elif isinstance(entry, DungeonGuideObjectiveContent):
+            planned = room_contents.get(entry.room_ref)
+            valid = (
+                valid
+                and room is not None
+                and room.role is RoomRole.OBJECTIVE
+                and planned is not None
+                and planned.objective == entry.objective_name
+            )
+        if valid:
+            accepted.append(entry)
+        else:
+            issues.append(
+                DungeonGuideContentIssue(
+                    code="guide_content.target_invalid",
+                    kind=entry.kind,
+                    entry_ref=entry.ref,
+                    room_ref=entry.room_ref,
+                    target_ref=target_ref,
+                    message="Runnable guide content does not match the accepted dungeon plan target.",
+                )
+            )
+
+    required_targets: list[
+        tuple[
+            Literal["gate_dependency", "encounter", "puzzle", "feature", "objective"],
+            str,
+            str,
+        ]
+    ] = []
+    required_targets.extend(
+        ("gate_dependency", gate.ref, gate.dependency_room) for gate in plan.gates
+    )
+    required_targets.extend(
+        ("encounter", room.ref, room.ref)
+        for room in plan.rooms
+        if room.encounter is not None
+    )
+    required_targets.extend(
+        ("puzzle", room.ref, room.ref)
+        for room in plan.rooms
+        if room.role is RoomRole.PUZZLE
+    )
+    required_targets.extend(
+        ("feature", content.room_ref, content.room_ref)
+        for content in plan.room_contents
+        if content.feature is not None
+    )
+    required_targets.extend(
+        ("objective", content.room_ref, content.room_ref)
+        for content in plan.room_contents
+        if content.objective is not None
+    )
+    for kind, target_ref, room_ref in required_targets:
+        if (kind, target_ref) in supplied_targets:
+            continue
+        issues.append(
+            DungeonGuideContentIssue(
+                code="guide_content.required_missing",
+                kind=kind,
+                room_ref=room_ref,
+                target_ref=target_ref,
+                message="The accepted dungeon plan requires runnable guide content for this target.",
+            )
+        )
+    return DungeonGuideContentValidationResult(
+        schema_version="1.0.0",
+        accepted_room_narratives=tuple(accepted_room_narratives),
+        accepted_entries=tuple(accepted),
+        issues=tuple(issues),
+    )
+
+
+def _runnable_content(entry: DungeonGuideContentEntry) -> DungeonGuideRunnableContent:
+    return DungeonGuideRunnableContent(
+        situation=entry.situation,
+        adjudication=entry.adjudication,
+        player_choices=entry.player_choices,
     )
 
 
@@ -694,16 +905,29 @@ def _build_dm_guide(
     model_lineage: tuple[PromptedDungeonModelLineage, ...],
 ) -> DungeonDmGuide | None:
     """Project accepted Tier A plan prose onto exact certified package IDs."""
-    plan = next(
+    proposal = next(
         (
-            lineage.proposal.plan
+            lineage.proposal
             for lineage in reversed(model_lineage)
             if lineage.proposal is not None and lineage.proposal.plan is not None
         ),
         None,
     )
-    if plan is None:
+    if proposal is None or proposal.plan is None:
         return None
+    return build_dungeon_dm_guide(
+        request, package, proposal.plan, proposal.guide_content
+    )
+
+
+def build_dungeon_dm_guide(
+    request: LayoutRequest,
+    package: DungeonPackage,
+    plan: DungeonPlan,
+    content_plan: DungeonGuideContentPlan | None = None,
+) -> DungeonDmGuide:
+    """Project one accepted plan onto exact generated package IDs without persistence."""
+
     compiled = compile_dungeon_plan(plan)
     if (
         not compiled.accepted
@@ -716,6 +940,20 @@ def _build_dm_guide(
         raise ConflictError(
             "Accepted proposal does not match the generated dungeon plan."
         )
+
+    content_validation = validate_dungeon_guide_content(plan, content_plan)
+    room_narratives_by_ref = {
+        item.room_ref: item for item in content_validation.accepted_room_narratives
+    }
+    content_by_kind_room = {
+        (entry.kind, entry.room_ref): entry
+        for entry in content_validation.accepted_entries
+    }
+    gate_content_by_ref = {
+        entry.gate_ref: entry
+        for entry in content_validation.accepted_entries
+        if isinstance(entry, DungeonGuideGateContent)
+    }
 
     map_callouts = tuple(
         entry
@@ -748,25 +986,55 @@ def _build_dm_guide(
         item.room_id: item for item in compiled.mechanics_plan.encounter_slots
     }
     guide_rooms: list[DungeonGuideRoom] = []
-    for plan_room in sorted(plan.rooms, key=lambda item: item.ref):
+    plan_rooms_by_ref = {room.ref: room for room in plan.rooms}
+    ordered_room_refs = []
+    for critical_room_ref in plan.critical_path:
+        ordered_room_refs.append(critical_room_ref)
+        ordered_room_refs.extend(
+            room_ref
+            for branch in plan.branches
+            if branch.from_room == critical_room_ref
+            for room_ref in branch.rooms
+        )
+    ordered_room_refs.extend(
+        room_ref
+        for branch in plan.branches
+        if branch.from_room not in plan.critical_path
+        for room_ref in branch.rooms
+    )
+    ordered_room_refs.extend(sorted(set(plan_rooms_by_ref) - set(ordered_room_refs)))
+    for presentation_number, room_ref in enumerate(ordered_room_refs, start=1):
+        plan_room = plan_rooms_by_ref[room_ref]
         room_id = room_ids_by_ref[plan_room.ref]
         room = rooms_by_id[room_id]
         reference = map_reference(room_id, room.floor_id)
         if reference is None:
             raise ConflictError("A DM-visible room is missing its map callout.")
+        encounter_content = content_by_kind_room.get(("encounter", plan_room.ref))
+        narrative = room_narratives_by_ref.get(plan_room.ref)
         guide_rooms.append(
             DungeonGuideRoom(
                 room_id=room_id,
                 floor_id=room.floor_id,
                 map_reference=reference,
+                presentation_number=presentation_number,
                 name=plan_room.name,
                 role=room.role,
                 tags=plan_room.tags,
+                read_aloud=narrative.read_aloud if narrative is not None else None,
+                sensory_details=(
+                    narrative.sensory_details if narrative is not None else ()
+                ),
                 preparation_note=plan_room.purpose,
                 encounter_slot=plan_room.encounter,
                 encounter_slot_id=(
                     encounter_slots_by_room[room_id].id
                     if plan_room.encounter is not None
+                    else None
+                ),
+                encounter_content=(
+                    _runnable_content(encounter_content)
+                    if isinstance(encounter_content, DungeonGuideEncounterContent)
                     else None
                 ),
             )
@@ -827,6 +1095,7 @@ def _build_dm_guide(
         reference = map_reference(room_id, room.floor_id)
         if reference is None:
             raise ConflictError("A dependency room is missing its map callout.")
+        gate_content = gate_content_by_ref.get(gate_intent.ref)
         guide_dependencies.append(
             DungeonGuideDependency(
                 dependency_id=dependency_id,
@@ -835,6 +1104,14 @@ def _build_dm_guide(
                 kind=gate_intent.dependency_kind.value,
                 room_id=room_id,
                 room_map_reference=reference,
+                discovery=(
+                    gate_content.discovery if gate_content is not None else None
+                ),
+                content=(
+                    _runnable_content(gate_content)
+                    if gate_content is not None
+                    else None
+                ),
             )
         )
 
@@ -866,6 +1143,8 @@ def _build_dm_guide(
                     name=content.trap.name,
                     trigger=content.trap.trigger,
                     effect=content.trap.effect,
+                    detection=content.trap.detection,
+                    disable=content.trap.disable,
                     detection_difficulty=trap_plan.detection_difficulty,
                     disable_difficulty=trap_plan.disable_difficulty,
                 )
@@ -876,6 +1155,7 @@ def _build_dm_guide(
             reference = map_reference(marker.id, marker.floor_id)
             if reference is None:
                 raise ConflictError("A feature is missing its DM map callout.")
+            feature_content = content_by_kind_room.get(("feature", room_ref))
             guide_features.append(
                 DungeonGuideFeature(
                     marker_id=marker.id,
@@ -884,6 +1164,11 @@ def _build_dm_guide(
                     kind=content.feature.kind,
                     name=content.feature.name,
                     description=content.feature.description,
+                    content=(
+                        _runnable_content(feature_content)
+                        if isinstance(feature_content, DungeonGuideFeatureContent)
+                        else None
+                    ),
                 )
             )
         if content.objective is not None:
@@ -892,6 +1177,7 @@ def _build_dm_guide(
             reference = map_reference(marker.id, marker.floor_id)
             if reference is None:
                 raise ConflictError("An objective is missing its DM map callout.")
+            objective_content = content_by_kind_room.get(("objective", room_ref))
             guide_objectives.append(
                 DungeonGuideObjective(
                     marker_id=marker.id,
@@ -899,8 +1185,33 @@ def _build_dm_guide(
                     map_reference=reference,
                     kind=objective_plan.kind,
                     name=objective_plan.name,
+                    content=(
+                        _runnable_content(objective_content)
+                        if isinstance(objective_content, DungeonGuideObjectiveContent)
+                        else None
+                    ),
                 )
             )
+
+    guide_puzzles: list[DungeonGuidePuzzle] = []
+    for entry in content_validation.accepted_entries:
+        if not isinstance(entry, DungeonGuidePuzzleContent):
+            continue
+        room_id = room_ids_by_ref[entry.room_ref]
+        room = rooms_by_id[room_id]
+        reference = map_reference(room_id, room.floor_id)
+        if reference is None:
+            raise ConflictError("A puzzle room is missing its DM map callout.")
+        guide_puzzles.append(
+            DungeonGuidePuzzle(
+                content_ref=entry.ref,
+                room_id=room_id,
+                map_reference=reference,
+                name=entry.name,
+                solution=entry.solution,
+                content=_runnable_content(entry),
+            )
+        )
 
     return DungeonDmGuide(
         schema_version="1.0.0",
@@ -911,9 +1222,10 @@ def _build_dm_guide(
         connections=tuple(guide_connections),
         dependencies=tuple(guide_dependencies),
         traps=tuple(guide_traps),
-        puzzles=(),
+        puzzles=tuple(guide_puzzles),
         objectives=tuple(guide_objectives),
         features=tuple(guide_features),
+        content_issues=content_validation.issues,
     )
 
 
@@ -1056,89 +1368,191 @@ def _dm_notes_text(request: LayoutRequest, dm_notes: DungeonDmNotes) -> str:
     return "\n".join(sections) + "\n"
 
 
+def render_dungeon_dm_guide_text(guide: DungeonDmGuide) -> str:
+    """Render an exact DM guide as a portable provider-free review document."""
+
+    return _dm_guide_text(guide)
+
+
 def _dm_guide_text(guide: DungeonDmGuide) -> str:
-    """Render the versioned guide as a portable readable UTF-8 DM document."""
+    """Render a concise, exploration-ordered Markdown DM document."""
 
     sections = [f"# {guide.title} — DM guide", "", guide.premise]
+    gate_connections = {
+        connection.gate_id: connection
+        for connection in guide.connections
+        if connection.gate_id is not None
+    }
     if guide.rooms:
-        sections.extend(("", "## Rooms"))
-        for room in guide.rooms:
-            details = [room.role.value.replace("_", " ")]
-            if room.tags:
-                details.append(f"tags: {', '.join(room.tags)}")
-            if room.encounter_slot is not None:
-                details.append(f"encounter: {room.encounter_slot.value}")
-            sections.append(
-                f"- {room.map_reference.token} — {room.name} ({'; '.join(details)})"
+        sections.extend(("", "## Room-by-room guide"))
+    for room in guide.rooms:
+        sections.extend(
+            (
+                "",
+                f"### {room.presentation_number}. {room.name} "
+                f"(Map {room.map_reference.token})",
+                "",
+                "**Read aloud**",
+                "",
+                f"> {room.read_aloud or 'Unknown; complete before play.'}",
             )
-            if room.preparation_note:
-                sections.append(f"  {room.preparation_note}")
-    if guide.connections:
-        sections.extend(("", "## Doors and transitions"))
+        )
+
         for connection in guide.connections:
-            token = (
-                connection.map_reference.token
-                if connection.map_reference
-                else "Transition"
+            if (
+                connection.from_room_id == room.room_id
+                and _connection_has_actionable_state(connection)
+            ):
+                _append_connection_state(sections, connection)
+        if room.encounter_slot is not None:
+            heading = (
+                "Exploration challenge"
+                if room.encounter_slot is EncounterSlotIntent.EXPLORATION
+                else f"{room.encounter_slot.value.title()} scene pressure"
             )
-            mechanics: list[str] = []
-            if connection.concealed:
-                mechanics.append(
-                    f"secret (discovery {connection.discovery_difficulty})"
+            sections.extend(("", f"#### {heading}"))
+            if room.encounter_content is None:
+                sections.extend(
+                    ("", "- **Preparation blocker:** Runnable details are missing.")
                 )
-            if connection.gate_id:
-                mechanics.append(
-                    f"{connection.gate_kind.value} gate (unlock {connection.unlock_difficulty})"
-                )
-            if connection.trap_id:
-                mechanics.append(
-                    f"trapped (trigger: {connection.trap_trigger}; "
-                    f"disable {connection.disable_difficulty}; "
-                    f"effect: {connection.trap_effect})"
-                )
-            endpoint = (
-                f" {connection.endpoint.value} {connection.endpoint_kind.value}"
-                if connection.endpoint is not None
-                and connection.endpoint_kind is not None
-                else ""
-            )
-            sections.append(
-                f"- {token} — {connection.passage}{endpoint}"
-                + (f": {', '.join(mechanics)}" if mechanics else ".")
-            )
-    if guide.dependencies:
-        sections.extend(("", "## Keys and clues"))
+            else:
+                _append_runnable_content(sections, room.encounter_content)
         for dependency in guide.dependencies:
-            sections.append(
-                f"- {dependency.room_map_reference.token} — {dependency.kind}: {dependency.name}"
+            if dependency.room_id != room.room_id:
+                continue
+            gate_connection = gate_connections.get(dependency.target_gate_id)
+            gate_token = (
+                gate_connection.map_reference.token
+                if gate_connection is not None
+                and gate_connection.map_reference is not None
+                else dependency.target_gate_id
             )
-    if guide.traps:
-        sections.extend(("", "## Traps and hazards"))
+            sections.extend(("", f"#### {dependency.name} — opens {gate_token}"))
+            if dependency.discovery is not None:
+                sections.extend(("", f"- **Find:** {dependency.discovery}"))
+            if dependency.content is not None:
+                _append_runnable_content(sections, dependency.content)
         for trap in guide.traps:
-            sections.append(
-                f"- {trap.map_reference.token} — {trap.name}: trigger {trap.trigger or 'unknown'} "
-                f"Detection {trap.detection_difficulty}; disable {trap.disable_difficulty}. "
-                f"Effect: {trap.effect or 'unknown'}"
+            if trap.room_id != room.room_id:
+                continue
+            sections.extend(
+                (
+                    "",
+                    f"#### {trap.map_reference.token} — {trap.name}",
+                    "",
+                    f"- **Trigger:** {trap.trigger or 'Unknown; complete before play.'}",
+                )
             )
-    if guide.puzzles:
-        sections.extend(("", "## Puzzles"))
+            if trap.detection is not None and trap.disable is not None:
+                sections.extend(
+                    (
+                        f"- **Detect:** DC {trap.detection_difficulty}; {trap.detection}",
+                        f"- **Disable:** DC {trap.disable_difficulty}; {trap.disable}",
+                    )
+                )
+            else:
+                sections.append(
+                    f"- **Detect / disable:** DC {trap.detection_difficulty} / "
+                    f"DC {trap.disable_difficulty}; methods unknown; complete before play."
+                )
+            sections.append(
+                f"- **Consequence:** {trap.effect or 'Unknown; complete before play.'}"
+            )
         for puzzle in guide.puzzles:
-            sections.append(
-                f"- {puzzle.map_reference.token} — {puzzle.name}: {puzzle.mechanism or 'unknown'} "
-                f"Difficulty {puzzle.difficulty}. Solution: {puzzle.solution or 'unknown'}. "
-                f"Consequence: {puzzle.consequence or 'unknown'}"
+            if puzzle.room_id != room.room_id:
+                continue
+            sections.extend(
+                ("", f"#### {puzzle.name}", "", f"- **Solution:** {puzzle.solution}")
             )
-    if guide.objectives:
-        sections.extend(("", "## Objectives"))
-        for objective in guide.objectives:
-            sections.append(f"- {objective.map_reference.token} — {objective.name}")
-    if guide.features:
-        sections.extend(("", "## Features"))
+            _append_runnable_content(sections, puzzle.content)
         for feature in guide.features:
-            sections.append(
-                f"- {feature.map_reference.token} — {feature.name}: {feature.description}"
+            if feature.room_id != room.room_id:
+                continue
+            sections.extend(
+                ("", f"#### {feature.map_reference.token} — {feature.name}")
             )
+            if feature.content is not None:
+                _append_runnable_content(sections, feature.content)
+        for objective in guide.objectives:
+            if objective.room_id != room.room_id:
+                continue
+            sections.extend(
+                ("", f"#### {objective.map_reference.token} — {objective.name}")
+            )
+            if objective.content is not None:
+                _append_runnable_content(sections, objective.content)
+
+    if guide.content_issues:
+        sections.extend(("", "## Preparation blockers", ""))
+        sections.extend(
+            f"- {issue.code}: {issue.message}" for issue in guide.content_issues
+        )
     return "\n".join(sections) + "\n"
+
+
+def _connection_has_actionable_state(connection: DungeonGuideConnection) -> bool:
+    return bool(
+        connection.concealed
+        or connection.gate_id
+        or connection.trap_id
+        or connection.endpoint is not None
+    )
+
+
+def _append_connection_state(
+    sections: list[str], connection: DungeonGuideConnection
+) -> None:
+    token = (
+        connection.map_reference.token
+        if connection.map_reference is not None
+        else "Transition"
+    )
+    if connection.concealed:
+        heading = f"{token} — Secret {connection.passage}"
+    elif connection.gate_id is not None:
+        heading = f"{token} — {connection.gate_kind.value.title()} {connection.passage}"
+    else:
+        heading = f"{token} — {connection.passage.title()} state"
+    sections.extend(("", f"#### {heading}", ""))
+    if connection.concealed:
+        sections.append(
+            f"- **Find:** discovery DC {connection.discovery_difficulty}; "
+            "check method is DM-adjudicated."
+        )
+    if connection.gate_id is not None:
+        sections.append(f"- **Open:** unlock DC {connection.unlock_difficulty}.")
+    if connection.trap_id is not None:
+        sections.extend(
+            (
+                f"- **Trigger:** {connection.trap_trigger}",
+                f"- **Disable:** DC {connection.disable_difficulty}.",
+                f"- **Consequence:** {connection.trap_effect}",
+            )
+        )
+    if connection.endpoint is not None and connection.endpoint_kind is not None:
+        sections.append(
+            f"- **Transition:** {connection.endpoint.value} "
+            f"{connection.endpoint_kind.value}."
+        )
+
+
+def _append_runnable_content(
+    sections: list[str], content: DungeonGuideRunnableContent
+) -> None:
+    sections.extend(
+        (
+            "",
+            f"- **Situation:** {content.situation}",
+            f"- **Run it:** {content.adjudication}",
+            "",
+            "##### Choices and consequences",
+            "",
+        )
+    )
+    sections.extend(
+        f"{index}. **{choice.action}** — {choice.outcome}"
+        for index, choice in enumerate(content.player_choices, start=1)
+    )
 
 
 def _dm_presentation_package(

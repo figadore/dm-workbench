@@ -1,24 +1,26 @@
 """CLI adapter smoke test over the shared Dungeon Studio service."""
 
 import json
+import uuid
 from collections.abc import Iterator
+from copy import deepcopy
 from pathlib import Path
 from urllib.request import Request
 
 import pytest
-from dungeon_fixtures import synthetic_layout_request
+from dungeon_fixtures import synthetic_layout_request, synthetic_prompt_proposal
 from sqlalchemy import Engine, text
 from typer.testing import CliRunner
 
+from dm_assistant.adapters.assets import LocalAssetStore
 from dm_assistant.cli.main import app
-from dm_dungeon import read_dungeon_package, to_canonical_json
+from dm_assistant.modules.preparation import PreparationService
+from dm_assistant.orchestration.dungeons import DungeonStudioSpecification
+from dm_assistant.orchestration.dungeons.evals import evaluate_dungeon_guide_quality
+from dm_dungeon import to_canonical_json
 
 pytestmark = pytest.mark.integration
 runner = CliRunner()
-FIXTURE_PATH = (
-    Path(__file__).parents[2]
-    / "packages/dungeon-engine/tests/fixtures/sunken_archive.v1.json"
-)
 
 
 class _JsonResponse:
@@ -40,12 +42,18 @@ class _JsonResponse:
 class _SseResponse:
     status = 200
 
-    def __init__(self, proposal: dict[str, object]) -> None:
+    def __init__(
+        self,
+        proposal: dict[str, object],
+        *,
+        input_tokens: int = 10,
+        output_tokens: int = 20,
+    ) -> None:
         payload = json.dumps(
             {
                 "name": "submit_dungeon_plan",
                 "id": "submit-cli-v1",
-                "arguments": {"proposal": proposal},
+                "arguments": proposal,
             },
             separators=(",", ":"),
         )
@@ -54,7 +62,10 @@ class _SseResponse:
             f"data: {payload}\n".encode(),
             b"\n",
             b"event: usage\n",
-            b'data: {"input_tokens":10,"output_tokens":20}\n',
+            (
+                f'data: {{"input_tokens":{input_tokens},'
+                f'"output_tokens":{output_tokens}}}\n'
+            ).encode(),
             b"\n",
             b"event: completion\n",
             b'data: {"reason":"stop"}\n',
@@ -172,7 +183,7 @@ def test_cli_generate_inspect_and_approve_use_shared_workflow(
         ],
     )
     assert roll20_export.exit_code == 0, roll20_export.output
-    assert len(_output_document(roll20_export.output)["asset_ids"]) == 8
+    assert len(_output_document(roll20_export.output)["asset_ids"]) == 4
 
     inspected = runner.invoke(
         app,
@@ -210,44 +221,7 @@ def test_cli_prompt_uses_private_gateway_and_persists_package(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    package = read_dungeon_package(FIXTURE_PATH)
-    proposal: dict[str, object] = {
-        "proposal_version": "1",
-        "plan": {
-            "schema_version": "1.0.0",
-            "title": package.brief.title,
-            "premise": "A synthetic flooded archive lies beneath a lighthouse.",
-            "themes": ["flooded archive"],
-            "rooms": [
-                {
-                    "ref": "entry",
-                    "name": "Entry",
-                    "role": "entrance",
-                    "purpose": "Establish the archive.",
-                },
-                {
-                    "ref": "stacks",
-                    "name": "Stacks",
-                    "role": "exploration",
-                    "purpose": "Reveal its history.",
-                },
-                {
-                    "ref": "gallery",
-                    "name": "Gallery",
-                    "role": "exploration",
-                    "purpose": "Foreshadow the vault.",
-                },
-                {
-                    "ref": "vault",
-                    "name": "Vault",
-                    "role": "objective",
-                    "purpose": "Hold the ledger.",
-                },
-            ],
-            "critical_path": ["entry", "stacks", "gallery", "vault"],
-            "room_contents": [{"room_ref": "vault", "objective": "Sealed Ledger"}],
-        },
-    }
+    proposal = synthetic_prompt_proposal()
     source_root = tmp_path / "prompt-sources"
     source_root.mkdir()
     environment = {
@@ -286,11 +260,34 @@ def test_cli_prompt_uses_private_gateway_and_persists_package(
                                     "maxOutputTokens": 4096,
                                 }
                             ],
-                        }
+                        },
+                        {
+                            "id": "openai-codex",
+                            "name": "Synthetic Codex",
+                            "authenticated": True,
+                            "authModes": ["oauth"],
+                            "models": [
+                                {
+                                    "id": "synthetic-codex",
+                                    "name": "Synthetic Codex model",
+                                    "input": ["text"],
+                                    "capabilities": ["text", "thinking", "tool_calls"],
+                                    "contextWindow": 128000,
+                                    "maxOutputTokens": 16384,
+                                }
+                            ],
+                        },
                     ]
                 }
             )
         if request.full_url.endswith("/v1/streams"):
+            request_document = json.loads(request.data or b"{}")
+            if request_document.get("provider") == "openai-codex":
+                return _SseResponse(
+                    proposal,
+                    input_tokens=3_885,
+                    output_tokens=7_747,
+                )
             return _SseResponse(proposal)
         raise AssertionError(f"unexpected gateway URL: {request.full_url}")
 
@@ -311,7 +308,7 @@ def test_cli_prompt_uses_private_gateway_and_persists_package(
     assert result["success"] is True
     assert result["resolved"]["provider"] == "faux"
     assert result["resolved"]["model"] == "faux-deterministic-v1"
-    assert result["resolved"]["title"] == package.brief.title
+    assert result["resolved"]["title"] == "Synthetic Constructive Archive"
     assert isinstance(result["resolved"]["seed"], int)
     campaigns = runner.invoke(app, ["campaign", "list"])
     assert campaigns.exit_code == 0, campaigns.output
@@ -332,7 +329,33 @@ def test_cli_prompt_uses_private_gateway_and_persists_package(
     assert inspected.exit_code == 0, inspected.output
     detail = _output_document(inspected.output)
     assert detail["versions"] == [result["artifact_version_id"]]
-    assert detail["title"] == package.brief.title
+    assert detail["title"] == "Synthetic Constructive Archive"
+
+    preparation = PreparationService(
+        db_engine,
+        LocalAssetStore(
+            tmp_path / "prompt-assets",
+            tmp_path / "prompt-scratch",
+        ),
+    )
+    version = preparation.get_version(
+        uuid.UUID(campaign_id), uuid.UUID(str(result["artifact_version_id"]))
+    )
+    specification = DungeonStudioSpecification.model_validate_json(
+        json.dumps(version.specification)
+    )
+    assert len(preparation.list_assets(uuid.UUID(campaign_id), version.id)) == 9
+    assert specification.dm_guide is not None
+    assert specification.preparation_readiness is not None
+    assert specification.preparation_readiness.ready
+    assert evaluate_dungeon_guide_quality(specification).automated_pass
+    assert version.generation_run_id is not None
+    run = preparation.get_generation_run(
+        uuid.UUID(campaign_id), version.generation_run_id
+    )
+    assert len(run.tool_runs) == 1
+    assert run.tool_runs[0]["tool_name"] == "submit_dungeon_plan"
+
     with db_engine.connect() as connection:
         selection = connection.execute(
             text(
@@ -342,3 +365,104 @@ def test_cli_prompt_uses_private_gateway_and_persists_package(
             )
         ).one()
     assert tuple(selection) == ("faux", "faux-deterministic-v1", "standard")
+
+    canary = runner.invoke(
+        app,
+        [
+            "dungeon",
+            "canary",
+            "--provider",
+            "openai-codex",
+            "--model",
+            "synthetic-codex",
+            "--acknowledge-advisory-output-cap",
+        ],
+    )
+    assert canary.exit_code == 0, canary.output
+    canary_result = _output_document(canary.output)
+    assert canary_result["success"] is True
+    assert canary_result["resolved"]["seed"] == 714_000_001
+    canary_version = preparation.get_version(
+        uuid.UUID(campaign_id),
+        uuid.UUID(str(canary_result["artifact_version_id"])),
+    )
+    canary_specification = DungeonStudioSpecification.model_validate_json(
+        json.dumps(canary_version.specification)
+    )
+    assert canary_specification.model_lineage
+    canary_profile = canary_specification.model_lineage[0].model_run.resolved_profile
+    assert canary_profile.override_notes["canary_id"] == "tier-a-live-canary-v1"
+    assert (
+        canary_profile.override_notes["output_cap_enforcement"]
+        == "advisory_manual_canary"
+    )
+    with db_engine.connect() as connection:
+        canary_attempt = connection.execute(
+            text(
+                "SELECT input_scope, validation_report FROM generation_run "
+                "WHERE campaign_id = :campaign_id AND generation_kind = 'dungeon_prompt' "
+                "AND input_scope->>'surface' = 'tier-a-live-canary-v1'"
+            ),
+            {"campaign_id": uuid.UUID(campaign_id)},
+        ).one()
+    assert canary_attempt.input_scope["surface"] == "tier-a-live-canary-v1"
+    assert canary_attempt.validation_report["run_policy"] == {
+        "canary_id": "tier-a-live-canary-v1",
+        "output_cap_enforcement": "advisory_manual_canary",
+        "requested_output_token_limit": 4096,
+        "cumulative_token_limit": 12000,
+    }
+
+    invalid_proposal = deepcopy(proposal)
+    invalid_plan = invalid_proposal["plan"]
+    assert isinstance(invalid_plan, dict)
+    invalid_rooms = invalid_plan["rooms"]
+    assert isinstance(invalid_rooms, list)
+    invalid_rooms[0]["encounter"] = "set_piece"
+    proposal = invalid_proposal
+    rejected = runner.invoke(
+        app,
+        [
+            "dungeon",
+            "prompt",
+            "A schema-invalid synthetic archive.",
+            "--campaign",
+            campaign_id,
+            "--provider",
+            "faux",
+            "--model",
+            "faux-deterministic-v1",
+        ],
+    )
+    assert rejected.exit_code == 1, rejected.output
+    attempt_line = next(
+        line
+        for line in rejected.output.splitlines()
+        if line.startswith("Attempt run: ")
+    )
+    failed_attempt = uuid.UUID(attempt_line.removeprefix("Attempt run: "))
+    assert f"Inspect with: dm dungeon run inspect {failed_attempt}" in rejected.output
+    inspected_attempt = runner.invoke(
+        app,
+        [
+            "dungeon",
+            "run",
+            "inspect",
+            str(failed_attempt),
+            "--campaign",
+            campaign_id,
+        ],
+    )
+    assert inspected_attempt.exit_code == 0, inspected_attempt.output
+    attempt_report = _output_document(inspected_attempt.output)["validation_report"]
+    assert attempt_report["stage"] == "model_submission"
+    assert attempt_report["code"] == "dungeon_prompt_rejected_after_repair"
+    assert attempt_report["repair_attempted"] is True
+    assert [item["attempt"] for item in attempt_report["submission_attempts"]] == [
+        "initial",
+        "repair",
+    ]
+    final_diagnostic = attempt_report["submission_attempts"][1]["diagnostics"][0]
+    assert final_diagnostic["code"] == "submission.schema_invalid"
+    assert final_diagnostic["path"].endswith("/encounter")
+    assert "set_piece" not in json.dumps(attempt_report)

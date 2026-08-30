@@ -51,6 +51,7 @@ from dm_dungeon.layout import (
 )
 from dm_dungeon.rendering import (
     MapCallout,
+    MapCalloutBadge,
     MapCalloutKind,
     MapKey,
     RenderAudience,
@@ -122,6 +123,7 @@ __all__ = [
     "PngArtifact",
     "PngExportRequest",
     "MapCallout",
+    "MapCalloutBadge",
     "MapCalloutKind",
     "MapKey",
     "RenderAudience",

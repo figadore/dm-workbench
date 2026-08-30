@@ -6,7 +6,8 @@ import json
 import time
 import uuid
 from collections.abc import Callable, Mapping
-from typing import Protocol, cast
+from dataclasses import dataclass
+from typing import Literal, Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, JsonValue
 
@@ -33,12 +34,12 @@ from dm_assistant.modules.preparation import (
     canonical_json_sha256,
 )
 from dm_assistant.orchestration.dungeons.contracts import (
+    DUNGEON_GENERATION_PROPOSAL_SCHEMA_VERSION,
     CreatePromptedDungeonWorkflow,
     DungeonGenerationProposal,
     DungeonWorkflowResult,
     PromptDungeonWorkflow,
     PromptedDungeonModelLineage,
-    SubmitDungeonPlanInput,
 )
 from dm_assistant.orchestration.modeling import (
     GatewayClient,
@@ -62,11 +63,13 @@ from dm_dungeon.layout import ORTHOGONAL_LAYOUT_GENERATOR_VERSION
 
 _DUNGEON_CONTEXT_KIND = "dungeon_generation"
 _DUNGEON_SCHEMA_NAME = "dungeon_generation_proposal"
-_DUNGEON_SCHEMA_VERSION = "1.0.0"
+_DUNGEON_SCHEMA_VERSION = DUNGEON_GENERATION_PROPOSAL_SCHEMA_VERSION
 _SUBMIT_DUNGEON_PLAN_TOOL = "submit_dungeon_plan"
 _MAX_REPAIR_ARGUMENT_CHARACTERS = 12_000
 _OUTPUT_TOKEN_LIMIT = 4_096
 _CUMULATIVE_TOKEN_BUDGET = 12_000
+_INPUT_TOKEN_ESTIMATE_BYTES_PER_TOKEN = 4
+_INPUT_TOKEN_ESTIMATE_OVERHEAD = 512
 _PLAN_GUIDANCE = (
     "Plan rules: one floor and 4–8 rooms; exactly one entrance and one objective; "
     "critical_path starts at the entrance and ends at the objective. Put every other "
@@ -75,7 +78,18 @@ _PLAN_GUIDANCE = (
     "when concealment is intended. Add at most one gate on a constructed public path "
     "edge; put its key or clue in a public room reachable before that gate. Name the "
     "final objective in exactly one room_contents record for the objective room. "
-    "Do not author edges, IDs, floors, coordinates, dimensions, seeds, or numeric DCs."
+    "Add one guide_content room_narrative for every room, with one short read-aloud "
+    "paragraph and two to four distinct sensory details that do not merely repeat it. Limit "
+    "read-aloud to what players can observe; keep hidden mechanisms in adjudication. When a "
+    "plan includes a gate dependency, encounter slot, puzzle-role room, feature, or objective, "
+    "add one matching guide_content entry with a concise runnable situation, explicit "
+    "adjudication, and two to four player action/outcome choices; include gate discovery and "
+    "puzzle solution in their typed fields. Use ordinary language for concrete objects and "
+    "operations. Give each interaction one consistent physical setup, trigger, effect, recovery, "
+    "and repeated-failure consequence when relevant. For traps, separate a visible trap warning from the concealed trigger and describe what detection and disable checks find or manipulate. Explain shared or cross-room state exactly, including whether an alarm has a responder, avoid undefined setting jargon, and do not "
+    "repeat map-visible connectivity or duplicate one interaction across entries. Make clues, "
+    "triggers, checks, and consequences actionable. Do not author edges, IDs, floors, coordinates, "
+    "dimensions, seeds, or numeric DCs."
 )
 
 
@@ -173,13 +187,39 @@ def resolve_dungeon_prompt_profile(
     )
 
 
-class DungeonProposalRejectedAfterRepair(Exception):
-    """Both bounded submissions were structurally valid but not acceptable.
+DungeonSubmissionFailureStage = Literal[
+    "model_submission", "intent_compile", "deterministic_preflight"
+]
 
-    This is deliberately distinct from a model abstention: deterministic compiler or
-    preflight diagnostics rejected the replacement proposal after the one permitted
-    fresh repair request.
-    """
+
+@dataclass(frozen=True, slots=True)
+class DungeonSubmissionFailure:
+    """One body-free rejection retained for safe after-the-fact inspection."""
+
+    attempt: Literal["initial", "repair"]
+    stage: DungeonSubmissionFailureStage
+    diagnostics: tuple[dict[str, JsonValue], ...]
+
+    def report(self) -> dict[str, JsonValue]:
+        """Return the bounded JSON document safe to persist on an attempt run."""
+        return {
+            "attempt": self.attempt,
+            "stage": self.stage,
+            "diagnostics": [dict(item) for item in self.diagnostics],
+        }
+
+
+class DungeonProposalRejectedAfterRepair(Exception):
+    """The initial and one permitted replacement submissions were rejected."""
+
+    def __init__(
+        self,
+        message: str = "dungeon proposal was rejected after its one repair request",
+        *,
+        failures: tuple[DungeonSubmissionFailure, ...] = (),
+    ) -> None:
+        super().__init__(message)
+        self.failures = failures
 
 
 class DungeonSubmissionService:
@@ -204,11 +244,12 @@ class DungeonSubmissionService:
         _validate_profile(profile)
         compiled: DungeonPlanCompileResult | None = None
         request: LayoutRequest | None = None
+        rejection_stage: DungeonSubmissionFailureStage = "model_submission"
 
-        def handle(value: SubmitDungeonPlanInput) -> ToolResult:
-            nonlocal compiled, request
-            proposal = value.proposal
+        def handle(proposal: DungeonGenerationProposal) -> ToolResult:
+            nonlocal compiled, rejection_stage, request
             if proposal.abstention is not None:
+                rejection_stage = "model_submission"
                 return ToolResult(
                     tool_name=_SUBMIT_DUNGEON_PLAN_TOOL,
                     call_id="server_submit",
@@ -217,6 +258,7 @@ class DungeonSubmissionService:
             assert proposal.plan is not None
             compiled = compile_dungeon_plan(proposal.plan)
             if not compiled.accepted:
+                rejection_stage = "intent_compile"
                 return ToolResult(
                     tool_name=_SUBMIT_DUNGEON_PLAN_TOOL,
                     call_id="server_submit",
@@ -232,6 +274,7 @@ class DungeonSubmissionService:
             request = _compile_layout_request(compiled, seed)
             _, diagnostics, valid = _preflight(request)
             if not valid:
+                rejection_stage = "deterministic_preflight"
                 return ToolResult(
                     tool_name=_SUBMIT_DUNGEON_PLAN_TOOL,
                     call_id="server_submit",
@@ -270,9 +313,10 @@ class DungeonSubmissionService:
                 "Submit one compact dungeon proposal. The server owns IDs, seed, "
                 "geometry, visibility, validation, persistence, and approval."
             ),
-            input_schema=SubmitDungeonPlanInput,
+            input_schema=DungeonGenerationProposal,
         )
         deadline = time.monotonic() + profile.time_budget_seconds
+        initial_failure: DungeonSubmissionFailure | None = None
         try:
             submitted, record = runner.run(
                 profile=profile,
@@ -284,48 +328,58 @@ class DungeonSubmissionService:
         except StructuredSubmissionRejected as rejected:
             record = rejected.record
             runs = [record]
-            repaired_profile = _remaining_submission_profile(profile, record)
+            initial_failure = DungeonSubmissionFailure(
+                attempt="initial",
+                stage="model_submission",
+                diagnostics=rejected.diagnostics,
+            )
+            repair_input = _repair_model_input(
+                command=run_input,
+                prior_arguments=record.tool_invocations[0].arguments,
+                diagnostics=rejected.diagnostics,
+            )
+            repaired_profile = _remaining_submission_profile(
+                profile, record, repair_input=repair_input, tool=tool
+            )
             try:
                 submitted, record = runner.run(
                     profile=repaired_profile,
-                    run_input=_repair_model_input(
-                        command=run_input,
-                        prior_arguments=record.tool_invocations[0].arguments,
-                        diagnostics=rejected.diagnostics,
-                    ),
+                    run_input=repair_input,
                     tool=tool,
                     handler=handle,
                     deadline_monotonic=deadline,
                 )
             except StructuredSubmissionRejected as error:
+                repair_failure = DungeonSubmissionFailure(
+                    attempt="repair",
+                    stage="model_submission",
+                    diagnostics=error.diagnostics,
+                )
                 raise DungeonProposalRejectedAfterRepair(
-                    "dungeon proposal was rejected after its one repair request"
+                    failures=(initial_failure, repair_failure)
                 ) from error
-            assert isinstance(submitted, SubmitDungeonPlanInput)
+            assert isinstance(submitted, DungeonGenerationProposal)
             runs.append(record)
             repaired = True
         else:
-            assert isinstance(submitted, SubmitDungeonPlanInput)
+            assert isinstance(submitted, DungeonGenerationProposal)
             runs = [record]
             repaired = False
             result_payload = record.tool_invocations[0].result.payload
-            if (
-                submitted.proposal.abstention is None
-                and result_payload.get("accepted") is False
-            ):
-                safe_diagnostics = result_payload.get("diagnostics", [])
-                if not isinstance(safe_diagnostics, list):
-                    safe_diagnostics = []
+            if submitted.abstention is None and result_payload.get("accepted") is False:
+                initial_failure = _submission_failure(
+                    record, attempt="initial", stage=rejection_stage
+                )
                 repair_input = _repair_model_input(
                     command=run_input,
                     prior_arguments=record.tool_invocations[0].arguments,
-                    diagnostics=tuple(
-                        item for item in safe_diagnostics[:8] if isinstance(item, dict)
-                    ),
+                    diagnostics=initial_failure.diagnostics,
                 )
                 compiled = None
                 request = None
-                repaired_profile = _remaining_submission_profile(profile, record)
+                repaired_profile = _remaining_submission_profile(
+                    profile, record, repair_input=repair_input, tool=tool
+                )
                 try:
                     submitted, record = runner.run(
                         profile=repaired_profile,
@@ -335,18 +389,27 @@ class DungeonSubmissionService:
                         deadline_monotonic=deadline,
                     )
                 except StructuredSubmissionRejected as error:
+                    repair_failure = DungeonSubmissionFailure(
+                        attempt="repair",
+                        stage="model_submission",
+                        diagnostics=error.diagnostics,
+                    )
                     raise DungeonProposalRejectedAfterRepair(
-                        "dungeon proposal was rejected after its one repair request"
+                        failures=(initial_failure, repair_failure)
                     ) from error
-                assert isinstance(submitted, SubmitDungeonPlanInput)
+                assert isinstance(submitted, DungeonGenerationProposal)
                 runs.append(record)
                 repaired = True
-        if repaired and submitted.proposal.abstention is None and request is None:
+        if repaired and submitted.abstention is None and request is None:
+            assert initial_failure is not None
+            repair_failure = _submission_failure(
+                record, attempt="repair", stage=rejection_stage
+            )
             raise DungeonProposalRejectedAfterRepair(
-                "dungeon proposal was rejected after its one repair request"
+                failures=(initial_failure, repair_failure)
             )
         return DungeonSubmissionResult(
-            proposal=submitted.proposal,
+            proposal=submitted,
             compilation=compiled,
             layout_request=request,
             model_run=record,
@@ -485,7 +548,9 @@ def _initial_model_input(
                     {
                         "task": _DUNGEON_SCHEMA_NAME,
                         "instruction": (
-                            "Use submit_dungeon_plan exactly once with DungeonPlan schema "
+                            "Use submit_dungeon_plan exactly once with proposal_version, "
+                            "plan, and optional guide_content directly at the tool-argument "
+                            "root; do not add a proposal envelope. Use DungeonPlan schema "
                             "version 1.0.0. Submit the smallest Tier A plan satisfying the "
                             "prompt. Copy a specifically named final objective from the DM "
                             "prompt exactly into room_contents[].objective; never substitute "
@@ -583,6 +648,31 @@ def _preflight(
     )
 
 
+def _submission_failure(
+    record: ModelRunRecord,
+    *,
+    attempt: Literal["initial", "repair"],
+    stage: DungeonSubmissionFailureStage,
+) -> DungeonSubmissionFailure:
+    """Extract only server-authored bounded diagnostics from one rejected call."""
+    payload = record.tool_invocations[0].result.payload
+    raw_diagnostics = payload.get("diagnostics")
+    diagnostics: list[dict[str, JsonValue]] = []
+    if isinstance(raw_diagnostics, list):
+        diagnostics.extend(
+            item for item in raw_diagnostics[:8] if isinstance(item, dict)
+        )
+    if not diagnostics:
+        code = payload.get("code")
+        if isinstance(code, str):
+            diagnostics.append({"code": code})
+    return DungeonSubmissionFailure(
+        attempt=attempt,
+        stage=stage,
+        diagnostics=tuple(diagnostics),
+    )
+
+
 def _diagnostics(values: tuple[BaseModel, ...]) -> tuple[dict[str, JsonValue], ...]:
     documents: list[dict[str, JsonValue]] = []
     for value in values:
@@ -600,7 +690,7 @@ def _diagnostics(values: tuple[BaseModel, ...]) -> tuple[dict[str, JsonValue], .
 def _lineage(record: ModelRunRecord) -> PromptedDungeonModelLineage:
     proposal: DungeonGenerationProposal | None = None
     if record.output_payload is not None:
-        proposal = SubmitDungeonPlanInput.model_validate(record.output_payload).proposal
+        proposal = DungeonGenerationProposal.model_validate(record.output_payload)
     return PromptedDungeonModelLineage(
         model_run_id=uuid.uuid4(), model_run=record, proposal=proposal
     )
@@ -627,6 +717,9 @@ def _tool_run_pins(
 def _remaining_submission_profile(
     profile: ResolvedModelRunProfile,
     record: ModelRunRecord,
+    *,
+    repair_input: ModelRunInput,
+    tool: StructuredSubmissionTool,
 ) -> ResolvedModelRunProfile:
     """Reserve one fresh repair request from the original cumulative budget."""
     if not record.usage_measured:
@@ -639,14 +732,41 @@ def _remaining_submission_profile(
     remaining_seconds = profile.time_budget_seconds - (
         (record.duration_ms + 999) // 1000
     )
-    if remaining_tokens < 1 or remaining_seconds < 1:
+    estimated_input_tokens = _estimated_submission_input_tokens(repair_input, tool)
+    remaining_output_tokens = remaining_tokens - estimated_input_tokens
+    if remaining_output_tokens < 1 or remaining_seconds < 1:
         raise ModelRunAbstained("no budget remains for deterministic diagnostic repair")
+    configured_output = profile.override_notes.get("output_token_limit")
+    output_limit = (
+        min(configured_output, remaining_output_tokens)
+        if isinstance(configured_output, int) and configured_output > 0
+        else remaining_output_tokens
+    )
     return profile.model_copy(
         update={
             "token_budget": remaining_tokens,
             "time_budget_seconds": remaining_seconds,
+            "override_notes": {
+                **profile.override_notes,
+                "output_token_limit": output_limit,
+                "estimated_input_tokens": estimated_input_tokens,
+            },
         }
     )
+
+
+def _estimated_submission_input_tokens(
+    run_input: ModelRunInput, tool: StructuredSubmissionTool
+) -> int:
+    """Estimate repair input from the complete canonical message and tool schema."""
+    request_document = {
+        "messages": [message.model_dump(mode="json") for message in run_input.messages],
+        "tool": tool.gateway_schema().model_dump(mode="json"),
+    }
+    byte_size = len(_canonical_message(request_document).encode("utf-8"))
+    return (
+        byte_size + _INPUT_TOKEN_ESTIMATE_BYTES_PER_TOKEN - 1
+    ) // _INPUT_TOKEN_ESTIMATE_BYTES_PER_TOKEN + _INPUT_TOKEN_ESTIMATE_OVERHEAD
 
 
 def _validate_profile(profile: ResolvedModelRunProfile) -> None:

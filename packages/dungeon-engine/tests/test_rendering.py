@@ -20,6 +20,7 @@ from dm_dungeon.rendering import (
     render_svg,
     write_svg,
 )
+from dm_dungeon.validation.grid import cells_for_corridor
 
 GOLDEN_ROOT = Path(__file__).parent / "golden"
 
@@ -125,13 +126,25 @@ def test_default_callouts_are_short_bijective_and_collision_free(
     key = build_map_key(package, floor_id, RenderAudience.DM, scale=20)
     assert {entry.token for entry in key.entries} == set(callout_text)
     boxes = [
-        (
-            entry.label_x - entry.width / 2,
-            entry.label_y - entry.height / 2,
-            entry.label_x + entry.width / 2,
-            entry.label_y + entry.height / 2,
-        )
+        box
         for entry in key.entries
+        for box in (
+            (
+                entry.label_x - entry.width / 2,
+                entry.label_y - entry.height / 2,
+                entry.label_x + entry.width / 2,
+                entry.label_y + entry.height / 2,
+            ),
+            *(
+                (
+                    badge.label_x - badge.width / 2,
+                    badge.label_y - badge.height / 2,
+                    badge.label_x + badge.width / 2,
+                    badge.label_y + badge.height / 2,
+                )
+                for badge in entry.badges
+            ),
+        )
     ]
     for index, first in enumerate(boxes):
         for second in boxes[index + 1 :]:
@@ -206,11 +219,40 @@ def test_corridor_rendering_uses_the_validated_cell_footprint(
         for element in root.iter()
         if element.attrib.get("data-component-id") == original.id
     )
-    fill = next(
+    fills = [
         element for element in corridor if element.attrib.get("class") == "corridor"
+    ]
+    outlines = [
+        element
+        for element in corridor
+        if element.attrib.get("class") == "corridor-outline"
+    ]
+    assert fills
+    assert all(element.tag.endswith("rect") for element in fills)
+    assert len(fills) == len(cells_for_corridor(original.path, original.width_cells))
+    assert len(outlines) >= 2
+    assert all(element.tag.endswith("line") for element in outlines)
+
+
+def test_visible_doors_use_an_explicit_thick_slab_in_player_svg(
+    synthetic_package: DungeonPackage,
+) -> None:
+    result = render_svg(
+        synthetic_package,
+        render_request(synthetic_package, RenderAudience.PLAYER),
     )
-    assert fill.tag.endswith("path")
-    assert fill.attrib["d"].count("M") >= 2
+
+    assert result.svg is not None
+    root = ET.fromstring(result.svg)
+    visible_door_lines = [
+        child
+        for component in root.iter()
+        if component.attrib.get("data-kind") == "door"
+        for child in component
+        if child.attrib.get("class") == "door"
+    ]
+    assert visible_door_lines
+    assert all(line.attrib.get("stroke-width") == "6" for line in visible_door_lines)
 
 
 def test_constructive_player_svg_omits_secret_channel_and_door(
@@ -243,6 +285,47 @@ def test_constructive_player_svg_omits_secret_channel_and_door(
     assert hidden_ids <= xml_component_ids(dm.svg)
     assert hidden_ids.isdisjoint(xml_component_ids(player.svg))
     assert "dm_only" not in player.svg
+    assert "data-callout" not in player.svg
+    assert 'data-kind="dungeon-start"' not in player.svg
+    assert 'data-mechanic-kind="objective"' not in player.svg
+
+
+def test_player_default_is_geometry_only_without_keys_or_objective_markers(
+    generated_package: DungeonPackage,
+) -> None:
+    floor_id = generated_package.floors[0].id
+    result = render_svg(
+        generated_package,
+        SvgRenderRequest(
+            schema_version="1.0.0",
+            package_id=generated_package.id,
+            floor_id=floor_id,
+            audience=RenderAudience.PLAYER,
+            pixels_per_cell=20,
+            annotation_mode=SvgAnnotationMode.CALLOUTS,
+            show_labels=True,
+            show_markers=True,
+        ),
+    )
+
+    assert result.svg is not None
+    assert "data-callout" not in result.svg
+    assert 'data-kind="dungeon-start"' not in result.svg
+    assert 'data-kind="encounter-slot"' not in result.svg
+    assert 'data-mechanic-kind="objective"' not in result.svg
+    assert not any(
+        component_id in result.svg
+        for component_id in {
+            item.id
+            for item in generated_package.room_mechanic_markers
+            if item.kind.value == "objective"
+        }
+    )
+    assert {
+        room.id
+        for room in generated_package.rooms
+        if room.visibility is Visibility.PLAYER_SAFE
+    } <= xml_component_ids(result.svg)
 
 
 def test_player_svg_omits_every_dm_only_upper_floor_component(

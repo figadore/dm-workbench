@@ -15,6 +15,7 @@ from dm_dungeon.contracts.geometry import (
     PointGeometry,
     PolygonGeometry,
     PolylineGeometry,
+    PositionAnchorKind,
     RectangleGeometry,
     RenderLayer,
     SegmentGeometry,
@@ -217,9 +218,10 @@ def render_svg(package: DungeonPackage, request: SvgRenderRequest) -> SvgRenderR
         scale,
         rendered_ids,
     )
-    if _annotation_mode(package, request) is SvgAnnotationMode.CALLOUTS:
-        _render_callouts(root, package, floor.id, request, scale)
-    if request.show_labels:
+    if request.show_labels and (
+        request.audience is RenderAudience.DM
+        or _annotation_mode(package, request) is SvgAnnotationMode.DEVELOPER_IDS
+    ):
         _render_labels(
             root,
             package,
@@ -239,6 +241,17 @@ def render_svg(package: DungeonPackage, request: SvgRenderRequest) -> SvgRenderR
             scale,
             rendered_ids,
         )
+    if _annotation_mode(package, request) is SvgAnnotationMode.CALLOUTS:
+        _render_callouts(root, package, floor.id, request, scale)
+        if request.audience is RenderAudience.DM:
+            _render_dm_legend(
+                root,
+                package,
+                floor.id,
+                layers,
+                request,
+                scale,
+            )
 
     svg = ET.tostring(root, encoding="unicode", short_empty_elements=True)
     digest = hashlib.sha256(svg.encode("utf-8")).hexdigest()
@@ -335,41 +348,51 @@ def _render_corridors(
             for opening in package.passage_openings
             if opening.corridor_id == corridor.id
         )
-        fill_path, outline_path = _corridor_footprint_paths(
+        cells, outline_edges = _corridor_footprint_primitives(
             corridor,
             scale,
             opening_segments,
         )
-        ET.SubElement(
-            component,
-            "path",
-            {
-                "class": "corridor",
-                "d": fill_path,
-            },
-        )
-        ET.SubElement(
-            component,
-            "path",
-            {
-                "class": "corridor-outline",
-                "d": outline_path,
-                "stroke-width": "4",
-            },
-        )
+        for left, top, right, bottom in cells:
+            ET.SubElement(
+                component,
+                "rect",
+                {
+                    "class": "corridor",
+                    "x": str(left),
+                    "y": str(top),
+                    "width": str(right - left),
+                    "height": str(bottom - top),
+                },
+            )
+        for start, end in outline_edges:
+            ET.SubElement(
+                component,
+                "line",
+                {
+                    "class": "corridor-outline",
+                    "x1": str(start[0]),
+                    "y1": str(start[1]),
+                    "x2": str(end[0]),
+                    "y2": str(end[1]),
+                    "stroke-width": "4",
+                },
+            )
 
 
-def _corridor_footprint_paths(
+def _corridor_footprint_primitives(
     corridor: CorridorLayout,
     scale: int,
     opening_segments: tuple[GridSegment, ...] = (),
-) -> tuple[str, str]:
-    """Render the validator's exact raster footprint, never a stroked centerline.
+) -> tuple[
+    tuple[tuple[int, int, int, int], ...],
+    tuple[tuple[tuple[int, int], tuple[int, int]], ...],
+]:
+    """Project the exact validated footprint into every trusted drawing adapter.
 
-    A stroke centered on a grid-line spills into a room on one side (especially for
-    even widths), while the geometry validator treats the same centerline as a set
-    of whole cells. Filling those exact cells and outlining only their outer edges
-    keeps the visual map aligned with validated walkable geometry.
+    Rectangles and lines are deliberately used instead of compact SVG path syntax:
+    the same primitives are consumed by browser SVG, Pillow PNG, and ReportLab PDF
+    adapters, preventing corridor walls from disappearing in raster review maps.
     """
     cells = cells_for_corridor(corridor.path, corridor.width_cells)
     opening_edges = {
@@ -379,15 +402,14 @@ def _corridor_footprint_paths(
         )
         for segment in opening_segments
     }
-    ordered_cells = sorted(cells, key=lambda cell: (cell[1], cell[0]))
-    fill_parts: list[str] = []
-    outline_parts: list[str] = []
-    for x, y in ordered_cells:
+    cell_rectangles: list[tuple[int, int, int, int]] = []
+    outline_edges: list[tuple[tuple[int, int], tuple[int, int]]] = []
+    for x, y in sorted(cells, key=lambda cell: (cell[1], cell[0])):
         left = x * scale
         top = y * scale
         right = (x + 1) * scale
         bottom = (y + 1) * scale
-        fill_parts.append(f"M{left},{top}H{right}V{bottom}H{left}Z")
+        cell_rectangles.append((left, top, right, bottom))
         for neighbor, start, end in (
             ((x, y - 1), (left, top), (right, top)),
             ((x + 1, y), (right, top), (right, bottom)),
@@ -398,8 +420,8 @@ def _corridor_footprint_paths(
                 neighbor not in cells
                 and _segment_key_points(start, end) not in opening_edges
             ):
-                outline_parts.append(f"M{start[0]},{start[1]}L{end[0]},{end[1]}")
-    return "".join(fill_parts), "".join(outline_parts)
+                outline_edges.append((start, end))
+    return tuple(cell_rectangles), tuple(outline_edges)
 
 
 def _render_rooms(
@@ -530,6 +552,9 @@ def _render_doors(
             "line",
             {
                 "class": css_class,
+                # Keep the width explicit so browser SVG, Pillow PNG, and ReportLab
+                # PDF all render the same unmistakable slab over the lighter grid.
+                "stroke-width": ("6" if request.theme is SvgThemeName.LOW_INK else "5"),
                 "x1": str(door.segment.start.x * scale),
                 "y1": str(door.segment.start.y * scale),
                 "x2": str(door.segment.end.x * scale),
@@ -586,11 +611,17 @@ def _render_features_and_hazards(
             marker, layers, request.audience
         ):
             continue
+        if (
+            request.audience is RenderAudience.PLAYER
+            and marker.kind is not RoomMechanicMarkerKind.FEATURE
+        ):
+            continue
         component = _component_group(
             group, marker, "room-mechanic-marker", rendered_ids
         )
         component.set("data-mechanic-kind", marker.kind.value)
-        _append_room_mechanic_symbol(component, marker.position, marker.kind, scale)
+        if _annotation_mode(package, request) is not SvgAnnotationMode.CALLOUTS:
+            _append_room_mechanic_symbol(component, marker.position, marker.kind, scale)
 
 
 def _render_transitions(
@@ -734,11 +765,11 @@ def _render_callouts(
                     "class": "room-callout",
                     "cx": _number(entry.label_x),
                     "cy": _number(entry.label_y),
-                    "r": _number(max(entry.width, entry.height) * 0.58),
+                    "r": _number(entry.width / 2),
                 },
             )
         elif entry.kind is MapCalloutKind.HAZARD:
-            half = max(entry.width, entry.height) * 0.55
+            half = entry.width / 2
             ET.SubElement(
                 group,
                 "polygon",
@@ -748,7 +779,7 @@ def _render_callouts(
                 },
             )
         elif entry.kind is MapCalloutKind.PUZZLE:
-            half = max(entry.width, entry.height) * 0.55
+            half = entry.width / 2
             ET.SubElement(
                 group,
                 "polygon",
@@ -761,7 +792,7 @@ def _render_callouts(
                 },
             )
         elif entry.kind is MapCalloutKind.FEATURE:
-            half = max(entry.width, entry.height) * 0.45
+            half = entry.width / 2
             ET.SubElement(
                 group,
                 "rect",
@@ -774,16 +805,22 @@ def _render_callouts(
                 },
             )
         elif entry.kind is MapCalloutKind.OBJECTIVE:
-            ET.SubElement(
-                group,
-                "circle",
-                {
-                    "class": "component-callout objective-callout",
-                    "cx": _number(entry.label_x),
-                    "cy": _number(entry.label_y),
-                    "r": _number(max(entry.width, entry.height) * 0.68),
-                },
-            )
+            for ring, radius in (
+                ("outer", entry.width / 2),
+                ("inner", entry.width / 2 - max(2.5, scale * 0.045)),
+            ):
+                ET.SubElement(
+                    group,
+                    "circle",
+                    {
+                        "class": "component-callout objective-callout",
+                        "cx": _number(entry.label_x),
+                        "cy": _number(entry.label_y),
+                        "r": _number(radius),
+                        "data-objective-callout": entry.token,
+                        "data-ring": ring,
+                    },
+                )
         else:
             ET.SubElement(
                 group,
@@ -792,7 +829,7 @@ def _render_callouts(
                     "class": "component-callout",
                     "cx": _number(entry.label_x),
                     "cy": _number(entry.label_y),
-                    "r": _number(max(entry.width, entry.height) * 0.58),
+                    "r": _number(entry.width / 2),
                 },
             )
         text = ET.SubElement(
@@ -801,8 +838,9 @@ def _render_callouts(
             {
                 "class": "callout-text",
                 "x": _number(entry.label_x),
-                "y": _number(entry.label_y + entry.height * 0.28),
+                "y": _number(entry.label_y + entry.text_height * 0.28),
                 "text-anchor": "middle",
+                "font-size": _number(entry.text_height / 1.45),
                 "data-callout": entry.token,
                 "data-component-id": entry.component_id,
                 "data-kind": entry.kind.value,
@@ -810,29 +848,297 @@ def _render_callouts(
         )
         text.text = entry.token
         if request.audience is RenderAudience.DM:
-            for index, badge in enumerate(entry.badges):
+            for badge in entry.badges:
+                ET.SubElement(
+                    group,
+                    "rect",
+                    {
+                        "class": "callout-badge-shape",
+                        "x": _number(badge.label_x - badge.width / 2),
+                        "y": _number(badge.label_y - badge.height / 2),
+                        "width": _number(badge.width),
+                        "height": _number(badge.height),
+                        "rx": _number(badge.width * 0.18),
+                    },
+                )
                 badge_text = ET.SubElement(
                     group,
                     "text",
                     {
                         "class": "callout-badge",
-                        "x": _number(
-                            entry.label_x + entry.width * (0.52 + index * 0.28)
-                        ),
-                        "y": _number(entry.label_y - entry.height * 0.38),
+                        "x": _number(badge.label_x),
+                        "y": _number(badge.label_y + badge.height * 0.28),
                         "text-anchor": "middle",
-                        "data-badge": badge,
+                        "font-size": _number(badge.height * 0.72),
+                        "data-badge": badge.token,
                     },
                 )
-                badge_text.text = badge
+                badge_text.text = badge.token
+
+
+def _render_dm_legend(
+    root: ET.Element,
+    package: DungeonPackage,
+    floor_id: str,
+    layers: dict[str, RenderLayer],
+    request: SvgRenderRequest,
+    scale: int,
+) -> None:
+    """Render a compact, grayscale-safe map key in an unoccupied floor corner."""
+
+    floor = next(item for item in package.floors if item.id == floor_id)
+    canvas_width = floor.bounds.width_cells * scale
+    canvas_height = floor.bounds.height_cells * scale
+    margin = max(8.0, scale * 0.16)
+    panel_width = min(canvas_width - 2 * margin, max(360.0, scale * 8.0))
+    panel_height = min(canvas_height - 2 * margin, max(112.0, scale * 2.0))
+    if panel_width <= 0 or panel_height <= 0:
+        return
+
+    occupied: list[tuple[float, float, float, float]] = []
+    for room in package.rooms:
+        if room.floor_id != floor_id or not _layered_visible(
+            room, layers, request.audience
+        ):
+            continue
+        xs = [point.x * scale for point in room.boundary.points]
+        ys = [point.y * scale for point in room.boundary.points]
+        occupied.append((min(xs), min(ys), max(xs), max(ys)))
+    for corridor in package.corridors:
+        if corridor.floor_id != floor_id or not _layered_visible(
+            corridor, layers, request.audience
+        ):
+            continue
+        cells = cells_for_corridor(corridor.path, corridor.width_cells)
+        if cells:
+            occupied.append(
+                (
+                    min(cell[0] for cell in cells) * scale,
+                    min(cell[1] for cell in cells) * scale,
+                    (max(cell[0] for cell in cells) + 1) * scale,
+                    (max(cell[1] for cell in cells) + 1) * scale,
+                )
+            )
+    for entry in build_map_key(
+        package, floor_id, request.audience, scale=scale
+    ).entries:
+        occupied.append(
+            (
+                entry.label_x - entry.width / 2,
+                entry.label_y - entry.height / 2,
+                entry.label_x + entry.width / 2,
+                entry.label_y + entry.height / 2,
+            )
+        )
+        occupied.extend(
+            (
+                badge.label_x - badge.width / 2,
+                badge.label_y - badge.height / 2,
+                badge.label_x + badge.width / 2,
+                badge.label_y + badge.height / 2,
+            )
+            for badge in entry.badges
+        )
+
+    candidates = (
+        (margin, margin),
+        (canvas_width - margin - panel_width, margin),
+        (margin, canvas_height - margin - panel_height),
+        (
+            canvas_width - margin - panel_width,
+            canvas_height - margin - panel_height,
+        ),
+    )
+    ranked = []
+    for index, (x, y) in enumerate(candidates):
+        box = (x, y, x + panel_width, y + panel_height)
+        overlap_count = sum(_boxes_intersect(box, item) for item in occupied)
+        ranked.append((overlap_count, index, x, y))
+    _, _, origin_x, origin_y = min(ranked)
+
+    group = ET.SubElement(
+        root,
+        "g",
+        {"id": "dm-map-legend", "data-kind": "map-legend"},
+    )
+    ET.SubElement(
+        group,
+        "rect",
+        {
+            "class": "map-legend-panel",
+            "x": _number(origin_x),
+            "y": _number(origin_y),
+            "width": _number(panel_width),
+            "height": _number(panel_height),
+            "rx": _number(max(3.0, scale * 0.08)),
+        },
+    )
+    font_size = max(11.0, min(15.0, scale * 0.22))
+    title = ET.SubElement(
+        group,
+        "text",
+        {
+            "class": "legend-title",
+            "x": _number(origin_x + 10),
+            "y": _number(origin_y + font_size + 5),
+            "font-size": _number(font_size),
+        },
+    )
+    title.text = "MAP KEY"
+
+    entries = (
+        ("room", "Room"),
+        ("start", "Start"),
+        ("door", "Door"),
+        ("lock-secret", "Lock / secret"),
+        ("trap", "Trap"),
+        ("feature", "Feature"),
+        ("objective", "Objective"),
+        ("encounter", "Encounter slot"),
+    )
+    header_height = font_size + 12
+    row_height = (panel_height - header_height) / 2
+    column_width = panel_width / 4
+    symbol_radius = max(6.0, min(10.0, row_height * 0.2))
+    for index, (kind, label) in enumerate(entries):
+        column = index % 4
+        row = index // 4
+        item_x = origin_x + column * column_width
+        center_x = item_x + symbol_radius + 10
+        center_y = origin_y + header_height + row_height * (row + 0.5)
+        _append_legend_symbol(group, kind, center_x, center_y, symbol_radius, font_size)
+        text = ET.SubElement(
+            group,
+            "text",
+            {
+                "class": "legend-text",
+                "x": _number(center_x + symbol_radius + 7),
+                "y": _number(center_y + font_size * 0.32),
+                "font-size": _number(font_size),
+                "data-legend-label": kind,
+            },
+        )
+        text.text = label
+
+
+def _append_legend_symbol(
+    parent: ET.Element,
+    kind: str,
+    x: float,
+    y: float,
+    radius: float,
+    font_size: float,
+) -> None:
+    symbol_class = f"legend-symbol legend-{kind}"
+    if kind in {"room", "objective"}:
+        ET.SubElement(
+            parent,
+            "circle",
+            {
+                "class": symbol_class,
+                "cx": _number(x),
+                "cy": _number(y),
+                "r": _number(radius),
+            },
+        )
+        if kind == "objective":
+            ET.SubElement(
+                parent,
+                "circle",
+                {
+                    "class": symbol_class,
+                    "cx": _number(x),
+                    "cy": _number(y),
+                    "r": _number(radius * 0.58),
+                },
+            )
+        elif kind == "room":
+            text = ET.SubElement(
+                parent,
+                "text",
+                {
+                    "class": "legend-symbol-text",
+                    "x": _number(x),
+                    "y": _number(y + font_size * 0.28),
+                    "text-anchor": "middle",
+                    "font-size": _number(font_size * 0.78),
+                },
+            )
+            text.text = "1"
+    elif kind == "start":
+        _append_start_symbol_at(parent, x, y, radius * 2.2)
+    elif kind == "door":
+        ET.SubElement(
+            parent,
+            "line",
+            {
+                "class": symbol_class,
+                "x1": _number(x - radius),
+                "y1": _number(y),
+                "x2": _number(x + radius),
+                "y2": _number(y),
+                "stroke-width": "3",
+            },
+        )
+    elif kind == "trap":
+        ET.SubElement(
+            parent,
+            "polygon",
+            {
+                "class": symbol_class,
+                "points": f"{_number(x)},{_number(y - radius)} "
+                f"{_number(x + radius)},{_number(y + radius)} "
+                f"{_number(x - radius)},{_number(y + radius)}",
+            },
+        )
+    else:
+        ET.SubElement(
+            parent,
+            "rect",
+            {
+                "class": symbol_class,
+                "x": _number(x - radius),
+                "y": _number(y - radius),
+                "width": _number(radius * 2),
+                "height": _number(radius * 2),
+                "rx": _number(radius * 0.18 if kind == "lock-secret" else 0),
+            },
+        )
+        if kind == "lock-secret":
+            text = ET.SubElement(
+                parent,
+                "text",
+                {
+                    "class": "legend-symbol-text",
+                    "x": _number(x),
+                    "y": _number(y + font_size * 0.25),
+                    "text-anchor": "middle",
+                    "font-size": _number(font_size * 0.62),
+                },
+            )
+            text.text = "L/S"
+
+
+def _boxes_intersect(
+    first: tuple[float, float, float, float],
+    second: tuple[float, float, float, float],
+) -> bool:
+    return not (
+        first[2] <= second[0]
+        or second[2] <= first[0]
+        or first[3] <= second[1]
+        or second[3] <= first[1]
+    )
 
 
 def _annotation_mode(
     package: DungeonPackage, request: SvgRenderRequest
 ) -> SvgAnnotationMode:
-    """Resolve explicit developer inspection versus the V1 callout default."""
+    """Resolve developer inspection, DM callouts, or clean player geometry."""
     if request.show_room_ids:
         return SvgAnnotationMode.DEVELOPER_IDS
+    if request.audience is RenderAudience.PLAYER:
+        return SvgAnnotationMode.NONE
     return request.annotation_mode
 
 
@@ -880,26 +1186,44 @@ def _render_markers(
     group = ET.SubElement(root, "g", {"id": "markers"})
     anchors = {anchor.id: anchor for anchor in package.position_anchors}
     rooms = {room.id: room for room in package.rooms}
+    developer_mode = (
+        _annotation_mode(package, request) is SvgAnnotationMode.DEVELOPER_IDS
+    )
     for anchor in package.position_anchors:
         if anchor.floor_id != floor_id or not _layered_visible(
             anchor, layers, request.audience
         ):
             continue
-        component = _component_group(group, anchor, "position-anchor", rendered_ids)
-        component.set("data-anchor-kind", anchor.kind.value)
-        ET.SubElement(
-            component,
-            "circle",
-            {
-                "class": "marker",
-                "cx": str(anchor.position.x * scale),
-                "cy": str(anchor.position.y * scale),
-                "r": _number(scale * 0.18),
-            },
+        if not developer_mode and (
+            request.audience is RenderAudience.PLAYER
+            or anchor.kind is not PositionAnchorKind.ENTRANCE
+        ):
+            continue
+        component = _component_group(
+            group,
+            anchor,
+            "position-anchor" if developer_mode else "dungeon-start",
+            rendered_ids,
         )
+        component.set("data-anchor-kind", anchor.kind.value)
+        if developer_mode:
+            ET.SubElement(
+                component,
+                "circle",
+                {
+                    "class": "marker",
+                    "cx": str(anchor.position.x * scale),
+                    "cy": str(anchor.position.y * scale),
+                    "r": _number(scale * 0.18),
+                },
+            )
+        else:
+            _append_start_symbol(component, anchor.position, scale)
     for slot in package.encounter_slots:
-        if slot.floor_id != floor_id or not _layered_visible(
-            slot, layers, request.audience
+        if (
+            request.audience is RenderAudience.PLAYER
+            or slot.floor_id != floor_id
+            or not _layered_visible(slot, layers, request.audience)
         ):
             continue
         position = None
@@ -924,6 +1248,65 @@ def _render_markers(
                 "height": _number(half * 2),
             },
         )
+        label = ET.SubElement(
+            component,
+            "text",
+            {
+                "class": "encounter-slot-label",
+                "x": _number(position.x * scale),
+                "y": _number(position.y * scale + scale * 0.1),
+                "font-size": _number(scale * 0.24),
+                "text-anchor": "middle",
+                "data-encounter-slot-label": "E",
+            },
+        )
+        label.text = "E"
+
+
+def _append_start_symbol(
+    parent: ET.Element,
+    point: GridPoint,
+    scale: int,
+) -> None:
+    _append_start_symbol_at(
+        parent,
+        point.x * scale,
+        point.y * scale,
+        scale * 0.34,
+    )
+
+
+def _append_start_symbol_at(
+    parent: ET.Element,
+    x: float,
+    y: float,
+    size: float,
+) -> None:
+    """Draw a table-facing start flag, never a generic technical anchor circle."""
+
+    pole_x = x - size * 0.32
+    top = y - size * 0.55
+    ET.SubElement(
+        parent,
+        "line",
+        {
+            "class": "start-marker",
+            "x1": _number(pole_x),
+            "y1": _number(top),
+            "x2": _number(pole_x),
+            "y2": _number(y + size * 0.58),
+        },
+    )
+    ET.SubElement(
+        parent,
+        "polygon",
+        {
+            "class": "start-marker",
+            "points": f"{_number(pole_x)},{_number(top)} "
+            f"{_number(x + size * 0.55)},{_number(y - size * 0.28)} "
+            f"{_number(pole_x)},{_number(y)}",
+        },
+    )
 
 
 def _append_room_mechanic_symbol(

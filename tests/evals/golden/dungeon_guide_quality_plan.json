@@ -1,0 +1,102 @@
+{
+  "schema_version": "1.0.0",
+  "title": "Synthetic Constructive Archive",
+  "premise": "A synthetic archive used only to test deterministic preparation.",
+  "themes": [
+    "synthetic"
+  ],
+  "rooms": [
+    {
+      "ref": "entry",
+      "name": "Archive Entry",
+      "role": "entrance",
+      "purpose": "A wall diagram shows a record entering, being sorted onto shelves, and being stored in a locked chest—the order used by the vault lock."
+    },
+    {
+      "ref": "gallery",
+      "name": "Record Gallery",
+      "role": "exploration",
+      "purpose": "The locked door to the hall displays the same three-wave emblem as its key in the flooded annex."
+    },
+    {
+      "ref": "seal",
+      "name": "Sealed Hall",
+      "role": "puzzle",
+      "purpose": "A single wall-mounted vault panel connects the Annex shelf, concealed threshold plate, and three-button lock to one visible bell, ink-cup, and timed-lockout mechanism."
+    },
+    {
+      "ref": "vault",
+      "name": "Synthetic Vault",
+      "role": "objective",
+      "purpose": "Resolve whether the party retrieves, documents, or leaves the named synthetic objective."
+    },
+    {
+      "ref": "cache",
+      "name": "Flooded Cataloguing Annex",
+      "role": "optional",
+      "purpose": "Offer a flooded shelf-stabilization challenge that reveals the hidden three-wave key for D1, plus an optional exhaustive-search secret bypass.",
+      "tags": [
+        "flooded"
+      ],
+      "encounter": "exploration"
+    }
+  ],
+  "critical_path": [
+    "entry",
+    "gallery",
+    "seal",
+    "vault"
+  ],
+  "branches": [
+    {
+      "ref": "cache_branch",
+      "from_room": "gallery",
+      "rooms": [
+        "cache"
+      ]
+    }
+  ],
+  "loops": [
+    {
+      "ref": "cache_bypass",
+      "from_room": "cache",
+      "to_room": "vault",
+      "secret": true
+    }
+  ],
+  "gates": [
+    {
+      "ref": "seal_gate",
+      "between_rooms": [
+        "gallery",
+        "seal"
+      ],
+      "kind": "locked",
+      "dependency_kind": "key",
+      "dependency_room": "cache",
+      "dependency_name": "Three-Wave Brass Key"
+    }
+  ],
+  "room_contents": [
+    {
+      "room_ref": "seal",
+      "trap": {
+        "name": "Synthetic Bell Ward",
+        "trigger": "Step on the concealed pivoting plate beneath the inscribed brass threshold.",
+        "effect": "The trip lever rings the bell and its clockwork bolt locks the buttons for 10 minutes. On the first ring only, the hammer's lower arm flips the full ink cup over the three button labels.",
+        "detection": "Notice the hairline seam around the pivoting threshold plate; tracing F1's service diagram automatically identifies the plate without this check.",
+        "disable": "Press the recessed catch at the right end of the brass strip and pull out its coupling pin before crossing.",
+        "challenge": "moderate"
+      },
+      "feature": {
+        "kind": "altar",
+        "name": "Instruction Pedestal",
+        "description": "A stone pedestal gives the button sequence in concrete words and diagrams three covered conduits from the Annex shelf, threshold plate, and button drum to the shared bell trip lever."
+      }
+    },
+    {
+      "room_ref": "vault",
+      "objective": "Synthetic Objective"
+    }
+  ]
+}

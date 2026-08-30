@@ -199,6 +199,8 @@ def test_optional_tokens_include_only_visible_position_anchors(
     assert {
         item.anchor_id for item in dm.result.manifest.token_placements
     } == expected_ids
+    assert expected_ids.isdisjoint(player.result.manifest.rendered_component_ids)
+    assert expected_ids.isdisjoint(dm.result.manifest.rendered_component_ids)
 
 
 def test_request_rejects_unsafe_or_unsupported_values(

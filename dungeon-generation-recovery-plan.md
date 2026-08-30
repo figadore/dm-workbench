@@ -39,6 +39,14 @@ Before a real user artifact or external consumer exists:
 This resets application contract history, not Git history. Do not force-push or rewrite
 commits as part of this task.
 
+All active V1 labels evolve in place until the retention gate is explicitly declared in
+both `PROJECT_STATUS.md` and the architecture. Synthetic fixtures, ignored review
+packets, disposable alpha database rows, and provider canaries do not cross that gate.
+Declare it no later than the first intentionally retained real-user artifact/campaign,
+external consumer, non-disposable deployment, or promised replay requirement; only then
+freeze pins and require documented readers, migrations, rollback, or compatibility
+versions.
+
 ## 3. Tier A scope
 
 A Tier A dungeon has:
@@ -64,7 +72,7 @@ block the gate.
 DM prompt + authorized narrow context + server seed
     |
     v
-one model tool call: submit_dungeon_plan(plan)
+one model tool call: submit_dungeon_plan(proposal fields at root, including plan)
     |
     v
 validate the small creative contract
@@ -100,7 +108,13 @@ the model for topology or geometry repair: code owns those steps.
 
 ## 5. Model tool contract
 
-The model expresses narrative identity and progression, not an arbitrary edge list.
+The model expresses narrative identity and progression, not an arbitrary edge list. The
+`DungeonGenerationProposal` fields are the `submit_dungeon_plan` tool arguments directly;
+there is no additional `proposal` envelope around them. Schema diagnostics and the one
+bounded repair therefore operate on `/plan`, `/guide_content`, and other actual root paths
+and must never tell the model to delete a valid proposal merely because an adapter added
+an avoidable wrapper.
+
 Illustrative input:
 
 ```json
@@ -148,7 +162,17 @@ The server returns a compact tool result and continues without another model tur
 ```
 
 A rejected plan returns only bounded codes, paths, affected refs, and repair actions.
-It never returns exact geometry, provider bodies, or arbitrary model prose.
+It never returns exact geometry, provider bodies, or arbitrary model prose. A repair is
+started only when a conservative estimate of its complete canonical message plus tool
+schema leaves output room inside the measured cumulative budget. Measured output or total
+usage above a pinned ceiling fails before publication and is durably inspectable without
+retaining provider/model bodies. Provider-reported usage above a requested transport cap blocks ordinary live rollout:
+rejecting the result cannot recover already consumed usage. One frozen non-production
+Tier A canary may use its dedicated CLI command with an explicit acknowledged
+`openai-codex` advisory-output policy. That exception leaves the requested cap in the
+transport request, retains the measured 12,000-token cumulative publication ceiling and
+repair reservation, records durable policy lineage, and permits only one stop-on-failure
+operator run after the other gates pass.
 
 ## 6. Topology construction and proof
 
@@ -278,11 +302,22 @@ story is interesting. Coherence is handled in layers:
 - encounter intent reserves room capacity but does not compose stat blocks yet;
 - traps are room/connection annotations with trigger/effect completeness;
 - features reserve typed spatial demand and receive deterministic anchors;
-- the guide is keyed to exact server IDs after geometry exists;
+- the guide is keyed to exact server IDs after geometry exists, but uses separate entry-first sequential presentation numbers;
+- every room receives a concise read-aloud block and locally grouped actionable door state, checks, clues, scene pressure, triggers, consequences, features, puzzles, and objectives; ordinary map-visible connectivity and separate sensory/purpose repetition are omitted;
+- read-aloud contains only player-observable information; setting terms resolve to concrete player-visible objects and operations; every interaction has one physical setup, trigger, effect, recovery, and repeated-failure result where relevant; traps distinguish visible warning, actual trigger, detection method, disable operation, and effect while code owns numeric difficulty; and any cross-room mechanism states its exact shared state plus whether an alarm has a responder;
 - fixed-prompt DM rubrics measure progression, variety, clue logic, and prep usefulness.
 
 Optional guide enrichment is separate from structural generation. Its failure leaves a
 valid draft with explicit readiness blockers rather than deleting the map.
+
+The fixed dungeon-guide review packet is the bridge between structural correctness and
+actual DM usefulness. It freezes one synthetic prompt, plan, seed, exact guide, DM map,
+and player map so human review can identify whether a technically valid draft is readable,
+secret-safe, coherent, and runnable without inventing missing material at the table.
+Worksheet findings become bounded code/content corrections and objective regression tests;
+the packet itself is neither user campaign content nor a long-term publication format.
+Passing it justifies proceeding to Tier B/C stress and later live-model canaries—it does
+not claim universal dungeon quality.
 
 ## 9. Stress ladder
 
@@ -359,16 +394,24 @@ proof-oriented diagnostics or recommend another floor; never exhaust random retr
 
 ### R4 — Prompt and guide integration
 
-- Expose only `submit_dungeon_plan`.
+- Expose only `submit_dungeon_plan`, with direct proposal fields at the tool root and no
+  redundant proposal wrapper.
 - Remove arbitrary edge authoring and topology repair from the model prompt.
 - Build the exact guide after package generation; optional enrichment fails
   independently.
+- Characterize schema failures against the actual model-visible root, preserve all valid
+  prior content through the one repair, and fail before publication on measured output or
+  cumulative token overage.
 - Exercise CLI/web/faux-provider atomic publication.
 
 ### R5 — Quality and stress gate
 
 - Add fixed prompt semantic/DM rubrics and the Tier B/C stress ladder.
-- Resume opt-in live canaries only after provider-free and faux gates pass.
+- Resume opt-in live canaries only after provider-free and faux gates pass and the human
+  review worksheet records explicit pass/fail decisions for every dimension. Ordinary
+  rollout also requires evidence that requested output ceilings bound reported usage;
+  the sole exception is one frozen, explicitly acknowledged, non-production Tier A
+  canary that retains the measured cumulative ceiling and durable override lineage.
 - Resume asset/print polish only after Tier A is dependable.
 
 ## 11. Stop/handoff rule

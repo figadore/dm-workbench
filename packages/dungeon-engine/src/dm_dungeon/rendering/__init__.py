@@ -3,6 +3,7 @@
 from dm_dungeon.rendering.annotations import (
     MAP_KEY_SCHEMA_VERSION,
     MapCallout,
+    MapCalloutBadge,
     MapCalloutKind,
     MapKey,
     build_map_key,
@@ -24,6 +25,7 @@ __all__ = [
     "SVG_RENDERER_VERSION",
     "MAP_KEY_SCHEMA_VERSION",
     "MapCallout",
+    "MapCalloutBadge",
     "MapCalloutKind",
     "MapKey",
     "RenderAudience",
