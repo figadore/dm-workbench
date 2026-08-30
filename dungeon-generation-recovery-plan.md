@@ -446,9 +446,15 @@ independently pinned faux-provider dispatch has a task-specific profile, prompt/
 6,000-token cumulative and 2,048-output budget, and one budget-reserved repair. Accepted
 content and lineage publish atomically in a DM-only child while preserving package/map
 hashes, accepted puzzle/exploration content and lineage, other features, and unrelated
-blockers; failure leaves the exploration parent current and stores no rejected body. No
-live provider was contacted, and no redaction/logging subsystem or new persistence store
-was added.
+blockers; failure leaves the exploration parent current and stores no rejected body. A
+provider-free trap seam now joins one exact room-trap marker/current guide entry to local
+geometry and deterministic detection/disable arithmetic, rejects foreign IDs plus
+structural/cross-task mutation and numeric-DC authorship, and projects warning,
+trigger/effect, detection/disable counterplay, consequences, and optional recovery into
+only the selected trap. Package/maps, accepted puzzle/exploration/feature content, other
+traps, and unrelated readiness diagnostics remain unchanged. Trap provider dispatch and
+publication are not wired. No live provider was contacted, and no redaction/logging
+subsystem or new persistence store was added.
 
 - Add independently bounded puzzle, exploration, other interaction, and narrative tasks
   over exact package IDs; merge accepted output deterministically and preserve the map on

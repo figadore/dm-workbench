@@ -274,17 +274,22 @@ IDs; accepted content and lineage are retained in a DM-only atomic child whose p
 adds observable cues, multiple approaches/consequences, and escalation/recovery while
 preserving package/map hashes, accepted puzzle content/lineage, and unrelated blockers.
 Failure leaves the puzzle parent current with body-free diagnostics. Feature interactions
-now have a separate provider-free contract: trusted code joins one exact package feature
-marker to its current guide entry and local room geometry, rejects foreign IDs and
-cross-task mutation, and projects only observable setup, multiple affordances/consequences,
-and optional reset/retry guidance. It preserves accepted puzzle/exploration content and
-unrelated blockers; feature provider dispatch, lineage, and atomic child publication are
-not wired yet. Accepted content remains available to the DM in the artifact, while routine
-attempt reports contain only compact operational metadata and diagnostics; raw transport
-capture requires explicit local debug. Until the remaining enrichment kinds are wired,
-drafts truthfully remain preparation-blocked. Geometry,
-visibility, validation, rendering, persistence, and approval remain server-owned. Run
-inspection remains body-free:
+have a separate exact-ID contract and independently bounded faux-provider task. Trusted
+code joins one exact package feature marker to its current guide entry and local room
+geometry, rejects foreign IDs and cross-task mutation, and projects only observable setup,
+multiple affordances/consequences, and optional reset/retry guidance. Accepted content and
+lineage publish in one DM-only child while package/map bytes, prior enrichments, and
+unrelated blockers remain unchanged. Trap interactions now have a provider-free exact-ID
+seam over one room-trap marker, its current guide entry, local geometry, and deterministic
+detection/disable difficulties. Trap output supplies an observable warning, trigger/effect,
+detection and disable counterplay, consequences, and optional reset/recovery without
+numeric difficulty authorship; deterministic projection changes only the selected trap.
+Trap provider dispatch and publication are not wired yet. Accepted content remains
+available to the DM in the artifact, while routine attempt reports contain only compact
+operational metadata and diagnostics; raw transport capture requires explicit local debug.
+Until the remaining enrichment kinds are wired, drafts truthfully remain
+preparation-blocked. Geometry, visibility, validation, rendering, persistence, and
+approval remain server-owned. Run inspection remains body-free:
 
 ```bash
 uv run --frozen dm dungeon run inspect <attempt-run-id>

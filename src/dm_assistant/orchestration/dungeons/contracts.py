@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -36,6 +37,7 @@ from dm_dungeon.contracts import (
 DUNGEON_GENERATION_PROPOSAL_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 DUNGEON_EXPLORATION_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 DUNGEON_FEATURE_INTERACTION_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
+DUNGEON_TRAP_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 DUNGEON_PUZZLE_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 
 
@@ -408,6 +410,130 @@ class PromptedDungeonFeatureInteractionLineage(WorkflowModel):
             raise ValueError(
                 "feature interaction lineage output must match the model run"
             )
+        return self
+
+
+class DungeonTrapContextSelection(WorkflowModel):
+    """Trusted exact trap and bounded policy for one post-layout trap task."""
+
+    room_id: ExactDungeonComponentId
+    trap_id: ExactDungeonComponentId
+    stakes: GuideContentText
+    constraints: tuple[GuideContentText, ...] = Field(default=(), max_length=8)
+
+
+class DungeonTrapRoomContext(WorkflowModel):
+    """Exact local geometry exposed to one trap-only task."""
+
+    room_id: ExactDungeonComponentId
+    floor_id: ExactDungeonComponentId
+    boundary: PolygonGeometry
+    capacity: RoomCapacity
+
+
+class DungeonTrapMechanic(WorkflowModel):
+    """Exact marker, current guide text, and code-owned trap arithmetic."""
+
+    trap_id: ExactDungeonComponentId
+    room_id: ExactDungeonComponentId
+    floor_id: ExactDungeonComponentId
+    position: GridPoint
+    name: str = Field(min_length=1, max_length=200)
+    current_warning: GuideContentText | None = None
+    current_trigger: GuideContentText | None = None
+    current_effect: GuideContentText | None = None
+    current_detection: GuideContentText | None = None
+    current_disable: GuideContentText | None = None
+    current_consequences: tuple[GuideContentText, ...] = Field(default=(), max_length=4)
+    current_reset_or_recovery: GuideContentText | None = None
+    detection_difficulty: int = Field(ge=0)
+    disable_difficulty: int = Field(ge=0)
+
+
+class DungeonTrapEnrichmentInput(WorkflowModel):
+    """Narrow trap payload built after exact geometry and mechanics exist."""
+
+    schema_version: Literal["1.0.0"]
+    package_id: ExactDungeonComponentId
+    room: DungeonTrapRoomContext
+    trap: DungeonTrapMechanic
+    stakes: GuideContentText
+    constraints: tuple[GuideContentText, ...] = Field(default=(), max_length=8)
+
+    @model_validator(mode="after")
+    def require_trap_in_local_room(self) -> DungeonTrapEnrichmentInput:
+        if (
+            self.trap.room_id != self.room.room_id
+            or self.trap.floor_id != self.room.floor_id
+        ):
+            raise ValueError(
+                "trap enrichment requires one trap in the exact local room"
+            )
+        return self
+
+
+class DungeonTrapEnrichmentOutput(WorkflowModel):
+    """Trap-only proposal with no model-authored arithmetic or structural fields."""
+
+    schema_version: Literal["1.0.0"]
+    package_id: ExactDungeonComponentId
+    room_id: ExactDungeonComponentId
+    trap_id: ExactDungeonComponentId
+    observable_warning: GuideContentText
+    trigger: GuideContentText
+    effect_narration: GuideContentText
+    detection_method: GuideContentText
+    disable_operation: GuideContentText
+    consequences: tuple[GuideContentText, ...] = Field(min_length=1, max_length=4)
+    reset_or_recovery: GuideContentText | None = None
+
+    @model_validator(mode="after")
+    def require_bounded_guide_projection(self) -> DungeonTrapEnrichmentOutput:
+        projected_fields = (
+            self.observable_warning,
+            self.trigger,
+            self.effect_narration,
+            self.detection_method,
+            self.disable_operation,
+            " ".join(self.consequences),
+            self.reset_or_recovery or "",
+        )
+        if any(len(value) > 2_000 for value in projected_fields):
+            raise ValueError("trap enrichment exceeds bounded guide projection text")
+        if any(
+            re.search(
+                r"(?i)\b(?:DC|difficulty(?:\s+class)?)\s*[:=]?\s*\d+\b",
+                value,
+            )
+            for value in projected_fields
+        ):
+            raise ValueError("trap enrichment cannot author numeric difficulty values")
+        return self
+
+
+class DungeonTrapIssue(WorkflowModel):
+    """Body-free exact-ID mismatch that blocks accepting trap content."""
+
+    code: Literal[
+        "trap_enrichment.package_mismatch",
+        "trap_enrichment.room_mismatch",
+        "trap_enrichment.trap_mismatch",
+    ]
+    component_id: ExactDungeonComponentId
+    message: str = Field(min_length=1, max_length=300)
+
+
+class DungeonTrapValidationResult(WorkflowModel):
+    """Provider-free semantic validation for one trap-only proposal."""
+
+    schema_version: Literal["1.0.0"]
+    accepted_output: DungeonTrapEnrichmentOutput | None = None
+    issues: tuple[DungeonTrapIssue, ...] = ()
+
+    @model_validator(mode="after")
+    def require_acceptance_to_match_issues(self) -> DungeonTrapValidationResult:
+        if (self.accepted_output is not None) == bool(self.issues):
+            raise ValueError("accepted trap enrichment must match semantic issues")
         return self
 
 
@@ -904,10 +1030,13 @@ class DungeonGuideTrap(WorkflowModel):
     room_id: str = Field(min_length=1, max_length=200)
     map_reference: DungeonGuideMapReference
     name: str = Field(min_length=1, max_length=200)
+    warning: str | None = Field(default=None, min_length=1, max_length=2_000)
     trigger: str | None = Field(default=None, min_length=1, max_length=4_000)
     effect: str | None = Field(default=None, min_length=1, max_length=4_000)
     detection: str | None = Field(default=None, min_length=1, max_length=4_000)
     disable: str | None = Field(default=None, min_length=1, max_length=4_000)
+    consequences: tuple[GuideContentText, ...] = Field(default=(), max_length=4)
+    reset_or_recovery: str | None = Field(default=None, min_length=1, max_length=2_000)
     detection_difficulty: int = Field(ge=0)
     disable_difficulty: int = Field(ge=0)
 

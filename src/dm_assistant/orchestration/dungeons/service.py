@@ -35,6 +35,7 @@ from dm_assistant.orchestration.dungeons.contracts import (
     DUNGEON_FEATURE_INTERACTION_ENRICHMENT_SCHEMA_VERSION,
     DUNGEON_GENERATION_PROPOSAL_SCHEMA_VERSION,
     DUNGEON_PUZZLE_ENRICHMENT_SCHEMA_VERSION,
+    DUNGEON_TRAP_ENRICHMENT_SCHEMA_VERSION,
     CreateDungeonWorkflow,
     CreatePromptedDungeonExplorationWorkflow,
     CreatePromptedDungeonFeatureInteractionWorkflow,
@@ -96,6 +97,13 @@ from dm_assistant.orchestration.dungeons.contracts import (
     DungeonRoomDmNote,
     DungeonStudioDetail,
     DungeonStudioSpecification,
+    DungeonTrapContextSelection,
+    DungeonTrapEnrichmentInput,
+    DungeonTrapEnrichmentOutput,
+    DungeonTrapIssue,
+    DungeonTrapMechanic,
+    DungeonTrapRoomContext,
+    DungeonTrapValidationResult,
     DungeonVersionComparison,
     DungeonWorkflowResult,
     ExportDungeonWorkflow,
@@ -1995,6 +2003,222 @@ def project_dungeon_feature_interaction_enrichment(
     return DungeonDmGuide.model_validate(document)
 
 
+def build_dungeon_trap_enrichment_input(
+    package: DungeonPackage,
+    guide: DungeonDmGuide,
+    selection: DungeonTrapContextSelection,
+) -> DungeonTrapEnrichmentInput:
+    """Join one exact trap marker, guide entry, geometry, and code-owned DCs."""
+
+    rooms_by_id = {room.id: room for room in package.rooms}
+    room = rooms_by_id.get(selection.room_id)
+    if room is None:
+        raise ConflictError("Trap enrichment selected an unknown exact trap room.")
+
+    marker = next(
+        (
+            item
+            for item in package.room_mechanic_markers
+            if item.id == selection.trap_id and item.kind is RoomMechanicMarkerKind.TRAP
+        ),
+        None,
+    )
+    if marker is None:
+        raise ConflictError("Trap enrichment selected an unknown exact room trap.")
+    if marker.room_id != room.id or marker.floor_id != room.floor_id:
+        raise ConflictError(
+            "Trap enrichment selected a trap outside the selected trap room."
+        )
+
+    guide_trap = next(
+        (item for item in guide.traps if item.marker_id == marker.id),
+        None,
+    )
+    if guide_trap is None:
+        raise ConflictError("Trap enrichment selected a trap outside the exact guide.")
+    if guide_trap.room_id != room.id:
+        raise ConflictError(
+            "Trap enrichment guide target does not match the exact trap room."
+        )
+
+    return DungeonTrapEnrichmentInput(
+        schema_version=DUNGEON_TRAP_ENRICHMENT_SCHEMA_VERSION,
+        package_id=package.id,
+        room=DungeonTrapRoomContext(
+            room_id=room.id,
+            floor_id=room.floor_id,
+            boundary=room.boundary,
+            capacity=room.capacity,
+        ),
+        trap=DungeonTrapMechanic(
+            trap_id=marker.id,
+            room_id=marker.room_id,
+            floor_id=marker.floor_id,
+            position=marker.position,
+            name=guide_trap.name,
+            current_warning=guide_trap.warning,
+            current_trigger=guide_trap.trigger,
+            current_effect=guide_trap.effect,
+            current_detection=guide_trap.detection,
+            current_disable=guide_trap.disable,
+            current_consequences=guide_trap.consequences,
+            current_reset_or_recovery=guide_trap.reset_or_recovery,
+            detection_difficulty=guide_trap.detection_difficulty,
+            disable_difficulty=guide_trap.disable_difficulty,
+        ),
+        stakes=selection.stakes,
+        constraints=selection.constraints,
+    )
+
+
+def validate_dungeon_trap_enrichment(
+    context: DungeonTrapEnrichmentInput,
+    output: DungeonTrapEnrichmentOutput,
+) -> DungeonTrapValidationResult:
+    """Check one trap-only proposal against its exact trusted context."""
+
+    issues: list[DungeonTrapIssue] = []
+    if output.package_id != context.package_id:
+        issues.append(
+            DungeonTrapIssue(
+                code="trap_enrichment.package_mismatch",
+                component_id=output.package_id,
+                message="Trap enrichment targets a different dungeon package.",
+            )
+        )
+    if output.room_id != context.room.room_id:
+        issues.append(
+            DungeonTrapIssue(
+                code="trap_enrichment.room_mismatch",
+                component_id=output.room_id,
+                message="Trap enrichment targets a different exact room.",
+            )
+        )
+    if output.trap_id != context.trap.trap_id:
+        issues.append(
+            DungeonTrapIssue(
+                code="trap_enrichment.trap_mismatch",
+                component_id=output.trap_id,
+                message="Trap enrichment targets a different exact trap.",
+            )
+        )
+    return DungeonTrapValidationResult(
+        schema_version=DUNGEON_TRAP_ENRICHMENT_SCHEMA_VERSION,
+        accepted_output=None if issues else output,
+        issues=tuple(issues),
+    )
+
+
+def project_dungeon_trap_enrichment(
+    guide: DungeonDmGuide,
+    *,
+    plan: DungeonPlan,
+    package: DungeonPackage,
+    context: DungeonTrapEnrichmentInput,
+    validation: DungeonTrapValidationResult,
+) -> DungeonDmGuide:
+    """Merge accepted exact trap content without changing code-owned mechanics."""
+
+    guide_trap = next(
+        (item for item in guide.traps if item.marker_id == context.trap.trap_id),
+        None,
+    )
+    if guide_trap is not None and all(
+        value is not None
+        for value in (
+            guide_trap.warning,
+            guide_trap.trigger,
+            guide_trap.effect,
+            guide_trap.detection,
+            guide_trap.disable,
+        )
+    ):
+        raise ConflictError("Trap enrichment cannot replace accepted trap content.")
+
+    rebuilt_context = build_dungeon_trap_enrichment_input(
+        package,
+        guide,
+        DungeonTrapContextSelection(
+            room_id=context.room.room_id,
+            trap_id=context.trap.trap_id,
+            stakes=context.stakes,
+            constraints=context.constraints,
+        ),
+    )
+    if rebuilt_context != context:
+        raise ConflictError(
+            "Trap enrichment context does not match the accepted exact package and guide."
+        )
+
+    output = validation.accepted_output
+    if output is None:
+        raise ConflictError("Rejected trap enrichment cannot be projected.")
+    authoritative_validation = validate_dungeon_trap_enrichment(context, output)
+    if authoritative_validation.accepted_output is None:
+        raise ConflictError("Trap enrichment failed exact-ID semantic validation.")
+
+    compiled = compile_dungeon_plan(plan)
+    if (
+        not compiled.accepted
+        or compiled.certificate is None
+        or compiled.topology is None
+        or compiled.mechanics_plan is None
+        or package.topology != compiled.topology
+    ):
+        raise ConflictError(
+            "Accepted trap enrichment does not match the generated dungeon plan."
+        )
+    room_ref_by_id = {item.room_id: item.ref for item in compiled.certificate.rooms}
+    room_ref = room_ref_by_id.get(output.room_id)
+    if room_ref is None:
+        raise ConflictError("Trap enrichment targets an unknown planned room.")
+    trap_plan = next(
+        (
+            item
+            for item in compiled.mechanics_plan.room_traps
+            if item.id == output.trap_id and item.room_id == output.room_id
+        ),
+        None,
+    )
+    planned_content = next(
+        (item for item in plan.room_contents if item.room_ref == room_ref),
+        None,
+    )
+    if trap_plan is None or planned_content is None or planned_content.trap is None:
+        raise ConflictError("Trap enrichment targets a trap outside the accepted plan.")
+    if guide_trap is None or guide_trap.room_id != output.room_id:
+        raise ConflictError("Trap enrichment targets a trap outside the exact guide.")
+    if (
+        trap_plan.detection_difficulty != context.trap.detection_difficulty
+        or trap_plan.disable_difficulty != context.trap.disable_difficulty
+        or guide_trap.detection_difficulty != context.trap.detection_difficulty
+        or guide_trap.disable_difficulty != context.trap.disable_difficulty
+    ):
+        raise ConflictError(
+            "Trap enrichment cannot change deterministic trap mechanics."
+        )
+
+    traps = tuple(
+        trap.model_copy(
+            update={
+                "warning": output.observable_warning,
+                "trigger": output.trigger,
+                "effect": output.effect_narration,
+                "detection": output.detection_method,
+                "disable": output.disable_operation,
+                "consequences": output.consequences,
+                "reset_or_recovery": output.reset_or_recovery,
+            }
+        )
+        if trap.marker_id == output.trap_id
+        else trap
+        for trap in guide.traps
+    )
+    document = guide.model_dump(mode="python")
+    document["traps"] = traps
+    return DungeonDmGuide.model_validate(document)
+
+
 def build_dungeon_puzzle_enrichment_input(
     package: DungeonPackage,
     selection: DungeonPuzzleContextSelection,
@@ -3011,13 +3235,11 @@ def _dm_guide_text(guide: DungeonDmGuide) -> str:
         for trap in guide.traps:
             if trap.room_id != room.room_id:
                 continue
-            sections.extend(
-                (
-                    "",
-                    f"#### {trap.map_reference.token} — {trap.name}",
-                    "",
-                    f"- **Trigger:** {trap.trigger or 'Unknown; complete before play.'}",
-                )
+            sections.extend(("", f"#### {trap.map_reference.token} — {trap.name}", ""))
+            if trap.warning is not None:
+                sections.append(f"- **Warning:** {trap.warning}")
+            sections.append(
+                f"- **Trigger:** {trap.trigger or 'Unknown; complete before play.'}"
             )
             if trap.detection is not None and trap.disable is not None:
                 sections.extend(
@@ -3034,6 +3256,12 @@ def _dm_guide_text(guide: DungeonDmGuide) -> str:
             sections.append(
                 f"- **Consequence:** {trap.effect or 'Unknown; complete before play.'}"
             )
+            sections.extend(
+                f"- **Further consequence:** {consequence}"
+                for consequence in trap.consequences
+            )
+            if trap.reset_or_recovery is not None:
+                sections.append(f"- **Reset / recovery:** {trap.reset_or_recovery}")
         for puzzle in guide.puzzles:
             if puzzle.room_id != room.room_id:
                 continue
