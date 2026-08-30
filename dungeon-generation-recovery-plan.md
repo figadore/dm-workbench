@@ -446,7 +446,8 @@ independently pinned faux-provider dispatch has a task-specific profile, prompt/
 6,000-token cumulative and 2,048-output budget, and one budget-reserved repair. Accepted
 content and lineage publish atomically in a DM-only child while preserving package/map
 hashes, accepted puzzle/exploration content and lineage, other features, and unrelated
-blockers; failure leaves the exploration parent current and stores no rejected body. The trap seam joins one exact room-trap marker/current guide entry to local geometry and
+blockers; failure leaves the exploration parent current and stores no rejected body. The
+trap seam joins one exact room-trap marker/current guide entry to local geometry and
 deterministic detection/disable arithmetic, rejects foreign IDs plus structural/cross-task
 mutation and numeric-DC authorship, and projects warning, trigger/effect,
 detection/disable counterplay, consequences, and optional recovery into only the selected
@@ -455,7 +456,13 @@ prompt/schema, 6,000-token cumulative and 2,048-output budget, and one budget-re
 repair. Accepted content and lineage publish atomically in a DM-only child while
 preserving package/map hashes, prior puzzle/exploration/feature content and lineage, other
 traps, and unrelated blockers; failure leaves the parent current and stores no rejected
-body. No live provider was contacted, and no redaction/logging subsystem or new
+body. The provider-free objective seam joins one exact objective marker/current guide
+entry and local geometry to bounded summaries copied from selected accepted puzzle,
+exploration, feature, and trap mechanics. It rejects foreign exact IDs and structural or
+cross-task mutation, then projects only observable goal, adjudication, multiple
+resolutions, and setback/aftermath into the objective while preserving package/map state,
+prior content, other guide entries, and unrelated blockers. Objective dispatch/publication
+remains later. No live provider was contacted, and no redaction/logging subsystem or new
 persistence store was added.
 
 - Add independently bounded puzzle, exploration, other interaction, and narrative tasks

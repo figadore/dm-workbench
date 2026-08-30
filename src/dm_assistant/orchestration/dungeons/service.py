@@ -34,6 +34,7 @@ from dm_assistant.orchestration.dungeons.contracts import (
     DUNGEON_EXPLORATION_ENRICHMENT_SCHEMA_VERSION,
     DUNGEON_FEATURE_INTERACTION_ENRICHMENT_SCHEMA_VERSION,
     DUNGEON_GENERATION_PROPOSAL_SCHEMA_VERSION,
+    DUNGEON_OBJECTIVE_ENRICHMENT_SCHEMA_VERSION,
     DUNGEON_PUZZLE_ENRICHMENT_SCHEMA_VERSION,
     DUNGEON_TRAP_ENRICHMENT_SCHEMA_VERSION,
     CreateDungeonWorkflow,
@@ -80,6 +81,15 @@ from dm_assistant.orchestration.dungeons.contracts import (
     DungeonGuideRoomNarrative,
     DungeonGuideRunnableContent,
     DungeonGuideTrap,
+    DungeonObjectiveAcceptedMechanic,
+    DungeonObjectiveContextSelection,
+    DungeonObjectiveCurrentResolution,
+    DungeonObjectiveEnrichmentInput,
+    DungeonObjectiveEnrichmentOutput,
+    DungeonObjectiveIssue,
+    DungeonObjectiveRoomContext,
+    DungeonObjectiveTarget,
+    DungeonObjectiveValidationResult,
     DungeonPreparationReadiness,
     DungeonPreparationReadinessDiagnostic,
     DungeonPrintCapability,
@@ -2463,6 +2473,401 @@ def project_dungeon_trap_enrichment(
     )
     document = guide.model_dump(mode="python")
     document["traps"] = traps
+    return DungeonDmGuide.model_validate(document)
+
+
+def build_dungeon_objective_enrichment_input(
+    package: DungeonPackage,
+    guide: DungeonDmGuide,
+    selection: DungeonObjectiveContextSelection,
+) -> DungeonObjectiveEnrichmentInput:
+    """Join one exact objective to local geometry and accepted mechanic summaries."""
+
+    rooms_by_id = {room.id: room for room in package.rooms}
+    room = rooms_by_id.get(selection.room_id)
+    if room is None:
+        raise ConflictError(
+            "Objective enrichment selected an unknown exact objective room."
+        )
+    if room.role is not RoomRole.OBJECTIVE:
+        raise ConflictError(
+            "Objective enrichment selected a room without an objective role."
+        )
+
+    marker = next(
+        (
+            item
+            for item in package.room_mechanic_markers
+            if item.id == selection.objective_id
+            and item.kind is RoomMechanicMarkerKind.OBJECTIVE
+        ),
+        None,
+    )
+    if marker is None:
+        raise ConflictError(
+            "Objective enrichment selected an unknown exact room objective."
+        )
+    if marker.room_id != room.id or marker.floor_id != room.floor_id:
+        raise ConflictError(
+            "Objective enrichment selected an objective outside the selected objective room."
+        )
+
+    guide_objective = next(
+        (item for item in guide.objectives if item.marker_id == marker.id),
+        None,
+    )
+    if guide_objective is None:
+        raise ConflictError(
+            "Objective enrichment selected an objective outside the exact guide."
+        )
+    if guide_objective.room_id != room.id:
+        raise ConflictError(
+            "Objective enrichment guide target does not match the exact objective room."
+        )
+
+    accepted_by_id = _accepted_objective_mechanics(package, guide)
+    accepted_mechanics: list[DungeonObjectiveAcceptedMechanic] = []
+    for mechanic_id in selection.mechanic_ids:
+        mechanic = accepted_by_id.get(mechanic_id)
+        if mechanic is None:
+            raise ConflictError(
+                "Objective enrichment selected an unknown or unaccepted exact mechanic."
+            )
+        accepted_mechanics.append(mechanic)
+
+    current_content = guide_objective.content
+    return DungeonObjectiveEnrichmentInput(
+        schema_version=DUNGEON_OBJECTIVE_ENRICHMENT_SCHEMA_VERSION,
+        package_id=package.id,
+        room=DungeonObjectiveRoomContext(
+            room_id=room.id,
+            floor_id=room.floor_id,
+            boundary=room.boundary,
+            capacity=room.capacity,
+        ),
+        objective=DungeonObjectiveTarget(
+            objective_id=marker.id,
+            room_id=marker.room_id,
+            floor_id=marker.floor_id,
+            position=marker.position,
+            kind=guide_objective.kind,
+            name=guide_objective.name,
+            current_situation=(
+                current_content.situation if current_content is not None else None
+            ),
+            current_adjudication=(
+                current_content.adjudication if current_content is not None else None
+            ),
+            current_resolutions=(
+                tuple(
+                    DungeonObjectiveCurrentResolution(
+                        action=item.action,
+                        outcome=item.outcome,
+                    )
+                    for item in current_content.player_choices
+                )
+                if current_content is not None
+                else ()
+            ),
+        ),
+        accepted_mechanics=tuple(accepted_mechanics),
+        stakes=selection.stakes,
+        constraints=selection.constraints,
+    )
+
+
+def _accepted_objective_mechanics(
+    package: DungeonPackage,
+    guide: DungeonDmGuide,
+) -> dict[str, DungeonObjectiveAcceptedMechanic]:
+    """Index only complete accepted mechanics using bounded guide-owned summaries."""
+
+    accepted: dict[str, DungeonObjectiveAcceptedMechanic] = {}
+    package_rooms_by_id = {room.id: room for room in package.rooms}
+    guide_rooms_by_id = {room.room_id: room for room in guide.rooms}
+    encounter_slots_by_id = {slot.id: slot for slot in package.encounter_slots}
+    markers_by_id = {marker.id: marker for marker in package.room_mechanic_markers}
+
+    for puzzle in guide.puzzles:
+        package_room = package_rooms_by_id.get(puzzle.room_id)
+        if package_room is None or package_room.role is not RoomRole.PUZZLE:
+            continue
+        accepted[puzzle.room_id] = DungeonObjectiveAcceptedMechanic(
+            mechanic_id=puzzle.room_id,
+            room_id=puzzle.room_id,
+            kind="puzzle",
+            name=puzzle.name,
+            observable_summary=puzzle.content.situation,
+            resolution_summary=puzzle.content.adjudication,
+            outcome_summaries=tuple(
+                item.outcome for item in puzzle.content.player_choices
+            ),
+        )
+
+    for room in guide.rooms:
+        if room.encounter_slot_id is None or room.encounter_content is None:
+            continue
+        encounter_slot = encounter_slots_by_id.get(room.encounter_slot_id)
+        if (
+            encounter_slot is None
+            or encounter_slot.room_id != room.room_id
+            or room.encounter_slot is not EncounterSlotIntent.EXPLORATION
+            or EncounterSlotIntent.EXPLORATION.value not in encounter_slot.tags
+        ):
+            continue
+        accepted[room.encounter_slot_id] = DungeonObjectiveAcceptedMechanic(
+            mechanic_id=room.encounter_slot_id,
+            room_id=room.room_id,
+            kind="exploration",
+            name=room.name,
+            observable_summary=room.encounter_content.situation,
+            resolution_summary=room.encounter_content.adjudication,
+            outcome_summaries=tuple(
+                item.outcome for item in room.encounter_content.player_choices
+            ),
+        )
+
+    for feature in guide.features:
+        if feature.content is None:
+            continue
+        marker = markers_by_id.get(feature.marker_id)
+        if (
+            marker is None
+            or marker.kind is not RoomMechanicMarkerKind.FEATURE
+            or marker.room_id != feature.room_id
+        ):
+            continue
+        accepted[feature.marker_id] = DungeonObjectiveAcceptedMechanic(
+            mechanic_id=feature.marker_id,
+            room_id=feature.room_id,
+            kind="feature",
+            name=feature.name,
+            observable_summary=feature.content.situation,
+            resolution_summary=feature.content.adjudication,
+            outcome_summaries=tuple(
+                item.outcome for item in feature.content.player_choices
+            ),
+        )
+
+    for trap in guide.traps:
+        marker = markers_by_id.get(trap.marker_id)
+        if (
+            marker is None
+            or marker.kind is not RoomMechanicMarkerKind.TRAP
+            or marker.room_id != trap.room_id
+            or not all(
+                value is not None
+                for value in (
+                    trap.warning,
+                    trap.trigger,
+                    trap.effect,
+                    trap.detection,
+                    trap.disable,
+                )
+            )
+        ):
+            continue
+        assert trap.warning is not None
+        assert trap.effect is not None
+        assert trap.disable is not None
+        accepted[trap.marker_id] = DungeonObjectiveAcceptedMechanic(
+            mechanic_id=trap.marker_id,
+            room_id=trap.room_id,
+            kind="trap",
+            name=trap.name,
+            observable_summary=trap.warning,
+            resolution_summary=trap.disable,
+            outcome_summaries=(trap.effect, *trap.consequences),
+        )
+
+    if any(item.room_id not in guide_rooms_by_id for item in accepted.values()):
+        raise ConflictError(
+            "Objective enrichment found accepted mechanics outside the exact guide."
+        )
+    return accepted
+
+
+def validate_dungeon_objective_enrichment(
+    context: DungeonObjectiveEnrichmentInput,
+    output: DungeonObjectiveEnrichmentOutput,
+) -> DungeonObjectiveValidationResult:
+    """Check one objective-only proposal against exact IDs and accepted mechanics."""
+
+    issues: list[DungeonObjectiveIssue] = []
+    if output.package_id != context.package_id:
+        issues.append(
+            DungeonObjectiveIssue(
+                code="objective_enrichment.package_mismatch",
+                component_id=output.package_id,
+                message="Objective enrichment targets a different dungeon package.",
+            )
+        )
+    if output.room_id != context.room.room_id:
+        issues.append(
+            DungeonObjectiveIssue(
+                code="objective_enrichment.room_mismatch",
+                component_id=output.room_id,
+                message="Objective enrichment targets a different exact room.",
+            )
+        )
+    if output.objective_id != context.objective.objective_id:
+        issues.append(
+            DungeonObjectiveIssue(
+                code="objective_enrichment.objective_mismatch",
+                component_id=output.objective_id,
+                message="Objective enrichment targets a different exact objective.",
+            )
+        )
+    accepted_mechanic_ids = {item.mechanic_id for item in context.accepted_mechanics}
+    invalid_mechanic_ids = sorted(
+        {
+            mechanic_id
+            for resolution in output.resolutions
+            for mechanic_id in resolution.mechanic_ids
+            if mechanic_id not in accepted_mechanic_ids
+        }
+    )
+    issues.extend(
+        DungeonObjectiveIssue(
+            code="objective_enrichment.mechanic_invalid",
+            component_id=mechanic_id,
+            message=(
+                "Objective resolution uses a mechanic outside the accepted context."
+            ),
+        )
+        for mechanic_id in invalid_mechanic_ids
+    )
+    return DungeonObjectiveValidationResult(
+        schema_version=DUNGEON_OBJECTIVE_ENRICHMENT_SCHEMA_VERSION,
+        accepted_output=None if issues else output,
+        issues=tuple(issues),
+    )
+
+
+def project_dungeon_objective_enrichment(
+    guide: DungeonDmGuide,
+    *,
+    plan: DungeonPlan,
+    package: DungeonPackage,
+    context: DungeonObjectiveEnrichmentInput,
+    validation: DungeonObjectiveValidationResult,
+) -> DungeonDmGuide:
+    """Merge one accepted exact objective without changing structure or mechanics."""
+
+    guide_objective = next(
+        (
+            item
+            for item in guide.objectives
+            if item.marker_id == context.objective.objective_id
+        ),
+        None,
+    )
+    if guide_objective is not None and guide_objective.content is not None:
+        raise ConflictError(
+            "Objective enrichment cannot replace accepted objective content."
+        )
+
+    rebuilt_context = build_dungeon_objective_enrichment_input(
+        package,
+        guide,
+        DungeonObjectiveContextSelection(
+            room_id=context.room.room_id,
+            objective_id=context.objective.objective_id,
+            mechanic_ids=tuple(item.mechanic_id for item in context.accepted_mechanics),
+            stakes=context.stakes,
+            constraints=context.constraints,
+        ),
+    )
+    if rebuilt_context != context:
+        raise ConflictError(
+            "Objective enrichment context does not match the accepted exact package and guide."
+        )
+
+    output = validation.accepted_output
+    if output is None:
+        raise ConflictError("Rejected objective enrichment cannot be projected.")
+    authoritative_validation = validate_dungeon_objective_enrichment(context, output)
+    if authoritative_validation.accepted_output is None:
+        raise ConflictError("Objective enrichment failed exact-ID semantic validation.")
+
+    compiled = compile_dungeon_plan(plan)
+    if (
+        not compiled.accepted
+        or compiled.certificate is None
+        or compiled.topology is None
+        or compiled.mechanics_plan is None
+        or package.topology != compiled.topology
+    ):
+        raise ConflictError(
+            "Accepted objective enrichment does not match the generated dungeon plan."
+        )
+    room_ref_by_id = {item.room_id: item.ref for item in compiled.certificate.rooms}
+    room_ref = room_ref_by_id.get(output.room_id)
+    if room_ref is None:
+        raise ConflictError("Objective enrichment targets an unknown planned room.")
+    planned_room = next(room for room in plan.rooms if room.ref == room_ref)
+    objective_plan = next(
+        (
+            item
+            for item in compiled.mechanics_plan.room_objectives
+            if item.id == output.objective_id and item.room_id == output.room_id
+        ),
+        None,
+    )
+    planned_content = next(
+        (item for item in plan.room_contents if item.room_ref == room_ref),
+        None,
+    )
+    if (
+        planned_room.role is not RoomRole.OBJECTIVE
+        or objective_plan is None
+        or planned_content is None
+        or planned_content.objective != objective_plan.name
+    ):
+        raise ConflictError(
+            "Objective enrichment targets an objective outside the accepted plan."
+        )
+    if (
+        guide_objective is None
+        or guide_objective.room_id != output.room_id
+        or guide_objective.kind != objective_plan.kind
+        or guide_objective.name != objective_plan.name
+        or context.objective.kind != objective_plan.kind
+        or context.objective.name != objective_plan.name
+    ):
+        raise ConflictError(
+            "Objective enrichment cannot change the exact guide objective."
+        )
+
+    content = DungeonGuideRunnableContent(
+        situation=output.observable_goal,
+        adjudication=(
+            f"{output.resolution_guidance} "
+            f"Setback or aftermath: {output.setback_or_aftermath}"
+        ),
+        player_choices=tuple(
+            DungeonGuidePlayerChoice(action=item.action, outcome=item.outcome)
+            for item in output.resolutions
+        ),
+    )
+    objectives = tuple(
+        objective.model_copy(update={"content": content})
+        if objective.marker_id == output.objective_id
+        else objective
+        for objective in guide.objectives
+    )
+    content_issues = tuple(
+        issue
+        for issue in guide.content_issues
+        if not (
+            issue.code == "guide_content.required_missing"
+            and issue.kind == "objective"
+            and issue.room_ref == room_ref
+        )
+    )
+    document = guide.model_dump(mode="python")
+    document["objectives"] = objectives
+    document["content_issues"] = content_issues
     return DungeonDmGuide.model_validate(document)
 
 

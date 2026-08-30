@@ -433,7 +433,7 @@ The internal P1-02 Library service now ingests bounded strict-UTF-8 files throug
 
 ## Current Next Step
 
-Continue **P7-14f** with a provider-free exact-ID objective enrichment seam over the independent Copper Tide Foundry case. Keep objective markers, package/map bytes, deterministic mechanics, and accepted puzzle/exploration/feature/trap content authoritative; do not combine it with room narrative, automatic orchestration, live calls, or Tier B/C. See [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) and [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
+Continue **P7-14f** by adding independently bounded faux-provider objective dispatch, repair, lineage, and atomic child publication over the provider-free Copper Tide Foundry seam. Keep objective markers, package/map bytes, deterministic mechanics, and accepted puzzle/exploration/feature/trap content authoritative; do not combine it with room narrative, automatic orchestration, live calls, or Tier B/C. See [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) and [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
 
 ## License and Third-Party Marks
 

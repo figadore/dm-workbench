@@ -1774,7 +1774,13 @@ faux-provider task now has its own profile/effort/prompt/schema, 6,000-token cum
 and 2,048-output budget, one budget-reserved repair, accepted-content lineage, and atomic
 DM-only child publication. Success changes only that trap while preserving package/map
 state, prior puzzle/exploration/feature content and lineage, the other traps, and unrelated
-blockers; rejection leaves the parent current with body-free diagnostics. Objective and
+blockers; rejection leaves the parent current with body-free diagnostics. The provider-free
+objective seam joins one exact objective marker/current guide entry and local geometry to a
+bounded selection of already accepted puzzle, exploration, feature, and trap summaries. It
+rejects foreign package/room/objective/mechanic IDs plus structural or cross-task mutation,
+and deterministically projects observable goal, adjudication, multiple resolutions, and
+setback/aftermath into only that objective while preserving package/map state, all accepted
+mechanics, other guide entries, and unrelated blockers. Objective provider dispatch,
 narrative enrichment, automatic staged orchestration, and live calls remain later slices.
 
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.

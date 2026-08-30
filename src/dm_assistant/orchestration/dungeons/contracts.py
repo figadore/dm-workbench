@@ -37,6 +37,7 @@ from dm_dungeon.contracts import (
 DUNGEON_GENERATION_PROPOSAL_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 DUNGEON_EXPLORATION_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 DUNGEON_FEATURE_INTERACTION_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
+DUNGEON_OBJECTIVE_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 DUNGEON_TRAP_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 DUNGEON_PUZZLE_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 
@@ -551,6 +552,183 @@ class PromptedDungeonTrapLineage(WorkflowModel):
             raise ValueError("trap lineage requires a successful model run")
         if self.model_run.output_payload != self.output.model_dump(mode="json"):
             raise ValueError("trap lineage output must match the model run")
+        return self
+
+
+class DungeonObjectiveContextSelection(WorkflowModel):
+    """Trusted exact objective, accepted mechanics, and bounded task policy."""
+
+    room_id: ExactDungeonComponentId
+    objective_id: ExactDungeonComponentId
+    mechanic_ids: tuple[ExactDungeonComponentId, ...] = Field(default=(), max_length=8)
+    stakes: GuideContentText
+    constraints: tuple[GuideContentText, ...] = Field(default=(), max_length=8)
+
+    @model_validator(mode="after")
+    def require_unique_mechanic_ids(self) -> DungeonObjectiveContextSelection:
+        if len(self.mechanic_ids) != len(set(self.mechanic_ids)):
+            raise ValueError("objective context requires unique accepted mechanic IDs")
+        return self
+
+
+class DungeonObjectiveRoomContext(WorkflowModel):
+    """Exact local geometry exposed to one objective-only task."""
+
+    room_id: ExactDungeonComponentId
+    floor_id: ExactDungeonComponentId
+    boundary: PolygonGeometry
+    capacity: RoomCapacity
+
+
+class DungeonObjectiveCurrentResolution(WorkflowModel):
+    """One already accepted objective resolution, if this entry is complete."""
+
+    action: GuideContentText
+    outcome: GuideContentText
+
+
+class DungeonObjectiveTarget(WorkflowModel):
+    """Exact objective marker joined to its current DM-guide entry."""
+
+    objective_id: ExactDungeonComponentId
+    room_id: ExactDungeonComponentId
+    floor_id: ExactDungeonComponentId
+    position: GridPoint
+    kind: ObjectiveKind
+    name: str = Field(min_length=1, max_length=200)
+    current_situation: GuideContentText | None = None
+    current_adjudication: GuideContentText | None = None
+    current_resolutions: tuple[DungeonObjectiveCurrentResolution, ...] = Field(
+        default=(), max_length=4
+    )
+
+    @model_validator(mode="after")
+    def require_complete_current_content(self) -> DungeonObjectiveTarget:
+        has_text = (
+            self.current_situation is not None or self.current_adjudication is not None
+        )
+        if has_text != bool(self.current_resolutions):
+            raise ValueError(
+                "objective current content must be present as one complete set"
+            )
+        if has_text and (
+            self.current_situation is None
+            or self.current_adjudication is None
+            or len(self.current_resolutions) < 2
+        ):
+            raise ValueError(
+                "accepted objective content requires at least two resolutions"
+            )
+        return self
+
+
+class DungeonObjectiveAcceptedMechanic(WorkflowModel):
+    """Bounded summary copied only from one already accepted guide mechanic."""
+
+    mechanic_id: ExactDungeonComponentId
+    room_id: ExactDungeonComponentId
+    kind: Literal["puzzle", "exploration", "feature", "trap"]
+    name: str = Field(min_length=1, max_length=200)
+    observable_summary: GuideContentText
+    resolution_summary: GuideContentText
+    outcome_summaries: tuple[GuideContentText, ...] = Field(min_length=1, max_length=5)
+
+
+class DungeonObjectiveEnrichmentInput(WorkflowModel):
+    """Narrow objective payload built after selected mechanics are accepted."""
+
+    schema_version: Literal["1.0.0"]
+    package_id: ExactDungeonComponentId
+    room: DungeonObjectiveRoomContext
+    objective: DungeonObjectiveTarget
+    accepted_mechanics: tuple[DungeonObjectiveAcceptedMechanic, ...] = Field(
+        default=(), max_length=8
+    )
+    stakes: GuideContentText
+    constraints: tuple[GuideContentText, ...] = Field(default=(), max_length=8)
+
+    @model_validator(mode="after")
+    def require_exact_local_objective_and_unique_mechanics(
+        self,
+    ) -> DungeonObjectiveEnrichmentInput:
+        if (
+            self.objective.room_id != self.room.room_id
+            or self.objective.floor_id != self.room.floor_id
+        ):
+            raise ValueError(
+                "objective enrichment requires one objective in the exact room"
+            )
+        mechanic_ids = [item.mechanic_id for item in self.accepted_mechanics]
+        if len(mechanic_ids) != len(set(mechanic_ids)):
+            raise ValueError("objective enrichment requires unique accepted mechanics")
+        return self
+
+
+class DungeonObjectiveResolution(WorkflowModel):
+    """One credible objective resolution, optionally grounded in accepted mechanics."""
+
+    mechanic_ids: tuple[ExactDungeonComponentId, ...] = Field(default=(), max_length=4)
+    action: GuideContentText
+    outcome: GuideContentText
+
+    @model_validator(mode="after")
+    def require_unique_mechanic_ids(self) -> DungeonObjectiveResolution:
+        if len(self.mechanic_ids) != len(set(self.mechanic_ids)):
+            raise ValueError("objective resolution requires unique mechanic IDs")
+        return self
+
+
+class DungeonObjectiveEnrichmentOutput(WorkflowModel):
+    """Objective-only proposal that cannot rename or structurally mutate its target."""
+
+    schema_version: Literal["1.0.0"]
+    package_id: ExactDungeonComponentId
+    room_id: ExactDungeonComponentId
+    objective_id: ExactDungeonComponentId
+    observable_goal: GuideContentText
+    resolution_guidance: GuideContentText
+    resolutions: tuple[DungeonObjectiveResolution, ...] = Field(
+        min_length=2, max_length=4
+    )
+    setback_or_aftermath: GuideContentText
+
+    @model_validator(mode="after")
+    def require_bounded_guide_projection(self) -> DungeonObjectiveEnrichmentOutput:
+        adjudication = (
+            f"{self.resolution_guidance} "
+            f"Setback or aftermath: {self.setback_or_aftermath}"
+        )
+        if len(adjudication) > 2_000:
+            raise ValueError(
+                "objective enrichment exceeds bounded guide projection text"
+            )
+        return self
+
+
+class DungeonObjectiveIssue(WorkflowModel):
+    """Body-free exact-ID mismatch that blocks accepting objective content."""
+
+    code: Literal[
+        "objective_enrichment.package_mismatch",
+        "objective_enrichment.room_mismatch",
+        "objective_enrichment.objective_mismatch",
+        "objective_enrichment.mechanic_invalid",
+    ]
+    component_id: ExactDungeonComponentId
+    message: str = Field(min_length=1, max_length=300)
+
+
+class DungeonObjectiveValidationResult(WorkflowModel):
+    """Provider-free semantic validation for one objective-only proposal."""
+
+    schema_version: Literal["1.0.0"]
+    accepted_output: DungeonObjectiveEnrichmentOutput | None = None
+    issues: tuple[DungeonObjectiveIssue, ...] = ()
+
+    @model_validator(mode="after")
+    def require_acceptance_to_match_issues(self) -> DungeonObjectiveValidationResult:
+        if (self.accepted_output is not None) == bool(self.issues):
+            raise ValueError("accepted objective enrichment must match semantic issues")
         return self
 
 
