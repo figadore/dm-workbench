@@ -40,6 +40,7 @@ from dm_assistant.orchestration.dungeons.contracts import (
     CreateDungeonWorkflow,
     CreatePromptedDungeonExplorationWorkflow,
     CreatePromptedDungeonFeatureInteractionWorkflow,
+    CreatePromptedDungeonObjectiveWorkflow,
     CreatePromptedDungeonPuzzleWorkflow,
     CreatePromptedDungeonTrapWorkflow,
     CreatePromptedDungeonWorkflow,
@@ -120,6 +121,7 @@ from dm_assistant.orchestration.dungeons.contracts import (
     ExportDungeonWorkflow,
     PromptDungeonExplorationWorkflow,
     PromptDungeonFeatureInteractionWorkflow,
+    PromptDungeonObjectiveWorkflow,
     PromptDungeonPuzzleWorkflow,
     PromptDungeonTrapWorkflow,
     PromptedDungeonModelLineage,
@@ -943,6 +945,255 @@ class DungeonStudioService:
                                 {
                                     "code": "trap_enrichment.projection_failed",
                                     "message": "Trap projection or publication failed.",
+                                }
+                            ],
+                        },
+                    )
+                )
+            raise
+        return DungeonWorkflowResult(
+            success=True,
+            artifact_id=published.artifact.id,
+            artifact_version_id=published.version.id,
+            generation_run_id=run.id,
+            diagnostics=(),
+        )
+
+    def build_objective_context(
+        self,
+        command: PromptDungeonObjectiveWorkflow,
+    ) -> DungeonObjectiveEnrichmentInput:
+        """Build one exact objective context from an immutable structural version."""
+
+        parent = self._preparation.get_version(
+            command.campaign_id,
+            command.parent_version_id,
+        )
+        if parent.artifact_id != command.artifact_id:
+            raise ConflictError("Parent version does not belong to the artifact.")
+        specification = _load_specification(parent.specification)
+        if specification.dm_guide is None:
+            raise ConflictError("Objective requires an exact structural guide.")
+        return build_dungeon_objective_enrichment_input(
+            specification.package,
+            specification.dm_guide,
+            command.selection,
+        )
+
+    def enrich_prompted_objective(
+        self,
+        command: CreatePromptedDungeonObjectiveWorkflow,
+    ) -> DungeonWorkflowResult:
+        """Publish accepted objective content without regenerating package geometry."""
+
+        parent = self._preparation.get_version(
+            command.campaign_id,
+            command.parent_version_id,
+        )
+        if parent.artifact_id != command.artifact_id:
+            raise ConflictError("Parent version does not belong to the artifact.")
+        specification = _load_specification(parent.specification)
+        plan = _accepted_structural_plan(specification)
+        if specification.dm_guide is None:
+            raise ConflictError(
+                "Objective enrichment requires an exact structural guide."
+            )
+
+        context_document = command.context.model_dump(mode="json")
+        context_hash = canonical_json_sha256(context_document)
+        context_envelope = GenerationContextEnvelope(
+            context_kind="dungeon_objective_enrichment",
+            payload_version=command.context.schema_version,
+            visibility_policy=VisibilityPolicy.DM_ONLY,
+            payload=context_document,
+            payload_sha256=context_hash,
+        )
+        context_pin = GenerationContextPin(
+            envelope_kind=context_envelope.context_kind,
+            payload_version=context_envelope.payload_version,
+            envelope=context_envelope.model_dump(mode="json"),
+            payload_sha256=context_hash,
+        )
+        run = self._preparation.start_generation_run(
+            StartGenerationRun(
+                campaign_id=command.campaign_id,
+                generation_kind="dungeon_objective_enrichment",
+                seed=specification.layout_request.seed,
+                input_scope={
+                    "artifact_id": str(command.artifact_id),
+                    "parent_version_id": str(command.parent_version_id),
+                    "package_id": specification.package.id,
+                    "room_id": command.context.room.room_id,
+                    "objective_id": command.context.objective.objective_id,
+                    "context_sha256": context_hash,
+                },
+                input_pins=parent.input_pins,
+                context=context_pin,
+                schema_versions={
+                    "dungeon_package": specification.package.schema_version,
+                    "dungeon_objective_enrichment": (
+                        DUNGEON_OBJECTIVE_ENRICHMENT_SCHEMA_VERSION
+                    ),
+                    "dungeon_studio": _STUDIO_SCHEMA_VERSION,
+                    "model_run": "1.0.0",
+                },
+                generator_versions={
+                    "dungeon_kernel": dm_dungeon.__version__,
+                    "layout": specification.layout_request.generator_version,
+                    "objective_guide_projection": "objective-guide-projection-v1",
+                },
+                renderer_versions={
+                    "svg": SVG_RENDERER_VERSION,
+                    "png": PNG_EXPORTER_VERSION,
+                    "pdf": PDF_EXPORTER_VERSION,
+                    "roll20": ROLL20_EXPORTER_VERSION,
+                },
+                model_task_profile_id=command.model_task_profile_id,
+                model_run_ids=(command.model_lineage.model_run_id,),
+                tool_runs=command.tool_runs,
+            )
+        )
+
+        try:
+            guide = project_dungeon_objective_enrichment(
+                specification.dm_guide,
+                plan=plan,
+                package=specification.package,
+                context=command.context,
+                validation=command.validation,
+            )
+            readiness = _build_preparation_readiness(guide)
+            topology_report = validate_topology(specification.package.topology)
+            geometry_report = validate_geometry(specification.package)
+            valid = topology_report.valid and geometry_report.valid
+            validation_report: dict[str, JsonValue] = {
+                "valid": valid,
+                "stage": "completed" if valid else "validation",
+                "topology": topology_report.model_dump(mode="json"),
+                "geometry": geometry_report.model_dump(mode="json"),
+                "objective_enrichment": {
+                    "accepted": True,
+                    "package_id": command.context.package_id,
+                    "room_id": command.context.room.room_id,
+                    "objective_id": command.context.objective.objective_id,
+                    "context_sha256": context_hash,
+                },
+            }
+            if readiness is not None:
+                validation_report["preparation_readiness"] = readiness.model_dump(
+                    mode="json"
+                )
+            if not valid:
+                self._preparation.finish_generation_run(
+                    FinishGenerationRun(
+                        campaign_id=command.campaign_id,
+                        run_id=run.id,
+                        status=GenerationStatus.FAILED,
+                        validation_report=validation_report,
+                    )
+                )
+                diagnostics = tuple(
+                    item.model_dump(mode="json")
+                    for item in (
+                        *topology_report.diagnostics,
+                        *geometry_report.diagnostics,
+                    )
+                )
+                return DungeonWorkflowResult(
+                    success=False,
+                    artifact_id=command.artifact_id,
+                    artifact_version_id=None,
+                    generation_run_id=run.id,
+                    diagnostics=diagnostics,
+                )
+
+            enriched_specification = specification.model_copy(
+                update={
+                    "dm_guide": guide,
+                    "preparation_readiness": readiness,
+                    "objective_model_lineage": (
+                        *specification.objective_model_lineage,
+                        command.model_lineage,
+                    ),
+                }
+            )
+            resolved_notes = _resolved_dm_notes(enriched_specification)
+            preview_assets = _preview_assets(
+                enriched_specification.package,
+                resolved_notes,
+            )
+            base_assets = (
+                _PendingAsset(
+                    ArtifactAssetRole.SPECIFICATION,
+                    0,
+                    "application/json",
+                    _canonical_json_bytes(
+                        enriched_specification.model_dump(mode="json")
+                    ),
+                ),
+                _PendingAsset(
+                    ArtifactAssetRole.VALIDATION_REPORT,
+                    0,
+                    "application/json",
+                    _canonical_json_bytes(validation_report),
+                ),
+                _dm_notes_asset(
+                    enriched_specification.layout_request,
+                    resolved_notes,
+                    guide,
+                ),
+            )
+            artifact = self._preparation.get_artifact(
+                command.campaign_id,
+                command.artifact_id,
+            )
+            published = self._preparation.publish_generated_package(
+                PublishGeneratedPackage(
+                    campaign_id=command.campaign_id,
+                    generation_run_id=run.id,
+                    artifact_id=command.artifact_id,
+                    artifact_type=ArtifactType.DUNGEON,
+                    title=artifact.title,
+                    visibility_policy=artifact.visibility_policy,
+                    parent_version_id=command.parent_version_id,
+                    schema_version=_VERSION_SCHEMA,
+                    specification=enriched_specification.model_dump(mode="json"),
+                    validation_report=validation_report,
+                    change_summary="Add independently generated exact-objective content.",
+                    input_pins=parent.input_pins,
+                    created_by=command.created_by,
+                    assets=tuple(
+                        PendingArtifactAsset(
+                            role=asset.role,
+                            ordinal=asset.ordinal,
+                            media_type=asset.media_type,
+                            data=asset.data,
+                        )
+                        for asset in (*base_assets, *preview_assets)
+                    ),
+                    required_assets=tuple(
+                        RequiredArtifactAsset(role=asset.role, ordinal=asset.ordinal)
+                        for asset in (*base_assets, *preview_assets)
+                    ),
+                )
+            )
+        except Exception:
+            if (
+                self._preparation.get_generation_run(command.campaign_id, run.id).status
+                is GenerationStatus.RUNNING
+            ):
+                self._preparation.finish_generation_run(
+                    FinishGenerationRun(
+                        campaign_id=command.campaign_id,
+                        run_id=run.id,
+                        status=GenerationStatus.FAILED,
+                        validation_report={
+                            "valid": False,
+                            "stage": "projection",
+                            "diagnostics": [
+                                {
+                                    "code": "objective_enrichment.projection_failed",
+                                    "message": "Objective projection or publication failed.",
                                 }
                             ],
                         },

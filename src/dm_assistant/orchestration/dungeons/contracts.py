@@ -732,6 +732,23 @@ class DungeonObjectiveValidationResult(WorkflowModel):
         return self
 
 
+class PromptedDungeonObjectiveLineage(WorkflowModel):
+    """Accepted objective content retained with its authorized dungeon version."""
+
+    model_run_id: UUID
+    context_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    model_run: ModelRunRecord
+    output: DungeonObjectiveEnrichmentOutput
+
+    @model_validator(mode="after")
+    def require_successful_matching_output(self) -> PromptedDungeonObjectiveLineage:
+        if self.model_run.status != "succeeded":
+            raise ValueError("objective lineage requires a successful model run")
+        if self.model_run.output_payload != self.output.model_dump(mode="json"):
+            raise ValueError("objective lineage output must match the model run")
+        return self
+
+
 class DungeonPuzzleClueApproval(WorkflowModel):
     """Server-approved exact location selected for one puzzle context."""
 
@@ -1377,6 +1394,7 @@ class DungeonStudioSpecification(WorkflowModel):
         PromptedDungeonFeatureInteractionLineage, ...
     ] = ()
     trap_model_lineage: tuple[PromptedDungeonTrapLineage, ...] = ()
+    objective_model_lineage: tuple[PromptedDungeonObjectiveLineage, ...] = ()
 
 
 class CreateDungeonWorkflow(WorkflowModel):
@@ -1602,6 +1620,41 @@ class CreatePromptedDungeonTrapWorkflow(WorkflowModel):
         context_hash = canonical_json_sha256(self.context.model_dump(mode="json"))
         if self.model_lineage.context_sha256 != context_hash:
             raise ValueError("trap publication requires matching context lineage")
+        return self
+
+
+class PromptDungeonObjectiveWorkflow(WorkflowModel):
+    """DM request for one exact-objective enrichment child version."""
+
+    campaign_id: UUID
+    artifact_id: UUID
+    parent_version_id: UUID
+    selection: DungeonObjectiveContextSelection
+    created_by: str = Field(min_length=1, max_length=200)
+
+
+class CreatePromptedDungeonObjectiveWorkflow(WorkflowModel):
+    """Accepted objective result ready for deterministic child publication."""
+
+    campaign_id: UUID
+    artifact_id: UUID
+    parent_version_id: UUID
+    context: DungeonObjectiveEnrichmentInput
+    validation: DungeonObjectiveValidationResult
+    model_task_profile_id: UUID
+    model_lineage: PromptedDungeonObjectiveLineage
+    tool_runs: tuple[ToolRunPin, ...] = ()
+    created_by: str = Field(min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def require_matching_accepted_lineage(
+        self,
+    ) -> CreatePromptedDungeonObjectiveWorkflow:
+        if self.validation.accepted_output != self.model_lineage.output:
+            raise ValueError("objective publication requires matching accepted lineage")
+        context_hash = canonical_json_sha256(self.context.model_dump(mode="json"))
+        if self.model_lineage.context_sha256 != context_hash:
+            raise ValueError("objective publication requires matching context lineage")
         return self
 
 

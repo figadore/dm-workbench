@@ -286,12 +286,18 @@ Trap output supplies an observable warning, trigger/effect, detection and disabl
 counterplay, consequences, and optional reset/recovery without numeric difficulty
 authorship. Accepted content and lineage publish atomically in a DM-only child while
 package/map bytes, prior enrichments, the other traps, and unrelated blockers remain
-unchanged; rejection leaves the parent current with body-free diagnostics. Accepted
-content remains available to the DM in the artifact, while routine attempt reports contain
-only compact operational metadata and diagnostics; raw transport capture requires explicit local debug.
-Until the remaining enrichment kinds are wired, drafts truthfully remain
-preparation-blocked. Geometry, visibility, validation, rendering, persistence, and
-approval remain server-owned. Run inspection remains body-free:
+unchanged; rejection leaves the parent current with body-free diagnostics. Objective
+content now follows the same independent boundary: trusted code joins one exact objective
+to its local geometry and a bounded selection of accepted mechanic summaries, while a
+separate 6,000-token cumulative/2,048-output faux-provider task proposes only an observable
+goal, adjudication, two to four resolutions, and setback/aftermath. Foreign objective or
+mechanic IDs are rejected; accepted content and lineage publish in one DM-only child while
+package/map bytes and all accepted puzzle/exploration/feature/trap content remain unchanged.
+Accepted content remains available to the DM in the artifact, while routine attempt reports
+contain only compact operational metadata and diagnostics; raw transport capture requires
+explicit local debug. Until room narrative and the remaining enrichment work are wired,
+drafts truthfully remain preparation-blocked. Geometry, visibility, validation, rendering,
+persistence, and approval remain server-owned. Run inspection remains body-free:
 
 ```bash
 uv run --frozen dm dungeon run inspect <attempt-run-id>
@@ -433,7 +439,13 @@ The internal P1-02 Library service now ingests bounded strict-UTF-8 files throug
 
 ## Current Next Step
 
-Continue **P7-14f** by adding independently bounded faux-provider objective dispatch, repair, lineage, and atomic child publication over the provider-free Copper Tide Foundry seam. Keep objective markers, package/map bytes, deterministic mechanics, and accepted puzzle/exploration/feature/trap content authoritative; do not combine it with room narrative, automatic orchestration, live calls, or Tier B/C. See [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) and [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
+Continue **P7-14f** with a provider-free exact-ID room-narrative contract over the
+objective child. The bounded homogeneous task should receive accepted mechanics and their
+player-observable projections, add concise read-aloud and room framing only, and be unable
+to invent or mutate mechanics, package/map state, or preparation approval. Do not combine
+it with provider dispatch, automatic orchestration, live calls, or Tier B/C. See
+[`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) and
+[`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
 
 ## License and Third-Party Marks
 

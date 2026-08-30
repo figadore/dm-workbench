@@ -1780,8 +1780,14 @@ bounded selection of already accepted puzzle, exploration, feature, and trap sum
 rejects foreign package/room/objective/mechanic IDs plus structural or cross-task mutation,
 and deterministically projects observable goal, adjudication, multiple resolutions, and
 setback/aftermath into only that objective while preserving package/map state, all accepted
-mechanics, other guide entries, and unrelated blockers. Objective provider dispatch,
-narrative enrichment, automatic staged orchestration, and live calls remain later slices.
+mechanics, other guide entries, and unrelated blockers. One independently pinned
+faux-provider objective task now has its own profile/effort/prompt/schema, 6,000-token
+cumulative and 2,048-output budget, one budget-reserved repair, accepted-content lineage,
+and atomic DM-only child publication. Success preserves package/map bytes, all accepted
+puzzle/exploration/feature/trap content and lineage, objective identity/kind, other guide
+entries, and unrelated blockers; rejection or publication failure leaves the trap parent
+current with body-free diagnostics. Narrative enrichment, automatic staged orchestration,
+and live calls remain later slices.
 
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
   Its model-visible proposal contains room identity/purpose, critical path, bounded

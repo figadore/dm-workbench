@@ -7,14 +7,15 @@
 ## Current State
 
 - **Updated:** 2026-08-30
-- **Branch/HEAD:** `fast-track-prompt-to-dungeon` at `e6f7110`, matching
+- **Branch/HEAD:** `fast-track-prompt-to-dungeon` at `397c35d`, one commit ahead of
   `origin/fast-track-prompt-to-dungeon` before the uncommitted slice below.
-- **Working tree:** **uncommitted P7-14f provider-free objective-enrichment slice** in the
-  files listed below. No migration, provider credential, dispatch, or persistence path is
-  partially edited.
+- **Working tree:** **uncommitted P7-14f objective-dispatch/publication slice** in the
+  files listed below. No migration, provider credential, live dispatch, or canonical
+  campaign path is partially edited.
 - **Current task:** **P7-14f — Staged Tier A authoring and anti-overfitting evaluation.**
-- **Task state:** exact-ID objective context, semantic validation, and deterministic guide
-  projection are complete and green. Objective provider dispatch/publication is next.
+- **Task state:** exact-ID objective provider dispatch, bounded repair, accepted-content
+  lineage, and atomic DM-only child publication are complete and green. Provider-free
+  room-narrative contracts are next.
 - **Schema head:** `0008_workbench_defaults`; no migration changed or is pending.
 - **Retention gate:** **not crossed.** Active V1 contracts evolve in place; there is no
   retained real-user artifact, external consumer, non-disposable deployment, or promised
@@ -22,37 +23,36 @@
 
 ## Implemented Staged Seam
 
-The model-visible structural proposal no longer contains prose-heavy `guide_content`.
-After deterministic topology, certificate, geometry, and secrecy validation, puzzle,
-exploration, feature-interaction, and trap tasks have strict exact-ID contexts/outputs,
-independent faux-provider budgets/repairs, deterministic guide projection, accepted model
-lineage, and atomic DM-only child publication.
+The objective task now follows the same independently failable boundary as puzzle,
+exploration, feature-interaction, and trap enrichment:
 
-The new provider-free objective slice:
+- trusted code builds one exact objective context from immutable package geometry, the
+  current guide target, bounded stakes/constraints, and selected summaries copied only
+  from accepted puzzle/exploration/feature/trap content;
+- a distinct task profile exposes only `submit_dungeon_objective`, with a 6,000-token
+  cumulative budget, 2,048-output ceiling, and one repair whose complete canonical input
+  plus schema is reserved from measured remaining usage;
+- schema and semantic checks reject foreign package/room/objective/mechanic IDs and do not
+  expose objective rename/kind, structure, geometry, deterministic arithmetic, approval,
+  canon, or another task's content;
+- accepted output and final model lineage remain in the authorized DM-only child artifact;
+  ordinary attempt records retain body-free IDs, hashes, usage, stages, and diagnostics;
+- deterministic projection changes only the exact objective, removes only its runnable-
+  content blocker, and preserves package/map bytes, objective identity/kind, all accepted
+  prior content and lineage, other guide entries, and unrelated blockers; and
+- rejection or publication failure leaves the Copper Tide Foundry trap parent current and
+  persists no rejected or exception body.
 
-- joins one exact objective marker and current guide entry to its local package geometry;
-- includes only a bounded exact-ID selection of summaries copied from already accepted
-  puzzle, exploration, feature, and trap guide content plus trusted stakes/constraints;
-- accepts only the exact package/room/objective IDs, observable goal, adjudication,
-  two-to-four resolutions, optional accepted-mechanic references, and setback/aftermath;
-- rejects foreign package/room/objective/mechanic IDs and structural, cross-task, rename,
-  or objective-kind mutation through strict schema and semantic checks; and
-- projects only into the selected objective, removes only its missing-content blocker,
-  and preserves package/map bytes, accepted prior mechanics, all other guide entries, and
-  unrelated diagnostics.
-
-The Copper Tide Foundry regression is independent of the archive fixture and exercises an
-accepted puzzle, exploration challenge, feature interaction, and two traps before objective
-projection. This provider-free boundary does not alter persisted artifact lineage; objective
-lineage and atomic child publication belong to the next dispatch slice.
+The new integration regression starts from independently accepted Copper Tide puzzle,
+exploration, feature, and trap children, then proves objective repair/publication and both
+failure paths. It is independent of the Synthetic Constructive Archive review fixture.
 
 ## Active Boundaries and Known Issues
 
-- Models propose content only. They cannot alter topology, geometry, visibility,
-  deterministic arithmetic/DC policy, preparation approval, or canon.
-- Objective dispatch/repair/lineage/publication, room narrative enrichment, automatic
-  staged orchestration, Tier B/C, the multi-case quality comparison, and a staged live
-  result are not implemented.
+- Models propose preparation content only. They cannot alter topology, geometry,
+  visibility, deterministic arithmetic/DC policy, preparation approval, or canon.
+- Room narrative enrichment, repeated/automatic staged orchestration, Tier B/C, the
+  multi-case quality comparison, and a staged live result are not implemented.
 - Live provider use remains paused. Pinned `@earendil-works/pi-ai` Codex transport does
   not serialize the requested hard output limit; post-response checks protect publication
   but cannot prevent provider usage. The acknowledged frozen-canary exception remains
@@ -62,7 +62,7 @@ lineage and atomic child publication belong to the next dispatch slice.
 - The full integration suite was not run. An older broad P7-14e run had three unrelated
   failures: Alembic/SQLAlchemy metadata diffs, a duplicate retrieval result, and a
   document-history trigger hit by a direct fixture. Their current status is unverified;
-  the focused staged dungeon integration gate was green for the prior trap-dispatch slice.
+  the focused staged dungeon integration gate is green.
 - No provider was contacted. No credential, canonical campaign write, preparation
   approval, pure-package change, migration, redaction system, or second persistence store
   is present in this slice.
@@ -73,8 +73,10 @@ Uncommitted implementation:
 
 - `src/dm_assistant/orchestration/dungeons/contracts.py`
 - `src/dm_assistant/orchestration/dungeons/service.py`
+- `src/dm_assistant/orchestration/dungeons/objective_prompting.py` (new)
+- `src/dm_assistant/orchestration/dungeons/objective_application.py` (new)
 - `src/dm_assistant/orchestration/dungeons/__init__.py`
-- `tests/unit/test_dungeon_objective_enrichment_contract.py` (new)
+- `tests/integration/test_dungeon_objective_prompt.py` (new)
 
 Uncommitted documentation:
 
@@ -88,29 +90,32 @@ Recorded for this slice:
 
 - `uv run pytest -q tests/unit tests/evals` -> **199 passed**.
 - `uv run pytest -q packages/dungeon-engine/tests` -> **139 passed**.
-- Focused objective/trap/exploration/puzzle/guide contract gate -> **17 passed**.
+- Focused puzzle/exploration/trap/objective integration gate -> **12 passed** against a
+  disposable PostgreSQL/pgvector container.
+- Focused objective/trap/exploration/puzzle contract gate -> **14 passed**.
 - Ruff lint/format and strict mypy over changed dungeon Python sources -> **passed**.
 - `git diff --check` -> **passed** after the final handoff rewrite.
 
-Suggested commit subject: `P7-14f add exact-ID objective enrichment contract`
+Suggested commit subject: `P7-14f add bounded objective dispatch and publication`
 
 ## Single Next Recommended Task
 
-**Add independently bounded faux-provider objective dispatch, repair, accepted-content
-lineage, and atomic DM-only child publication for the exact objective contract.**
+**Add a provider-free exact-ID room-narrative context, output, semantic validation, and
+deterministic guide projection after accepted mechanics exist.**
 
-**First concrete action:** add a failing integration test in a new
-`tests/integration/test_dungeon_objective_prompt.py` that starts from the Copper Tide
-Foundry trap child, dispatches the exact objective through a task-specific faux profile,
-and proves its own 6,000-token cumulative/2,048-output budget with one complete-input-
-reserved repair.
+**First concrete action:** add failing unit cases in a new
+`tests/unit/test_dungeon_room_narrative_enrichment_contract.py` using a materially
+different synthetic setting. Prove that a bounded homogeneous input includes only exact
+selected room geometry, existing room guide state, tone/constraints, and player-observable
+summaries copied from accepted local mechanics. Output may add concise observable
+read-aloud and room framing only; it must preserve exact package/room IDs, reject foreign
+or duplicate rooms and structural/cross-task fields, and project only into selected room
+narratives without changing package/map bytes, accepted mechanics, objective content,
+lineage, other guide entries, or unrelated blockers.
 
-Success must publish one child preserving package/map hashes, all accepted puzzle/
-exploration/feature/trap content and lineage, objective identity/kind, other guide entries,
-and unrelated blockers. Rejection or publication failure must leave the trap parent
-current and persist only body-free diagnostics. Do **not** add room narrative, automatic
-orchestration, live calls, Tier B/C, a migration, or a universal optional-field generation
-context in that slice.
+Do **not** add narrative provider dispatch, automatic orchestration, live calls, Tier B/C,
+a migration, model-authored hidden mechanics, or a universal optional-field generation
+context in that provider-free slice.
 
 ## Authoritative References
 
