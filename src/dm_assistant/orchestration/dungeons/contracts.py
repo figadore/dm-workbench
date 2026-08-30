@@ -8,7 +8,11 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 from dm_assistant.modules.modeling import ModelRunRecord
-from dm_assistant.modules.preparation import GenerationContextPin, ToolRunPin
+from dm_assistant.modules.preparation import (
+    GenerationContextPin,
+    ToolRunPin,
+    canonical_json_sha256,
+)
 from dm_assistant.modules.scope import TaskScope, TaskType
 from dm_dungeon import (
     DungeonPackage,
@@ -21,6 +25,7 @@ from dm_dungeon.contracts import (
     EncounterSlotIntent,
     EndpointDoorKind,
     FeatureIntentKind,
+    GridPoint,
     ObjectiveKind,
     PolygonGeometry,
     RoomCapacity,
@@ -29,6 +34,7 @@ from dm_dungeon.contracts import (
 )
 
 DUNGEON_GENERATION_PROPOSAL_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
+DUNGEON_EXPLORATION_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 DUNGEON_PUZZLE_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 
 
@@ -37,7 +43,7 @@ class WorkflowModel(BaseModel):
 
 
 class PromptedDungeonModelLineage(WorkflowModel):
-    """One validated model response retained for prompt replay and review."""
+    """One validated structural model response retained for replay and review."""
 
     model_run_id: UUID
     model_run: ModelRunRecord
@@ -63,6 +69,179 @@ GuideContentText = Annotated[str, Field(min_length=1, max_length=2_000)]
 
 
 ExactDungeonComponentId = Annotated[str, Field(min_length=1, max_length=200)]
+
+
+class DungeonExplorationAffordanceApproval(WorkflowModel):
+    """Trusted room-local feature selected as an environmental affordance."""
+
+    affordance_id: ExactDungeonComponentId
+    use: GuideContentText
+
+
+class DungeonExplorationContextSelection(WorkflowModel):
+    """Trusted IDs and policy used to build one exploration-only context."""
+
+    room_id: ExactDungeonComponentId
+    affordances: tuple[DungeonExplorationAffordanceApproval, ...] = Field(
+        min_length=1, max_length=6
+    )
+    pacing_role: Literal[
+        "discovery",
+        "rising_tension",
+        "resource_pressure",
+        "transition",
+        "respite",
+    ]
+    stakes: GuideContentText
+    constraints: tuple[GuideContentText, ...] = Field(default=(), max_length=8)
+
+    @model_validator(mode="after")
+    def require_unique_affordance_approvals(
+        self,
+    ) -> DungeonExplorationContextSelection:
+        affordance_ids = [item.affordance_id for item in self.affordances]
+        if len(affordance_ids) != len(set(affordance_ids)):
+            raise ValueError(
+                "exploration context selection requires unique affordance IDs"
+            )
+        return self
+
+
+class DungeonExplorationRoomContext(WorkflowModel):
+    """Exact local geometry exposed to one post-layout exploration task."""
+
+    room_id: ExactDungeonComponentId
+    floor_id: ExactDungeonComponentId
+    boundary: PolygonGeometry
+    capacity: RoomCapacity
+    encounter_slot_id: ExactDungeonComponentId
+
+
+class DungeonExplorationAffordance(WorkflowModel):
+    """One approved exact feature marker usable in the selected room."""
+
+    affordance_id: ExactDungeonComponentId
+    room_id: ExactDungeonComponentId
+    floor_id: ExactDungeonComponentId
+    position: GridPoint
+    use: GuideContentText
+
+
+class DungeonExplorationEnrichmentInput(WorkflowModel):
+    """Narrow Workbench payload for exploration design after exact geometry exists."""
+
+    schema_version: Literal["1.0.0"]
+    package_id: ExactDungeonComponentId
+    room: DungeonExplorationRoomContext
+    affordances: tuple[DungeonExplorationAffordance, ...] = Field(
+        min_length=1, max_length=6
+    )
+    pacing_role: Literal[
+        "discovery",
+        "rising_tension",
+        "resource_pressure",
+        "transition",
+        "respite",
+    ]
+    stakes: GuideContentText
+    constraints: tuple[GuideContentText, ...] = Field(default=(), max_length=8)
+
+    @model_validator(mode="after")
+    def require_unique_local_affordances(
+        self,
+    ) -> DungeonExplorationEnrichmentInput:
+        affordance_ids = [item.affordance_id for item in self.affordances]
+        if len(affordance_ids) != len(set(affordance_ids)):
+            raise ValueError("exploration enrichment requires unique affordance IDs")
+        if any(
+            item.room_id != self.room.room_id or item.floor_id != self.room.floor_id
+            for item in self.affordances
+        ):
+            raise ValueError(
+                "exploration enrichment affordances must belong to the local room"
+            )
+        return self
+
+
+class DungeonExplorationApproach(WorkflowModel):
+    """One actionable use of approved room-local affordances."""
+
+    affordance_ids: tuple[ExactDungeonComponentId, ...] = Field(
+        min_length=1, max_length=4
+    )
+    action: GuideContentText
+    adjudication: GuideContentText
+    consequence: GuideContentText
+
+    @model_validator(mode="after")
+    def require_unique_affordance_ids(self) -> DungeonExplorationApproach:
+        if len(self.affordance_ids) != len(set(self.affordance_ids)):
+            raise ValueError("exploration approach requires unique affordance IDs")
+        return self
+
+
+class DungeonExplorationEnrichmentOutput(WorkflowModel):
+    """Exploration-only proposal that cannot mutate package-owned structure."""
+
+    schema_version: Literal["1.0.0"]
+    package_id: ExactDungeonComponentId
+    room_id: ExactDungeonComponentId
+    encounter_slot_id: ExactDungeonComponentId
+    observable_cues: tuple[GuideContentText, ...] = Field(min_length=2, max_length=6)
+    approaches: tuple[DungeonExplorationApproach, ...] = Field(
+        min_length=2, max_length=4
+    )
+    escalation: GuideContentText
+    recovery: GuideContentText
+
+    @model_validator(mode="after")
+    def require_bounded_guide_projection(
+        self,
+    ) -> DungeonExplorationEnrichmentOutput:
+        projected_fields = (
+            " ".join(self.observable_cues),
+            f"Escalation: {self.escalation} Recovery: {self.recovery}",
+            *(
+                f"{approach.adjudication} Consequence: {approach.consequence}"
+                for approach in self.approaches
+            ),
+        )
+        if any(len(value) > 2_000 for value in projected_fields):
+            raise ValueError(
+                "exploration enrichment exceeds bounded guide projection text"
+            )
+        return self
+
+
+class DungeonExplorationEnrichmentIssue(WorkflowModel):
+    """Body-free exact-ID mismatch that blocks exploration enrichment."""
+
+    code: Literal[
+        "exploration_enrichment.package_mismatch",
+        "exploration_enrichment.room_mismatch",
+        "exploration_enrichment.encounter_slot_mismatch",
+        "exploration_enrichment.affordance_invalid",
+    ]
+    component_id: ExactDungeonComponentId
+    message: str = Field(min_length=1, max_length=300)
+
+
+class DungeonExplorationEnrichmentValidationResult(WorkflowModel):
+    """Provider-free semantic validation of one exploration-only proposal."""
+
+    schema_version: Literal["1.0.0"]
+    accepted_output: DungeonExplorationEnrichmentOutput | None = None
+    issues: tuple[DungeonExplorationEnrichmentIssue, ...] = ()
+
+    @model_validator(mode="after")
+    def require_acceptance_to_match_issues(
+        self,
+    ) -> DungeonExplorationEnrichmentValidationResult:
+        if (self.accepted_output is not None) == bool(self.issues):
+            raise ValueError(
+                "accepted exploration enrichment must match semantic issues"
+            )
+        return self
 
 
 class DungeonPuzzleClueApproval(WorkflowModel):
@@ -278,6 +457,23 @@ class DungeonPuzzleEnrichmentValidationResult(WorkflowModel):
     ) -> DungeonPuzzleEnrichmentValidationResult:
         if (self.accepted_output is not None) == bool(self.issues):
             raise ValueError("accepted puzzle enrichment must match semantic issues")
+        return self
+
+
+class PromptedDungeonPuzzleLineage(WorkflowModel):
+    """Accepted puzzle content retained with its authorized dungeon version."""
+
+    model_run_id: UUID
+    context_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    model_run: ModelRunRecord
+    output: DungeonPuzzleEnrichmentOutput
+
+    @model_validator(mode="after")
+    def require_successful_matching_output(self) -> PromptedDungeonPuzzleLineage:
+        if self.model_run.status != "succeeded":
+            raise ValueError("puzzle lineage requires a successful model run")
+        if self.model_run.output_payload != self.output.model_dump(mode="json"):
+            raise ValueError("puzzle lineage output must match the model run")
         return self
 
 
@@ -684,6 +880,7 @@ class DungeonStudioSpecification(WorkflowModel):
     dm_guide: DungeonDmGuide | None = None
     preparation_readiness: DungeonPreparationReadiness | None = None
     model_lineage: tuple[PromptedDungeonModelLineage, ...] = ()
+    puzzle_model_lineage: tuple[PromptedDungeonPuzzleLineage, ...] = ()
 
 
 class CreateDungeonWorkflow(WorkflowModel):
@@ -799,6 +996,39 @@ class CreatePromptedDungeonWorkflow(WorkflowModel):
     model_lineage: tuple[PromptedDungeonModelLineage, ...] = Field(min_length=1)
     tool_runs: tuple[ToolRunPin, ...] = ()
     source_prompt: str = Field(min_length=1, max_length=4_000)
+
+
+class PromptDungeonPuzzleWorkflow(WorkflowModel):
+    """DM request for one exact-room puzzle enrichment child version."""
+
+    campaign_id: UUID
+    artifact_id: UUID
+    parent_version_id: UUID
+    selection: DungeonPuzzleContextSelection
+    created_by: str = Field(min_length=1, max_length=200)
+
+
+class CreatePromptedDungeonPuzzleWorkflow(WorkflowModel):
+    """Accepted puzzle model result ready for deterministic child publication."""
+
+    campaign_id: UUID
+    artifact_id: UUID
+    parent_version_id: UUID
+    context: DungeonPuzzleEnrichmentInput
+    validation: DungeonPuzzleEnrichmentValidationResult
+    model_task_profile_id: UUID
+    model_lineage: PromptedDungeonPuzzleLineage
+    tool_runs: tuple[ToolRunPin, ...] = ()
+    created_by: str = Field(min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def require_matching_accepted_lineage(self) -> CreatePromptedDungeonPuzzleWorkflow:
+        if self.validation.accepted_output != self.model_lineage.output:
+            raise ValueError("puzzle publication requires matching accepted lineage")
+        context_hash = canonical_json_sha256(self.context.model_dump(mode="json"))
+        if self.model_lineage.context_sha256 != context_hash:
+            raise ValueError("puzzle publication requires matching context lineage")
+        return self
 
 
 class RegenerateDungeonWorkflow(WorkflowModel):

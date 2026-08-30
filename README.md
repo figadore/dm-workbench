@@ -259,13 +259,24 @@ loop, one gate, and typed content slots with conservative demand. Deterministic 
 constructs all edges and IDs and emits an independently recomputed
 `TopologyCertificate` covering connectivity, cycle/branch/gate/secret witnesses,
 room/port demand, and embedding bands. Detailed puzzle, exploration, interaction, and
-narrative work belongs to separate post-geometry tasks over exact IDs. The provider-free
-puzzle seam now constructs one narrow context from accepted package geometry and explicit
-clue/objective/dependency approvals, validates the exact-ID result, and projects it into the
-matching room guide without changing the package or clearing unrelated blockers. Until the
-remaining tasks are wired through bounded provider orchestration, structural drafts
-truthfully remain preparation-blocked. Geometry, visibility, validation, rendering,
-persistence, and approval remain server-owned. Run inspection remains body-free:
+narrative work belongs to separate post-geometry tasks over exact IDs. The puzzle seam
+constructs one narrow context from accepted package geometry and explicit clue/objective/
+dependency approvals, then runs an independently pinned puzzle tool with its own effort,
+prompt/schema, 6,000-token cumulative/2,048-output budget, and one budget-reserved repair.
+Accepted faux-provider content is projected into the matching room guide and atomically
+published as a DM-only child version without changing package/map bytes or clearing
+unrelated blockers; task failure leaves the parent unchanged. Exploration has a separate
+provider-free exact-ID contract: trusted code exposes only one exploration-role room's
+local geometry, exact slot, approved room-local feature affordances, pacing role, stakes,
+and constraints. Its validator rejects foreign IDs, and deterministic projection adds
+observable cues, multiple approaches/consequences, and escalation/recovery while
+preserving accepted puzzle content and unrelated blockers. Exploration provider dispatch
+and publication are not wired yet. Accepted content remains available to the DM in the
+artifact, while routine attempt reports contain only compact operational metadata and
+diagnostics; raw transport capture requires explicit local debug. Until the remaining
+enrichment kinds are wired, drafts truthfully remain preparation-blocked. Geometry,
+visibility, validation, rendering, persistence, and approval remain server-owned. Run
+inspection remains body-free:
 
 ```bash
 uv run --frozen dm dungeon run inspect <attempt-run-id>
@@ -407,7 +418,7 @@ The internal P1-02 Library service now ingests bounded strict-UTF-8 files throug
 
 ## Current Next Step
 
-Continue **P7-14e** with human DM review of the regenerated fixed Tier A packet after the physical-causality correction. If every quality dimension and player secrecy pass, record the evidence and begin provider-free Tier B/C stress-ladder design; otherwise make only the next bounded fixture/renderer correction. Keep live canaries paused. See [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) and [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
+Continue **P7-14f** by adding independently bounded faux-provider dispatch, repair, lineage, and atomic child publication for the exact-ID exploration contract. Preserve package/map bytes, accepted puzzle content, and unrelated readiness blockers on both success and failure. Do not run a live provider or start Tier B/C. See [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) and [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
 
 ## License and Third-Party Marks
 

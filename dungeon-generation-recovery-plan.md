@@ -428,10 +428,16 @@ proof-oriented diagnostics or recommend another floor; never exhaust random retr
 
 ### R5 — Task-specific enrichment and Tier A quality gate
 
-Current provider-free seam: exact-package puzzle context slicing, exact-ID output
-validation, and deterministic room-guide projection are implemented without provider
-contact or durable task lineage. Projection preserves package/map bytes and leaves every
-unrelated missing enrichment as a readiness blocker.
+Current staged seam: exact-package puzzle context slicing, exact-ID output validation,
+and deterministic room-guide projection are implemented. One independently pinned faux-
+provider puzzle task has its own effort/profile, schema, token/output budget, and one
+budget-reserved repair. Accepted content is retained in a DM-only atomic child version;
+failed attempts keep the parent/map and persist only compact diagnostics on the existing
+run surface. Exploration separately has a provider-free exact-ID contract, trusted local-
+geometry/affordance context builder, semantic validator, and deterministic guide
+projection that preserves accepted puzzle content and unrelated blockers; provider
+dispatch/publication is not yet implemented. No live provider was contacted, and no
+redaction/logging subsystem or new persistence store was added.
 
 - Add independently bounded puzzle, exploration, other interaction, and narrative tasks
   over exact package IDs; merge accepted output deterministically and preserve the map on

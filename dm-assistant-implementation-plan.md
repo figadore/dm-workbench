@@ -1739,15 +1739,22 @@ creative tasks and encourages verbose contract compliance rather than coherent p
 Implement the architecture's independently failable enrichment boundary before expanding
 the topology stress ladder.
 
-Current provider-free slices: the model-visible structural root no longer contains
-`guide_content`; its accepted tool result reports typed content-slot counts and faux
-publication leaves truthful readiness blockers. Strict exact-ID puzzle input/output plus
-semantic validation contracts exist. Trusted context construction now slices one accepted
-package down to its selected puzzle room geometry and explicitly approved clue/objective/
-dependency IDs, and deterministic projection merges one accepted output into that exact
-room's guide without changing the package or clearing unrelated blockers. Provider
-dispatch, durable puzzle lineage, exploration, other interactions, and narrative remain to
-be implemented in later bounded slices.
+Current staged slices: the model-visible structural root no longer contains
+`guide_content`; its accepted tool result reports typed content-slot counts and structural
+publication leaves truthful readiness blockers. Strict exact-ID puzzle and exploration
+input/output and semantic validation contracts exist. Trusted puzzle context construction
+slices one accepted package down to its selected room geometry and explicitly approved
+clue/objective/dependency IDs. One independently pinned faux-provider puzzle task now has
+its own effort, prompt/schema, 6,000-token cumulative/2,048-output budget, and one budget-
+reserved repair. Accepted puzzle content is projected into that exact room and atomically
+published in a DM-only child version without changing package/map bytes or clearing
+unrelated blockers; failure leaves the parent unchanged with safe durable diagnostics.
+The provider-free exploration seam separately slices one exploration-role room to its
+local geometry, exact exploration slot, approved local feature affordances, pacing role,
+stakes, and constraints; validates exact output IDs; and deterministically projects
+observable cues, multiple approaches/consequences, and escalation/recovery without
+replacing accepted puzzle content or clearing unrelated blockers. Exploration provider
+dispatch/publication, other interactions, narrative, and live calls remain later slices.
 
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
   Its model-visible proposal contains room identity/purpose, critical path, bounded
@@ -1775,10 +1782,14 @@ be implemented in later bounded slices.
     set only after accepted mechanics exist; it cannot invent or change those mechanics.
 - Give every enrichment task its own prompt/instruction pin, model/effort selection,
   output and cumulative token budget, bounded repair policy, diagnostics, and durable
-  lineage. Reuse only the small common scope/provenance/visibility/citation/hash envelope;
-  do not create a universal optional-field guide context. Enrichment proposals cannot
-  alter topology, geometry, another task's accepted content, deterministic arithmetic,
-  preparation approval, or canon.
+  lineage. Keep this proportionate: accepted content belongs in the authorized DM artifact;
+  routine logs and attempt reports need only IDs/hashes, pins, usage, status/stage, and
+  bounded code/path/repair facts, with raw transport bodies limited to explicit transient
+  local debugging. Reuse the existing artifact specification and `generation_run`; do not
+  add a redaction service or second audit store. Reuse only the small common scope/
+  provenance/visibility/citation/hash envelope; do not create a universal optional-field
+  guide context. Enrichment proposals cannot alter topology, geometry, another task's
+  accepted content, deterministic arithmetic, preparation approval, or canon.
 - Merge accepted enrichments deterministically into the exact room-centric guide. Missing,
   invalid, or human-rejected content leaves explicit preparation-readiness blockers while
   preserving the structurally valid draft and secrecy-clean maps. Subjective evaluation

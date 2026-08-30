@@ -8,21 +8,28 @@
 
 - **Last updated:** 2026-09-08
 - **Branch:** `fast-track-prompt-to-dungeon`; P7-14d is at `a816d6a`, P7-14e is at
-  `5dc7d80`, the P7-14f anti-overfitting cleanup is at `ea812d6`, and the structural/
-  puzzle-contract separation is at `ae6d406`.
+  `5dc7d80`, the P7-14f anti-overfitting cleanup is at `ea812d6`, structural/puzzle
+  separation is at `ae6d406`, and exact puzzle context/projection is at `088568d`.
 - **Current task:** **P7-14f — Staged Tier A authoring and anti-overfitting evaluation.**
-- **Task state:** **WIP; the provider-free structural/puzzle boundary now reaches exact
-  guide projection. `submit_dungeon_plan` remains model-visible structural intent only.
-  Trusted context construction selects one puzzle-role room from an accepted exact package,
-  exposes only its authoritative geometry/connection/feature IDs plus explicitly approved
-  clue/objective/dependency IDs, and rejects foreign IDs. Strict output validation rejects
-  package, room, clue-location, and cross-task mutation mismatches. One accepted puzzle can
-  now be projected deterministically into that exact room's guide with a bounded success
-  state, solution, clues, alternatives, failure, and retry behavior; package/map state is
-  unchanged and all unrelated missing enrichments remain readiness blockers. No puzzle
-  provider task, durable enrichment run, exploration contract, or narrative task exists
-  yet. The archive guide-content contract remains only for provider-free review/renderer
-  regression, not in model lineage. Live calls and Tier B/C remain deferred.**
+- **Task state:** **WIP; the staged structural/puzzle boundary reaches faux-provider
+  orchestration and atomic DM-only child publication, and the next provider-free
+  exploration boundary is now implemented. `submit_dungeon_plan` remains structural
+  intent only. One exact-ID `submit_dungeon_puzzle` task receives only trusted local
+  geometry plus approved clue/objective/dependency IDs and has independent prompt/schema/
+  profile/effort pins, a 6,000-token cumulative and 2,048-output budget, and one repair
+  whose estimated input is reserved first. Accepted puzzle content and its final model
+  record are retained with the authorized artifact, projected into the exact room, and
+  published without regenerating package geometry; map asset hashes remain unchanged and
+  unrelated blockers remain. Failed initial/repair attempts leave the parent current and
+  persist compact code/path/repair diagnostics without rejected values. The separate
+  exploration contract now slices one exploration-role room to local geometry, its exact
+  exploration slot, approved local feature affordances, pacing role, stakes, and
+  constraints; exact-ID validation and deterministic guide projection add observable cues,
+  multiple approaches/consequences, and escalation/recovery without mutating the package,
+  replacing accepted puzzle content, or clearing unrelated blockers. Exploration provider
+  dispatch/publication, other interactions, narrative, and full staged initial
+  orchestration remain absent; no migration or live call changed, and Tier B/C remain
+  deferred.**
 - **Schema head:** `0008_workbench_defaults`; no migration changed.
 - **Retention gate:** **not crossed.** There is no retained real-user artifact, external
   consumer, non-disposable deployment, or promised replay requirement; active V1 labels
@@ -69,13 +76,15 @@ reserved. Live provider calls, Tier B/C, and P7-13 output/print work remain paus
 - The structural call will retain only room identity/purpose, path/branch/loop/gate intent,
   named objective, and bounded typed content slots/reserved demand. It will not author the
   full puzzle, exploration challenge, trap/feature interaction, and room narrative.
-- Puzzle and exploration generation will be different Workbench task calls after exact
-  geometry exists. Puzzle input/output and semantic validation contracts are keyed to exact
-  package/room/clue/objective/dependency IDs and local geometry. Provider-free context
-  slicing and deterministic guide projection now exist and preserve unrelated readiness
-  blockers; provider dispatch and durable lineage remain next. Exploration still has no
-  contract. Neither task may modify topology, visibility, arithmetic, or the other task's
-  accepted proposal.
+- Puzzle and exploration generation are different Workbench task calls after exact
+  geometry exists. Puzzle input/output validation, context slicing, independently bounded
+  faux dispatch/repair, accepted-content lineage, deterministic projection, and atomic
+  child publication now exist. Exploration independently has provider-free strict input/
+  output contracts, trusted exact-room context slicing, semantic validation, and guide
+  projection; dispatch/lineage/publication remain absent. Accepted bodies live in the DM-
+  only artifact; routine logs and attempt reports keep only compact operational metadata
+  and diagnostics, while raw capture is explicit transient debug. Neither task may modify
+  topology, visibility, arithmetic, or another task's accepted proposal.
 - Narrative generation occurs after mechanics are accepted and receives their
   player-observable projection, preventing read-aloud from silently redefining or leaking
   the interaction.
@@ -496,11 +505,19 @@ reserved. Live provider calls, Tier B/C, and P7-13 output/print work remain paus
 
 ## Files Changed
 
-No migration changed. The committed P7-14e slice touched the files below. Building on
-committed P7-14f separation `ae6d406`, the current working tree adds trusted exact-package
-puzzle context construction, bounded success/projection semantics, deterministic exact-room
-guide projection, a non-archive generated-package regression, and matching status/
-architecture/plan/README updates. The broader P7-14e/P7-14f file inventory remains:
+No migration changed. Building on committed exact puzzle context/projection `088568d`,
+the current working tree adds independently bounded puzzle prompt/application services,
+accepted puzzle lineage in the active V1 specification, exact-package child publication,
+and a faux-provider success/failure integration regression. It now also adds the separate
+provider-free exploration input/output contracts, trusted local context construction,
+exact-ID semantic validation, deterministic guide projection, and a non-archive Skyroot
+Conservatory regression. Matching status/architecture/plan/README updates describe both
+bounded slices without claiming exploration dispatch. New files are
+`src/dm_assistant/orchestration/dungeons/puzzle_prompting.py`,
+`src/dm_assistant/orchestration/dungeons/puzzle_application.py`,
+`tests/integration/test_dungeon_puzzle_prompt.py`, and
+`tests/unit/test_dungeon_exploration_enrichment_contract.py`. The broader P7 inventory
+remains:
 
 - `AGENTS.md`
 - `Makefile`
@@ -513,6 +530,8 @@ architecture/plan/README updates. The broader P7-14e/P7-14f file inventory remai
 - `src/dm_assistant/orchestration/dungeons/contracts.py`
 - `src/dm_assistant/orchestration/dungeons/evals.py`
 - `src/dm_assistant/orchestration/dungeons/prompting.py`
+- `src/dm_assistant/orchestration/dungeons/puzzle_application.py`
+- `src/dm_assistant/orchestration/dungeons/puzzle_prompting.py`
 - `src/dm_assistant/orchestration/dungeons/review.py`
 - `src/dm_assistant/orchestration/dungeons/service.py`
 - `src/dm_assistant/orchestration/modeling/__init__.py`
@@ -521,10 +540,12 @@ architecture/plan/README updates. The broader P7-14e/P7-14f file inventory remai
 - `tests/evals/golden/dungeon_guide_quality_content.json`
 - `tests/evals/golden/dungeon_guide_quality_plan.json`
 - `tests/integration/dungeon_fixtures.py`
+- `tests/integration/test_dungeon_puzzle_prompt.py`
 - `tests/integration/test_dungeon_studio_cli.py`
 - `tests/integration/test_dungeon_studio_web_prompt.py`
 - `tests/integration/test_dungeon_studio_workflow.py`
 - `tests/unit/test_dungeon_canary.py`
+- `tests/unit/test_dungeon_exploration_enrichment_contract.py`
 - `tests/unit/test_dungeon_guide_content_contract.py`
 - `tests/unit/test_dungeon_puzzle_enrichment_contract.py`
 - `tests/unit/test_dungeon_review_packet.py`
@@ -747,6 +768,33 @@ architecture/plan/README updates. The broader P7-14e/P7-14f file inventory remai
 - Focused CLI/web/workflow integration gate -> **5 passed** against disposable PostgreSQL.
 - Focused Ruff lint/format and strict mypy over the changed dungeon sources passed; final
   `git diff --check` passed. No provider was contacted.
+- Added the faux puzzle orchestration regression failing-first; collection initially
+  failed because `DungeonPuzzlePromptApplicationService` did not exist. The first
+  integration executions then exposed test-only DM-scope and strict persisted-contract
+  parsing mistakes; both were corrected without weakening production validation.
+- `make test-integration PYTEST_ARGS='-q
+  tests/integration/test_dungeon_puzzle_prompt.py'` -> **2 passed**, covering accepted
+  DM-only child publication and exhausted-repair failure with no new child.
+- Focused puzzle/CLI/web/workflow integration gate -> **7 passed** against disposable
+  PostgreSQL. It proves independent puzzle tool/schema/profile/fast effort/budgets, one
+  estimated-input-reserved repair, accepted lineage, byte-identical map asset hashes,
+  unchanged parent on failure, and rejected values absent from both accepted child
+  lineage and durable failure reports.
+- Added the provider-free Skyroot exploration regression failing-first; collection
+  initially failed because `DungeonExplorationAffordanceApproval` did not exist. After
+  implementation, `uv run pytest -q tests/unit/test_dungeon_exploration_enrichment_contract.py`
+  -> **3 passed**. The regression proves local geometry/exact-slot/approved-affordance
+  slicing, foreign-ID and structural-mutation rejection, deterministic projection,
+  unchanged package/map references, accepted puzzle preservation, exact unrelated-blocker
+  preservation, and no replacement of accepted exploration content.
+- Focused exploration/puzzle/guide/prompt contract gate -> **22 passed**. Focused Ruff
+  lint passed; Ruff formatting was applied to the three changed/new Python files; strict
+  mypy over the three dungeon source modules passed.
+- `uv run pytest -q tests/unit tests/evals` -> **192 passed** and
+  `uv run pytest -q packages/dungeon-engine/tests` -> **139 passed** in separate runs.
+- Focused Ruff lint/format and strict mypy over the five changed/new dungeon source modules
+  passed. Final `git diff --check` and Markdown fence checks passed. No live provider was
+  contacted.
 
 Package and root tests must continue to run as separate pytest invocations: combining
 both test roots in one process causes pytest's existing duplicate module basenames to
@@ -754,30 +802,34 @@ produce an import-file-mismatch collection error.
 
 ## Working Tree
 
-P7-14d is committed at `a816d6a`, P7-14e at `5dc7d80`, the P7-14f prompt/canary cleanup
-at `ea812d6`, and structural/puzzle contract separation at `ae6d406`. This working tree
-adds provider-free exact-package puzzle context construction and deterministic exact-room
-guide projection. The non-archive regression proves foreign room/clue IDs fail, accepted
-puzzle output leaves package/map state unchanged, and all other missing content remains a
-readiness blocker. Prompted faux drafts still do not invoke this seam and therefore remain
-structurally successful but preparation-blocked. No migration, generated review packet,
-provider response, credential, canonical campaign write, preparation approval, pure package
-change, or live provider call changed. The generated review directories remain ignored.
-Do not claim a complete staged runtime: puzzle provider orchestration and durable lineage,
-exploration, other interactions, and narrative are still absent.
+P7-14d is committed at `a816d6a`, P7-14e at `5dc7d80`, prompt/canary cleanup at
+`ea812d6`, structural/puzzle separation at `ae6d406`, and provider-free puzzle context/
+projection at `088568d`. This working tree adds the independently bounded faux puzzle task,
+minimal durable attempt metadata, accepted-content lineage in the DM-only specification,
+and atomic child publication over the unchanged package. The non-archive Windglass
+integration proves independent tool/schema/profile/effort/budgets, one budget-reserved
+repair, unchanged map hashes on success, and unchanged current parent plus rejected-value-
+free diagnostics on failure. The separate non-archive Skyroot unit regression proves the
+provider-free exploration contract, trusted local context, exact-ID validation, and
+projection preserve package/map state, accepted puzzle content, and unrelated blockers.
+No migration, live provider response, credential, canonical campaign write, preparation
+approval, pure package change, redaction subsystem, second store, or live call changed.
+Generated review directories remain ignored. Do not claim a complete staged runtime:
+exploration dispatch/lineage/publication, other interactions, narrative, automatic initial
+context selection/orchestration, and a staged live result are still absent.
 
 Suggested commit subject:
 
-`P7-14f construct and project exact puzzle context`
+`P7-14f add bounded puzzle dispatch and exploration contract`
 
 ## Single Next Recommended Task
 
-**Wire the exact-ID puzzle seam through one independently bounded faux-provider task and
-durable enrichment lineage, still without adding exploration or a live call.**
+**Add independently bounded faux-provider exploration dispatch, repair, accepted-content
+lineage, and atomic DM-only child publication over the provider-free exact-ID contract.**
 
-**First concrete action:** add a failing faux-gateway orchestration regression proving the
-puzzle task receives only `DungeonPuzzleEnrichmentInput`, uses its own prompt/profile/
-effort and token/repair budget, records body-safe task lineage, and projects an accepted
-result without rerunning or mutating the structural package. Preserve the valid map and
-puzzle-specific readiness blocker on task failure. Do not add exploration, run live, start
-Tier B/C, or remove the archive renderer regression in this slice.
+**First concrete action:** add a failing Skyroot integration regression that starts from a
+structural parent plus accepted puzzle child, dispatches one `submit_dungeon_exploration`
+task with independent prompt/schema/profile/effort/token pins, and proves success preserves
+package/map hashes, puzzle lineage/content, and unrelated blockers while failure leaves the
+parent current with body-free diagnostics. Do not run live, start Tier B/C, or generalize
+puzzle/exploration into a universal optional context or orchestration abstraction.

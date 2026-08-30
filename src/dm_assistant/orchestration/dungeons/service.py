@@ -16,6 +16,7 @@ from dm_assistant.modules.preparation import (
     ArtifactType,
     AttachArtifactAsset,
     FinishGenerationRun,
+    GenerationContextEnvelope,
     GenerationContextPin,
     GenerationStatus,
     PendingArtifactAsset,
@@ -30,11 +31,22 @@ from dm_assistant.modules.preparation import (
 )
 from dm_assistant.observability import bind_log_context, get_logger
 from dm_assistant.orchestration.dungeons.contracts import (
+    DUNGEON_EXPLORATION_ENRICHMENT_SCHEMA_VERSION,
     DUNGEON_GENERATION_PROPOSAL_SCHEMA_VERSION,
+    DUNGEON_PUZZLE_ENRICHMENT_SCHEMA_VERSION,
     CreateDungeonWorkflow,
+    CreatePromptedDungeonPuzzleWorkflow,
     CreatePromptedDungeonWorkflow,
     DungeonDmGuide,
     DungeonDmNotes,
+    DungeonExplorationAffordance,
+    DungeonExplorationAffordanceApproval,
+    DungeonExplorationContextSelection,
+    DungeonExplorationEnrichmentInput,
+    DungeonExplorationEnrichmentIssue,
+    DungeonExplorationEnrichmentOutput,
+    DungeonExplorationEnrichmentValidationResult,
+    DungeonExplorationRoomContext,
     DungeonGenerationRegressionCase,
     DungeonGuideConnection,
     DungeonGuideContentEntry,
@@ -77,6 +89,7 @@ from dm_assistant.orchestration.dungeons.contracts import (
     DungeonVersionComparison,
     DungeonWorkflowResult,
     ExportDungeonWorkflow,
+    PromptDungeonPuzzleWorkflow,
     PromptedDungeonModelLineage,
     RegenerateDungeonWorkflow,
 )
@@ -170,6 +183,248 @@ class DungeonStudioService:
             model_lineage=command.model_lineage,
             tool_runs=command.tool_runs,
             dm_notes=_build_dm_notes(command.layout_request, command.source_prompt),
+        )
+
+    def build_puzzle_context(
+        self,
+        command: PromptDungeonPuzzleWorkflow,
+    ) -> DungeonPuzzleEnrichmentInput:
+        """Build one exact puzzle context from an immutable structural version."""
+
+        parent = self._preparation.get_version(
+            command.campaign_id,
+            command.parent_version_id,
+        )
+        if parent.artifact_id != command.artifact_id:
+            raise ConflictError("Parent version does not belong to the artifact.")
+        specification = _load_specification(parent.specification)
+        return build_dungeon_puzzle_enrichment_input(
+            specification.package,
+            command.selection,
+        )
+
+    def enrich_prompted_puzzle(
+        self,
+        command: CreatePromptedDungeonPuzzleWorkflow,
+    ) -> DungeonWorkflowResult:
+        """Publish accepted puzzle content without regenerating package geometry."""
+
+        parent = self._preparation.get_version(
+            command.campaign_id,
+            command.parent_version_id,
+        )
+        if parent.artifact_id != command.artifact_id:
+            raise ConflictError("Parent version does not belong to the artifact.")
+        specification = _load_specification(parent.specification)
+        plan = _accepted_structural_plan(specification)
+        if specification.dm_guide is None:
+            raise ConflictError("Puzzle enrichment requires an exact structural guide.")
+
+        context_document = command.context.model_dump(mode="json")
+        context_hash = canonical_json_sha256(context_document)
+        context_envelope = GenerationContextEnvelope(
+            context_kind="dungeon_puzzle_enrichment",
+            payload_version=command.context.schema_version,
+            visibility_policy=VisibilityPolicy.DM_ONLY,
+            payload=context_document,
+            payload_sha256=context_hash,
+        )
+        context_pin = GenerationContextPin(
+            envelope_kind=context_envelope.context_kind,
+            payload_version=context_envelope.payload_version,
+            envelope=context_envelope.model_dump(mode="json"),
+            payload_sha256=context_hash,
+        )
+        run = self._preparation.start_generation_run(
+            StartGenerationRun(
+                campaign_id=command.campaign_id,
+                generation_kind="dungeon_puzzle_enrichment",
+                seed=specification.layout_request.seed,
+                input_scope={
+                    "artifact_id": str(command.artifact_id),
+                    "parent_version_id": str(command.parent_version_id),
+                    "package_id": specification.package.id,
+                    "room_id": command.context.room.room_id,
+                    "context_sha256": context_hash,
+                },
+                input_pins=parent.input_pins,
+                context=context_pin,
+                schema_versions={
+                    "dungeon_package": specification.package.schema_version,
+                    "dungeon_puzzle_enrichment": (
+                        DUNGEON_PUZZLE_ENRICHMENT_SCHEMA_VERSION
+                    ),
+                    "dungeon_studio": _STUDIO_SCHEMA_VERSION,
+                    "model_run": "1.0.0",
+                },
+                generator_versions={
+                    "dungeon_kernel": dm_dungeon.__version__,
+                    "layout": specification.layout_request.generator_version,
+                    "puzzle_guide_projection": "puzzle-guide-projection-v1",
+                },
+                renderer_versions={
+                    "svg": SVG_RENDERER_VERSION,
+                    "png": PNG_EXPORTER_VERSION,
+                    "pdf": PDF_EXPORTER_VERSION,
+                    "roll20": ROLL20_EXPORTER_VERSION,
+                },
+                model_task_profile_id=command.model_task_profile_id,
+                model_run_ids=(command.model_lineage.model_run_id,),
+                tool_runs=command.tool_runs,
+            )
+        )
+
+        try:
+            guide = project_dungeon_puzzle_enrichment(
+                specification.dm_guide,
+                plan=plan,
+                package=specification.package,
+                context=command.context,
+                validation=command.validation,
+            )
+            readiness = _build_preparation_readiness(guide)
+            topology_report = validate_topology(specification.package.topology)
+            geometry_report = validate_geometry(specification.package)
+            valid = topology_report.valid and geometry_report.valid
+            validation_report: dict[str, JsonValue] = {
+                "valid": valid,
+                "stage": "completed" if valid else "validation",
+                "topology": topology_report.model_dump(mode="json"),
+                "geometry": geometry_report.model_dump(mode="json"),
+                "puzzle_enrichment": {
+                    "accepted": True,
+                    "package_id": command.context.package_id,
+                    "room_id": command.context.room.room_id,
+                    "context_sha256": context_hash,
+                },
+            }
+            if readiness is not None:
+                validation_report["preparation_readiness"] = readiness.model_dump(
+                    mode="json"
+                )
+            if not valid:
+                self._preparation.finish_generation_run(
+                    FinishGenerationRun(
+                        campaign_id=command.campaign_id,
+                        run_id=run.id,
+                        status=GenerationStatus.FAILED,
+                        validation_report=validation_report,
+                    )
+                )
+                diagnostics = tuple(
+                    item.model_dump(mode="json")
+                    for item in (
+                        *topology_report.diagnostics,
+                        *geometry_report.diagnostics,
+                    )
+                )
+                return DungeonWorkflowResult(
+                    success=False,
+                    artifact_id=command.artifact_id,
+                    artifact_version_id=None,
+                    generation_run_id=run.id,
+                    diagnostics=diagnostics,
+                )
+
+            enriched_specification = specification.model_copy(
+                update={
+                    "dm_guide": guide,
+                    "preparation_readiness": readiness,
+                    "puzzle_model_lineage": (
+                        *specification.puzzle_model_lineage,
+                        command.model_lineage,
+                    ),
+                }
+            )
+            resolved_notes = _resolved_dm_notes(enriched_specification)
+            preview_assets = _preview_assets(
+                enriched_specification.package,
+                resolved_notes,
+            )
+            base_assets = (
+                _PendingAsset(
+                    ArtifactAssetRole.SPECIFICATION,
+                    0,
+                    "application/json",
+                    _canonical_json_bytes(
+                        enriched_specification.model_dump(mode="json")
+                    ),
+                ),
+                _PendingAsset(
+                    ArtifactAssetRole.VALIDATION_REPORT,
+                    0,
+                    "application/json",
+                    _canonical_json_bytes(validation_report),
+                ),
+                _dm_notes_asset(
+                    enriched_specification.layout_request,
+                    resolved_notes,
+                    guide,
+                ),
+            )
+            artifact = self._preparation.get_artifact(
+                command.campaign_id,
+                command.artifact_id,
+            )
+            published = self._preparation.publish_generated_package(
+                PublishGeneratedPackage(
+                    campaign_id=command.campaign_id,
+                    generation_run_id=run.id,
+                    artifact_id=command.artifact_id,
+                    artifact_type=ArtifactType.DUNGEON,
+                    title=artifact.title,
+                    visibility_policy=artifact.visibility_policy,
+                    parent_version_id=command.parent_version_id,
+                    schema_version=_VERSION_SCHEMA,
+                    specification=enriched_specification.model_dump(mode="json"),
+                    validation_report=validation_report,
+                    change_summary="Add independently generated exact-room puzzle content.",
+                    input_pins=parent.input_pins,
+                    created_by=command.created_by,
+                    assets=tuple(
+                        PendingArtifactAsset(
+                            role=asset.role,
+                            ordinal=asset.ordinal,
+                            media_type=asset.media_type,
+                            data=asset.data,
+                        )
+                        for asset in (*base_assets, *preview_assets)
+                    ),
+                    required_assets=tuple(
+                        RequiredArtifactAsset(role=asset.role, ordinal=asset.ordinal)
+                        for asset in (*base_assets, *preview_assets)
+                    ),
+                )
+            )
+        except Exception:
+            if (
+                self._preparation.get_generation_run(command.campaign_id, run.id).status
+                is GenerationStatus.RUNNING
+            ):
+                self._preparation.finish_generation_run(
+                    FinishGenerationRun(
+                        campaign_id=command.campaign_id,
+                        run_id=run.id,
+                        status=GenerationStatus.FAILED,
+                        validation_report={
+                            "valid": False,
+                            "stage": "projection",
+                            "diagnostics": [
+                                {
+                                    "code": "puzzle_enrichment.projection_failed",
+                                    "message": "Puzzle projection or publication failed.",
+                                }
+                            ],
+                        },
+                    )
+                )
+            raise
+        return DungeonWorkflowResult(
+            success=True,
+            artifact_id=published.artifact.id,
+            artifact_version_id=published.version.id,
+            generation_run_id=run.id,
+            diagnostics=(),
         )
 
     def regenerate(
@@ -757,6 +1012,250 @@ def _build_preparation_readiness(
     )
 
 
+def build_dungeon_exploration_enrichment_input(
+    package: DungeonPackage,
+    selection: DungeonExplorationContextSelection,
+) -> DungeonExplorationEnrichmentInput:
+    """Slice one trusted exact package into a local exploration-only context."""
+
+    rooms_by_id = {room.id: room for room in package.rooms}
+    room = rooms_by_id.get(selection.room_id)
+    if room is None:
+        raise ConflictError(
+            "Exploration context selected an unknown exact exploration room."
+        )
+    if room.role is not RoomRole.EXPLORATION:
+        raise ConflictError(
+            "Exploration context selected a room without an exploration role."
+        )
+
+    encounter_slots = tuple(
+        slot
+        for slot in package.encounter_slots
+        if slot.room_id == room.id
+        and EncounterSlotIntent.EXPLORATION.value in slot.tags
+    )
+    if len(encounter_slots) != 1:
+        raise ConflictError(
+            "Exploration context requires one exact exploration encounter slot."
+        )
+    encounter_slot = encounter_slots[0]
+
+    feature_markers = {
+        marker.id: marker
+        for marker in package.room_mechanic_markers
+        if marker.kind is RoomMechanicMarkerKind.FEATURE
+    }
+    affordances: list[DungeonExplorationAffordance] = []
+    for approval in selection.affordances:
+        marker = feature_markers.get(approval.affordance_id)
+        if marker is None:
+            raise ConflictError(
+                "Exploration context selected an unknown exact environmental affordance."
+            )
+        if marker.room_id != room.id or marker.floor_id != room.floor_id:
+            raise ConflictError(
+                "Exploration context selected an affordance outside the selected exploration room."
+            )
+        affordances.append(
+            DungeonExplorationAffordance(
+                affordance_id=marker.id,
+                room_id=marker.room_id,
+                floor_id=marker.floor_id,
+                position=marker.position,
+                use=approval.use,
+            )
+        )
+
+    return DungeonExplorationEnrichmentInput(
+        schema_version=DUNGEON_EXPLORATION_ENRICHMENT_SCHEMA_VERSION,
+        package_id=package.id,
+        room=DungeonExplorationRoomContext(
+            room_id=room.id,
+            floor_id=room.floor_id,
+            boundary=room.boundary,
+            capacity=room.capacity,
+            encounter_slot_id=encounter_slot.id,
+        ),
+        affordances=tuple(affordances),
+        pacing_role=selection.pacing_role,
+        stakes=selection.stakes,
+        constraints=selection.constraints,
+    )
+
+
+def validate_dungeon_exploration_enrichment(
+    context: DungeonExplorationEnrichmentInput,
+    output: DungeonExplorationEnrichmentOutput,
+) -> DungeonExplorationEnrichmentValidationResult:
+    """Check one exploration proposal against its exact server-authored context."""
+
+    issues: list[DungeonExplorationEnrichmentIssue] = []
+    if output.package_id != context.package_id:
+        issues.append(
+            DungeonExplorationEnrichmentIssue(
+                code="exploration_enrichment.package_mismatch",
+                component_id=output.package_id,
+                message="Exploration enrichment targets a different dungeon package.",
+            )
+        )
+    if output.room_id != context.room.room_id:
+        issues.append(
+            DungeonExplorationEnrichmentIssue(
+                code="exploration_enrichment.room_mismatch",
+                component_id=output.room_id,
+                message="Exploration enrichment targets a different exact room.",
+            )
+        )
+    if output.encounter_slot_id != context.room.encounter_slot_id:
+        issues.append(
+            DungeonExplorationEnrichmentIssue(
+                code="exploration_enrichment.encounter_slot_mismatch",
+                component_id=output.encounter_slot_id,
+                message="Exploration enrichment targets a different exact encounter slot.",
+            )
+        )
+    allowed_affordance_ids = {item.affordance_id for item in context.affordances}
+    invalid_affordance_ids = sorted(
+        {
+            affordance_id
+            for approach in output.approaches
+            for affordance_id in approach.affordance_ids
+            if affordance_id not in allowed_affordance_ids
+        }
+    )
+    issues.extend(
+        DungeonExplorationEnrichmentIssue(
+            code="exploration_enrichment.affordance_invalid",
+            component_id=affordance_id,
+            message="Exploration approach uses an affordance outside the approved context.",
+        )
+        for affordance_id in invalid_affordance_ids
+    )
+    return DungeonExplorationEnrichmentValidationResult(
+        schema_version=DUNGEON_EXPLORATION_ENRICHMENT_SCHEMA_VERSION,
+        accepted_output=None if issues else output,
+        issues=tuple(issues),
+    )
+
+
+def project_dungeon_exploration_enrichment(
+    guide: DungeonDmGuide,
+    *,
+    plan: DungeonPlan,
+    package: DungeonPackage,
+    context: DungeonExplorationEnrichmentInput,
+    validation: DungeonExplorationEnrichmentValidationResult,
+) -> DungeonDmGuide:
+    """Merge one accepted exact-ID exploration challenge without package mutation."""
+
+    rebuilt_context = build_dungeon_exploration_enrichment_input(
+        package,
+        DungeonExplorationContextSelection(
+            room_id=context.room.room_id,
+            affordances=tuple(
+                DungeonExplorationAffordanceApproval(
+                    affordance_id=item.affordance_id,
+                    use=item.use,
+                )
+                for item in context.affordances
+            ),
+            pacing_role=context.pacing_role,
+            stakes=context.stakes,
+            constraints=context.constraints,
+        ),
+    )
+    if rebuilt_context != context:
+        raise ConflictError(
+            "Exploration enrichment context does not match the accepted exact package."
+        )
+
+    output = validation.accepted_output
+    if output is None:
+        raise ConflictError("Rejected exploration enrichment cannot be projected.")
+    authoritative_validation = validate_dungeon_exploration_enrichment(context, output)
+    if authoritative_validation.accepted_output is None:
+        raise ConflictError(
+            "Exploration enrichment failed exact-ID semantic validation."
+        )
+
+    compiled = compile_dungeon_plan(plan)
+    if (
+        not compiled.accepted
+        or compiled.certificate is None
+        or compiled.topology is None
+        or package.topology != compiled.topology
+    ):
+        raise ConflictError(
+            "Accepted exploration enrichment does not match the generated dungeon plan."
+        )
+    room_ref_by_id = {item.room_id: item.ref for item in compiled.certificate.rooms}
+    room_ref = room_ref_by_id.get(output.room_id)
+    if room_ref is None:
+        raise ConflictError("Exploration enrichment targets an unknown planned room.")
+    planned_room = next(room for room in plan.rooms if room.ref == room_ref)
+    if (
+        planned_room.role is not RoomRole.EXPLORATION
+        or planned_room.encounter is not EncounterSlotIntent.EXPLORATION
+    ):
+        raise ConflictError(
+            "Exploration enrichment targets a room without exploration intent."
+        )
+
+    guide_room = next(
+        (room for room in guide.rooms if room.room_id == output.room_id), None
+    )
+    if guide_room is None:
+        raise ConflictError(
+            "Exploration enrichment targets a room outside the exact guide."
+        )
+    if guide_room.encounter_slot_id != output.encounter_slot_id:
+        raise ConflictError(
+            "Exploration enrichment targets a slot outside the exact guide."
+        )
+    if guide_room.encounter_content is not None:
+        raise ConflictError(
+            "Exploration enrichment cannot replace accepted exploration content."
+        )
+
+    pacing = context.pacing_role.replace("_", " ").capitalize()
+    encounter_content = DungeonGuideRunnableContent(
+        situation=" ".join((*output.observable_cues, f"Stakes: {context.stakes}")),
+        adjudication=(
+            f"Pacing: {pacing}. Escalation: {output.escalation} "
+            f"Recovery: {output.recovery}"
+        ),
+        player_choices=tuple(
+            DungeonGuidePlayerChoice(
+                action=approach.action,
+                outcome=(
+                    f"{approach.adjudication} Consequence: {approach.consequence}"
+                ),
+            )
+            for approach in output.approaches
+        ),
+    )
+    rooms = tuple(
+        room.model_copy(update={"encounter_content": encounter_content})
+        if room.room_id == output.room_id
+        else room
+        for room in guide.rooms
+    )
+    content_issues = tuple(
+        issue
+        for issue in guide.content_issues
+        if not (
+            issue.code == "guide_content.required_missing"
+            and issue.kind == "encounter"
+            and issue.room_ref == room_ref
+        )
+    )
+    document = guide.model_dump(mode="python")
+    document["rooms"] = rooms
+    document["content_issues"] = content_issues
+    return DungeonDmGuide.model_validate(document)
+
+
 def build_dungeon_puzzle_enrichment_input(
     package: DungeonPackage,
     selection: DungeonPuzzleContextSelection,
@@ -1221,6 +1720,22 @@ def _runnable_content(entry: DungeonGuideContentEntry) -> DungeonGuideRunnableCo
         adjudication=entry.adjudication,
         player_choices=entry.player_choices,
     )
+
+
+def _accepted_structural_plan(specification: DungeonStudioSpecification) -> DungeonPlan:
+    proposal = next(
+        (
+            lineage.proposal
+            for lineage in reversed(specification.model_lineage)
+            if lineage.proposal is not None and lineage.proposal.plan is not None
+        ),
+        None,
+    )
+    if proposal is None or proposal.plan is None:
+        raise ConflictError(
+            "Puzzle enrichment requires accepted structural plan lineage."
+        )
+    return proposal.plan
 
 
 def _build_dm_guide(
