@@ -273,11 +273,16 @@ cumulative/2,048-output budget, and one budget-reserved repair. Validation rejec
 IDs; accepted content and lineage are retained in a DM-only atomic child whose projection
 adds observable cues, multiple approaches/consequences, and escalation/recovery while
 preserving package/map hashes, accepted puzzle content/lineage, and unrelated blockers.
-Failure leaves the puzzle parent current with body-free diagnostics. Accepted content
-remains available to the DM in the artifact, while routine attempt reports contain only
-compact operational metadata and diagnostics; raw transport capture requires explicit
-local debug. Until the remaining
-enrichment kinds are wired, drafts truthfully remain preparation-blocked. Geometry,
+Failure leaves the puzzle parent current with body-free diagnostics. Feature interactions
+now have a separate provider-free contract: trusted code joins one exact package feature
+marker to its current guide entry and local room geometry, rejects foreign IDs and
+cross-task mutation, and projects only observable setup, multiple affordances/consequences,
+and optional reset/retry guidance. It preserves accepted puzzle/exploration content and
+unrelated blockers; feature provider dispatch, lineage, and atomic child publication are
+not wired yet. Accepted content remains available to the DM in the artifact, while routine
+attempt reports contain only compact operational metadata and diagnostics; raw transport
+capture requires explicit local debug. Until the remaining enrichment kinds are wired,
+drafts truthfully remain preparation-blocked. Geometry,
 visibility, validation, rendering, persistence, and approval remain server-owned. Run
 inspection remains body-free:
 
@@ -421,7 +426,7 @@ The internal P1-02 Library service now ingests bounded strict-UTF-8 files throug
 
 ## Current Next Step
 
-Continue **P7-14f** by adding independently bounded faux-provider dispatch, repair, lineage, and atomic child publication for the exact-ID exploration contract. Preserve package/map bytes, accepted puzzle content, and unrelated readiness blockers on both success and failure. Do not run a live provider or start Tier B/C. See [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) and [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
+Continue **P7-14f** by adding independently bounded faux-provider dispatch, repair, accepted lineage, and atomic child publication for the exact-ID feature-interaction contract. Preserve package/map bytes, accepted puzzle/exploration content and lineage, and unrelated readiness blockers on both success and failure. Do not run a live provider or start Tier B/C. See [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) and [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
 
 ## License and Third-Party Marks
 

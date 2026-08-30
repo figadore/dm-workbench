@@ -1,4 +1,4 @@
-"""Exact-ID Workbench exploration-enrichment contract coverage."""
+"""Exact-ID Workbench exploration and feature-enrichment contract coverage."""
 
 import json
 from copy import deepcopy
@@ -12,6 +12,13 @@ from dm_assistant.orchestration.dungeons import (
     DungeonExplorationContextSelection,
     DungeonExplorationEnrichmentInput,
     DungeonExplorationEnrichmentOutput,
+    DungeonFeatureInteractionContextSelection,
+    DungeonFeatureInteractionEnrichmentInput,
+    DungeonFeatureInteractionEnrichmentOutput,
+    DungeonFeatureInteractionFeature,
+    DungeonFeatureInteractionIssue,
+    DungeonFeatureInteractionRoomContext,
+    DungeonFeatureInteractionValidationResult,
     DungeonPuzzleClueApproval,
     DungeonPuzzleContextSelection,
     DungeonPuzzleEnrichmentOutput,
@@ -19,11 +26,14 @@ from dm_assistant.orchestration.dungeons import (
 from dm_assistant.orchestration.dungeons.service import (
     build_dungeon_dm_guide,
     build_dungeon_exploration_enrichment_input,
+    build_dungeon_feature_interaction_enrichment_input,
     build_dungeon_preparation_readiness,
     build_dungeon_puzzle_enrichment_input,
     project_dungeon_exploration_enrichment,
+    project_dungeon_feature_interaction_enrichment,
     project_dungeon_puzzle_enrichment,
     validate_dungeon_exploration_enrichment,
+    validate_dungeon_feature_interaction_enrichment,
     validate_dungeon_puzzle_enrichment,
 )
 from dm_dungeon import (
@@ -89,7 +99,15 @@ def _skyroot_package() -> tuple[DungeonPlan, LayoutRequest, DungeonPackage]:
                             "description": "A fixed prism stand catches light from the surviving roof panes.",
                         },
                     },
-                    {"room_ref": "nursery", "objective": "Cloud-Pine Cutting"},
+                    {
+                        "room_ref": "nursery",
+                        "feature": {
+                            "kind": "other",
+                            "name": "Mistwheel Console",
+                            "description": "A handwheel and two sight glasses regulate mist around the cloud-pine bed.",
+                        },
+                        "objective": "Cloud-Pine Cutting",
+                    },
                 ],
             }
         )
@@ -254,6 +272,173 @@ def test_exact_package_builds_local_exploration_context_and_rejects_foreign_ids(
                 }
             ),
         )
+
+
+def _feature_selection(
+    *, room_id: str, feature_id: str
+) -> DungeonFeatureInteractionContextSelection:
+    return DungeonFeatureInteractionContextSelection(
+        room_id=room_id,
+        feature_id=feature_id,
+        interaction_goal="Let the party stabilize the nursery mist before handling the cutting.",
+        stakes="A careless adjustment drenches the cutting but never destroys or permanently blocks it.",
+        constraints=(
+            "Keep the handwheel and two sight glasses as the complete apparatus",
+            "Do not invent numeric difficulty values",
+            "Allow more than one reasonable adjustment method",
+        ),
+    )
+
+
+def _feature_output(
+    *, package_id: str, room_id: str, feature_id: str
+) -> dict[str, object]:
+    return {
+        "schema_version": "1.0.0",
+        "package_id": package_id,
+        "room_id": room_id,
+        "feature_id": feature_id,
+        "observable_setup": [
+            "The left sight glass is empty while the right glass pulses with cloudy water.",
+            "Turning the handwheel changes both water levels in opposite directions.",
+        ],
+        "affordances": [
+            {
+                "action": "Turn the wheel until both sight glasses hold the same level.",
+                "adjudication": "Slow adjustments reveal the levels settling toward the center marks.",
+                "consequence": "Balanced flow parts the mist around the cutting bed.",
+            },
+            {
+                "action": "Clamp one feed line while another character feathers the wheel.",
+                "adjudication": "A secure soft clamp can hold either line without prescribing one tool.",
+                "consequence": "The mist clears, but the clamped line must be released before the cutting is removed.",
+            },
+        ],
+        "reset_or_retry": "Opening the drain lever empties both glasses and returns the wheel to its starting mark.",
+    }
+
+
+def test_exact_guide_feature_builds_local_context_and_rejects_foreign_ids() -> None:
+    plan, request, package = _skyroot_package()
+    compiled = compile_dungeon_plan(plan)
+    assert compiled.certificate is not None
+    assert compiled.mechanics_plan is not None
+    room_ids = {item.ref: item.room_id for item in compiled.certificate.rooms}
+    feature_ids = {
+        item.room_id: item.id for item in compiled.mechanics_plan.room_features
+    }
+    guide = build_dungeon_dm_guide(request, package, plan)
+    selection = _feature_selection(
+        room_id=room_ids["nursery"],
+        feature_id=feature_ids[room_ids["nursery"]],
+    )
+
+    context = build_dungeon_feature_interaction_enrichment_input(
+        package, guide, selection
+    )
+
+    exact_room = next(room for room in package.rooms if room.id == room_ids["nursery"])
+    marker = next(
+        item
+        for item in package.room_mechanic_markers
+        if item.id == feature_ids[room_ids["nursery"]]
+    )
+    assert context.package_id == package.id
+    assert context.room == DungeonFeatureInteractionRoomContext(
+        room_id=exact_room.id,
+        floor_id=exact_room.floor_id,
+        boundary=exact_room.boundary,
+        capacity=exact_room.capacity,
+    )
+    assert context.feature == DungeonFeatureInteractionFeature(
+        feature_id=marker.id,
+        room_id=marker.room_id,
+        floor_id=marker.floor_id,
+        position=marker.position,
+        kind="other",
+        name="Mistwheel Console",
+        description="A handwheel and two sight glasses regulate mist around the cloud-pine bed.",
+    )
+    assert context.interaction_goal == selection.interaction_goal
+    assert context.stakes == selection.stakes
+    assert context.constraints == selection.constraints
+
+    input_schema = str(DungeonFeatureInteractionEnrichmentInput.model_json_schema())
+    output_schema = str(DungeonFeatureInteractionEnrichmentOutput.model_json_schema())
+    assert "DungeonPlan" not in input_schema
+    assert "critical_path" not in input_schema
+    assert "DungeonPuzzle" not in output_schema
+    assert "encounter_content" not in output_schema
+    assert "topology" not in output_schema
+
+    with pytest.raises(ConflictError, match="unknown exact feature room"):
+        build_dungeon_feature_interaction_enrichment_input(
+            package,
+            guide,
+            selection.model_copy(update={"room_id": "room_from_another_package"}),
+        )
+    with pytest.raises(ConflictError, match="unknown exact room feature"):
+        build_dungeon_feature_interaction_enrichment_input(
+            package,
+            guide,
+            selection.model_copy(update={"feature_id": "feature_from_another_package"}),
+        )
+    with pytest.raises(ConflictError, match="outside the selected feature room"):
+        build_dungeon_feature_interaction_enrichment_input(
+            package,
+            guide,
+            selection.model_copy(
+                update={"feature_id": feature_ids[room_ids["gallery"]]}
+            ),
+        )
+
+    valid_document = _feature_output(
+        package_id=package.id,
+        room_id=room_ids["nursery"],
+        feature_id=feature_ids[room_ids["nursery"]],
+    )
+    output = DungeonFeatureInteractionEnrichmentOutput.model_validate(valid_document)
+    assert (
+        validate_dungeon_feature_interaction_enrichment(context, output).accepted_output
+        == output
+    )
+
+    structural_mutation = deepcopy(valid_document)
+    structural_mutation["topology"] = {"replace": True}
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        DungeonFeatureInteractionEnrichmentOutput.model_validate(structural_mutation)
+    cross_task_mutation = deepcopy(valid_document)
+    cross_task_mutation["encounter_content"] = {"replace": True}
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        DungeonFeatureInteractionEnrichmentOutput.model_validate(cross_task_mutation)
+
+    mismatch = deepcopy(valid_document)
+    mismatch["package_id"] = "package_other"
+    mismatch["room_id"] = "room_other"
+    mismatch["feature_id"] = "feature_other"
+    rejected = validate_dungeon_feature_interaction_enrichment(
+        context, DungeonFeatureInteractionEnrichmentOutput.model_validate(mismatch)
+    )
+    assert rejected == DungeonFeatureInteractionValidationResult(
+        schema_version="1.0.0",
+        issues=(
+            DungeonFeatureInteractionIssue(
+                code="feature_interaction.package_mismatch",
+                component_id="package_other",
+                message="Feature interaction targets a different dungeon package.",
+            ),
+            DungeonFeatureInteractionIssue(
+                code="feature_interaction.room_mismatch",
+                component_id="room_other",
+                message="Feature interaction targets a different exact room.",
+            ),
+            DungeonFeatureInteractionIssue(
+                code="feature_interaction.feature_mismatch",
+                component_id="feature_other",
+                message="Feature interaction targets a different exact feature.",
+            ),
+        ),
+    )
 
 
 def test_exploration_validation_rejects_foreign_ids_and_structural_mutation() -> None:
@@ -448,4 +633,77 @@ def test_accepted_exploration_projects_one_challenge_without_cross_task_mutation
             package=package,
             context=context,
             validation=validation,
+        )
+
+    feature_id = feature_ids[room_ids["nursery"]]
+    feature_context = build_dungeon_feature_interaction_enrichment_input(
+        package,
+        guide,
+        _feature_selection(room_id=room_ids["nursery"], feature_id=feature_id),
+    )
+    feature_output = DungeonFeatureInteractionEnrichmentOutput.model_validate(
+        _feature_output(
+            package_id=package.id,
+            room_id=room_ids["nursery"],
+            feature_id=feature_id,
+        )
+    )
+    feature_validation = validate_dungeon_feature_interaction_enrichment(
+        feature_context, feature_output
+    )
+
+    guide_with_feature = project_dungeon_feature_interaction_enrichment(
+        guide,
+        plan=plan,
+        package=package,
+        context=feature_context,
+        validation=feature_validation,
+    )
+
+    assert package.model_dump_json() == package_before
+    assert guide_with_feature.map_callouts == guide.map_callouts
+    assert guide_with_feature.rooms == guide.rooms
+    assert guide_with_feature.connections == guide.connections
+    assert guide_with_feature.dependencies == guide.dependencies
+    assert guide_with_feature.traps == guide.traps
+    assert guide_with_feature.puzzles == guide.puzzles
+    assert guide_with_feature.objectives == guide.objectives
+    target = next(
+        item for item in guide_with_feature.features if item.marker_id == feature_id
+    )
+    assert target.content is not None
+    assert "left sight glass is empty" in target.content.situation
+    assert "careless adjustment drenches" in target.content.situation
+    assert "Opening the drain lever" in target.content.adjudication
+    assert len(target.content.player_choices) == 2
+    assert "Balanced flow parts the mist" in target.content.player_choices[0].outcome
+    assert all(
+        item
+        == next(prior for prior in guide.features if prior.marker_id == item.marker_id)
+        for item in guide_with_feature.features
+        if item.marker_id != feature_id
+    )
+    removed_feature_issue = next(
+        issue
+        for issue in guide.content_issues
+        if issue.kind == "feature" and issue.room_ref == "nursery"
+    )
+    assert guide_with_feature.content_issues == tuple(
+        issue for issue in guide.content_issues if issue != removed_feature_issue
+    )
+    assert {issue.kind for issue in guide_with_feature.content_issues} == {
+        "room",
+        "feature",
+        "objective",
+    }
+
+    with pytest.raises(
+        ConflictError, match="cannot replace accepted feature interaction content"
+    ):
+        project_dungeon_feature_interaction_enrichment(
+            guide_with_feature,
+            plan=plan,
+            package=package,
+            context=feature_context,
+            validation=feature_validation,
         )

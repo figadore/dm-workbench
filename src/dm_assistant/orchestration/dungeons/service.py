@@ -32,6 +32,7 @@ from dm_assistant.modules.preparation import (
 from dm_assistant.observability import bind_log_context, get_logger
 from dm_assistant.orchestration.dungeons.contracts import (
     DUNGEON_EXPLORATION_ENRICHMENT_SCHEMA_VERSION,
+    DUNGEON_FEATURE_INTERACTION_ENRICHMENT_SCHEMA_VERSION,
     DUNGEON_GENERATION_PROPOSAL_SCHEMA_VERSION,
     DUNGEON_PUZZLE_ENRICHMENT_SCHEMA_VERSION,
     CreateDungeonWorkflow,
@@ -48,6 +49,13 @@ from dm_assistant.orchestration.dungeons.contracts import (
     DungeonExplorationEnrichmentOutput,
     DungeonExplorationEnrichmentValidationResult,
     DungeonExplorationRoomContext,
+    DungeonFeatureInteractionContextSelection,
+    DungeonFeatureInteractionEnrichmentInput,
+    DungeonFeatureInteractionEnrichmentOutput,
+    DungeonFeatureInteractionFeature,
+    DungeonFeatureInteractionIssue,
+    DungeonFeatureInteractionRoomContext,
+    DungeonFeatureInteractionValidationResult,
     DungeonGenerationRegressionCase,
     DungeonGuideConnection,
     DungeonGuideContentEntry,
@@ -1498,6 +1506,238 @@ def project_dungeon_exploration_enrichment(
     )
     document = guide.model_dump(mode="python")
     document["rooms"] = rooms
+    document["content_issues"] = content_issues
+    return DungeonDmGuide.model_validate(document)
+
+
+def build_dungeon_feature_interaction_enrichment_input(
+    package: DungeonPackage,
+    guide: DungeonDmGuide,
+    selection: DungeonFeatureInteractionContextSelection,
+) -> DungeonFeatureInteractionEnrichmentInput:
+    """Slice one exact package/guide feature into a local interaction context."""
+
+    rooms_by_id = {room.id: room for room in package.rooms}
+    room = rooms_by_id.get(selection.room_id)
+    if room is None:
+        raise ConflictError(
+            "Feature interaction selected an unknown exact feature room."
+        )
+
+    marker = next(
+        (
+            item
+            for item in package.room_mechanic_markers
+            if item.id == selection.feature_id
+            and item.kind is RoomMechanicMarkerKind.FEATURE
+        ),
+        None,
+    )
+    if marker is None:
+        raise ConflictError(
+            "Feature interaction selected an unknown exact room feature."
+        )
+    if marker.room_id != room.id or marker.floor_id != room.floor_id:
+        raise ConflictError(
+            "Feature interaction selected a feature outside the selected feature room."
+        )
+
+    guide_feature = next(
+        (item for item in guide.features if item.marker_id == marker.id),
+        None,
+    )
+    if guide_feature is None:
+        raise ConflictError(
+            "Feature interaction selected a feature outside the exact guide."
+        )
+    if guide_feature.room_id != room.id:
+        raise ConflictError(
+            "Feature interaction guide target does not match the exact feature room."
+        )
+
+    return DungeonFeatureInteractionEnrichmentInput(
+        schema_version=DUNGEON_FEATURE_INTERACTION_ENRICHMENT_SCHEMA_VERSION,
+        package_id=package.id,
+        room=DungeonFeatureInteractionRoomContext(
+            room_id=room.id,
+            floor_id=room.floor_id,
+            boundary=room.boundary,
+            capacity=room.capacity,
+        ),
+        feature=DungeonFeatureInteractionFeature(
+            feature_id=marker.id,
+            room_id=marker.room_id,
+            floor_id=marker.floor_id,
+            position=marker.position,
+            kind=guide_feature.kind,
+            name=guide_feature.name,
+            description=guide_feature.description,
+        ),
+        interaction_goal=selection.interaction_goal,
+        stakes=selection.stakes,
+        constraints=selection.constraints,
+    )
+
+
+def validate_dungeon_feature_interaction_enrichment(
+    context: DungeonFeatureInteractionEnrichmentInput,
+    output: DungeonFeatureInteractionEnrichmentOutput,
+) -> DungeonFeatureInteractionValidationResult:
+    """Check one feature-only proposal against its exact trusted context."""
+
+    issues: list[DungeonFeatureInteractionIssue] = []
+    if output.package_id != context.package_id:
+        issues.append(
+            DungeonFeatureInteractionIssue(
+                code="feature_interaction.package_mismatch",
+                component_id=output.package_id,
+                message="Feature interaction targets a different dungeon package.",
+            )
+        )
+    if output.room_id != context.room.room_id:
+        issues.append(
+            DungeonFeatureInteractionIssue(
+                code="feature_interaction.room_mismatch",
+                component_id=output.room_id,
+                message="Feature interaction targets a different exact room.",
+            )
+        )
+    if output.feature_id != context.feature.feature_id:
+        issues.append(
+            DungeonFeatureInteractionIssue(
+                code="feature_interaction.feature_mismatch",
+                component_id=output.feature_id,
+                message="Feature interaction targets a different exact feature.",
+            )
+        )
+    return DungeonFeatureInteractionValidationResult(
+        schema_version=DUNGEON_FEATURE_INTERACTION_ENRICHMENT_SCHEMA_VERSION,
+        accepted_output=None if issues else output,
+        issues=tuple(issues),
+    )
+
+
+def project_dungeon_feature_interaction_enrichment(
+    guide: DungeonDmGuide,
+    *,
+    plan: DungeonPlan,
+    package: DungeonPackage,
+    context: DungeonFeatureInteractionEnrichmentInput,
+    validation: DungeonFeatureInteractionValidationResult,
+) -> DungeonDmGuide:
+    """Merge one accepted exact feature interaction without cross-task mutation."""
+
+    guide_feature = next(
+        (
+            item
+            for item in guide.features
+            if item.marker_id == context.feature.feature_id
+        ),
+        None,
+    )
+    if guide_feature is not None and guide_feature.content is not None:
+        raise ConflictError(
+            "Feature interaction cannot replace accepted feature interaction content."
+        )
+
+    rebuilt_context = build_dungeon_feature_interaction_enrichment_input(
+        package,
+        guide,
+        DungeonFeatureInteractionContextSelection(
+            room_id=context.room.room_id,
+            feature_id=context.feature.feature_id,
+            interaction_goal=context.interaction_goal,
+            stakes=context.stakes,
+            constraints=context.constraints,
+        ),
+    )
+    if rebuilt_context != context:
+        raise ConflictError(
+            "Feature interaction context does not match the accepted exact package and guide."
+        )
+
+    output = validation.accepted_output
+    if output is None:
+        raise ConflictError("Rejected feature interaction cannot be projected.")
+    authoritative_validation = validate_dungeon_feature_interaction_enrichment(
+        context, output
+    )
+    if authoritative_validation.accepted_output is None:
+        raise ConflictError("Feature interaction failed exact-ID semantic validation.")
+
+    compiled = compile_dungeon_plan(plan)
+    if (
+        not compiled.accepted
+        or compiled.certificate is None
+        or compiled.topology is None
+        or compiled.mechanics_plan is None
+        or package.topology != compiled.topology
+    ):
+        raise ConflictError(
+            "Accepted feature interaction does not match the generated dungeon plan."
+        )
+    room_ref_by_id = {item.room_id: item.ref for item in compiled.certificate.rooms}
+    room_ref = room_ref_by_id.get(output.room_id)
+    if room_ref is None:
+        raise ConflictError("Feature interaction targets an unknown planned room.")
+    feature_plan = next(
+        (
+            item
+            for item in compiled.mechanics_plan.room_features
+            if item.id == output.feature_id and item.room_id == output.room_id
+        ),
+        None,
+    )
+    planned_content = next(
+        (item for item in plan.room_contents if item.room_ref == room_ref),
+        None,
+    )
+    if (
+        feature_plan is None
+        or planned_content is None
+        or planned_content.feature is None
+    ):
+        raise ConflictError(
+            "Feature interaction targets a feature outside the accepted plan."
+        )
+    if guide_feature is None or guide_feature.room_id != output.room_id:
+        raise ConflictError(
+            "Feature interaction targets a feature outside the exact guide."
+        )
+
+    adjudication_sections = [f"Interaction goal: {context.interaction_goal}"]
+    if output.reset_or_retry is not None:
+        adjudication_sections.append(f"Reset or retry: {output.reset_or_retry}")
+    content = DungeonGuideRunnableContent(
+        situation=" ".join((*output.observable_setup, f"Stakes: {context.stakes}")),
+        adjudication=" ".join(adjudication_sections),
+        player_choices=tuple(
+            DungeonGuidePlayerChoice(
+                action=affordance.action,
+                outcome=(
+                    f"{affordance.adjudication} Consequence: {affordance.consequence}"
+                ),
+            )
+            for affordance in output.affordances
+        ),
+    )
+    features = tuple(
+        feature.model_copy(update={"content": content})
+        if feature.marker_id == output.feature_id
+        else feature
+        for feature in guide.features
+    )
+    content_issues = tuple(
+        issue
+        for issue in guide.content_issues
+        if not (
+            issue.code == "guide_content.required_missing"
+            and issue.kind == "feature"
+            and issue.room_ref == room_ref
+        )
+    )
+    document = guide.model_dump(mode="python")
+    document["features"] = features
     document["content_issues"] = content_issues
     return DungeonDmGuide.model_validate(document)
 

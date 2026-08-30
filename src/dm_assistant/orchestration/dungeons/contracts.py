@@ -35,6 +35,7 @@ from dm_dungeon.contracts import (
 
 DUNGEON_GENERATION_PROPOSAL_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 DUNGEON_EXPLORATION_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
+DUNGEON_FEATURE_INTERACTION_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 DUNGEON_PUZZLE_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 
 
@@ -260,6 +261,130 @@ class PromptedDungeonExplorationLineage(WorkflowModel):
             raise ValueError("exploration lineage requires a successful model run")
         if self.model_run.output_payload != self.output.model_dump(mode="json"):
             raise ValueError("exploration lineage output must match the model run")
+        return self
+
+
+class DungeonFeatureInteractionContextSelection(WorkflowModel):
+    """Trusted exact feature and policy for one post-layout interaction task."""
+
+    room_id: ExactDungeonComponentId
+    feature_id: ExactDungeonComponentId
+    interaction_goal: GuideContentText
+    stakes: GuideContentText
+    constraints: tuple[GuideContentText, ...] = Field(default=(), max_length=8)
+
+
+class DungeonFeatureInteractionRoomContext(WorkflowModel):
+    """Exact local geometry exposed to one feature-interaction task."""
+
+    room_id: ExactDungeonComponentId
+    floor_id: ExactDungeonComponentId
+    boundary: PolygonGeometry
+    capacity: RoomCapacity
+
+
+class DungeonFeatureInteractionFeature(WorkflowModel):
+    """One exact guide feature joined to its package-owned marker geometry."""
+
+    feature_id: ExactDungeonComponentId
+    room_id: ExactDungeonComponentId
+    floor_id: ExactDungeonComponentId
+    position: GridPoint
+    kind: FeatureIntentKind
+    name: str = Field(min_length=1, max_length=200)
+    description: GuideContentText
+
+
+class DungeonFeatureInteractionEnrichmentInput(WorkflowModel):
+    """Narrow feature payload built from an exact package and current guide."""
+
+    schema_version: Literal["1.0.0"]
+    package_id: ExactDungeonComponentId
+    room: DungeonFeatureInteractionRoomContext
+    feature: DungeonFeatureInteractionFeature
+    interaction_goal: GuideContentText
+    stakes: GuideContentText
+    constraints: tuple[GuideContentText, ...] = Field(default=(), max_length=8)
+
+    @model_validator(mode="after")
+    def require_feature_in_local_room(
+        self,
+    ) -> DungeonFeatureInteractionEnrichmentInput:
+        if (
+            self.feature.room_id != self.room.room_id
+            or self.feature.floor_id != self.room.floor_id
+        ):
+            raise ValueError(
+                "feature interaction requires one feature in the exact local room"
+            )
+        return self
+
+
+class DungeonFeatureInteractionAffordance(WorkflowModel):
+    """One actionable use and consequence for the selected exact feature."""
+
+    action: GuideContentText
+    adjudication: GuideContentText
+    consequence: GuideContentText
+
+
+class DungeonFeatureInteractionEnrichmentOutput(WorkflowModel):
+    """Feature-only proposal that cannot mutate structure or another task."""
+
+    schema_version: Literal["1.0.0"]
+    package_id: ExactDungeonComponentId
+    room_id: ExactDungeonComponentId
+    feature_id: ExactDungeonComponentId
+    observable_setup: tuple[GuideContentText, ...] = Field(min_length=1, max_length=5)
+    affordances: tuple[DungeonFeatureInteractionAffordance, ...] = Field(
+        min_length=2, max_length=4
+    )
+    reset_or_retry: GuideContentText | None = None
+
+    @model_validator(mode="after")
+    def require_bounded_guide_projection(
+        self,
+    ) -> DungeonFeatureInteractionEnrichmentOutput:
+        projected_fields = (
+            " ".join(self.observable_setup),
+            " ".join(
+                f"{item.adjudication} Consequence: {item.consequence}"
+                for item in self.affordances
+            ),
+            self.reset_or_retry or "",
+        )
+        if any(len(value) > 2_000 for value in projected_fields):
+            raise ValueError(
+                "feature interaction exceeds bounded guide projection text"
+            )
+        return self
+
+
+class DungeonFeatureInteractionIssue(WorkflowModel):
+    """Body-free exact-ID mismatch that blocks one feature interaction."""
+
+    code: Literal[
+        "feature_interaction.package_mismatch",
+        "feature_interaction.room_mismatch",
+        "feature_interaction.feature_mismatch",
+    ]
+    component_id: ExactDungeonComponentId
+    message: str = Field(min_length=1, max_length=300)
+
+
+class DungeonFeatureInteractionValidationResult(WorkflowModel):
+    """Provider-free semantic validation for one feature-only proposal."""
+
+    schema_version: Literal["1.0.0"]
+    accepted_output: DungeonFeatureInteractionEnrichmentOutput | None = None
+    issues: tuple[DungeonFeatureInteractionIssue, ...] = ()
+
+    @model_validator(mode="after")
+    def require_acceptance_to_match_issues(
+        self,
+    ) -> DungeonFeatureInteractionValidationResult:
+        if (self.accepted_output is not None) == bool(self.issues):
+            raise ValueError("accepted feature interaction must match semantic issues")
         return self
 
 

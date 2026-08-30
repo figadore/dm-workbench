@@ -1757,8 +1757,13 @@ with one budget-reserved repair, retains accepted content/lineage, and atomicall
 a DM-only child. Deterministic projection adds observable cues, multiple approaches/
 consequences, and escalation/recovery without replacing accepted puzzle content, changing
 package/map bytes, or clearing unrelated blockers. Rejection leaves the puzzle parent
-current with body-free diagnostics. Other interactions, narrative, automatic staged
-orchestration, and live calls remain later slices.
+current with body-free diagnostics. A provider-free feature-interaction seam now joins one
+exact package feature marker to its current guide entry and local room geometry, validates
+exact package/room/feature IDs, and projects observable setup, multiple affordances and
+consequences, plus optional reset/retry guidance into only that feature. It preserves
+accepted puzzle/exploration content and unrelated blockers; feature dispatch, lineage,
+atomic child publication, traps, narrative, automatic staged orchestration, and live calls
+remain later slices.
 
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
   Its model-visible proposal contains room identity/purpose, critical path, bounded
