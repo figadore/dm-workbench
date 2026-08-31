@@ -156,11 +156,15 @@ class DungeonObjectivePromptApplicationService:
                     "room_id": context.room.room_id,
                     "objective_id": context.objective.objective_id,
                     "context_sha256": context_hash,
+                    "creative_continuity_sha256": (
+                        context.continuity.projection_sha256
+                    ),
                 },
                 schema_versions={
                     "dungeon_objective_enrichment": (
                         DUNGEON_OBJECTIVE_ENRICHMENT_SCHEMA_VERSION
-                    )
+                    ),
+                    "dungeon_creative_continuity": context.continuity.projection_version,
                 },
                 model_task_profile_id=profile.task_profile_id,
             )

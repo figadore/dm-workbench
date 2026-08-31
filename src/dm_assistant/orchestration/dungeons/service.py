@@ -1036,12 +1036,16 @@ class DungeonStudioService:
         if parent.artifact_id != command.artifact_id:
             raise ConflictError("Parent version does not belong to the artifact.")
         specification = _load_specification(parent.specification)
+        plan = _accepted_structural_plan(specification)
+        continuity = _required_creative_continuity(specification)
         if specification.dm_guide is None:
             raise ConflictError("Objective requires an exact structural guide.")
         return build_dungeon_objective_enrichment_input(
             specification.package,
             specification.dm_guide,
             command.selection,
+            plan=plan,
+            creative_continuity=continuity,
         )
 
     def enrich_prompted_objective(
@@ -1058,6 +1062,7 @@ class DungeonStudioService:
             raise ConflictError("Parent version does not belong to the artifact.")
         specification = _load_specification(parent.specification)
         plan = _accepted_structural_plan(specification)
+        continuity = _required_creative_continuity(specification)
         if specification.dm_guide is None:
             raise ConflictError(
                 "Objective enrichment requires an exact structural guide."
@@ -1069,6 +1074,7 @@ class DungeonStudioService:
             context_kind="dungeon_objective_enrichment",
             payload_version=command.context.schema_version,
             visibility_policy=VisibilityPolicy.DM_ONLY,
+            source_links=command.context.continuity.source_links,
             payload=context_document,
             payload_sha256=context_hash,
         )
@@ -1090,6 +1096,9 @@ class DungeonStudioService:
                     "room_id": command.context.room.room_id,
                     "objective_id": command.context.objective.objective_id,
                     "context_sha256": context_hash,
+                    "creative_continuity_sha256": (
+                        command.context.continuity.projection_sha256
+                    ),
                 },
                 input_pins=parent.input_pins,
                 context=context_pin,
@@ -1097,6 +1106,9 @@ class DungeonStudioService:
                     "dungeon_package": specification.package.schema_version,
                     "dungeon_objective_enrichment": (
                         DUNGEON_OBJECTIVE_ENRICHMENT_SCHEMA_VERSION
+                    ),
+                    "dungeon_creative_continuity": (
+                        DUNGEON_CREATIVE_CONTINUITY_VERSION
                     ),
                     "dungeon_studio": _STUDIO_SCHEMA_VERSION,
                     "model_run": "1.0.0",
@@ -1123,6 +1135,7 @@ class DungeonStudioService:
                 specification.dm_guide,
                 plan=plan,
                 package=specification.package,
+                creative_continuity=continuity,
                 context=command.context,
                 validation=command.validation,
             )
@@ -1141,6 +1154,9 @@ class DungeonStudioService:
                     "room_id": command.context.room.room_id,
                     "objective_id": command.context.objective.objective_id,
                     "context_sha256": context_hash,
+                    "creative_continuity_sha256": (
+                        command.context.continuity.projection_sha256
+                    ),
                 },
             }
             if readiness is not None:
@@ -3144,8 +3160,11 @@ def build_dungeon_objective_enrichment_input(
     package: DungeonPackage,
     guide: DungeonDmGuide,
     selection: DungeonObjectiveContextSelection,
+    *,
+    plan: DungeonPlan,
+    creative_continuity: DungeonCreativeContinuityProjection,
 ) -> DungeonObjectiveEnrichmentInput:
-    """Join one exact objective to local geometry and accepted mechanic summaries."""
+    """Join one exact objective, accepted mechanics, and pinned continuity."""
 
     rooms_by_id = {room.id: room for room in package.rooms}
     room = rooms_by_id.get(selection.room_id)
@@ -3199,10 +3218,18 @@ def build_dungeon_objective_enrichment_input(
             )
         accepted_mechanics.append(mechanic)
 
+    continuity = build_dungeon_enrichment_continuity_context(
+        projection=creative_continuity,
+        plan=plan,
+        package=package,
+        room_ids=(room.id,),
+        selected_fact_ids=selection.continuity_fact_ids,
+    )
     current_content = guide_objective.content
     return DungeonObjectiveEnrichmentInput(
         schema_version=DUNGEON_OBJECTIVE_ENRICHMENT_SCHEMA_VERSION,
         package_id=package.id,
+        continuity=continuity,
         room=DungeonObjectiveRoomContext(
             room_id=room.id,
             floor_id=room.floor_id,
@@ -3413,6 +3440,7 @@ def project_dungeon_objective_enrichment(
     *,
     plan: DungeonPlan,
     package: DungeonPackage,
+    creative_continuity: DungeonCreativeContinuityProjection,
     context: DungeonObjectiveEnrichmentInput,
     validation: DungeonObjectiveValidationResult,
 ) -> DungeonDmGuide:
@@ -3437,10 +3465,15 @@ def project_dungeon_objective_enrichment(
         DungeonObjectiveContextSelection(
             room_id=context.room.room_id,
             objective_id=context.objective.objective_id,
+            continuity_fact_ids=tuple(
+                fact.fact_id for fact in context.continuity.selected_facts
+            ),
             mechanic_ids=tuple(item.mechanic_id for item in context.accepted_mechanics),
             stakes=context.stakes,
             constraints=context.constraints,
         ),
+        plan=plan,
+        creative_continuity=creative_continuity,
     )
     if rebuilt_context != context:
         raise ConflictError(

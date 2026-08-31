@@ -746,12 +746,15 @@ class DungeonObjectiveContextSelection(WorkflowModel):
 
     room_id: ExactDungeonComponentId
     objective_id: ExactDungeonComponentId
+    continuity_fact_ids: tuple[str, ...] = Field(default=(), max_length=8)
     mechanic_ids: tuple[ExactDungeonComponentId, ...] = Field(default=(), max_length=8)
     stakes: GuideContentText
     constraints: tuple[GuideContentText, ...] = Field(default=(), max_length=8)
 
     @model_validator(mode="after")
-    def require_unique_mechanic_ids(self) -> DungeonObjectiveContextSelection:
+    def require_unique_selection_ids(self) -> DungeonObjectiveContextSelection:
+        if len(self.continuity_fact_ids) != len(set(self.continuity_fact_ids)):
+            raise ValueError("objective context requires unique continuity fact IDs")
         if len(self.mechanic_ids) != len(set(self.mechanic_ids)):
             raise ValueError("objective context requires unique accepted mechanic IDs")
         return self
@@ -825,6 +828,7 @@ class DungeonObjectiveEnrichmentInput(WorkflowModel):
 
     schema_version: Literal["1.0.0"]
     package_id: ExactDungeonComponentId
+    continuity: DungeonEnrichmentContinuityContext
     room: DungeonObjectiveRoomContext
     objective: DungeonObjectiveTarget
     accepted_mechanics: tuple[DungeonObjectiveAcceptedMechanic, ...] = Field(
@@ -923,6 +927,7 @@ class PromptedDungeonObjectiveLineage(WorkflowModel):
 
     model_run_id: UUID
     context_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    creative_continuity_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     model_run: ModelRunRecord
     output: DungeonObjectiveEnrichmentOutput
 
@@ -2030,6 +2035,13 @@ class CreatePromptedDungeonObjectiveWorkflow(WorkflowModel):
         context_hash = canonical_json_sha256(self.context.model_dump(mode="json"))
         if self.model_lineage.context_sha256 != context_hash:
             raise ValueError("objective publication requires matching context lineage")
+        if (
+            self.model_lineage.creative_continuity_sha256
+            != self.context.continuity.projection_sha256
+        ):
+            raise ValueError(
+                "objective publication requires matching continuity lineage"
+            )
         return self
 
 

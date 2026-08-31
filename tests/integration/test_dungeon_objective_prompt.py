@@ -210,6 +210,8 @@ def test_faux_objective_task_repairs_and_publishes_atomic_preserving_trap_child(
     db_engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     prepared = _prepare_trapped_copper(db_engine, tmp_path, monkeypatch)
+    assert prepared.specification.creative_continuity is not None
+    continuity_hash = prepared.specification.creative_continuity.projection_sha256
     selection = _selection(prepared)
     valid = _objective_output(
         package_id=prepared.specification.package.id,
@@ -282,6 +284,10 @@ def test_faux_objective_task_repairs_and_publishes_atomic_preserving_trap_child(
         == selection.objective_id
     )
     assert (
+        child_spec.objective_model_lineage[-1].creative_continuity_sha256
+        == continuity_hash
+    )
+    assert (
         child_spec.dm_guide is not None and prepared.specification.dm_guide is not None
     )
     assert child_spec.dm_guide.rooms == prepared.specification.dm_guide.rooms
@@ -342,6 +348,9 @@ def test_faux_objective_task_repairs_and_publishes_atomic_preserving_trap_child(
     assert {
         item["mechanic_id"] for item in prompt_document["context"]["accepted_mechanics"]
     } == set(selection.mechanic_ids)
+    assert (
+        prompt_document["context"]["continuity"]["projection_sha256"] == continuity_hash
+    )
     repair_document = json.loads(gateway.messages[1][0].content)
     assert repair_document["previous_arguments"] == rejected
     assert (
@@ -368,6 +377,8 @@ def test_faux_objective_task_repairs_and_publishes_atomic_preserving_trap_child(
     )
     report_text = json.dumps(attempt_run.validation_report)
     assert attempt_run.validation_report["code"] == "dungeon_objective_prompt_completed"
+    assert attempt_run.input_scope["creative_continuity_sha256"] == continuity_hash
+    assert attempt_run.schema_versions["dungeon_creative_continuity"] == "1.0.0"
     assert "observable_goal" not in report_text
     assert valid["resolution_guidance"] not in report_text
     artifact_run = prepared.base.base.base.preparation.get_generation_run(
@@ -375,6 +386,14 @@ def test_faux_objective_task_repairs_and_publishes_atomic_preserving_trap_child(
     )
     assert artifact_run.generation_kind == "dungeon_objective_enrichment"
     assert artifact_run.model_task_profile_id == profile.task_profile_id
+    assert artifact_run.input_scope["creative_continuity_sha256"] == continuity_hash
+    assert artifact_run.schema_versions["dungeon_creative_continuity"] == "1.0.0"
+    assert (
+        artifact_run.validation_report["objective_enrichment"][
+            "creative_continuity_sha256"
+        ]
+        == continuity_hash
+    )
     assert artifact_run.tool_runs[0]["tool_name"] == "submit_dungeon_objective"
 
     parent_assets = prepared.base.base.base.preparation.list_assets(

@@ -20,6 +20,7 @@ from dm_assistant.orchestration.dungeons import (
     DungeonExplorationAffordanceApproval,
     DungeonExplorationContextSelection,
     DungeonFeatureInteractionContextSelection,
+    DungeonObjectiveContextSelection,
     DungeonPuzzleContextSelection,
     DungeonTrapContextSelection,
 )
@@ -30,6 +31,7 @@ from dm_assistant.orchestration.dungeons.service import (
     build_dungeon_dm_guide,
     build_dungeon_exploration_enrichment_input,
     build_dungeon_feature_interaction_enrichment_input,
+    build_dungeon_objective_enrichment_input,
     build_dungeon_puzzle_enrichment_input,
     build_dungeon_trap_enrichment_input,
 )
@@ -265,12 +267,30 @@ def test_local_enrichments_inherit_one_hash_with_relevant_authorized_facts() -> 
         plan=plan,
         creative_continuity=projection,
     )
+    objective_id = next(
+        marker.id
+        for marker in package.room_mechanic_markers
+        if marker.room_id == room_ids["vault"] and marker.kind.value == "objective"
+    )
+    objective = build_dungeon_objective_enrichment_input(
+        package,
+        guide,
+        DungeonObjectiveContextSelection(
+            room_id=room_ids["vault"],
+            objective_id=objective_id,
+            continuity_fact_ids=("tide_history",),
+            stakes="Recover the ledger before the lower archive floods.",
+        ),
+        plan=plan,
+        creative_continuity=projection,
+    )
 
     contexts = (
         puzzle.continuity,
         exploration.continuity,
         feature.continuity,
         trap.continuity,
+        objective.continuity,
     )
     assert {context.projection_version for context in contexts} == {
         projection.projection_version
@@ -300,6 +320,12 @@ def test_local_enrichments_inherit_one_hash_with_relevant_authorized_facts() -> 
     assert [source.source_id for source in trap.continuity.source_links] == [
         "source_history"
     ]
+    assert [fact.fact_id for fact in objective.continuity.selected_facts] == [
+        "tide_history"
+    ]
+    assert [source.source_id for source in objective.continuity.source_links] == [
+        "source_history"
+    ]
     assert "unused_faction" not in {
         fact.fact_id for context in contexts for fact in context.selected_facts
     }
@@ -309,6 +335,10 @@ def test_local_enrichments_inherit_one_hash_with_relevant_authorized_facts() -> 
     }
     assert {room.room_ref for room in feature.continuity.room_intents} == {"channel"}
     assert {room.room_ref for room in trap.continuity.room_intents} == {"quay"}
+    assert {room.room_ref for room in objective.continuity.room_intents} == {"vault"}
+    assert {item.name for item in objective.continuity.objective_intents} == {
+        "Tide Ledger"
+    }
 
 
 def test_context_builders_reject_stale_projection_and_unauthorized_fact() -> None:
@@ -358,6 +388,35 @@ def test_context_builders_reject_stale_projection_and_unauthorized_fact() -> Non
                 trap_id=trap_id,
                 continuity_fact_ids=("invented_lore",),
                 stakes="Supplies may scatter.",
+            ),
+            plan=plan,
+            creative_continuity=projection,
+        )
+
+    objective_id = next(
+        marker.id
+        for marker in package.room_mechanic_markers
+        if marker.room_id == room_ids["vault"] and marker.kind.value == "objective"
+    )
+    objective_selection = DungeonObjectiveContextSelection(
+        room_id=room_ids["vault"],
+        objective_id=objective_id,
+        stakes="Recover the ledger before the archive floods.",
+    )
+    with pytest.raises(ConflictError, match="hash is stale"):
+        build_dungeon_objective_enrichment_input(
+            package,
+            guide,
+            objective_selection,
+            plan=plan,
+            creative_continuity=stale,
+        )
+    with pytest.raises(ConflictError, match="unauthorized or stale fact"):
+        build_dungeon_objective_enrichment_input(
+            package,
+            guide,
+            objective_selection.model_copy(
+                update={"continuity_fact_ids": ("invented_lore",)}
             ),
             plan=plan,
             creative_continuity=projection,

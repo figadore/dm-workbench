@@ -492,16 +492,18 @@ added.
 
 The provider-free continuity foundation now derives and persists one bounded dungeon-only
 self-hashed projection from the resolved `DungeonGenerationContext` and accepted structural
-plan. Puzzle, exploration, feature-interaction, and trap contexts inherit its exact
-version/hash while selecting only relevant authorized lore, premise/themes, room/
+plan. Puzzle, exploration, feature-interaction, trap, and objective contexts inherit its
+exact version/hash while selecting only relevant authorized lore, premise/themes, room/
 progression/objective intent, history/environment facts, tone, motif-variation constraints,
 and exact cited sources. Their accepted lineages and generation-run metadata pin the
-shared hash. Stale hashes, unauthorized fact IDs, broader-visibility sources, and campaign
-lore in standalone mode fail closed; absent standalone lore remains unknown.
+shared hash. Deterministic objective projection rebuilds its exact room, selected facts,
+accepted-mechanic summaries, plan, package, guide target, and continuity pin. Stale hashes,
+unauthorized fact IDs, broader-visibility sources, and campaign lore in standalone mode fail
+closed; absent standalone lore remains unknown.
 
 Required before chain repetition or live Tier A: carry this same projection through
-objective and room-narrative contexts and lineages without turning it into a universal
-optional-field context or unrestricted corpus/guide dump.
+room-narrative contexts and lineages without turning it into a universal optional-field
+context or unrestricted corpus/guide dump.
 
 After required enrichment, run deterministic continuity/source/lineage/dependency/secrecy
 validation and produce a DM-facing whole-dungeon cohesion report. A separately budgeted

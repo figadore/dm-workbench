@@ -7,7 +7,13 @@ import pytest
 from pydantic import ValidationError
 
 from dm_assistant.errors import ConflictError
+from dm_assistant.modules.preparation import (
+    DungeonGenerationContext,
+    GenerationContextEnvelope,
+    canonical_json_sha256,
+)
 from dm_assistant.orchestration.dungeons import (
+    DungeonCreativeContinuityProjection,
     DungeonGuidePlayerChoice,
     DungeonGuideRunnableContent,
     DungeonObjectiveAcceptedMechanic,
@@ -19,6 +25,9 @@ from dm_assistant.orchestration.dungeons import (
     DungeonObjectiveRoomContext,
     DungeonObjectiveTarget,
     DungeonObjectiveValidationResult,
+)
+from dm_assistant.orchestration.dungeons.continuity import (
+    derive_dungeon_creative_continuity,
 )
 from dm_assistant.orchestration.dungeons.contracts import (
     DungeonDmGuide,
@@ -125,6 +134,24 @@ def _copper_tide_package() -> tuple[DungeonPlan, LayoutRequest, DungeonPackage]:
     return plan, request, layout.package
 
 
+def _creative_continuity(plan: DungeonPlan) -> DungeonCreativeContinuityProjection:
+    payload = DungeonGenerationContext(
+        context_version="1.0.0",
+        prompt_input_sha256="7" * 64,
+        preparation_owner_id="dm",
+        context_provenance="synthetic_standalone",
+    ).model_dump(mode="json")
+    return derive_dungeon_creative_continuity(
+        GenerationContextEnvelope(
+            context_kind="dungeon_generation",
+            payload_version="1.0.0",
+            payload=payload,
+            payload_sha256=canonical_json_sha256(payload),
+        ),
+        plan,
+    )
+
+
 def _content(label: str) -> DungeonGuideRunnableContent:
     return DungeonGuideRunnableContent(
         situation=f"Accepted observable {label} setup.",
@@ -188,6 +215,7 @@ def _accepted_mechanics_guide(
         for trap in guide.traps
     )
     accepted = DungeonDmGuide.model_validate(document)
+    assert exploration_room.encounter_slot_id is not None
     return accepted, (
         exploration_room.encounter_slot_id,
         feature.marker_id,
@@ -247,7 +275,14 @@ def test_exact_objective_context_joins_marker_guide_geometry_and_accepted_mechan
         ),
     )
 
-    context = build_dungeon_objective_enrichment_input(package, guide, selection)
+    continuity = _creative_continuity(plan)
+    context = build_dungeon_objective_enrichment_input(
+        package,
+        guide,
+        selection,
+        plan=plan,
+        creative_continuity=continuity,
+    )
 
     room = next(item for item in package.rooms if item.id == room_ids["vault"])
     marker = next(
@@ -255,6 +290,14 @@ def test_exact_objective_context_joins_marker_guide_geometry_and_accepted_mechan
     )
     guide_objective = guide.objectives[0]
     assert context.package_id == package.id
+    assert context.continuity.projection_sha256 == continuity.projection_sha256
+    assert context.continuity.campaign_lore_status == "unknown"
+    assert context.continuity.selected_facts == ()
+    assert context.continuity.source_links == ()
+    assert {room.room_ref for room in context.continuity.room_intents} == {"vault"}
+    assert {item.name for item in context.continuity.objective_intents} == {
+        "Synthetic Tide Gauge"
+    }
     assert context.room == DungeonObjectiveRoomContext(
         room_id=room.id,
         floor_id=room.floor_id,
@@ -300,6 +343,7 @@ def test_exact_objective_context_joins_marker_guide_geometry_and_accepted_mechan
     input_schema = str(DungeonObjectiveEnrichmentInput.model_json_schema())
     output_schema = str(DungeonObjectiveEnrichmentOutput.model_json_schema())
     assert "accepted_mechanics" in input_schema
+    assert "continuity" in input_schema
     assert "DungeonPlan" not in input_schema
     assert "topology" not in output_schema
     assert "trap_content" not in output_schema
@@ -310,12 +354,16 @@ def test_exact_objective_context_joins_marker_guide_geometry_and_accepted_mechan
             package,
             guide,
             selection.model_copy(update={"room_id": "room_from_another_package"}),
+            plan=plan,
+            creative_continuity=continuity,
         )
     with pytest.raises(ConflictError, match="unknown exact room objective"):
         build_dungeon_objective_enrichment_input(
             package,
             guide,
             selection.model_copy(update={"objective_id": "objective_other"}),
+            plan=plan,
+            creative_continuity=continuity,
         )
     with pytest.raises(ConflictError, match="unknown or unaccepted exact mechanic"):
         build_dungeon_objective_enrichment_input(
@@ -324,6 +372,8 @@ def test_exact_objective_context_joins_marker_guide_geometry_and_accepted_mechan
             selection.model_copy(
                 update={"mechanic_ids": ("mechanic_from_another_package",)}
             ),
+            plan=plan,
+            creative_continuity=continuity,
         )
 
 
@@ -341,6 +391,7 @@ def test_objective_output_rejects_foreign_ids_mechanics_and_cross_task_mutation(
         build_dungeon_dm_guide(request, package, plan)
     )
     mechanic_ids = (puzzle_id, *other_mechanic_ids)
+    continuity = _creative_continuity(plan)
     context = build_dungeon_objective_enrichment_input(
         package,
         guide,
@@ -350,6 +401,8 @@ def test_objective_output_rejects_foreign_ids_mechanics_and_cross_task_mutation(
             mechanic_ids=mechanic_ids,
             stakes="A setback costs time but does not destroy the gauge.",
         ),
+        plan=plan,
+        creative_continuity=continuity,
     )
     valid_document = _objective_output(
         package_id=package.id,
@@ -431,6 +484,7 @@ def test_accepted_objective_projects_only_selected_entry_and_clears_only_its_blo
         build_dungeon_dm_guide(request, package, plan)
     )
     mechanic_ids = (puzzle_id, *other_mechanic_ids)
+    continuity = _creative_continuity(plan)
     context = build_dungeon_objective_enrichment_input(
         package,
         guide,
@@ -441,6 +495,8 @@ def test_accepted_objective_projects_only_selected_entry_and_clears_only_its_blo
             stakes="Recover the gauge intact; setbacks cost time but do not destroy it.",
             constraints=("Offer at least two credible resolutions",),
         ),
+        plan=plan,
+        creative_continuity=continuity,
     )
     output = DungeonObjectiveEnrichmentOutput.model_validate(
         _objective_output(
@@ -459,6 +515,7 @@ def test_accepted_objective_projects_only_selected_entry_and_clears_only_its_blo
         guide,
         plan=plan,
         package=package,
+        creative_continuity=continuity,
         context=context,
         validation=validation,
     )
@@ -521,6 +578,7 @@ def test_accepted_objective_projects_only_selected_entry_and_clears_only_its_blo
             enriched,
             plan=plan,
             package=package,
+            creative_continuity=continuity,
             context=context,
             validation=validation,
         )

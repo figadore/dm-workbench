@@ -290,11 +290,13 @@ unchanged; rejection leaves the parent current with body-free diagnostics. Objec
 content now follows the same independent boundary: trusted code joins one exact objective
 to its local geometry and a bounded selection of accepted mechanic summaries, while a
 separate 6,000-token cumulative/2,048-output faux-provider task proposes only an observable
-goal, adjudication, two to four resolutions, and setback/aftermath. Foreign objective or
-mechanic IDs are rejected; accepted content and lineage publish in one DM-only child while
-package/map bytes and all accepted puzzle/exploration/feature/trap content remain unchanged.
-Room narratives now use a separate exact-room faux-provider task with the same 6,000-token
-cumulative/2,048-output and one-repair policy. It returns only concise read-aloud plus
+goal, adjudication, two to four resolutions, and setback/aftermath. It inherits the exact
+structural creative-continuity hash while exposing only the objective room intent,
+explicitly selected authorized facts/sources, and bounded accepted-mechanic summaries.
+Foreign objective or mechanic IDs are rejected; accepted content and continuity lineage
+publish in one DM-only child while package/map bytes and all accepted puzzle/exploration/
+feature/trap content remain unchanged. Room narratives now use a separate exact-room
+faux-provider task with the same 6,000-token cumulative/2,048-output and one-repair policy. It returns only concise read-aloud plus
 observable framing for every selected room, retains accepted content and lineage in one
 atomic DM-only child, and preserves package/map bytes, all prior enrichments, unselected
 rooms, and unrelated readiness blockers. Rejection or publication failure leaves the
@@ -445,13 +447,14 @@ The internal P1-02 Library service now ingests bounded strict-UTF-8 files throug
 ## Current Next Step
 
 Continue **P7-14f** by carrying the provider-free creative-continuity projection through
-objective and room-narrative contexts before extending resumed coordination or adding a
-repeated runner. Structural publication derives and persists one self-hashed projection;
-puzzle, exploration, feature-interaction, and trap tasks inherit the same version/hash and
-only explicitly selected authorized facts/sources, while standalone lore remains unknown.
-Next, finish propagation and add the deterministic final continuity/readiness report and
-non-authoritative whole-dungeon cohesion rubric; models may diagnose but never edit or
-approve. Do not add live calls, Tier B/C, a migration, model-authored geometry/mechanics,
+room-narrative contexts before extending resumed coordination or adding a repeated runner.
+Structural publication derives and persists one self-hashed projection; puzzle,
+exploration, feature-interaction, trap, and objective tasks inherit the same version/hash
+and only explicitly selected authorized facts/sources, while standalone lore remains
+unknown. Next, finish propagation and add the deterministic final continuity/readiness
+report and non-authoritative whole-dungeon cohesion rubric; models may diagnose but never
+edit or approve. Do not add live calls, Tier B/C, a migration, model-authored
+geometry/mechanics,
 or preparation approval in that slice. See
 [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) and
 [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.

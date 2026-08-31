@@ -158,6 +158,7 @@ def _lineage(lineage_type: type, output: object, sequence: int) -> object:
             PromptedDungeonExplorationLineage,
             PromptedDungeonFeatureInteractionLineage,
             PromptedDungeonTrapLineage,
+            PromptedDungeonObjectiveLineage,
         )
         else {}
     )
