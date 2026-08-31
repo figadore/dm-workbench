@@ -95,17 +95,19 @@ commits superseded them. This file preserves only compact milestone history:
   reservation, durable body-free diagnostics, and frozen Tier A canary policy were
   established. Codex ordinary live use remained paused because the pinned transport
   did not send a hard output limit.
-- **P7-14f staged enrichment through objective continuity:** Removed prose-heavy guide
+- **P7-14f staged enrichment and provider-free final gate:** Removed prose-heavy guide
   content from the structural proposal and retained truthful readiness blockers
   (`ae6d406`). Added independently bounded exact-ID puzzle, exploration, feature, trap,
-  and objective contexts, dispatch, deterministic guide projection, accepted lineage,
-  and atomic DM-only child publication through `b9f9371`. A pure planner and one-step
-  coordinator skip accepted work and fail closed on inconsistent state. Every accepted
-  child preserves package/map bytes and prior task content; rejection leaves its parent
-  current with compact body-free diagnostics. One persisted creative-continuity pin now
-  reaches structural, puzzle, exploration, feature, trap, and objective artifacts/tasks.
-  Room-narrative continuity, final readiness/cohesion gates, repeated orchestration, and
-  staged live evaluation remained incomplete at this milestone.
+  objective, and homogeneous room-narrative contexts, dispatch, deterministic projection,
+  accepted lineage, and atomic DM-only child publication through `9a3d87f`. A pure planner
+  and one-step coordinator skip accepted work and fail closed on inconsistent state. One
+  creative-continuity pin reaches every staged task; accepted lineage retains its version/
+  hash and exact selected fact/source IDs. The pure final gate recomputes continuity,
+  sources, dependencies, required content, slot/lineage coverage, typed cross-task
+  references, and player secrecy with body-free diagnostics. A separate strict report
+  contract covers all six cohesion dimensions without edit, approval, blocker-clearing, or
+  canonical operations. Application-boundary enforcement, DM disposition, repeated
+  orchestration, and staged live evaluation remain incomplete.
 
 ### Deployment baseline
 

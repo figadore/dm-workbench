@@ -1832,20 +1832,25 @@ intents, selected facts/sources, and player-observable accepted-mechanic summari
 Standalone generation contains no campaign facts by default, and absent history or lore
 remains explicitly unknown.
 
-The required continuity projection now reaches every staged task. Before repeated/full-chain
-dispatch or a live Tier A run, add the final deterministic continuity/source/dependency/
-lineage/secrecy gate and bounded non-authoritative cohesion report. This remains a set of
-strict task-specific payloads, not a universal optional-field generation payload.
+The required continuity projection now reaches every staged task. A provider-free final
+gate recomputes the structural context/projection, exact authorized-source inheritance,
+topology/geometry and gate dependencies, required guide/readiness state, exact slot and
+successful-lineage coverage, typed cross-task references, and player-map secrecy. Accepted
+enrichment lineage now retains the continuity version/hash plus selected fact and exact
+source IDs so this gate can verify source inheritance rather than trusting an opaque context
+hash. Its diagnostics are bounded and body-free. A separate strict cohesion-report contract
+covers all six required dimensions and can carry only findings, exact evidence IDs, and a
+targeted existing-seam recommendation; it has no content-edit, blocker-clearing, approval,
+or canonical operation. This remains a set of strict task-specific payloads, not a universal
+optional-field generation payload.
 
-After all required enrichments, deterministic validation must verify continuity-hash/
-source inheritance, exact dependencies, required content, lineage, secrecy, and typed
-cross-task consistency. A separately bounded read-only holistic review may then report
-whole-dungeon concerns without editing content or approving preparation. Its structured
-report and the DM review packet must assess thematic reinforcement, history-to-environment
-causality, mechanic/objective unity, progression, intentional motif variation, and
-consistency with every selected campaign fact. Findings trigger explicit DM disposition or
-targeted regeneration of one exact enrichment seam—never a broad silent rewrite, canonical
-write, or model approval.
+Before repeated/full-chain dispatch or a live Tier A run, enforce this final gate at the
+prompted preparation-readiness/approval and review-packet boundaries, then add explicit DM
+disposition for the read-only cohesion report. The DM review must assess thematic
+reinforcement, history-to-environment causality, mechanic/objective unity, progression,
+intentional motif variation, and consistency with every selected campaign fact. Findings
+trigger explicit DM disposition or targeted regeneration of one exact enrichment seam—never
+a broad silent rewrite, canonical write, or model approval.
 
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
   Its model-visible proposal contains room identity/purpose, critical path, bounded

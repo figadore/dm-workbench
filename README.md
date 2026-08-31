@@ -303,7 +303,15 @@ accepted-mechanic summaries. It returns only concise read-aloud plus observable 
 every selected room, pins continuity in lineage and compact run metadata, and publishes one
 atomic DM-only child while preserving package/map bytes, all prior enrichments, unselected
 rooms, and unrelated readiness blockers. Stale continuity or unauthorized facts fail before
-dispatch; rejection or publication failure leaves the objective parent current. Accepted content remains available to the DM in the artifact,
+dispatch; rejection or publication failure leaves the objective parent current. Every
+accepted enrichment lineage also retains its continuity version/hash plus selected fact and
+exact source IDs. A provider-free final gate can therefore recompute continuity/source
+inheritance, package and guide dependencies, complete slot/content/lineage coverage, typed
+cross-task references, and player-map secrecy without reading provider bodies. Its bounded
+diagnostics contain only codes and exact IDs. The separate six-dimension cohesion-report
+contract is non-authoritative and permits only findings, evidence IDs, and targeted existing-
+seam recommendations—never content edits, approval, blocker clearing, or canon writes.
+Accepted content remains available to the DM in the artifact,
 while routine attempt reports contain only compact operational metadata and diagnostics;
 raw transport capture requires explicit local debug. Missing enrichment still truthfully
 blocks preparation readiness. Geometry, visibility, validation, rendering,
@@ -449,16 +457,15 @@ The internal P1-02 Library service now ingests bounded strict-UTF-8 files throug
 
 ## Current Next Step
 
-Continue **P7-14f** with the final deterministic continuity/readiness gate and bounded,
-non-authoritative whole-dungeon cohesion report before extending resumed coordination or
-adding a repeated runner. Structural publication and every puzzle, exploration,
-feature-interaction, trap, objective, and room-narrative task now share one persisted
-creative-continuity version/hash while receiving only task-relevant room intent, explicitly
-selected authorized facts/sources, and bounded prior-task summaries; standalone lore remains
-unknown. The next slice must verify continuity/source inheritance, exact dependencies,
-required content, lineage, and secrecy, then report cohesion findings without editing,
-approving, or writing canon. Do not add live calls, Tier B/C, a migration, model-authored
-geometry/mechanics, or preparation approval in that slice. See
+Continue **P7-14f** by enforcing the provider-free final continuity/readiness gate at the
+prompted preparation-readiness/approval and review-packet boundaries, then add explicit DM
+disposition for the separate non-authoritative cohesion report. The gate already recomputes
+continuity and exact source inheritance, dependencies, required content, lineage, typed
+cross-task references, and player secrecy with bounded body-free diagnostics. The report
+contract covers all six whole-dungeon dimensions but cannot edit content, clear blockers,
+approve preparation, or write canon. Do not add repeated/full-chain dispatch, live calls,
+Tier B/C, a migration, model-authored geometry/mechanics, or canonical writes before those
+application boundaries are proven. See
 [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) and
 [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
 

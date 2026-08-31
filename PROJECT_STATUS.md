@@ -7,62 +7,66 @@
 ## Current State
 
 - **Updated:** 2026-08-31
-- **Branch/HEAD:** `fast-track-prompt-to-dungeon` at `b9f9371`, one commit ahead of
+- **Branch/HEAD:** `fast-track-prompt-to-dungeon` at `9a3d87f`, two commits ahead of
   `origin/fast-track-prompt-to-dungeon`, plus the uncommitted slice below.
-- **Working tree:** **uncommitted P7-14f room-narrative creative-continuity
-  propagation**. No migration, live provider call, credential, canonical campaign path,
-  preparation approval path, repeated/full-chain dispatcher, final continuity gate, or
-  pure-package change is partially edited.
+- **Working tree:** **uncommitted P7-14f final deterministic staged-dungeon gate and
+  read-only cohesion-report contracts**. No migration, live provider call, credential,
+  canonical campaign path, preparation approval enforcement, repeated/full-chain
+  dispatcher, or pure-package change is partially edited.
 - **Current task:** **P7-14f — Staged Tier A authoring and anti-overfitting evaluation.**
-- **Task state:** structural and every staged enrichment artifact/task now share one exact
-  creative-continuity pin. The final deterministic continuity/readiness gate and bounded
-  non-authoritative cohesion report remain before repeated orchestration or live use.
+- **Task state:** the pure final gate and strict report shape now exist. They are not yet
+  enforced by prompted preparation approval/readiness or written into the DM review packet;
+  no holistic provider call or DM disposition workflow exists.
 - **Schema head:** `0008_workbench_defaults`; no migration changed or is pending.
 - **Retention gate:** **not crossed.** Active V1 contracts evolve in place; there is no
   retained real-user artifact, external consumer, non-disposable deployment, or promised
   replay requirement.
 
-## Implemented Room-Narrative Continuity Slice
+## Implemented Final-Gate Slice
 
 Trusted Workbench code now:
 
-- adds bounded, unique continuity-fact selections to room-narrative policy and requires
-  `DungeonEnrichmentContinuityContext` in the strict model-visible input;
-- rebuilds the persisted structural projection from its exact context/plan before narrative
-  context construction, then verifies the projection hash, exact package, selected rooms,
-  authorized facts, and exact cited sources;
-- exposes only selected room intents and approved fact/source subsets alongside existing
-  player-observable local puzzle/exploration/feature/trap/objective summaries;
-- deterministically rebuilds the complete strict context before projecting accepted prose
-  into only the selected blank room narratives;
-- pins the shared continuity hash in accepted narrative lineage, publication validation,
-  provider-visible context, prompt/artifact run scope and schema metadata, context source
-  links, and artifact validation reports; and
-- preserves package/map bytes, every accepted mechanic/objective and lineage, unselected
-  room state, unrelated readiness blockers, preparation lifecycle, and canonical state.
+- exposes `validate_final_staged_dungeon()` as a pure provider-free function over one
+  immutable `DungeonStudioSpecification`;
+- rebuilds the accepted structural plan/context and exact creative-continuity projection,
+  validates structural context pin/source inheritance, and compares the persisted
+  projection;
+- evolves accepted puzzle/exploration/feature/trap/objective/narrative lineage in place to
+  retain the continuity version/hash plus exact selected fact and cited source IDs;
+- recomputes topology/geometry and exact gate/dependency projection, current preparation
+  readiness, complete staged slot/content/successful-lineage coverage, typed cross-task
+  references, and player SVG secrecy;
+- returns seven stable check families with bounded code/ID-only diagnostics and no prompt,
+  guide, provider, or campaign body;
+- defines a separate six-dimension `DungeonCohesionReviewReport` contract with bounded
+  findings, exact evidence IDs, and only targeted existing-seam recommendations; and
+- gives that report no content-edit, blocker-clearing, preparation-approval, persistence,
+  provider, or canonical operation.
 
-Models still propose preparation prose only. They cannot change topology, geometry,
-visibility, deterministic arithmetic, accepted mechanics/objectives, preparation approval,
-or canon.
+The gate does not mutate or persist the artifact and does not approve preparation. The
+cohesion report is a contract only; no model has been called and no report can self-approve.
 
 ## Tests Added/Extended
 
-- Grounded synthetic Moonseed coverage proves narrative and objective contexts share one
-  version/hash while narrative receives only selected room intents, its authorized fact and
-  exact source, and player-observable accepted-mechanic summaries.
-- Provider-free negatives prove narrative construction rejects a stale hash or unauthorized
-  fact before any provider boundary and requires unique fact selections.
-- Projection coverage proves deterministic continuity rebuild while preserving package,
-  prior guide state, unselected rooms, and unrelated blockers.
-- Faux-provider PostgreSQL assertions cover provider-visible continuity, objective-to-
-  narrative hash inheritance, accepted-lineage pins, prompt/artifact run metadata, report
-  pins, source links, and unchanged atomic child/map behavior when a database is available.
+A grounded synthetic glasshouse fixture now exercises all staged task kinds plus a real
+certified gate/dependency. Provider-free coverage proves:
+
+- one fully enriched specification passes all seven final checks without mutation;
+- every enrichment lineage carries the exact authorized fact/source inheritance;
+- stale package/dependency projection, readiness, continuity lineage, and source lineage
+  fail closed with bounded body-free diagnostics;
+- a malformed protected trap marker exposed to the player renderer is detected even when
+  its in-memory package classification is relabelled; and
+- the cohesion report requires all six dimensions and rejects approval/edit fields.
 
 ## Active Boundaries and Known Issues
 
-- Final continuity/source/dependency/lineage/secrecy checks and the bounded,
-  non-authoritative whole-dungeon cohesion report are not implemented. Do not add repeated/
-  full-chain dispatch until that gate exists.
+- Prompted `DungeonStudioService.approve()` still checks only legacy preparation readiness.
+  It must invoke the final gate for staged prompted artifacts and fail closed before the
+  lifecycle transition. Provider-independent manually authored Studio artifacts must retain
+  their existing approval path rather than being forced to fabricate model lineage.
+- The development review packet still predates the six-dimension cohesion report and does
+  not record deterministic-gate evidence or explicit DM disposition.
 - Broader resumed feature/trap/objective/narrative coordinator coverage, automatic chain
   repetition, multi-case quality comparison, staged live result, Tier B/C, and resumed
   output/print work remain pending.
@@ -72,10 +76,11 @@ or canon.
   ordinary rollout permission.
 - Package and root pytest suites must run separately because duplicate test module basenames
   cause an import-file-mismatch when collected in one process.
-- Disposable-PostgreSQL narrative integration was skipped locally because
-  `DM_TEST_DATABASE_URL` is unset and Docker is unavailable. The last full integration run
-  still has three unrelated failures (metadata drift, embedding-run timestamp ordering,
-  and missing source-path history in a direct fixture).
+- Disposable-PostgreSQL enrichment integration is skipped locally because
+  `DM_TEST_DATABASE_URL` is unset and Docker is unavailable.
+- A repository-wide Ruff/format run still reports unrelated pre-existing Library/import and
+  formatting drift outside this slice; focused lint/format over every changed Python file
+  passes.
 - No provider was contacted. No credential, canonical campaign write, preparation approval,
   migration, redaction system, or second persistence store is present.
 
@@ -83,44 +88,44 @@ or canon.
 
 Uncommitted production/tests:
 
-- `src/dm_assistant/orchestration/dungeons/{contracts.py,service.py}`
-- `src/dm_assistant/orchestration/dungeons/{room_narrative_application,room_narrative_prompting}.py`
-- room-narrative continuity unit/integration tests and staged-planner fixture update
+- `src/dm_assistant/orchestration/dungeons/final_validation.py`
+- dungeon exports/contracts and all six enrichment prompting modules
+- `tests/unit/test_dungeon_staged_enrichment_plan.py`
 
 Uncommitted documentation:
 
 - `README.md`
-- `dm-assistant-implementation-plan.md`
+- `dm-assistant-{implementation-plan,technical-architecture}.md`
 - `dungeon-generation-recovery-plan.md`
 - `PROJECT_HISTORY.md`
 - `PROJECT_STATUS.md`
 
 Recorded for this slice:
 
-- `uv run pytest -q tests/unit tests/evals` -> **209 passed**.
+- `uv run pytest -q tests/unit tests/evals` -> **213 passed**.
 - `uv run pytest -q packages/dungeon-engine/tests` -> **139 passed**.
-- `uv run pytest -q -rs tests/integration/test_dungeon_room_narrative_prompt.py` ->
-  **3 skipped** (`DM_TEST_DATABASE_URL` unset).
-- Strict mypy over changed production and focused unit paths -> **passed**.
-- Ruff lint/format over changed Python sources/tests -> **passed**.
-- `git diff --check` -> **passed** before the final handoff refresh.
+- focused final-gate/continuity/enrichment contract tests -> **28 passed**.
+- focused PostgreSQL enrichment suites -> **15 skipped** (`DM_TEST_DATABASE_URL` unset).
+- strict mypy over every changed production Python file and focused tests -> **passed**.
+- Ruff lint/format over every changed Python file -> **passed**.
+- `git diff --check` -> **passed** before this handoff refresh.
 
-Suggested commit subject: `P7-14f pin creative continuity through room narratives`
+Suggested commit subject: `P7-14f add final staged-dungeon continuity gate`
 
 ## Single Next Recommended Task
 
-**Add the final deterministic staged-dungeon continuity/readiness gate before resumed
-coordinator coverage or chain repetition.**
+**Enforce the final deterministic gate at the prompted preparation approval boundary and
+surface its evidence in the DM review packet before resumed coordination or repetition.**
 
-**First concrete action:** add failing provider-free tests over a fully enriched synthetic
-specification that recompute and require one structural/enrichment continuity hash, exact
-authorized-source inheritance, exact slot/dependency and successful-lineage coverage,
-required content, typed cross-task consistency, and player-secrecy cleanliness. Then expose
-bounded body-free diagnostics plus a separate read-only cohesion-report contract that cannot
-edit content, clear blockers, approve preparation, or write canon.
+**First concrete action:** add failing provider-free service tests proving a fully enriched
+prompted artifact cannot transition to `approved_for_play` when any final-gate check fails,
+while an existing model-independent manually authored artifact keeps its current readiness-
+based approval path. Then persist/render only the final result's body-free hash/check
+summary and require explicit DM disposition of all six cohesion dimensions; do not let a
+report clear deterministic blockers.
 
 Do **not** add repeated/full-chain dispatch, a live/holistic provider call, Tier B/C, a
-migration, queue, model-authored mechanics, preparation approval, or canon writes.
+migration, queue, model-authored mechanics, automatic preparation approval, or canon writes.
 
 ## Authoritative References
 

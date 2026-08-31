@@ -153,6 +153,16 @@ from dm_assistant.orchestration.dungeons.feature_interaction_prompting import (
     DungeonFeatureInteractionSubmissionService,
     resolve_dungeon_feature_interaction_prompt_profile,
 )
+from dm_assistant.orchestration.dungeons.final_validation import (
+    DungeonCohesionAssessment,
+    DungeonCohesionFinding,
+    DungeonCohesionReviewReport,
+    DungeonCohesionTargetedRecommendation,
+    DungeonFinalValidationCheck,
+    DungeonFinalValidationDiagnostic,
+    DungeonFinalValidationResult,
+    validate_final_staged_dungeon,
+)
 from dm_assistant.orchestration.dungeons.objective_application import (
     DungeonObjectivePromptApplicationService,
     DungeonObjectivePromptAttemptResult,
@@ -256,6 +266,10 @@ __all__ = [
     "DungeonContinuityLoopIntent",
     "DungeonContinuityObjectiveIntent",
     "DungeonContinuityRoomIntent",
+    "DungeonCohesionAssessment",
+    "DungeonCohesionFinding",
+    "DungeonCohesionReviewReport",
+    "DungeonCohesionTargetedRecommendation",
     "DungeonCreativeContinuityProjection",
     "DungeonEnrichmentContinuityContext",
     "DungeonPromptApplicationService",
@@ -296,6 +310,9 @@ __all__ = [
     "DungeonFeatureInteractionSubmissionResult",
     "DungeonFeatureInteractionSubmissionService",
     "DungeonFeatureInteractionValidationResult",
+    "DungeonFinalValidationCheck",
+    "DungeonFinalValidationDiagnostic",
+    "DungeonFinalValidationResult",
     "DungeonGenerationProposal",
     "DungeonGenerationRegressionCase",
     "DungeonGuideContentIssue",
@@ -418,4 +435,5 @@ __all__ = [
     "resolve_dungeon_puzzle_prompt_profile",
     "resolve_dungeon_room_narrative_prompt_profile",
     "resolve_dungeon_trap_prompt_profile",
+    "validate_final_staged_dungeon",
 ]

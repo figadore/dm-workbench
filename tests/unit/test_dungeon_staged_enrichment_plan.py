@@ -5,13 +5,26 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+from pydantic import ValidationError
 
 from dm_assistant.modules.modeling import ModelRunRecord
+from dm_assistant.modules.preparation import (
+    ContextSourceLink,
+    DungeonGenerationContext,
+    DungeonGenerationFact,
+    GenerationContextEnvelope,
+    GenerationContextPin,
+    VisibilityPolicy,
+    canonical_json_sha256,
+)
 from dm_assistant.orchestration.dungeons import (
+    DungeonCohesionAssessment,
+    DungeonCohesionReviewReport,
     DungeonExplorationApproach,
     DungeonExplorationEnrichmentOutput,
     DungeonFeatureInteractionAffordance,
     DungeonFeatureInteractionEnrichmentOutput,
+    DungeonGenerationProposal,
     DungeonGuidePlayerChoice,
     DungeonGuideRunnableContent,
     DungeonObjectiveEnrichmentOutput,
@@ -25,19 +38,29 @@ from dm_assistant.orchestration.dungeons import (
     DungeonTrapEnrichmentOutput,
     PromptedDungeonExplorationLineage,
     PromptedDungeonFeatureInteractionLineage,
+    PromptedDungeonModelLineage,
     PromptedDungeonObjectiveLineage,
     PromptedDungeonPuzzleLineage,
     PromptedDungeonRoomNarrativeLineage,
     PromptedDungeonTrapLineage,
+    derive_dungeon_creative_continuity,
     plan_dungeon_staged_enrichment,
+    validate_final_staged_dungeon,
 )
 from dm_assistant.orchestration.dungeons.contracts import DungeonGuidePuzzle
+from dm_assistant.orchestration.dungeons.final_validation import (
+    DungeonCohesionDimension,
+)
 from dm_assistant.orchestration.dungeons.service import (
     build_dungeon_dm_guide,
     build_dungeon_preparation_readiness,
 )
 from dm_dungeon import DungeonPlan, LayoutRequest, compile_dungeon_plan, generate_layout
-from dm_dungeon.contracts import EncounterSlotIntent, RoomMechanicMarkerKind
+from dm_dungeon.contracts import (
+    EncounterSlotIntent,
+    RoomMechanicMarkerKind,
+    Visibility,
+)
 from dm_dungeon.layout import ORTHOGONAL_LAYOUT_GENERATOR_VERSION
 
 
@@ -82,6 +105,16 @@ def _specification(case: str) -> DungeonStudioSpecification:
                     f"{case}_dial",
                     f"{case}_vault",
                 ],
+                "gates": [
+                    {
+                        "ref": f"{case}_vault_gate",
+                        "between_rooms": [f"{case}_dial", f"{case}_vault"],
+                        "kind": "locked",
+                        "dependency_kind": "key",
+                        "dependency_room": f"{case}_entry",
+                        "dependency_name": "Synthetic Shutter Key",
+                    }
+                ],
                 "room_contents": [
                     {
                         "room_ref": f"{case}_entry",
@@ -120,12 +153,85 @@ def _specification(case: str) -> DungeonStudioSpecification:
     layout = generate_layout(request)
     assert layout.success and layout.package is not None
     guide = build_dungeon_dm_guide(request, layout.package, plan)
+    guide_document = guide.model_dump(mode="python")
+    guide_document["dependencies"] = tuple(
+        dependency.model_copy(
+            update={
+                "discovery": "The synthetic shutter key hangs beside the entry diagram.",
+                "content": _content("gate dependency"),
+            }
+        )
+        for dependency in guide.dependencies
+    )
+    guide_document["content_issues"] = tuple(
+        issue for issue in guide.content_issues if issue.kind != "gate_dependency"
+    )
+    guide = type(guide).model_validate(guide_document)
+    source = ContextSourceLink(
+        source_kind="document_revision",
+        source_id="glasshouse_history_source",
+        revision_id="synthetic_revision",
+        sha256="a" * 64,
+        visibility_policy=VisibilityPolicy.DM_ONLY,
+    )
+    payload = DungeonGenerationContext(
+        context_version="1.0.0",
+        prompt_input_sha256="b" * 64,
+        tones=("wind-worn",),
+        motif_variation_constraints=(
+            "Vary the glass motif between light, sound, and unstable footing.",
+        ),
+        selected_facts=(
+            DungeonGenerationFact(
+                fact_id="glasshouse_history",
+                kind="history",
+                summary="The glasshouse shutters once protected rare synthetic seeds.",
+                source_ids=(source.source_id,),
+            ),
+        ),
+        grounding_mode="selected_campaign",
+        preparation_owner_id="dm",
+        context_provenance="synthetic_final_gate_fixture",
+    )
+    payload_document = payload.model_dump(mode="json")
+    envelope = GenerationContextEnvelope(
+        context_kind="dungeon_generation",
+        payload_version="1.0.0",
+        campaign_revision_id=UUID(int=101),
+        corpus_snapshot_id=UUID(int=102),
+        rules_profile_id=UUID(int=103),
+        visibility_policy=VisibilityPolicy.DM_ONLY,
+        source_links=(source,),
+        payload=payload_document,
+        payload_sha256=canonical_json_sha256(payload_document),
+    )
+    context_pin = GenerationContextPin(
+        envelope_kind=envelope.context_kind,
+        payload_version=envelope.payload_version,
+        envelope=envelope.model_dump(mode="json"),
+        payload_sha256=envelope.payload_sha256,
+        source_links=envelope.source_links,
+    )
+    continuity = derive_dungeon_creative_continuity(envelope, plan)
+    proposal = DungeonGenerationProposal(
+        proposal_version="1",
+        plan=plan,
+        intent_summary="Build a synthetic glasshouse progression.",
+    )
+    structural_lineage = PromptedDungeonModelLineage(
+        model_run_id=UUID(int=100),
+        model_run=_run(proposal),
+        proposal=proposal,
+    )
     return DungeonStudioSpecification(
         schema_version="1.0.0",
         layout_request=request,
         package=layout.package,
+        structural_context=context_pin,
+        creative_continuity=continuity,
         dm_guide=guide,
         preparation_readiness=build_dungeon_preparation_readiness(guide),
+        model_lineage=(structural_lineage,),
     )
 
 
@@ -149,9 +255,19 @@ def _run(output: Any) -> ModelRunRecord:
     return ModelRunRecord.model_construct(status="succeeded", output_payload=payload)
 
 
-def _lineage(lineage_type: type, output: object, sequence: int) -> object:
+def _lineage(
+    lineage_type: type,
+    output: object,
+    sequence: int,
+    continuity_sha256: str,
+) -> object:
     continuity = (
-        {"creative_continuity_sha256": "f" * 64}
+        {
+            "creative_continuity_version": "1.0.0",
+            "creative_continuity_sha256": continuity_sha256,
+            "selected_fact_ids": ("glasshouse_history",),
+            "source_ids": ("glasshouse_history_source",),
+        }
         if lineage_type
         in (
             PromptedDungeonPuzzleLineage,
@@ -182,6 +298,7 @@ def _accept_next(
     guide = specification.dm_guide
     assert guide is not None
     package_id = specification.package.id
+    assert specification.creative_continuity is not None
     document = guide.model_dump(mode="python")
     update: dict[str, object]
     output: Any
@@ -230,7 +347,12 @@ def _accept_next(
         update = {
             "puzzle_model_lineage": (
                 *specification.puzzle_model_lineage,
-                _lineage(PromptedDungeonPuzzleLineage, output, sequence),
+                _lineage(
+                    PromptedDungeonPuzzleLineage,
+                    output,
+                    sequence,
+                    specification.creative_continuity.projection_sha256,
+                ),
             )
         }
     elif task.kind == "exploration":
@@ -283,7 +405,12 @@ def _accept_next(
         update = {
             "exploration_model_lineage": (
                 *specification.exploration_model_lineage,
-                _lineage(PromptedDungeonExplorationLineage, output, sequence),
+                _lineage(
+                    PromptedDungeonExplorationLineage,
+                    output,
+                    sequence,
+                    specification.creative_continuity.projection_sha256,
+                ),
             )
         }
     elif task.kind == "feature_interaction":
@@ -317,7 +444,12 @@ def _accept_next(
         update = {
             "feature_interaction_model_lineage": (
                 *specification.feature_interaction_model_lineage,
-                _lineage(PromptedDungeonFeatureInteractionLineage, output, sequence),
+                _lineage(
+                    PromptedDungeonFeatureInteractionLineage,
+                    output,
+                    sequence,
+                    specification.creative_continuity.projection_sha256,
+                ),
             )
         }
     elif task.kind == "trap":
@@ -353,7 +485,12 @@ def _accept_next(
         update = {
             "trap_model_lineage": (
                 *specification.trap_model_lineage,
-                _lineage(PromptedDungeonTrapLineage, output, sequence),
+                _lineage(
+                    PromptedDungeonTrapLineage,
+                    output,
+                    sequence,
+                    specification.creative_continuity.projection_sha256,
+                ),
             )
         }
     elif task.kind == "objective":
@@ -387,7 +524,12 @@ def _accept_next(
         update = {
             "objective_model_lineage": (
                 *specification.objective_model_lineage,
-                _lineage(PromptedDungeonObjectiveLineage, output, sequence),
+                _lineage(
+                    PromptedDungeonObjectiveLineage,
+                    output,
+                    sequence,
+                    specification.creative_continuity.projection_sha256,
+                ),
             )
         }
     else:
@@ -421,9 +563,37 @@ def _accept_next(
         update = {
             "room_narrative_model_lineage": (
                 *specification.room_narrative_model_lineage,
-                _lineage(PromptedDungeonRoomNarrativeLineage, output, sequence),
+                _lineage(
+                    PromptedDungeonRoomNarrativeLineage,
+                    output,
+                    sequence,
+                    specification.creative_continuity.projection_sha256,
+                ),
             )
         }
+
+    room_ref_by_id = {
+        item.room_id: item.ref
+        for item in specification.layout_request.certificate.rooms
+    }
+    issue_kind = {
+        "puzzle": "puzzle",
+        "exploration": "encounter",
+        "feature_interaction": "feature",
+        "objective": "objective",
+        "room_narrative": "room",
+    }.get(task.kind)
+    if issue_kind is not None:
+        selected_room_refs = {room_ref_by_id[room_id] for room_id in task.room_ids}
+        document["content_issues"] = tuple(
+            issue
+            for issue in guide.content_issues
+            if not (
+                issue.code == "guide_content.required_missing"
+                and issue.kind == issue_kind
+                and issue.room_ref in selected_room_refs
+            )
+        )
 
     enriched_guide = type(guide).model_validate(document)
     return specification.model_copy(
@@ -538,3 +708,186 @@ def test_planner_blocks_missing_guide_and_content_without_accepted_lineage() -> 
     assert [item.code for item in blocked.blockers] == [
         "staged_enrichment.accepted_state_inconsistent"
     ]
+
+
+def _fully_enriched_specification(case: str) -> DungeonStudioSpecification:
+    specification = _specification(case)
+    for sequence in range(1, 8):
+        plan = plan_dungeon_staged_enrichment(specification)
+        if plan.status == "complete":
+            break
+        specification = _accept_next(specification, sequence)
+    assert plan_dungeon_staged_enrichment(specification).status == "complete"
+    return specification
+
+
+def test_final_gate_accepts_one_fully_enriched_exact_source_lineage() -> None:
+    specification = _fully_enriched_specification("silver")
+    before = specification.model_dump_json()
+
+    result = validate_final_staged_dungeon(specification)
+
+    assert result.valid
+    assert not result.diagnostics
+    assert all(check.passed for check in result.checks)
+    assert specification.model_dump_json() == before
+    assert specification.creative_continuity is not None
+    assert result.creative_continuity_sha256 == (
+        specification.creative_continuity.projection_sha256
+    )
+    for lineage_group in (
+        specification.puzzle_model_lineage,
+        specification.exploration_model_lineage,
+        specification.feature_interaction_model_lineage,
+        specification.trap_model_lineage,
+        specification.objective_model_lineage,
+        specification.room_narrative_model_lineage,
+    ):
+        assert lineage_group
+        assert {item.selected_fact_ids for item in lineage_group} == {
+            ("glasshouse_history",)
+        }
+        assert {item.source_ids for item in lineage_group} == {
+            ("glasshouse_history_source",)
+        }
+
+
+def test_final_gate_reports_body_free_source_lineage_content_and_structure_failures() -> (
+    None
+):
+    specification = _fully_enriched_specification("bronze")
+    stale_puzzle = specification.puzzle_model_lineage[0].model_copy(
+        update={"source_ids": ("unauthorized_source",)}
+    )
+    stale_narrative = specification.room_narrative_model_lineage[0].model_copy(
+        update={"creative_continuity_sha256": "0" * 64}
+    )
+    readiness = specification.preparation_readiness
+    guide = specification.dm_guide
+    assert readiness is not None and guide is not None and guide.dependencies
+    broken_guide = guide.model_copy(
+        update={
+            "dependencies": (
+                guide.dependencies[0].model_copy(
+                    update={"target_gate_id": "unknown_gate"}
+                ),
+            )
+        }
+    )
+    broken = specification.model_copy(
+        update={
+            "layout_request": specification.layout_request.model_copy(
+                update={"package_id": "stale_package_id"}
+            ),
+            "dm_guide": broken_guide,
+            "puzzle_model_lineage": (stale_puzzle,),
+            "room_narrative_model_lineage": (stale_narrative,),
+            "preparation_readiness": readiness.model_copy(update={"ready": False}),
+        }
+    )
+
+    result = validate_final_staged_dungeon(broken)
+
+    assert not result.valid
+    assert {item.code for item in result.diagnostics} >= {
+        "dungeon_final.dependency_mismatch",
+        "dungeon_final.required_content_missing",
+        "dungeon_final.lineage_continuity_mismatch",
+        "dungeon_final.lineage_source_mismatch",
+    }
+    serialized = result.model_dump_json()
+    assert "Observable puzzle situation" not in serialized
+    assert "Pale light crosses" not in serialized
+    assert len(result.diagnostics) <= 64
+
+
+def test_final_gate_fails_closed_when_a_protected_marker_becomes_player_visible() -> (
+    None
+):
+    specification = _fully_enriched_specification("ivory")
+    trap_id = specification.trap_model_lineage[0].output.trap_id
+    trap_marker = next(
+        marker
+        for marker in specification.package.room_mechanic_markers
+        if marker.id == trap_id
+    )
+    player_layer = trap_marker.layer_id
+    tampered_layers = tuple(
+        layer.model_copy(
+            update={
+                "visibility": Visibility.PLAYER_SAFE,
+                "include_in_player_export": True,
+            }
+        )
+        if layer.id == player_layer
+        else layer
+        for layer in specification.package.layers
+    )
+    tampered_markers = tuple(
+        marker.model_copy(
+            update={
+                "kind": RoomMechanicMarkerKind.FEATURE,
+                "visibility": Visibility.PLAYER_SAFE,
+            }
+        )
+        if marker.id == trap_id
+        else marker
+        for marker in specification.package.room_mechanic_markers
+    )
+    tampered_package = specification.package.model_copy(
+        update={
+            "layers": tampered_layers,
+            "room_mechanic_markers": tampered_markers,
+        }
+    )
+    tampered = specification.model_copy(update={"package": tampered_package})
+
+    result = validate_final_staged_dungeon(tampered)
+
+    assert not result.valid
+    assert any(
+        item.code == "dungeon_final.player_secret_leak"
+        and trap_id in item.component_ids
+        for item in result.diagnostics
+    )
+
+
+def test_cohesion_report_is_six_dimension_read_only_metadata() -> None:
+    specification = _fully_enriched_specification("pearl")
+    validation = validate_final_staged_dungeon(specification)
+    assert validation.valid and validation.creative_continuity_sha256 is not None
+    dimensions: tuple[DungeonCohesionDimension, ...] = (
+        "thematic_reinforcement",
+        "history_environment_causality",
+        "mechanic_objective_unity",
+        "progression",
+        "motif_variation",
+        "selected_lore_consistency",
+    )
+    assessments = tuple(
+        DungeonCohesionAssessment(dimension=dimension, decision="pass")
+        for dimension in dimensions
+    )
+    report_document = {
+        "schema_version": "1.0.0",
+        "specification_sha256": validation.specification_sha256,
+        "deterministic_validation_sha256": canonical_json_sha256(
+            validation.model_dump(mode="json")
+        ),
+        "creative_continuity_sha256": validation.creative_continuity_sha256,
+        "reviewer_kind": "bounded_model",
+        "non_authoritative": True,
+        "assessments": [item.model_dump(mode="json") for item in assessments],
+    }
+
+    report = DungeonCohesionReviewReport.model_validate(report_document)
+
+    assert report.non_authoritative is True
+    schema_properties = report.model_json_schema()["properties"]
+    assert "approved" not in schema_properties
+    assert "content_edits" not in schema_properties
+    assert "canonical_operations" not in schema_properties
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        DungeonCohesionReviewReport.model_validate(
+            {**report_document, "approved": True}
+        )

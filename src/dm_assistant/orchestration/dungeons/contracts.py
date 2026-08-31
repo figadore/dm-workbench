@@ -57,6 +57,15 @@ class WorkflowModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=False)
 
 
+def _require_unique_enrichment_source_lineage(
+    selected_fact_ids: tuple[str, ...], source_ids: tuple[str, ...]
+) -> None:
+    if len(selected_fact_ids) != len(set(selected_fact_ids)):
+        raise ValueError("enrichment lineage requires unique selected fact IDs")
+    if len(source_ids) != len(set(source_ids)):
+        raise ValueError("enrichment lineage requires unique source IDs")
+
+
 class DungeonContinuityRoomIntent(WorkflowModel):
     """Accepted structural intent for one locally referenced plan room."""
 
@@ -416,7 +425,10 @@ class PromptedDungeonExplorationLineage(WorkflowModel):
 
     model_run_id: UUID
     context_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    creative_continuity_version: Literal["1.0.0"]
     creative_continuity_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    selected_fact_ids: tuple[GuideLocalRef, ...] = Field(default=(), max_length=8)
+    source_ids: tuple[ExactDungeonComponentId, ...] = Field(default=(), max_length=16)
     model_run: ModelRunRecord
     output: DungeonExplorationEnrichmentOutput
 
@@ -428,6 +440,9 @@ class PromptedDungeonExplorationLineage(WorkflowModel):
             raise ValueError("exploration lineage requires a successful model run")
         if self.model_run.output_payload != self.output.model_dump(mode="json"):
             raise ValueError("exploration lineage output must match the model run")
+        _require_unique_enrichment_source_lineage(
+            self.selected_fact_ids, self.source_ids
+        )
         return self
 
 
@@ -572,7 +587,10 @@ class PromptedDungeonFeatureInteractionLineage(WorkflowModel):
 
     model_run_id: UUID
     context_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    creative_continuity_version: Literal["1.0.0"]
     creative_continuity_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    selected_fact_ids: tuple[GuideLocalRef, ...] = Field(default=(), max_length=8)
+    source_ids: tuple[ExactDungeonComponentId, ...] = Field(default=(), max_length=16)
     model_run: ModelRunRecord
     output: DungeonFeatureInteractionEnrichmentOutput
 
@@ -588,6 +606,9 @@ class PromptedDungeonFeatureInteractionLineage(WorkflowModel):
             raise ValueError(
                 "feature interaction lineage output must match the model run"
             )
+        _require_unique_enrichment_source_lineage(
+            self.selected_fact_ids, self.source_ids
+        )
         return self
 
 
@@ -728,7 +749,10 @@ class PromptedDungeonTrapLineage(WorkflowModel):
 
     model_run_id: UUID
     context_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    creative_continuity_version: Literal["1.0.0"]
     creative_continuity_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    selected_fact_ids: tuple[GuideLocalRef, ...] = Field(default=(), max_length=8)
+    source_ids: tuple[ExactDungeonComponentId, ...] = Field(default=(), max_length=16)
     model_run: ModelRunRecord
     output: DungeonTrapEnrichmentOutput
 
@@ -738,6 +762,9 @@ class PromptedDungeonTrapLineage(WorkflowModel):
             raise ValueError("trap lineage requires a successful model run")
         if self.model_run.output_payload != self.output.model_dump(mode="json"):
             raise ValueError("trap lineage output must match the model run")
+        _require_unique_enrichment_source_lineage(
+            self.selected_fact_ids, self.source_ids
+        )
         return self
 
 
@@ -927,7 +954,10 @@ class PromptedDungeonObjectiveLineage(WorkflowModel):
 
     model_run_id: UUID
     context_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    creative_continuity_version: Literal["1.0.0"]
     creative_continuity_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    selected_fact_ids: tuple[GuideLocalRef, ...] = Field(default=(), max_length=8)
+    source_ids: tuple[ExactDungeonComponentId, ...] = Field(default=(), max_length=16)
     model_run: ModelRunRecord
     output: DungeonObjectiveEnrichmentOutput
 
@@ -937,6 +967,9 @@ class PromptedDungeonObjectiveLineage(WorkflowModel):
             raise ValueError("objective lineage requires a successful model run")
         if self.model_run.output_payload != self.output.model_dump(mode="json"):
             raise ValueError("objective lineage output must match the model run")
+        _require_unique_enrichment_source_lineage(
+            self.selected_fact_ids, self.source_ids
+        )
         return self
 
 
@@ -1092,7 +1125,10 @@ class PromptedDungeonRoomNarrativeLineage(WorkflowModel):
 
     model_run_id: UUID
     context_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    creative_continuity_version: Literal["1.0.0"]
     creative_continuity_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    selected_fact_ids: tuple[GuideLocalRef, ...] = Field(default=(), max_length=8)
+    source_ids: tuple[ExactDungeonComponentId, ...] = Field(default=(), max_length=16)
     model_run: ModelRunRecord
     output: DungeonRoomNarrativeEnrichmentOutput
 
@@ -1104,6 +1140,9 @@ class PromptedDungeonRoomNarrativeLineage(WorkflowModel):
             raise ValueError("room narrative lineage requires a successful model run")
         if self.model_run.output_payload != self.output.model_dump(mode="json"):
             raise ValueError("room narrative lineage output must match the model run")
+        _require_unique_enrichment_source_lineage(
+            self.selected_fact_ids, self.source_ids
+        )
         return self
 
 
@@ -1334,7 +1373,10 @@ class PromptedDungeonPuzzleLineage(WorkflowModel):
 
     model_run_id: UUID
     context_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    creative_continuity_version: Literal["1.0.0"]
     creative_continuity_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    selected_fact_ids: tuple[GuideLocalRef, ...] = Field(default=(), max_length=8)
+    source_ids: tuple[ExactDungeonComponentId, ...] = Field(default=(), max_length=16)
     model_run: ModelRunRecord
     output: DungeonPuzzleEnrichmentOutput
 
@@ -1344,6 +1386,9 @@ class PromptedDungeonPuzzleLineage(WorkflowModel):
             raise ValueError("puzzle lineage requires a successful model run")
         if self.model_run.output_payload != self.output.model_dump(mode="json"):
             raise ValueError("puzzle lineage output must match the model run")
+        _require_unique_enrichment_source_lineage(
+            self.selected_fact_ids, self.source_ids
+        )
         return self
 
 
