@@ -7,76 +7,74 @@
 ## Current State
 
 - **Updated:** 2026-08-31
-- **Branch/HEAD:** `fast-track-prompt-to-dungeon` at `4a4e0a2`, synchronized with
+- **Branch/HEAD:** `fast-track-prompt-to-dungeon` at `468c162`, one commit ahead of
   `origin/fast-track-prompt-to-dungeon`, plus the uncommitted slice below.
-- **Working tree:** **uncommitted P7-14f resumed exploration coordinator regression**.
-  No migration, live provider call, credential, canonical campaign path, preparation
-  approval path, repeated/full-chain dispatcher, or pure-package change is partially
-  edited.
+- **Working tree:** **uncommitted P7-14f creative-continuity foundation and puzzle/
+  exploration propagation**. No migration, live provider call, credential, canonical
+  campaign path, preparation approval path, repeated/full-chain dispatcher, or pure-package
+  change is partially edited.
 - **Current task:** **P7-14f — Staged Tier A authoring and anti-overfitting evaluation.**
-- **Task state:** one-step coordination is covered through accepted puzzle and resumed
-  exploration children. The newly explicit creative-continuity/final-cohesion boundary is
-  the next slice before broader resumed coordination or any repeated runner.
+- **Task state:** one bounded dungeon-only creative foundation is now derived and persisted;
+  puzzle and exploration contexts/lineages inherit it. Propagation to feature, trap,
+  objective, and narrative tasks plus the final deterministic/cohesion gate remains.
 - **Schema head:** `0008_workbench_defaults`; no migration changed or is pending.
 - **Retention gate:** **not crossed.** Active V1 contracts evolve in place; there is no
   retained real-user artifact, external consumer, non-disposable deployment, or promised
   replay requirement.
 
-## Implemented Resumed Exploration Slice
+## Implemented Creative-Continuity Slice
 
-`DungeonStagedEnrichmentCoordinator` now exercises a resumed exploration task without
-introducing chain repetition:
+Trusted Workbench code now:
 
-- `DungeonStagedExplorationPolicy` carries the exact planner-selected encounter-slot ID
-  separately from its room-local affordance/pacing/stakes selection;
-- coordinator target checks compare task kind, room ID, and encounter-slot ID before the
-  exploration application seam can construct context or call a provider;
-- an accepted faux-provider exploration publishes exactly one atomic DM-only child and
-  replans that current child to the expected exact feature-interaction target;
-- a mismatched slot raises a conflict before any provider call, attempt run, or artifact
-  version write and leaves the accepted puzzle parent current; and
-- stored JSONB specifications are decoded through strict model JSON validation, matching
-  the existing Dungeon Studio load boundary instead of incorrectly treating JSON strings
-  as already-instantiated enum/UUID objects.
+- extends the narrow `DungeonGenerationContext` with explicit grounding mode, tones,
+  motif-variation constraints, and bounded cited facts while rejecting facts in standalone
+  mode;
+- records per-source/fact visibility and fails closed on mismatched visibility,
+  unauthorized/stale citations, incomplete grounding pins, or standalone source leakage;
+- derives one deterministic `DungeonCreativeContinuityProjection` from the exact resolved
+  envelope and accepted `DungeonPlan`, including premise/themes, room purposes,
+  critical-path/branch/loop/gate intent, objectives, selected facts, tone, motifs, and
+  source lineage;
+- self-hashes that projection over its complete hash-excluded document and pins source
+  envelope/payload plus structural-plan hashes;
+- persists the structural context and projection in the DM-only dungeon specification and
+  records compact version/hash metadata in the structural generation run;
+- requires puzzle and exploration builders to verify the projection against the exact plan
+  and package, then expose only relevant room intent and explicitly approved fact/source
+  subsets while carrying one shared projection version/hash; and
+- pins the same hash in puzzle/exploration accepted lineage, task context pins, generation-
+  run scope/report metadata, provider-visible strict context, and atomic child specs.
 
-The synthetic Cobalt Orrery regression now includes one room-local exploration affordance.
-Success proves structural -> puzzle -> exploration parent/child lineage, one call for the
-resumed step, exact exploration lineage, and feature replanning. The mismatch sibling
-proves zero provider calls and no third version.
+Standalone prompt-to-dungeon generation remains ungrounded and reports campaign lore as
+`unknown`; it does not infer campaign facts from the campaign ID or source corpus.
 
-## Planned Creative Continuity and Final Cohesion Gate
+## Tests Added/Extended
 
-Before broader coordination, chain repetition, or live Tier A, the plan now requires:
-
-- one bounded dungeon-only continuity projection derived from the resolved
-  `DungeonGenerationContext` and accepted structural plan;
-- pinned version/hash/source lineage across every strict enrichment context, with only
-  relevant authorized facts, accepted intent, and bounded prior-task summaries exposed;
-- standalone lore remaining unknown unless campaign grounding is explicitly selected;
-- deterministic final checks for continuity/source inheritance, dependencies, required
-  content, lineage, secrecy, and typed cross-task consistency; and
-- a DM-facing whole-dungeon rubric covering thematic reinforcement, history/environment
-  causality, mechanic/objective unity, progression, motif variation, and selected-lore
-  consistency. A bounded reviewer may diagnose only; it cannot edit, approve, or write
-  canon, and fixes target one exact enrichment seam.
-
-This is planning/documentation only in the current uncommitted slice; no continuity
-contract, context propagation, reviewer, or final report is implemented yet.
+- New synthetic Tide Archive contract tests prove puzzle and exploration contexts inherit
+  one hash while receiving different authorized fact/source subsets and excluding an
+  unrelated faction fact.
+- Negative tests cover stale projection hashes, unauthorized fact IDs, broader-visibility
+  sources, source leakage into standalone mode, and direct standalone-fact construction.
+- Puzzle/exploration unit contracts now require continuity and deterministic projection
+  rebuilds verify it against the accepted plan/package.
+- Disposable-PostgreSQL prompt tests prove structural projection persistence, prompt hash
+  inheritance, accepted-lineage pins, run-scope pins, and unchanged atomic child behavior.
 
 ## Active Boundaries and Known Issues
 
 - Models propose preparation content only. They cannot alter topology, geometry,
   visibility, deterministic arithmetic/DC policy, preparation approval, or canon.
-- Creative-continuity propagation/final cohesion reporting, automatic/repeated full-chain
-  orchestration, resumed feature/trap/objective/narrative coordinator coverage, the
-  multi-case quality comparison, staged live result, Tier B/C, and resumed output/print
-  work are not implemented.
-- Live provider use remains paused. Pinned `@earendil-works/pi-ai` Codex transport does
-  not serialize the requested hard output limit; post-response checks protect publication
-  but cannot prevent provider usage. The frozen-canary exception remains operator risk,
-  not ordinary rollout permission.
-- Narrative dispatch can cover only rooms whose required local mechanics are accepted;
-  rooms sharing an incomplete mechanic remain readiness-blocked until it is accepted.
+- Creative continuity is not yet present in feature, trap, objective, or room-narrative
+  strict inputs/lineages. Do not add repeated/full-chain dispatch until all required tasks
+  inherit the same pin and the final deterministic continuity gate exists.
+- Final deterministic continuity/source/dependency/lineage/secrecy checks and the bounded
+  non-authoritative whole-dungeon cohesion report are not implemented.
+- Automatic chain repetition, broader resumed coordinator coverage, multi-case quality
+  comparison, staged live result, Tier B/C, and resumed output/print work remain pending.
+- Live provider use remains paused. Pinned `@earendil-works/pi-ai` Codex transport does not
+  serialize the requested hard output limit; post-response checks protect publication but
+  cannot prevent provider usage. The frozen-canary exception remains operator risk, not
+  ordinary rollout permission.
 - Package and root pytest suites must run separately because duplicate test module
   basenames cause an import-file-mismatch when collected in one process.
 - The full disposable-PostgreSQL integration run has three unrelated existing failures:
@@ -88,47 +86,49 @@ contract, context propagation, reviewer, or final report is implemented yet.
 
 ## Current Files and Verification
 
-Uncommitted implementation:
+Uncommitted implementation/tests include:
 
-- `src/dm_assistant/orchestration/dungeons/staged_enrichment_coordinator.py`
-- `tests/integration/test_dungeon_staged_enrichment_coordinator.py`
+- `src/dm_assistant/modules/preparation/{contracts.py,__init__.py}`
+- `src/dm_assistant/orchestration/dungeons/{continuity.py,contracts.py,service.py}`
+- dungeon exports plus structural/puzzle/exploration prompting modules
+- continuity, preparation, puzzle, exploration, planner, and focused integration tests
 
 Uncommitted documentation:
 
 - `README.md`
 - `dm-assistant-implementation-plan.md`
-- `dm-assistant-technical-architecture.md`
 - `dungeon-generation-recovery-plan.md`
 - `PROJECT_STATUS.md`
 
 Recorded for this slice:
 
-- Disposable-PostgreSQL focused coordinator gate -> **4 passed**.
+- `uv run pytest -q tests/unit tests/evals` -> **209 passed**.
+- `uv run pytest -q packages/dungeon-engine/tests` -> **139 passed**.
+- Focused disposable-PostgreSQL puzzle/exploration/coordinator gate -> **10 passed**.
 - Full disposable-PostgreSQL integration suite -> **62 passed, 3 unrelated failures**
   described above.
-- `uv run pytest -q tests/unit tests/evals` -> **206 passed**.
-- `uv run pytest -q packages/dungeon-engine/tests` -> **139 passed**.
-- Ruff lint/format over changed Python sources and integration test -> **passed**.
-- Strict mypy over coordinator and its integration test -> **passed**.
+- Strict mypy over changed production continuity paths and new/updated core tests ->
+  **passed**.
+- Ruff lint/format over changed Python sources/tests -> **passed**.
 - `git diff --check` -> **passed**.
 
-Suggested commit subject: `P7-14f cover resumed exploration and plan cohesion gate`
+Suggested commit subject: `P7-14f pin creative continuity through puzzle and exploration`
 
 ## Single Next Recommended Task
 
-**Define the provider-free dungeon creative-continuity contract and projection before
-extending resumed feature coordination or adding any repeated/full-chain runner.**
+**Propagate the exact persisted creative-continuity pin through feature-interaction and trap
+contexts/lineages before adding resumed coordinator coverage.**
 
-**First concrete action:** add failing contract tests that derive one bounded continuity
-projection from a synthetic `GenerationContextEnvelope<DungeonGenerationContext>` plus an
-accepted structural plan, then prove puzzle and exploration context builders carry the
-same version/hash while exposing only relevant authorized fields. Include negative cases
-for stale hashes, broader-visibility sources, and ungrounded standalone lore.
+**First concrete action:** add failing provider-free tests showing feature and trap builders
+receive the same projection version/hash as their puzzle/exploration parent, expose only
+their exact room/marker intent plus explicitly selected authorized facts/sources, and reject
+a stale hash or unauthorized fact before provider dispatch. Then add required continuity
+sub-contracts, lineage pins, deterministic rebuild checks, and compact run metadata using
+the existing artifact/run surfaces.
 
-Keep this a dungeon-specific required sub-contract inside strict task payloads—not a
-universal optional-field generation context or corpus dump. Do **not** add a holistic
-provider call, automatic chain repetition, live provider use, Tier B/C, a migration, a
-queue, model-authored mechanics, preparation approval, or canon writes in that slice.
+Do **not** add automatic chain repetition, a holistic provider call, live provider use,
+Tier B/C, a migration, a queue, model-authored mechanics, preparation approval, or canon
+writes in that slice.
 
 ## Authoritative References
 

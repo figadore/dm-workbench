@@ -7,7 +7,13 @@ import pytest
 from pydantic import ValidationError
 
 from dm_assistant.errors import ConflictError
+from dm_assistant.modules.preparation import (
+    DungeonGenerationContext,
+    GenerationContextEnvelope,
+    canonical_json_sha256,
+)
 from dm_assistant.orchestration.dungeons import (
+    DungeonCreativeContinuityProjection,
     DungeonExplorationAffordanceApproval,
     DungeonExplorationContextSelection,
     DungeonExplorationEnrichmentInput,
@@ -22,6 +28,9 @@ from dm_assistant.orchestration.dungeons import (
     DungeonPuzzleClueApproval,
     DungeonPuzzleContextSelection,
     DungeonPuzzleEnrichmentOutput,
+)
+from dm_assistant.orchestration.dungeons.continuity import (
+    derive_dungeon_creative_continuity,
 )
 from dm_assistant.orchestration.dungeons.service import (
     build_dungeon_dm_guide,
@@ -44,6 +53,25 @@ from dm_dungeon import (
     generate_layout,
 )
 from dm_dungeon.layout import ORTHOGONAL_LAYOUT_GENERATOR_VERSION
+
+
+def _standalone_continuity(
+    plan: DungeonPlan,
+) -> DungeonCreativeContinuityProjection:
+    payload = DungeonGenerationContext(
+        context_version="1.0.0",
+        prompt_input_sha256="a" * 64,
+        preparation_owner_id="dm",
+        context_provenance="synthetic_test",
+    )
+    payload_document = payload.model_dump(mode="json")
+    envelope = GenerationContextEnvelope(
+        context_kind="dungeon_generation",
+        payload_version="1.0.0",
+        payload=payload_document,
+        payload_sha256=canonical_json_sha256(payload_document),
+    )
+    return derive_dungeon_creative_continuity(envelope, plan)
 
 
 def _skyroot_package() -> tuple[DungeonPlan, LayoutRequest, DungeonPackage]:
@@ -190,6 +218,7 @@ def test_exact_package_builds_local_exploration_context_and_rejects_foreign_ids(
     None
 ):
     plan, _, package = _skyroot_package()
+    continuity = _standalone_continuity(plan)
     compiled = compile_dungeon_plan(plan)
     assert compiled.certificate is not None
     assert compiled.mechanics_plan is not None
@@ -208,7 +237,12 @@ def test_exact_package_builds_local_exploration_context_and_rejects_foreign_ids(
         room_id=room_ids["gallery"], affordance_id=affordance_id
     )
 
-    context = build_dungeon_exploration_enrichment_input(package, selection)
+    context = build_dungeon_exploration_enrichment_input(
+        package,
+        selection,
+        plan=plan,
+        creative_continuity=continuity,
+    )
 
     exact_room = next(room for room in package.rooms if room.id == room_ids["gallery"])
     marker = next(
@@ -231,7 +265,7 @@ def test_exact_package_builds_local_exploration_context_and_rejects_foreign_ids(
     input_schema = str(DungeonExplorationEnrichmentInput.model_json_schema())
     output_schema = str(DungeonExplorationEnrichmentOutput.model_json_schema())
     assert "DungeonPlan" not in input_schema
-    assert "critical_path" not in input_schema
+    assert "continuity" in input_schema
     assert "DungeonPuzzle" not in output_schema
     assert "topology" not in output_schema
 
@@ -239,6 +273,8 @@ def test_exact_package_builds_local_exploration_context_and_rejects_foreign_ids(
         build_dungeon_exploration_enrichment_input(
             package,
             selection.model_copy(update={"room_id": "room_from_another_package"}),
+            plan=plan,
+            creative_continuity=continuity,
         )
     with pytest.raises(ConflictError, match="unknown exact environmental affordance"):
         build_dungeon_exploration_enrichment_input(
@@ -253,6 +289,8 @@ def test_exact_package_builds_local_exploration_context_and_rejects_foreign_ids(
                     )
                 }
             ),
+            plan=plan,
+            creative_continuity=continuity,
         )
     with pytest.raises(ConflictError, match="outside the selected exploration room"):
         build_dungeon_exploration_enrichment_input(
@@ -271,6 +309,8 @@ def test_exact_package_builds_local_exploration_context_and_rejects_foreign_ids(
                     )
                 }
             ),
+            plan=plan,
+            creative_continuity=continuity,
         )
 
 
@@ -443,6 +483,7 @@ def test_exact_guide_feature_builds_local_context_and_rejects_foreign_ids() -> N
 
 def test_exploration_validation_rejects_foreign_ids_and_structural_mutation() -> None:
     plan, _, package = _skyroot_package()
+    continuity = _standalone_continuity(plan)
     compiled = compile_dungeon_plan(plan)
     assert compiled.certificate is not None
     assert compiled.mechanics_plan is not None
@@ -457,6 +498,8 @@ def test_exploration_validation_rejects_foreign_ids_and_structural_mutation() ->
         _exploration_selection(
             room_id=room_ids["gallery"], affordance_id=affordance_id
         ),
+        plan=plan,
+        creative_continuity=continuity,
     )
     valid_document = _exploration_output(
         package_id=package.id,
@@ -498,6 +541,7 @@ def test_accepted_exploration_projects_one_challenge_without_cross_task_mutation
     None
 ):
     plan, request, package = _skyroot_package()
+    continuity = _standalone_continuity(plan)
     compiled = compile_dungeon_plan(plan)
     assert compiled.certificate is not None
     assert compiled.mechanics_plan is not None
@@ -518,6 +562,8 @@ def test_accepted_exploration_projects_one_challenge_without_cross_task_mutation
                 ),
             ),
         ),
+        plan=plan,
+        creative_continuity=continuity,
     )
     puzzle_output = DungeonPuzzleEnrichmentOutput(
         schema_version="1.0.0",
@@ -552,6 +598,7 @@ def test_accepted_exploration_projects_one_challenge_without_cross_task_mutation
         base_guide,
         plan=plan,
         package=package,
+        creative_continuity=continuity,
         context=puzzle_context,
         validation=validate_dungeon_puzzle_enrichment(puzzle_context, puzzle_output),
     )
@@ -562,6 +609,8 @@ def test_accepted_exploration_projects_one_challenge_without_cross_task_mutation
         _exploration_selection(
             room_id=room_ids["gallery"], affordance_id=affordance_id
         ),
+        plan=plan,
+        creative_continuity=continuity,
     )
     output = DungeonExplorationEnrichmentOutput.model_validate(
         _exploration_output(
@@ -578,6 +627,7 @@ def test_accepted_exploration_projects_one_challenge_without_cross_task_mutation
         guide_with_puzzle,
         plan=plan,
         package=package,
+        creative_continuity=continuity,
         context=context,
         validation=validation,
     )
@@ -631,6 +681,7 @@ def test_accepted_exploration_projects_one_challenge_without_cross_task_mutation
             guide,
             plan=plan,
             package=package,
+            creative_continuity=continuity,
             context=context,
             validation=validation,
         )

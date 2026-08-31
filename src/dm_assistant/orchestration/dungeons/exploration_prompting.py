@@ -392,6 +392,7 @@ class DungeonExplorationPromptService:
         lineage = PromptedDungeonExplorationLineage(
             model_run_id=uuid.uuid4(),
             context_sha256=canonical_json_sha256(exact_context.model_dump(mode="json")),
+            creative_continuity_sha256=(exact_context.continuity.projection_sha256),
             model_run=submitted.model_run.model_copy(
                 update={"run_input": _initial_model_input(exact_context)}
             ),

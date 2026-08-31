@@ -50,7 +50,7 @@ def test_generation_context_envelope_round_trips_hash_and_rejects_grounding() ->
         prompt_input_sha256="a" * 64,
         requested_constraints=("single entrance", "low light"),
         preparation_owner_id="dm",
-        standalone_provenance="prompt_to_dungeon",
+        context_provenance="prompt_to_dungeon",
     )
     envelope = GenerationContextEnvelope(
         context_kind="dungeon_generation",

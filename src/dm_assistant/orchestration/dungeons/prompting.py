@@ -516,7 +516,7 @@ def _build_standalone_context(
         prompt_input_sha256=canonical_json_sha256({"prompt": command.prompt}),
         requested_constraints=command.requested_constraints,
         preparation_owner_id=str(command.campaign_id),
-        standalone_provenance="dm_prompt",
+        context_provenance="dm_prompt",
     )
     payload_document = payload.model_dump(mode="json")
     envelope = GenerationContextEnvelope(

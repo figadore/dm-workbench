@@ -1814,16 +1814,22 @@ mismatched slot fails before any provider call or version write. Broader resumed
 trap/objective/narrative coverage, automatic repetition/full-chain dispatch, and live calls
 remain later slices.
 
-Before repeated/full-chain dispatch or a live Tier A run, add an explicit creative-
-continuity and final-cohesion slice. Trusted Workbench code must derive one bounded dungeon-
-only continuity projection from the resolved `DungeonGenerationContext` and accepted
-structural plan: premise, themes, room purposes, progression/objective intent, selected
-authorized history/environment facts, factions/hooks, tone, motif variation constraints,
-and source/citation references where grounding was explicitly enabled. Pin its version and
-hash to the artifact and every enrichment lineage. Each strict task context receives only
-the relevant projection plus that shared hash; this is not a universal optional-field
-generation payload. Standalone generation continues to contain no campaign facts by
-default, and absent history or lore remains unknown rather than invented.
+The first explicit creative-continuity slice is now provider-free. Trusted Workbench code
+derives one bounded dungeon-only self-hashed projection from the resolved
+`DungeonGenerationContext` and accepted structural plan: premise, themes, room purposes,
+progression/objective intent, selected authorized history/environment facts,
+factions/hooks, tone, motif variation constraints, and source/citation references where
+grounding was explicitly enabled. Structural artifacts persist the exact context and
+projection. Puzzle and exploration contexts carry its same version/hash, select only
+explicitly approved facts and their exact sources, reject stale hashes, unauthorized facts,
+or broader-visibility sources, and pin the shared hash in accepted lineage and generation-
+run metadata. Standalone generation contains no campaign facts by default, and absent
+history or lore remains explicitly unknown.
+
+Before repeated/full-chain dispatch or a live Tier A run, complete that required projection
+through feature, trap, objective, and room-narrative contexts and lineages. Each strict task
+must receive only its relevant projection plus the shared hash; this is not a universal
+optional-field generation payload.
 
 After all required enrichments, deterministic validation must verify continuity-hash/
 source inheritance, exact dependencies, required content, lineage, secrecy, and typed

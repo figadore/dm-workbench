@@ -490,14 +490,18 @@ feature/trap/objective/narrative coverage and chain repetition remain pending. N
 provider was contacted, and no redaction/logging subsystem or new persistence store was
 added.
 
-Required before chain repetition or live Tier A: derive and pin one bounded dungeon-only
-creative-continuity projection from the resolved `DungeonGenerationContext` and accepted
-structural plan. Every strict enrichment context must inherit its version/hash while
-receiving only relevant authorized lore, premise/themes, room/progression/objective intent,
-history/environment facts, tone, motif-variation constraints, and bounded accepted-task
-summaries. Standalone mode remains ungrounded by default and must report absent lore as
-unknown. This shared continuity boundary must not become a universal optional-field context
-or an unrestricted corpus/guide dump.
+The provider-free continuity foundation now derives and persists one bounded dungeon-only
+self-hashed projection from the resolved `DungeonGenerationContext` and accepted structural
+plan. Puzzle and exploration contexts inherit its exact version/hash while selecting only
+relevant authorized lore, premise/themes, room/progression/objective intent,
+history/environment facts, tone, motif-variation constraints, and exact cited sources.
+Their accepted lineages and generation-run metadata pin the shared hash. Stale hashes,
+unauthorized fact IDs, broader-visibility sources, and campaign lore in standalone mode
+fail closed; absent standalone lore remains unknown.
+
+Required before chain repetition or live Tier A: carry this same projection through feature,
+trap, objective, and room-narrative contexts and lineages without turning it into a universal
+optional-field context or unrestricted corpus/guide dump.
 
 After required enrichment, run deterministic continuity/source/lineage/dependency/secrecy
 validation and produce a DM-facing whole-dungeon cohesion report. A separately budgeted

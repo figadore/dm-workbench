@@ -105,12 +105,36 @@ class InputPins(ContractModel):
 
 
 class ContextSourceLink(ContractModel):
-    """One source link captured by a generation-context envelope."""
+    """One authorized source link captured by a generation-context envelope."""
 
     source_kind: Slug
     source_id: str = Field(min_length=1, max_length=200)
     revision_id: str | None = Field(default=None, min_length=1, max_length=200)
     sha256: Sha256Hex | None = None
+    visibility_policy: VisibilityPolicy = VisibilityPolicy.DM_ONLY
+
+
+class DungeonGenerationFact(ContractModel):
+    """One explicitly selected, cited fact in a dungeon-only domain context."""
+
+    fact_id: Slug
+    kind: Literal[
+        "location_lore",
+        "history",
+        "environment",
+        "faction",
+        "plot_hook",
+        "geography",
+    ]
+    summary: SummaryText
+    source_ids: tuple[str, ...] = Field(min_length=1, max_length=8)
+    visibility_policy: VisibilityPolicy = VisibilityPolicy.DM_ONLY
+
+    @model_validator(mode="after")
+    def require_unique_source_ids(self) -> Self:
+        if len(self.source_ids) != len(set(self.source_ids)):
+            raise ValueError("dungeon generation fact requires unique source IDs")
+        return self
 
 
 class GenerationContextPin(ContractModel):
@@ -133,21 +157,28 @@ class GenerationContextPin(ContractModel):
 
 
 class DungeonGenerationContext(ContractModel):
-    """Standalone dungeon prompt provenance without campaign grounding by default."""
+    """Narrow dungeon provenance and explicitly selected creative grounding."""
 
     context_version: VersionText
     prompt_input_sha256: Sha256Hex
-    requested_constraints: tuple[ShortText, ...] = ()
+    requested_constraints: tuple[ShortText, ...] = Field(default=(), max_length=16)
+    tones: tuple[ShortText, ...] = Field(default=(), max_length=4)
+    motif_variation_constraints: tuple[SummaryText, ...] = Field(
+        default=(), max_length=8
+    )
+    selected_facts: tuple[DungeonGenerationFact, ...] = Field(default=(), max_length=16)
+    grounding_mode: Literal["standalone", "selected_campaign"] = "standalone"
+    preparation_owner_id: ShortText
+    context_provenance: ShortText
 
     @model_validator(mode="after")
-    def normalize_constraints(self) -> Self:
-        object.__setattr__(
-            self, "requested_constraints", tuple(self.requested_constraints)
-        )
+    def require_bounded_grounding(self) -> Self:
+        fact_ids = [fact.fact_id for fact in self.selected_facts]
+        if len(fact_ids) != len(set(fact_ids)):
+            raise ValueError("dungeon generation context requires unique fact IDs")
+        if self.grounding_mode == "standalone" and self.selected_facts:
+            raise ValueError("standalone dungeon context cannot contain campaign facts")
         return self
-
-    preparation_owner_id: ShortText
-    standalone_provenance: ShortText
 
 
 class GenerationContextEnvelope(ContractModel):

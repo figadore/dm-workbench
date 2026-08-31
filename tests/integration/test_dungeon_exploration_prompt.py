@@ -377,6 +377,10 @@ def test_faux_exploration_task_repairs_and_preserves_puzzle_child(
     db_engine: Engine, tmp_path: Path
 ) -> None:
     prepared = _prepare_skyroot(db_engine, tmp_path)
+    assert prepared.puzzle_specification.creative_continuity is not None
+    continuity_hash = (
+        prepared.puzzle_specification.creative_continuity.projection_sha256
+    )
     selection = _selection(prepared)
     context = prepared.studio.build_exploration_context(
         PromptDungeonExplorationWorkflow(
@@ -470,6 +474,15 @@ def test_faux_exploration_task_repairs_and_preserves_puzzle_child(
     assert child_spec.exploration_model_lineage[-1].output.recovery.startswith(
         "Opening the west drain"
     )
+    assert (
+        child_spec.creative_continuity
+        == prepared.puzzle_specification.creative_continuity
+    )
+    assert context.continuity.projection_sha256 == continuity_hash
+    assert (
+        child_spec.exploration_model_lineage[-1].creative_continuity_sha256
+        == continuity_hash
+    )
     gallery = next(
         room
         for room in child_spec.dm_guide.rooms
@@ -497,6 +510,9 @@ def test_faux_exploration_task_repairs_and_preserves_puzzle_child(
     assert "DungeonPuzzle" not in schema_text
     prompt_document = json.loads(gateway.messages[0][0].content)
     assert prompt_document["context"]["room"]["room_id"] == prepared.room_ids["gallery"]
+    assert (
+        prompt_document["context"]["continuity"]["projection_sha256"] == continuity_hash
+    )
     assert "plan" not in prompt_document["context"]
     repair_document = json.loads(gateway.messages[1][0].content)
     assert repair_document["previous_arguments"] == rejected
@@ -522,6 +538,7 @@ def test_faux_exploration_task_repairs_and_preserves_puzzle_child(
     )
     assert artifact_run.generation_kind == "dungeon_exploration_enrichment"
     assert artifact_run.model_task_profile_id == profile.task_profile_id
+    assert artifact_run.input_scope["creative_continuity_sha256"] == continuity_hash
     assert artifact_run.tool_runs[0]["tool_name"] == "submit_dungeon_exploration"
 
     parent_assets = prepared.preparation.list_assets(

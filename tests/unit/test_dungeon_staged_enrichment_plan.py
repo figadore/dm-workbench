@@ -150,11 +150,18 @@ def _run(output: Any) -> ModelRunRecord:
 
 
 def _lineage(lineage_type: type, output: object, sequence: int) -> object:
+    continuity = (
+        {"creative_continuity_sha256": "f" * 64}
+        if lineage_type
+        in (PromptedDungeonPuzzleLineage, PromptedDungeonExplorationLineage)
+        else {}
+    )
     return lineage_type(
         model_run_id=UUID(int=sequence),
         context_sha256=f"{sequence:064x}",
         model_run=_run(output),
         output=output,
+        **continuity,
     )
 
 

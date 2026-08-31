@@ -10,6 +10,8 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 from dm_assistant.modules.modeling import ModelRunRecord
 from dm_assistant.modules.preparation import (
+    ContextSourceLink,
+    DungeonGenerationFact,
     GenerationContextPin,
     ToolRunPin,
     canonical_json_sha256,
@@ -35,6 +37,7 @@ from dm_dungeon.contracts import (
 )
 
 DUNGEON_GENERATION_PROPOSAL_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
+DUNGEON_CREATIVE_CONTINUITY_VERSION: Literal["1.0.0"] = "1.0.0"
 DUNGEON_EXPLORATION_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 DUNGEON_FEATURE_INTERACTION_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 DUNGEON_OBJECTIVE_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
@@ -42,9 +45,172 @@ DUNGEON_ROOM_NARRATIVE_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 DUNGEON_TRAP_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 DUNGEON_PUZZLE_ENRICHMENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 
+GuideLocalRef = Annotated[
+    str,
+    Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_-]*$"),
+]
+GuideContentText = Annotated[str, Field(min_length=1, max_length=2_000)]
+ExactDungeonComponentId = Annotated[str, Field(min_length=1, max_length=200)]
+
 
 class WorkflowModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=False)
+
+
+class DungeonContinuityRoomIntent(WorkflowModel):
+    """Accepted structural intent for one locally referenced plan room."""
+
+    room_ref: GuideLocalRef
+    name: str = Field(min_length=1, max_length=200)
+    role: RoomRole
+    purpose: GuideContentText
+    tags: tuple[str, ...] = Field(default=(), max_length=6)
+
+
+class DungeonContinuityBranchIntent(WorkflowModel):
+    """Accepted bounded branch progression retained without exact geometry."""
+
+    branch_ref: GuideLocalRef
+    from_room_ref: GuideLocalRef
+    room_refs: tuple[GuideLocalRef, ...] = Field(min_length=1, max_length=3)
+
+
+class DungeonContinuityLoopIntent(WorkflowModel):
+    """Accepted bounded loop intent retained without exposing renderer state."""
+
+    loop_ref: GuideLocalRef
+    from_room_ref: GuideLocalRef
+    to_room_ref: GuideLocalRef
+    secret: bool
+
+
+class DungeonContinuityGateIntent(WorkflowModel):
+    """Accepted gate/dependency relationship relevant to staged authoring."""
+
+    gate_ref: GuideLocalRef
+    between_room_refs: tuple[GuideLocalRef, GuideLocalRef]
+    dependency_room_ref: GuideLocalRef
+    dependency_name: str = Field(min_length=1, max_length=200)
+
+
+class DungeonContinuityObjectiveIntent(WorkflowModel):
+    """Accepted named objective intent for one plan room."""
+
+    room_ref: GuideLocalRef
+    name: str = Field(min_length=1, max_length=200)
+
+
+class DungeonCreativeContinuityProjection(WorkflowModel):
+    """Pinned dungeon-only creative foundation derived after structural acceptance."""
+
+    projection_version: Literal["1.0.0"]
+    source_envelope_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_payload_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    structural_plan_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    premise: GuideContentText
+    themes: tuple[str, ...] = Field(min_length=1, max_length=4)
+    room_intents: tuple[DungeonContinuityRoomIntent, ...] = Field(
+        min_length=4, max_length=8
+    )
+    critical_path: tuple[GuideLocalRef, ...] = Field(min_length=2, max_length=8)
+    branches: tuple[DungeonContinuityBranchIntent, ...] = Field(
+        default=(), max_length=2
+    )
+    loops: tuple[DungeonContinuityLoopIntent, ...] = Field(default=(), max_length=1)
+    gates: tuple[DungeonContinuityGateIntent, ...] = Field(default=(), max_length=1)
+    objective_intents: tuple[DungeonContinuityObjectiveIntent, ...] = Field(
+        default=(), max_length=8
+    )
+    tones: tuple[str, ...] = Field(default=(), max_length=4)
+    motif_variation_constraints: tuple[GuideContentText, ...] = Field(
+        default=(), max_length=8
+    )
+    campaign_lore_status: Literal["unknown", "selected"]
+    selected_facts: tuple[DungeonGenerationFact, ...] = Field(default=(), max_length=16)
+    source_links: tuple[ContextSourceLink, ...] = Field(default=(), max_length=32)
+    projection_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def verify_projection_hash_and_sources(
+        self,
+    ) -> DungeonCreativeContinuityProjection:
+        document = self.model_dump(mode="json", exclude={"projection_sha256"})
+        if canonical_json_sha256(document) != self.projection_sha256:
+            raise ValueError("creative continuity projection hash is stale")
+        fact_ids = [fact.fact_id for fact in self.selected_facts]
+        if len(fact_ids) != len(set(fact_ids)):
+            raise ValueError("creative continuity requires unique selected fact IDs")
+        source_ids = [source.source_id for source in self.source_links]
+        if len(source_ids) != len(set(source_ids)):
+            raise ValueError("creative continuity requires unique source IDs")
+        cited_source_ids = {
+            source_id for fact in self.selected_facts for source_id in fact.source_ids
+        }
+        if cited_source_ids != set(source_ids):
+            raise ValueError(
+                "creative continuity sources must exactly match selected fact citations"
+            )
+        if self.campaign_lore_status == "unknown" and (
+            self.selected_facts or self.source_links
+        ):
+            raise ValueError("unknown campaign lore cannot carry grounded facts")
+        if self.campaign_lore_status == "selected" and not self.selected_facts:
+            raise ValueError("selected campaign lore requires at least one fact")
+        return self
+
+
+class DungeonEnrichmentContinuityContext(WorkflowModel):
+    """Relevant authorized continuity subset carried by one strict dungeon task."""
+
+    projection_version: Literal["1.0.0"]
+    projection_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    premise: GuideContentText
+    themes: tuple[str, ...] = Field(min_length=1, max_length=4)
+    room_intents: tuple[DungeonContinuityRoomIntent, ...] = Field(
+        min_length=1, max_length=8
+    )
+    critical_path: tuple[GuideLocalRef, ...] = Field(min_length=2, max_length=8)
+    branches: tuple[DungeonContinuityBranchIntent, ...] = Field(
+        default=(), max_length=2
+    )
+    loops: tuple[DungeonContinuityLoopIntent, ...] = Field(default=(), max_length=1)
+    gates: tuple[DungeonContinuityGateIntent, ...] = Field(default=(), max_length=1)
+    objective_intents: tuple[DungeonContinuityObjectiveIntent, ...] = Field(
+        default=(), max_length=8
+    )
+    tones: tuple[str, ...] = Field(default=(), max_length=4)
+    motif_variation_constraints: tuple[GuideContentText, ...] = Field(
+        default=(), max_length=8
+    )
+    campaign_lore_status: Literal["unknown", "selected"]
+    selected_facts: tuple[DungeonGenerationFact, ...] = Field(default=(), max_length=8)
+    source_links: tuple[ContextSourceLink, ...] = Field(default=(), max_length=16)
+
+    @model_validator(mode="after")
+    def require_only_cited_authorized_sources(
+        self,
+    ) -> DungeonEnrichmentContinuityContext:
+        room_refs = [room.room_ref for room in self.room_intents]
+        if len(room_refs) != len(set(room_refs)):
+            raise ValueError("enrichment continuity requires unique room intents")
+        fact_ids = [fact.fact_id for fact in self.selected_facts]
+        if len(fact_ids) != len(set(fact_ids)):
+            raise ValueError("enrichment continuity requires unique selected facts")
+        source_ids = [source.source_id for source in self.source_links]
+        if len(source_ids) != len(set(source_ids)):
+            raise ValueError("enrichment continuity requires unique source IDs")
+        cited_source_ids = {
+            source_id for fact in self.selected_facts for source_id in fact.source_ids
+        }
+        if cited_source_ids != set(source_ids):
+            raise ValueError(
+                "enrichment continuity sources must exactly match selected facts"
+            )
+        if self.campaign_lore_status == "unknown" and (
+            self.selected_facts or self.source_links
+        ):
+            raise ValueError("ungrounded enrichment must leave campaign lore unknown")
+        return self
 
 
 class PromptedDungeonModelLineage(WorkflowModel):
@@ -66,16 +232,6 @@ class PromptedDungeonModelLineage(WorkflowModel):
         return self
 
 
-GuideLocalRef = Annotated[
-    str,
-    Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_-]*$"),
-]
-GuideContentText = Annotated[str, Field(min_length=1, max_length=2_000)]
-
-
-ExactDungeonComponentId = Annotated[str, Field(min_length=1, max_length=200)]
-
-
 class DungeonExplorationAffordanceApproval(WorkflowModel):
     """Trusted room-local feature selected as an environmental affordance."""
 
@@ -87,6 +243,7 @@ class DungeonExplorationContextSelection(WorkflowModel):
     """Trusted IDs and policy used to build one exploration-only context."""
 
     room_id: ExactDungeonComponentId
+    continuity_fact_ids: tuple[str, ...] = Field(default=(), max_length=8)
     affordances: tuple[DungeonExplorationAffordanceApproval, ...] = Field(
         min_length=1, max_length=6
     )
@@ -108,6 +265,10 @@ class DungeonExplorationContextSelection(WorkflowModel):
         if len(affordance_ids) != len(set(affordance_ids)):
             raise ValueError(
                 "exploration context selection requires unique affordance IDs"
+            )
+        if len(self.continuity_fact_ids) != len(set(self.continuity_fact_ids)):
+            raise ValueError(
+                "exploration context selection requires unique continuity fact IDs"
             )
         return self
 
@@ -137,6 +298,7 @@ class DungeonExplorationEnrichmentInput(WorkflowModel):
 
     schema_version: Literal["1.0.0"]
     package_id: ExactDungeonComponentId
+    continuity: DungeonEnrichmentContinuityContext
     room: DungeonExplorationRoomContext
     affordances: tuple[DungeonExplorationAffordance, ...] = Field(
         min_length=1, max_length=6
@@ -254,6 +416,7 @@ class PromptedDungeonExplorationLineage(WorkflowModel):
 
     model_run_id: UUID
     context_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    creative_continuity_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     model_run: ModelRunRecord
     output: DungeonExplorationEnrichmentOutput
 
@@ -936,6 +1099,7 @@ class DungeonPuzzleContextSelection(WorkflowModel):
     """Trusted IDs and policy text used to construct a model-visible context."""
 
     room_id: ExactDungeonComponentId
+    continuity_fact_ids: tuple[str, ...] = Field(default=(), max_length=8)
     clue_locations: tuple[DungeonPuzzleClueApproval, ...] = Field(
         default=(), max_length=6
     )
@@ -950,6 +1114,10 @@ class DungeonPuzzleContextSelection(WorkflowModel):
         if len(location_ids) != len(set(location_ids)):
             raise ValueError(
                 "puzzle context selection requires unique clue location IDs"
+            )
+        if len(self.continuity_fact_ids) != len(set(self.continuity_fact_ids)):
+            raise ValueError(
+                "puzzle context selection requires unique continuity fact IDs"
             )
         return self
 
@@ -995,6 +1163,7 @@ class DungeonPuzzleEnrichmentInput(WorkflowModel):
 
     schema_version: Literal["1.0.0"]
     package_id: ExactDungeonComponentId
+    continuity: DungeonEnrichmentContinuityContext
     room: DungeonPuzzleRoomContext
     objective_relationship: DungeonPuzzleObjectiveRelationship | None = None
     dependency_relationship: DungeonPuzzleDependencyRelationship | None = None
@@ -1131,6 +1300,7 @@ class PromptedDungeonPuzzleLineage(WorkflowModel):
 
     model_run_id: UUID
     context_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    creative_continuity_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     model_run: ModelRunRecord
     output: DungeonPuzzleEnrichmentOutput
 
@@ -1545,6 +1715,8 @@ class DungeonStudioSpecification(WorkflowModel):
     schema_version: Literal["1.0.0"]
     layout_request: LayoutRequest
     package: DungeonPackage
+    structural_context: GenerationContextPin | None = None
+    creative_continuity: DungeonCreativeContinuityProjection | None = None
     dm_notes: DungeonDmNotes = DungeonDmNotes()
     dm_guide: DungeonDmGuide | None = None
     preparation_readiness: DungeonPreparationReadiness | None = None
@@ -1709,6 +1881,13 @@ class CreatePromptedDungeonExplorationWorkflow(WorkflowModel):
         if self.model_lineage.context_sha256 != context_hash:
             raise ValueError(
                 "exploration publication requires matching context lineage"
+            )
+        if (
+            self.model_lineage.creative_continuity_sha256
+            != self.context.continuity.projection_sha256
+        ):
+            raise ValueError(
+                "exploration publication requires matching continuity lineage"
             )
         return self
 
@@ -1889,6 +2068,11 @@ class CreatePromptedDungeonPuzzleWorkflow(WorkflowModel):
         context_hash = canonical_json_sha256(self.context.model_dump(mode="json"))
         if self.model_lineage.context_sha256 != context_hash:
             raise ValueError("puzzle publication requires matching context lineage")
+        if (
+            self.model_lineage.creative_continuity_sha256
+            != self.context.continuity.projection_sha256
+        ):
+            raise ValueError("puzzle publication requires matching continuity lineage")
         return self
 
 

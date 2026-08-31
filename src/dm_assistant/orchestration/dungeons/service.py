@@ -30,7 +30,12 @@ from dm_assistant.modules.preparation import (
     canonical_json_sha256,
 )
 from dm_assistant.observability import bind_log_context, get_logger
+from dm_assistant.orchestration.dungeons.continuity import (
+    build_dungeon_enrichment_continuity_context,
+    derive_dungeon_creative_continuity,
+)
 from dm_assistant.orchestration.dungeons.contracts import (
+    DUNGEON_CREATIVE_CONTINUITY_VERSION,
     DUNGEON_EXPLORATION_ENRICHMENT_SCHEMA_VERSION,
     DUNGEON_FEATURE_INTERACTION_ENRICHMENT_SCHEMA_VERSION,
     DUNGEON_GENERATION_PROPOSAL_SCHEMA_VERSION,
@@ -46,6 +51,7 @@ from dm_assistant.orchestration.dungeons.contracts import (
     CreatePromptedDungeonRoomNarrativeWorkflow,
     CreatePromptedDungeonTrapWorkflow,
     CreatePromptedDungeonWorkflow,
+    DungeonCreativeContinuityProjection,
     DungeonDmGuide,
     DungeonDmNotes,
     DungeonExplorationAffordance,
@@ -242,9 +248,13 @@ class DungeonStudioService:
         if parent.artifact_id != command.artifact_id:
             raise ConflictError("Parent version does not belong to the artifact.")
         specification = _load_specification(parent.specification)
+        plan = _accepted_structural_plan(specification)
+        continuity = _required_creative_continuity(specification)
         return build_dungeon_exploration_enrichment_input(
             specification.package,
             command.selection,
+            plan=plan,
+            creative_continuity=continuity,
         )
 
     def enrich_prompted_exploration(
@@ -261,6 +271,7 @@ class DungeonStudioService:
             raise ConflictError("Parent version does not belong to the artifact.")
         specification = _load_specification(parent.specification)
         plan = _accepted_structural_plan(specification)
+        continuity = _required_creative_continuity(specification)
         if specification.dm_guide is None:
             raise ConflictError(
                 "Exploration enrichment requires an exact structural guide."
@@ -272,6 +283,7 @@ class DungeonStudioService:
             context_kind="dungeon_exploration_enrichment",
             payload_version=command.context.schema_version,
             visibility_policy=VisibilityPolicy.DM_ONLY,
+            source_links=command.context.continuity.source_links,
             payload=context_document,
             payload_sha256=context_hash,
         )
@@ -292,6 +304,9 @@ class DungeonStudioService:
                     "package_id": specification.package.id,
                     "room_id": command.context.room.room_id,
                     "context_sha256": context_hash,
+                    "creative_continuity_sha256": (
+                        command.context.continuity.projection_sha256
+                    ),
                 },
                 input_pins=parent.input_pins,
                 context=context_pin,
@@ -299,6 +314,9 @@ class DungeonStudioService:
                     "dungeon_package": specification.package.schema_version,
                     "dungeon_exploration_enrichment": (
                         DUNGEON_EXPLORATION_ENRICHMENT_SCHEMA_VERSION
+                    ),
+                    "dungeon_creative_continuity": (
+                        DUNGEON_CREATIVE_CONTINUITY_VERSION
                     ),
                     "dungeon_studio": _STUDIO_SCHEMA_VERSION,
                     "model_run": "1.0.0",
@@ -325,6 +343,7 @@ class DungeonStudioService:
                 specification.dm_guide,
                 plan=plan,
                 package=specification.package,
+                creative_continuity=continuity,
                 context=command.context,
                 validation=command.validation,
             )
@@ -342,6 +361,9 @@ class DungeonStudioService:
                     "package_id": command.context.package_id,
                     "room_id": command.context.room.room_id,
                     "context_sha256": context_hash,
+                    "creative_continuity_sha256": (
+                        command.context.continuity.projection_sha256
+                    ),
                 },
             }
             if readiness is not None:
@@ -1480,9 +1502,13 @@ class DungeonStudioService:
         if parent.artifact_id != command.artifact_id:
             raise ConflictError("Parent version does not belong to the artifact.")
         specification = _load_specification(parent.specification)
+        plan = _accepted_structural_plan(specification)
+        continuity = _required_creative_continuity(specification)
         return build_dungeon_puzzle_enrichment_input(
             specification.package,
             command.selection,
+            plan=plan,
+            creative_continuity=continuity,
         )
 
     def enrich_prompted_puzzle(
@@ -1499,6 +1525,7 @@ class DungeonStudioService:
             raise ConflictError("Parent version does not belong to the artifact.")
         specification = _load_specification(parent.specification)
         plan = _accepted_structural_plan(specification)
+        continuity = _required_creative_continuity(specification)
         if specification.dm_guide is None:
             raise ConflictError("Puzzle enrichment requires an exact structural guide.")
 
@@ -1508,6 +1535,7 @@ class DungeonStudioService:
             context_kind="dungeon_puzzle_enrichment",
             payload_version=command.context.schema_version,
             visibility_policy=VisibilityPolicy.DM_ONLY,
+            source_links=command.context.continuity.source_links,
             payload=context_document,
             payload_sha256=context_hash,
         )
@@ -1528,6 +1556,9 @@ class DungeonStudioService:
                     "package_id": specification.package.id,
                     "room_id": command.context.room.room_id,
                     "context_sha256": context_hash,
+                    "creative_continuity_sha256": (
+                        command.context.continuity.projection_sha256
+                    ),
                 },
                 input_pins=parent.input_pins,
                 context=context_pin,
@@ -1535,6 +1566,9 @@ class DungeonStudioService:
                     "dungeon_package": specification.package.schema_version,
                     "dungeon_puzzle_enrichment": (
                         DUNGEON_PUZZLE_ENRICHMENT_SCHEMA_VERSION
+                    ),
+                    "dungeon_creative_continuity": (
+                        DUNGEON_CREATIVE_CONTINUITY_VERSION
                     ),
                     "dungeon_studio": _STUDIO_SCHEMA_VERSION,
                     "model_run": "1.0.0",
@@ -1561,6 +1595,7 @@ class DungeonStudioService:
                 specification.dm_guide,
                 plan=plan,
                 package=specification.package,
+                creative_continuity=continuity,
                 context=command.context,
                 validation=command.validation,
             )
@@ -1578,6 +1613,9 @@ class DungeonStudioService:
                     "package_id": command.context.package_id,
                     "room_id": command.context.room.room_id,
                     "context_sha256": context_hash,
+                    "creative_continuity_sha256": (
+                        command.context.continuity.projection_sha256
+                    ),
                 },
             }
             if readiness is not None:
@@ -1877,6 +1915,19 @@ class DungeonStudioService:
         tool_runs: tuple[ToolRunPin, ...] = (),
         dm_notes: DungeonDmNotes | None = None,
     ) -> DungeonWorkflowResult:
+        creative_continuity: DungeonCreativeContinuityProjection | None = None
+        if model_lineage:
+            if context is None:
+                raise ConflictError(
+                    "Prompted dungeon generation requires its structural context pin."
+                )
+            structural_plan = _accepted_structural_plan_from_lineage(model_lineage)
+            context_envelope = _generation_context_envelope(context)
+            creative_continuity = derive_dungeon_creative_continuity(
+                context_envelope,
+                structural_plan,
+            )
+
         request_document = json.loads(to_canonical_json(request))
         input_scope: dict[str, JsonValue] = {
             "layout_request_sha256": canonical_json_sha256(request_document),
@@ -1906,12 +1957,23 @@ class DungeonStudioService:
                     ]
                 }
             )
+            if creative_continuity is None:
+                raise ConflictError(
+                    "Prompted dungeon generation requires creative continuity."
+                )
+            input_scope["creative_continuity_sha256"] = (
+                creative_continuity.projection_sha256
+            )
             schema_versions["dungeon_generation_proposal"] = (
                 DUNGEON_GENERATION_PROPOSAL_SCHEMA_VERSION
+            )
+            schema_versions["dungeon_creative_continuity"] = (
+                DUNGEON_CREATIVE_CONTINUITY_VERSION
             )
             generator_versions["plan_compiler"] = (
                 dm_dungeon.DUNGEON_PLAN_COMPILER_VERSION
             )
+            generator_versions["creative_continuity"] = "dungeon-creative-continuity-v1"
             schema_versions["model_run"] = "1.0.0"
         run = self._preparation.start_generation_run(
             StartGenerationRun(
@@ -1983,6 +2045,13 @@ class DungeonStudioService:
             "geometry": geometry_report.model_dump(mode="json"),
             "layout_random_draw_count": layout.random_draw_count,
         }
+        if creative_continuity is not None:
+            validation_report["creative_continuity"] = {
+                "projection_version": creative_continuity.projection_version,
+                "projection_sha256": creative_continuity.projection_sha256,
+                "source_payload_sha256": creative_continuity.source_payload_sha256,
+                "campaign_lore_status": creative_continuity.campaign_lore_status,
+            }
         if not valid:
             self._preparation.finish_generation_run(
                 FinishGenerationRun(
@@ -2069,6 +2138,8 @@ class DungeonStudioService:
             schema_version=_STUDIO_SCHEMA_VERSION,
             layout_request=request,
             package=package,
+            structural_context=context,
+            creative_continuity=creative_continuity,
             dm_notes=resolved_dm_notes,
             dm_guide=dm_guide,
             preparation_readiness=preparation_readiness,
@@ -2297,8 +2368,11 @@ def _build_preparation_readiness(
 def build_dungeon_exploration_enrichment_input(
     package: DungeonPackage,
     selection: DungeonExplorationContextSelection,
+    *,
+    plan: DungeonPlan,
+    creative_continuity: DungeonCreativeContinuityProjection,
 ) -> DungeonExplorationEnrichmentInput:
-    """Slice one trusted exact package into a local exploration-only context."""
+    """Slice one exact package plus pinned continuity into an exploration context."""
 
     rooms_by_id = {room.id: room for room in package.rooms}
     room = rooms_by_id.get(selection.room_id)
@@ -2349,9 +2423,17 @@ def build_dungeon_exploration_enrichment_input(
             )
         )
 
+    continuity = build_dungeon_enrichment_continuity_context(
+        projection=creative_continuity,
+        plan=plan,
+        package=package,
+        room_ids=(room.id,),
+        selected_fact_ids=selection.continuity_fact_ids,
+    )
     return DungeonExplorationEnrichmentInput(
         schema_version=DUNGEON_EXPLORATION_ENRICHMENT_SCHEMA_VERSION,
         package_id=package.id,
+        continuity=continuity,
         room=DungeonExplorationRoomContext(
             room_id=room.id,
             floor_id=room.floor_id,
@@ -2426,6 +2508,7 @@ def project_dungeon_exploration_enrichment(
     *,
     plan: DungeonPlan,
     package: DungeonPackage,
+    creative_continuity: DungeonCreativeContinuityProjection,
     context: DungeonExplorationEnrichmentInput,
     validation: DungeonExplorationEnrichmentValidationResult,
 ) -> DungeonDmGuide:
@@ -2435,6 +2518,9 @@ def project_dungeon_exploration_enrichment(
         package,
         DungeonExplorationContextSelection(
             room_id=context.room.room_id,
+            continuity_fact_ids=tuple(
+                fact.fact_id for fact in context.continuity.selected_facts
+            ),
             affordances=tuple(
                 DungeonExplorationAffordanceApproval(
                     affordance_id=item.affordance_id,
@@ -2446,6 +2532,8 @@ def project_dungeon_exploration_enrichment(
             stakes=context.stakes,
             constraints=context.constraints,
         ),
+        plan=plan,
+        creative_continuity=creative_continuity,
     )
     if rebuilt_context != context:
         raise ConflictError(
@@ -3636,8 +3724,11 @@ def project_dungeon_room_narrative_enrichment(
 def build_dungeon_puzzle_enrichment_input(
     package: DungeonPackage,
     selection: DungeonPuzzleContextSelection,
+    *,
+    plan: DungeonPlan,
+    creative_continuity: DungeonCreativeContinuityProjection,
 ) -> DungeonPuzzleEnrichmentInput:
-    """Slice one trusted exact package into a narrow puzzle-only context."""
+    """Slice one exact package plus pinned continuity into a puzzle context."""
 
     rooms_by_id = {room.id: room for room in package.rooms}
     room = rooms_by_id.get(selection.room_id)
@@ -3755,9 +3846,47 @@ def build_dungeon_puzzle_enrichment_input(
             relationship=selection.dependency.relationship,
         )
 
+    continuity_room_ids = {
+        room.id,
+        *(location.room_id for location in clue_locations),
+    }
+    if objective_relationship is not None:
+        continuity_room_ids.add(objective_relationship.objective_room_id)
+    if dependency_relationship is not None:
+        dependency_location = next(
+            (
+                item.located_in_room_id
+                for item in package.topology.keys
+                if item.id == dependency_relationship.dependency_id
+            ),
+            None,
+        )
+        if dependency_location is None:
+            dependency_location = next(
+                (
+                    item.located_in_room_id
+                    for item in package.topology.clues
+                    if item.id == dependency_relationship.dependency_id
+                ),
+                None,
+            )
+        if dependency_location is None:
+            raise ConflictError(
+                "Puzzle continuity could not resolve the accepted dependency room."
+            )
+        continuity_room_ids.add(dependency_location)
+    continuity = build_dungeon_enrichment_continuity_context(
+        projection=creative_continuity,
+        plan=plan,
+        package=package,
+        room_ids=continuity_room_ids,
+        selected_fact_ids=selection.continuity_fact_ids,
+    )
+
     return DungeonPuzzleEnrichmentInput(
         schema_version="1.0.0",
         package_id=package.id,
+        continuity=continuity,
         room=DungeonPuzzleRoomContext(
             room_id=room.id,
             floor_id=room.floor_id,
@@ -3819,6 +3948,7 @@ def project_dungeon_puzzle_enrichment(
     *,
     plan: DungeonPlan,
     package: DungeonPackage,
+    creative_continuity: DungeonCreativeContinuityProjection,
     context: DungeonPuzzleEnrichmentInput,
     validation: DungeonPuzzleEnrichmentValidationResult,
 ) -> DungeonDmGuide:
@@ -3828,6 +3958,9 @@ def project_dungeon_puzzle_enrichment(
         package,
         DungeonPuzzleContextSelection(
             room_id=context.room.room_id,
+            continuity_fact_ids=tuple(
+                fact.fact_id for fact in context.continuity.selected_facts
+            ),
             clue_locations=tuple(
                 DungeonPuzzleClueApproval(
                     location_id=item.location_id,
@@ -3855,6 +3988,8 @@ def project_dungeon_puzzle_enrichment(
             tone=context.tone,
             constraints=context.constraints,
         ),
+        plan=plan,
+        creative_continuity=creative_continuity,
     )
     if rebuilt_context != context:
         raise ConflictError(
@@ -4100,19 +4235,62 @@ def _runnable_content(entry: DungeonGuideContentEntry) -> DungeonGuideRunnableCo
 
 
 def _accepted_structural_plan(specification: DungeonStudioSpecification) -> DungeonPlan:
+    return _accepted_structural_plan_from_lineage(specification.model_lineage)
+
+
+def _accepted_structural_plan_from_lineage(
+    model_lineage: tuple[PromptedDungeonModelLineage, ...],
+) -> DungeonPlan:
     proposal = next(
         (
             lineage.proposal
-            for lineage in reversed(specification.model_lineage)
+            for lineage in reversed(model_lineage)
             if lineage.proposal is not None and lineage.proposal.plan is not None
         ),
         None,
     )
     if proposal is None or proposal.plan is None:
         raise ConflictError(
-            "Puzzle enrichment requires accepted structural plan lineage."
+            "Dungeon enrichment requires accepted structural plan lineage."
         )
     return proposal.plan
+
+
+def _generation_context_envelope(
+    context: GenerationContextPin,
+) -> GenerationContextEnvelope:
+    try:
+        envelope = GenerationContextEnvelope.model_validate_json(
+            json.dumps(context.envelope)
+        )
+    except ValidationError as error:
+        raise ConflictError(
+            "Creative continuity requires a valid structural context envelope."
+        ) from error
+    if (
+        envelope.context_kind != context.envelope_kind
+        or envelope.payload_version != context.payload_version
+        or envelope.payload_sha256 != context.payload_sha256
+        or envelope.source_links != context.source_links
+    ):
+        raise ConflictError("Creative continuity structural context pin is stale.")
+    return envelope
+
+
+def _required_creative_continuity(
+    specification: DungeonStudioSpecification,
+) -> DungeonCreativeContinuityProjection:
+    continuity = specification.creative_continuity
+    context = specification.structural_context
+    if continuity is None or context is None:
+        raise ConflictError("Dungeon enrichment requires pinned creative continuity.")
+    expected = derive_dungeon_creative_continuity(
+        _generation_context_envelope(context),
+        _accepted_structural_plan(specification),
+    )
+    if expected != continuity:
+        raise ConflictError("Dungeon creative continuity projection is stale.")
+    return continuity
 
 
 def _build_dm_guide(

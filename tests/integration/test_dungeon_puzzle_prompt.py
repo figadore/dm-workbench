@@ -230,6 +230,11 @@ def test_faux_puzzle_task_has_independent_budget_and_persists_exact_guide_versio
     )
     plan = parent_spec.model_lineage[-1].proposal
     assert plan is not None and plan.plan is not None
+    assert parent_spec.structural_context is not None
+    assert parent_spec.creative_continuity is not None
+    continuity_hash = parent_spec.creative_continuity.projection_sha256
+    assert parent_spec.creative_continuity.campaign_lore_status == "unknown"
+    assert parent_spec.creative_continuity.selected_facts == ()
     compiled_room_ids = {
         item.ref: item.room_id for item in parent_spec.layout_request.certificate.rooms
     }
@@ -345,6 +350,11 @@ def test_faux_puzzle_task_has_independent_budget_and_persists_exact_guide_versio
     assert child_spec.dm_guide is not None
     assert child_spec.dm_guide.puzzles[0].name == "The Returning Gale"
     assert child_spec.puzzle_model_lineage[-1].output.name == "The Returning Gale"
+    assert child_spec.creative_continuity == parent_spec.creative_continuity
+    assert (
+        child_spec.puzzle_model_lineage[-1].creative_continuity_sha256
+        == continuity_hash
+    )
     child_specification_text = json.dumps(child.specification)
     assert "rejected_success_path_value" not in child_specification_text
     assert "REJECTED_SUCCESS_PATH_BODY" not in child_specification_text
@@ -369,6 +379,9 @@ def test_faux_puzzle_task_has_independent_budget_and_persists_exact_guide_versio
     assert "exploration" not in puzzle_schema
     prompt_document = json.loads(puzzle_gateway.messages[0][0].content)
     assert prompt_document["context"]["package_id"] == parent_spec.package.id
+    assert (
+        prompt_document["context"]["continuity"]["projection_sha256"] == continuity_hash
+    )
     assert "plan" not in prompt_document["context"]
     repair_document = json.loads(puzzle_gateway.messages[1][0].content)
     assert repair_document["previous_arguments"] == rejected_initial
@@ -397,6 +410,7 @@ def test_faux_puzzle_task_has_independent_budget_and_persists_exact_guide_versio
     )
     assert artifact_run.generation_kind == "dungeon_puzzle_enrichment"
     assert artifact_run.model_task_profile_id == puzzle_profile.task_profile_id
+    assert artifact_run.input_scope["creative_continuity_sha256"] == continuity_hash
     assert artifact_run.tool_runs[0]["tool_name"] == "submit_dungeon_puzzle"
 
     parent_assets = preparation.list_assets(campaign_id, parent.id)

@@ -7,13 +7,22 @@ import pytest
 from pydantic import ValidationError
 
 from dm_assistant.errors import ConflictError
+from dm_assistant.modules.preparation import (
+    DungeonGenerationContext,
+    GenerationContextEnvelope,
+    canonical_json_sha256,
+)
 from dm_assistant.orchestration.dungeons import (
+    DungeonCreativeContinuityProjection,
     DungeonPuzzleClueApproval,
     DungeonPuzzleContextSelection,
     DungeonPuzzleDependencyApproval,
     DungeonPuzzleEnrichmentInput,
     DungeonPuzzleEnrichmentOutput,
     DungeonPuzzleObjectiveApproval,
+)
+from dm_assistant.orchestration.dungeons.continuity import (
+    derive_dungeon_creative_continuity,
 )
 from dm_assistant.orchestration.dungeons.service import (
     build_dungeon_dm_guide,
@@ -32,10 +41,49 @@ from dm_dungeon import (
 from dm_dungeon.layout import ORTHOGONAL_LAYOUT_GENERATOR_VERSION
 
 
+def _standalone_continuity(
+    plan: DungeonPlan,
+) -> DungeonCreativeContinuityProjection:
+    payload = DungeonGenerationContext(
+        context_version="1.0.0",
+        prompt_input_sha256="a" * 64,
+        preparation_owner_id="dm",
+        context_provenance="synthetic_test",
+    )
+    payload_document = payload.model_dump(mode="json")
+    envelope = GenerationContextEnvelope(
+        context_kind="dungeon_generation",
+        payload_version="1.0.0",
+        payload=payload_document,
+        payload_sha256=canonical_json_sha256(payload_document),
+    )
+    return derive_dungeon_creative_continuity(envelope, plan)
+
+
+def _raw_continuity() -> dict[str, object]:
+    return {
+        "projection_version": "1.0.0",
+        "projection_sha256": "a" * 64,
+        "premise": "Recover a synthetic seed from an abandoned mountain shrine.",
+        "themes": ["wind", "weathered stone"],
+        "room_intents": [
+            {
+                "room_ref": "apse",
+                "name": "Echoing Apse",
+                "role": "puzzle",
+                "purpose": "Control access to the seed vault.",
+            }
+        ],
+        "critical_path": ["approach", "apse"],
+        "campaign_lore_status": "unknown",
+    }
+
+
 def _wind_shrine_input() -> dict[str, object]:
     return {
         "schema_version": "1.0.0",
         "package_id": "package_wind_shrine",
+        "continuity": _raw_continuity(),
         "room": {
             "room_id": "room_echoing_apse",
             "floor_id": "floor_mountain_shrine",
@@ -215,13 +263,14 @@ def test_puzzle_enrichment_contract_is_narrow_and_exact_id_keyed() -> None:
     input_schema = str(DungeonPuzzleEnrichmentInput.model_json_schema())
     output_schema = str(DungeonPuzzleEnrichmentOutput.model_json_schema())
     assert "DungeonPlan" not in input_schema
-    assert "critical_path" not in input_schema
+    assert "continuity" in input_schema
     assert "exploration" not in output_schema
     assert "topology" not in output_schema
 
 
 def test_exact_package_builds_narrow_puzzle_context_and_rejects_foreign_ids() -> None:
     plan, request, package = _wind_shrine_package()
+    continuity = _standalone_continuity(plan)
     compiled = compile_dungeon_plan(plan)
     assert compiled.certificate is not None
     assert compiled.mechanics_plan is not None
@@ -255,7 +304,12 @@ def test_exact_package_builds_narrow_puzzle_context_and_rejects_foreign_ids() ->
         constraints=("No numeric difficulty values", "Allow non-musical solutions"),
     )
 
-    context = build_dungeon_puzzle_enrichment_input(package, selection)
+    context = build_dungeon_puzzle_enrichment_input(
+        package,
+        selection,
+        plan=plan,
+        creative_continuity=continuity,
+    )
 
     puzzle_room = next(room for room in package.rooms if room.id == room_ids["apse"])
     assert context.package_id == package.id
@@ -280,6 +334,8 @@ def test_exact_package_builds_narrow_puzzle_context_and_rejects_foreign_ids() ->
         build_dungeon_puzzle_enrichment_input(
             package,
             selection.model_copy(update={"room_id": "room_from_another_package"}),
+            plan=plan,
+            creative_continuity=continuity,
         )
     foreign_clue = selection.model_copy(
         update={
@@ -292,7 +348,12 @@ def test_exact_package_builds_narrow_puzzle_context_and_rejects_foreign_ids() ->
         }
     )
     with pytest.raises(ConflictError, match="unknown exact clue location"):
-        build_dungeon_puzzle_enrichment_input(package, foreign_clue)
+        build_dungeon_puzzle_enrichment_input(
+            package,
+            foreign_clue,
+            plan=plan,
+            creative_continuity=continuity,
+        )
     distant_clue = selection.model_copy(
         update={
             "clue_locations": (
@@ -304,11 +365,17 @@ def test_exact_package_builds_narrow_puzzle_context_and_rejects_foreign_ids() ->
         }
     )
     with pytest.raises(ConflictError, match="outside the local puzzle neighborhood"):
-        build_dungeon_puzzle_enrichment_input(package, distant_clue)
+        build_dungeon_puzzle_enrichment_input(
+            package,
+            distant_clue,
+            plan=plan,
+            creative_continuity=continuity,
+        )
 
 
 def test_accepted_puzzle_projects_into_exact_guide_without_mutating_package() -> None:
     plan, request, package = _wind_shrine_package()
+    continuity = _standalone_continuity(plan)
     compiled = compile_dungeon_plan(plan)
     assert compiled.certificate is not None
     assert compiled.mechanics_plan is not None
@@ -339,7 +406,12 @@ def test_accepted_puzzle_projects_into_exact_guide_without_mutating_package() ->
             relationship="uses_dependency",
         ),
     )
-    context = build_dungeon_puzzle_enrichment_input(package, selection)
+    context = build_dungeon_puzzle_enrichment_input(
+        package,
+        selection,
+        plan=plan,
+        creative_continuity=continuity,
+    )
     output_document = _wind_shrine_output()
     output_document["room_id"] = room_ids["apse"]
     output_document["clue_path"] = [
@@ -364,6 +436,7 @@ def test_accepted_puzzle_projects_into_exact_guide_without_mutating_package() ->
         base_guide,
         plan=plan,
         package=package,
+        creative_continuity=continuity,
         context=context,
         validation=validation,
     )
