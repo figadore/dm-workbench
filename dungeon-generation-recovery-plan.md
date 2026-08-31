@@ -472,9 +472,17 @@ exploration, feature, trap, and objective content. Its strict output contains on
 read-aloud and observable framing. Validation rejects foreign, duplicate, or omitted
 rooms, and projection fills only selected blank narratives and removes only their room
 blockers while preserving all mechanics, objective content, package/map state, other
-guide entries, and unrelated blockers. Narrative provider dispatch is not wired. No live
-provider was contacted, and no redaction/logging subsystem or new persistence store was
-added.
+guide entries, and unrelated blockers. Its independently pinned faux-provider dispatch
+has a task-specific profile, prompt/schema, 6,000-token cumulative and 2,048-output
+budget, and one budget-reserved repair. Accepted content and lineage publish atomically in
+a DM-only child while preserving package/map bytes, every prior enrichment and lineage,
+unselected room state, and unrelated blockers; rejection or publication failure leaves
+the objective parent current and stores no rejected body. A provider-free staged planner
+now orders exact puzzle, exploration, feature, trap, objective, and bounded narrative
+targets from package slots, current guide state, and accepted lineage; it skips completed
+tasks and fails closed on inconsistent or unsupported state. It does not dispatch or
+repeat the chain. No live provider was contacted, and no redaction/logging subsystem or
+new persistence store was added.
 
 - Add independently bounded puzzle, exploration, other interaction, and narrative tasks
   over exact package IDs; merge accepted output deterministically and preserve the map on

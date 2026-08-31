@@ -891,6 +891,25 @@ class DungeonRoomNarrativeValidationResult(WorkflowModel):
         return self
 
 
+class PromptedDungeonRoomNarrativeLineage(WorkflowModel):
+    """Accepted room prose retained with its authorized dungeon version."""
+
+    model_run_id: UUID
+    context_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    model_run: ModelRunRecord
+    output: DungeonRoomNarrativeEnrichmentOutput
+
+    @model_validator(mode="after")
+    def require_successful_matching_output(
+        self,
+    ) -> PromptedDungeonRoomNarrativeLineage:
+        if self.model_run.status != "succeeded":
+            raise ValueError("room narrative lineage requires a successful model run")
+        if self.model_run.output_payload != self.output.model_dump(mode="json"):
+            raise ValueError("room narrative lineage output must match the model run")
+        return self
+
+
 class DungeonPuzzleClueApproval(WorkflowModel):
     """Server-approved exact location selected for one puzzle context."""
 
@@ -1537,6 +1556,7 @@ class DungeonStudioSpecification(WorkflowModel):
     ] = ()
     trap_model_lineage: tuple[PromptedDungeonTrapLineage, ...] = ()
     objective_model_lineage: tuple[PromptedDungeonObjectiveLineage, ...] = ()
+    room_narrative_model_lineage: tuple[PromptedDungeonRoomNarrativeLineage, ...] = ()
 
 
 class CreateDungeonWorkflow(WorkflowModel):
@@ -1797,6 +1817,45 @@ class CreatePromptedDungeonObjectiveWorkflow(WorkflowModel):
         context_hash = canonical_json_sha256(self.context.model_dump(mode="json"))
         if self.model_lineage.context_sha256 != context_hash:
             raise ValueError("objective publication requires matching context lineage")
+        return self
+
+
+class PromptDungeonRoomNarrativeWorkflow(WorkflowModel):
+    """DM request for one bounded exact-room narrative enrichment child."""
+
+    campaign_id: UUID
+    artifact_id: UUID
+    parent_version_id: UUID
+    selection: DungeonRoomNarrativeContextSelection
+    created_by: str = Field(min_length=1, max_length=200)
+
+
+class CreatePromptedDungeonRoomNarrativeWorkflow(WorkflowModel):
+    """Accepted room narratives ready for deterministic child publication."""
+
+    campaign_id: UUID
+    artifact_id: UUID
+    parent_version_id: UUID
+    context: DungeonRoomNarrativeEnrichmentInput
+    validation: DungeonRoomNarrativeValidationResult
+    model_task_profile_id: UUID
+    model_lineage: PromptedDungeonRoomNarrativeLineage
+    tool_runs: tuple[ToolRunPin, ...] = ()
+    created_by: str = Field(min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def require_matching_accepted_lineage(
+        self,
+    ) -> CreatePromptedDungeonRoomNarrativeWorkflow:
+        if self.validation.accepted_output != self.model_lineage.output:
+            raise ValueError(
+                "room narrative publication requires matching accepted lineage"
+            )
+        context_hash = canonical_json_sha256(self.context.model_dump(mode="json"))
+        if self.model_lineage.context_sha256 != context_hash:
+            raise ValueError(
+                "room narrative publication requires matching context lineage"
+            )
         return self
 
 

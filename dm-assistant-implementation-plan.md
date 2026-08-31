@@ -1793,9 +1793,19 @@ exploration, feature, trap, and objective content. Its strict exact-ID output ca
 concise read-aloud and observable room framing. Semantic validation rejects foreign,
 duplicate, or omitted rooms, and deterministic projection changes only selected blank
 room narratives plus their exact readiness blockers while preserving package/map state,
-accepted mechanics/objectives, other guide entries, and unrelated blockers. Narrative
-provider dispatch/publication, automatic staged orchestration, and live calls remain later
-slices.
+accepted mechanics/objectives, other guide entries, and unrelated blockers. One
+independently pinned faux-provider narrative task now has its own profile/effort/prompt/
+schema, 6,000-token cumulative and 2,048-output budget, one budget-reserved repair,
+accepted-content lineage, and atomic DM-only child publication. Success preserves package/
+map bytes, every prior enrichment and lineage, unselected room state, and unrelated
+blockers; rejection or publication failure leaves the objective parent current with body-
+free diagnostics. A pure staged planner now compares exact structural slots with current
+guide projection and retained accepted lineage, skips completed work, selects the next
+single mechanic task in deterministic puzzle/exploration/feature/trap/objective order, and
+selects the bounded narrative room set only after local mechanics are accepted. It fails
+closed on missing/mismatched guide state, stale or duplicate lineage, untracked projected
+content, and unsupported blockers. Automatic dispatch/repetition and live calls remain
+later slices.
 
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
   Its model-visible proposal contains room identity/purpose, critical path, bounded

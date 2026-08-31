@@ -293,10 +293,15 @@ separate 6,000-token cumulative/2,048-output faux-provider task proposes only an
 goal, adjudication, two to four resolutions, and setback/aftermath. Foreign objective or
 mechanic IDs are rejected; accepted content and lineage publish in one DM-only child while
 package/map bytes and all accepted puzzle/exploration/feature/trap content remain unchanged.
-Accepted content remains available to the DM in the artifact, while routine attempt reports
-contain only compact operational metadata and diagnostics; raw transport capture requires
-explicit local debug. Until room narrative and the remaining enrichment work are wired,
-drafts truthfully remain preparation-blocked. Geometry, visibility, validation, rendering,
+Room narratives now use a separate exact-room faux-provider task with the same 6,000-token
+cumulative/2,048-output and one-repair policy. It returns only concise read-aloud plus
+observable framing for every selected room, retains accepted content and lineage in one
+atomic DM-only child, and preserves package/map bytes, all prior enrichments, unselected
+rooms, and unrelated readiness blockers. Rejection or publication failure leaves the
+objective parent current. Accepted content remains available to the DM in the artifact,
+while routine attempt reports contain only compact operational metadata and diagnostics;
+raw transport capture requires explicit local debug. Missing enrichment still truthfully
+blocks preparation readiness. Geometry, visibility, validation, rendering,
 persistence, and approval remain server-owned. Run inspection remains body-free:
 
 ```bash
@@ -439,11 +444,12 @@ The internal P1-02 Library service now ingests bounded strict-UTF-8 files throug
 
 ## Current Next Step
 
-Continue **P7-14f** by adding independently pinned faux-provider dispatch and atomic
-DM-only child publication for the exact-ID room-narrative contract. Preserve its bounded
-homogeneous context, observable-only output, exact-room validation, prior mechanics and
-lineage, package/map bytes, other guide entries, and unrelated blockers. Do not combine it
-with automatic staged orchestration, live calls, Tier B/C, or a migration. See
+Continue **P7-14f** by wiring the provider-free exact-slot planner into a one-step staged
+coordinator across the existing puzzle, exploration, feature, trap, objective, and room-
+narrative seams. Preserve explicit task-policy inputs, one atomic child per accepted task,
+resumable parent/child lineage, bounded failure, and no topology/map regeneration. Do not
+add repeated/full-chain dispatch, live calls, Tier B/C, a migration, model-authored
+geometry/mechanics, or preparation approval in that slice. See
 [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) and
 [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
 
