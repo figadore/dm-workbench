@@ -7,89 +7,95 @@
 ## Current State
 
 - **Updated:** 2026-08-31
-- **Branch/HEAD:** `fast-track-prompt-to-dungeon` at `9a3d87f`, two commits ahead of
+- **Branch/HEAD:** `fast-track-prompt-to-dungeon` at `2d0e78a`, three commits ahead of
   `origin/fast-track-prompt-to-dungeon`, plus the uncommitted slice below.
-- **Working tree:** **uncommitted P7-14f final deterministic staged-dungeon gate and
-  read-only cohesion-report contracts**. No migration, live provider call, credential,
-  canonical campaign path, preparation approval enforcement, repeated/full-chain
-  dispatcher, or pure-package change is partially edited.
+- **Working tree:** **uncommitted P7-14f prompted approval and staged review-packet final-
+  gate enforcement**. No migration, provider call, credential, canonical campaign path,
+  chain dispatcher, or pure-package behavior is partially edited.
 - **Current task:** **P7-14f — Staged Tier A authoring and anti-overfitting evaluation.**
-- **Task state:** the pure final gate and strict report shape now exist. They are not yet
-  enforced by prompted preparation approval/readiness or written into the DM review packet;
-  no holistic provider call or DM disposition workflow exists.
+- **Task state:** the final deterministic gate now blocks prompted preparation approval and
+  staged review packets; all six cohesion dimensions require explicit hash-bound DM
+  disposition. Broader resumed one-step coordinator coverage remains before repetition.
 - **Schema head:** `0008_workbench_defaults`; no migration changed or is pending.
 - **Retention gate:** **not crossed.** Active V1 contracts evolve in place; there is no
   retained real-user artifact, external consumer, non-disposable deployment, or promised
   replay requirement.
 
-## Implemented Final-Gate Slice
+## Implemented This Slice
 
-Trusted Workbench code now:
+Prompted approval now:
 
-- exposes `validate_final_staged_dungeon()` as a pure provider-free function over one
-  immutable `DungeonStudioSpecification`;
-- rebuilds the accepted structural plan/context and exact creative-continuity projection,
-  validates structural context pin/source inheritance, and compares the persisted
-  projection;
-- evolves accepted puzzle/exploration/feature/trap/objective/narrative lineage in place to
-  retain the continuity version/hash plus exact selected fact and cited source IDs;
-- recomputes topology/geometry and exact gate/dependency projection, current preparation
-  readiness, complete staged slot/content/successful-lineage coverage, typed cross-task
-  references, and player SVG secrecy;
-- returns seven stable check families with bounded code/ID-only diagnostics and no prompt,
-  guide, provider, or campaign body;
-- defines a separate six-dimension `DungeonCohesionReviewReport` contract with bounded
-  findings, exact evidence IDs, and only targeted existing-seam recommendations; and
-- gives that report no content-edit, blocker-clearing, preparation-approval, persistence,
-  provider, or canonical operation.
+- distinguishes prompted/staged specifications from provider-independent manually authored
+  Studio artifacts;
+- retains the existing preparation-readiness check for every artifact;
+- reruns `validate_final_staged_dungeon()` before any prompted lifecycle transition;
+- fails closed when continuity, sources, dependencies, required content, lineage, typed
+  cross-task references, or player secrecy fail;
+- requires a strict cohesion report plus DM-authored disposition bound to the exact
+  specification, deterministic-result, continuity, and report hashes;
+- requires disposition of all six dimensions and every exact finding; and
+- blocks `targeted_regeneration` decisions while preserving the report's inability to edit,
+  clear blockers, approve preparation, or write canon.
 
-The gate does not mutate or persist the artifact and does not approve preparation. The
-cohesion report is a contract only; no model has been called and no report can self-approve.
+The JSON approval API can carry the strict report/disposition models. Existing CLI/browser
+approval remains sufficient for provider-independent artifacts; a prompted artifact cannot
+use those evidence-free adapters to bypass the gate.
+
+The staged provider-free review-packet writer now:
+
+- reruns the same final gate and refuses an invalid staged specification;
+- validates the exact report/disposition binding without performing lifecycle or canonical
+  operations;
+- emits exact DM/player maps, guide, rubric, report, disposition JSON, and a readable DM
+  disposition record; and
+- persists only the deterministic result hash and seven body-free check summaries, never
+  final-gate diagnostics or provider bodies.
+
+The existing fixed synthetic archive packet remains a renderer/secrecy regression and the
+provider-independent approval workflow retains its readiness-based path.
 
 ## Tests Added/Extended
 
-A grounded synthetic glasshouse fixture now exercises all staged task kinds plus a real
-certified gate/dependency. Provider-free coverage proves:
+Provider-free tests prove:
 
-- one fully enriched specification passes all seven final checks without mutation;
-- every enrichment lineage carries the exact authorized fact/source inheritance;
-- stale package/dependency projection, readiness, continuity lineage, and source lineage
-  fail closed with bounded body-free diagnostics;
-- a malformed protected trap marker exposed to the player renderer is detected even when
-  its in-memory package classification is relabelled; and
-- the cohesion report requires all six dimensions and rejects approval/edit fields.
+- a fully enriched prompted artifact with stale source lineage fails before the preparation
+  transition even when supplied with a previously valid cohesion report/disposition;
+- a valid prompted artifact cannot transition without all six DM dispositions;
+- exact valid evidence reaches the lifecycle boundary;
+- a report/disposition cannot clear a failed deterministic gate;
+- staged review output contains all seven check families but no diagnostics or guide body in
+  its deterministic summary; and
+- the existing provider-independent workflow test still exercises readiness-based approval
+  unchanged (integration is locally skipped without its database fixture).
 
 ## Active Boundaries and Known Issues
 
-- Prompted `DungeonStudioService.approve()` still checks only legacy preparation readiness.
-  It must invoke the final gate for staged prompted artifacts and fail closed before the
-  lifecycle transition. Provider-independent manually authored Studio artifacts must retain
-  their existing approval path rather than being forced to fabricate model lineage.
-- The development review packet still predates the six-dimension cohesion report and does
-  not record deterministic-gate evidence or explicit DM disposition.
 - Broader resumed feature/trap/objective/narrative coordinator coverage, automatic chain
   repetition, multi-case quality comparison, staged live result, Tier B/C, and resumed
   output/print work remain pending.
+- There is no bounded cohesion-reviewer model call yet. Current strict report and disposition
+  evidence is provider-free/human-constructible and non-authoritative.
+- The browser/CLI do not yet collect prompted report/disposition documents; this fails closed
+  rather than permitting evidence-free prompted approval. The authenticated JSON API accepts
+  the strict evidence.
 - Live provider use remains paused. Pinned `@earendil-works/pi-ai` Codex transport does not
   serialize the requested hard output limit; post-response checks protect publication but
   cannot prevent provider usage. The frozen-canary exception remains operator risk, not
   ordinary rollout permission.
 - Package and root pytest suites must run separately because duplicate test module basenames
   cause an import-file-mismatch when collected in one process.
-- Disposable-PostgreSQL enrichment integration is skipped locally because
-  `DM_TEST_DATABASE_URL` is unset and Docker is unavailable.
-- A repository-wide Ruff/format run still reports unrelated pre-existing Library/import and
-  formatting drift outside this slice; focused lint/format over every changed Python file
-  passes.
-- No provider was contacted. No credential, canonical campaign write, preparation approval,
-  migration, redaction system, or second persistence store is present.
+- Disposable-PostgreSQL integration is skipped locally because `DM_TEST_DATABASE_URL` is
+  unset and Docker is unavailable.
+- No provider was contacted. No credential, canon write, migration, queue, redaction system,
+  second persistence store, or model-authored mechanics are present.
 
 ## Current Files and Verification
 
 Uncommitted production/tests:
 
-- `src/dm_assistant/orchestration/dungeons/final_validation.py`
-- dungeon exports/contracts and all six enrichment prompting modules
+- `src/dm_assistant/orchestration/dungeons/{final_validation,review,service}.py`
+- `src/dm_assistant/orchestration/dungeons/__init__.py`
+- `src/dm_assistant/api/dungeons.py`
 - `tests/unit/test_dungeon_staged_enrichment_plan.py`
 
 Uncommitted documentation:
@@ -102,30 +108,29 @@ Uncommitted documentation:
 
 Recorded for this slice:
 
-- `uv run pytest -q tests/unit tests/evals` -> **213 passed**.
+- `uv run pytest -q tests/unit tests/evals` -> **221 passed**.
 - `uv run pytest -q packages/dungeon-engine/tests` -> **139 passed**.
-- focused final-gate/continuity/enrichment contract tests -> **28 passed**.
-- focused PostgreSQL enrichment suites -> **15 skipped** (`DM_TEST_DATABASE_URL` unset).
-- strict mypy over every changed production Python file and focused tests -> **passed**.
+- focused staged/review-packet tests -> **16 passed**.
+- focused PostgreSQL workflow -> **2 skipped** (database fixture unavailable).
+- strict mypy over every changed production Python file and focused test -> **passed**.
 - Ruff lint/format over every changed Python file -> **passed**.
-- `git diff --check` -> **passed** before this handoff refresh.
+- `git diff --check` -> **passed** before documentation refresh.
 
-Suggested commit subject: `P7-14f add final staged-dungeon continuity gate`
+Suggested commit subject: `P7-14f enforce final gate at prompted approval`
 
 ## Single Next Recommended Task
 
-**Enforce the final deterministic gate at the prompted preparation approval boundary and
-surface its evidence in the DM review packet before resumed coordination or repetition.**
+**Add provider-free resumed one-step coordinator coverage for feature, trap, objective, and
+room-narrative targets before any automatic repetition/full-chain dispatcher.**
 
-**First concrete action:** add failing provider-free service tests proving a fully enriched
-prompted artifact cannot transition to `approved_for_play` when any final-gate check fails,
-while an existing model-independent manually authored artifact keeps its current readiness-
-based approval path. Then persist/render only the final result's body-free hash/check
-summary and require explicit DM disposition of all six cohesion dimensions; do not let a
-report clear deterministic blockers.
+**First concrete action:** add a failing coordinator test for the exact next feature target
+proving a matching trusted feature policy invokes only that one existing seam and replans the
+accepted child, while a mismatched feature ID makes no provider call and writes no version.
+Then repeat that established discriminated-policy pattern for trap, objective, and bounded
+room narrative without adding a loop.
 
-Do **not** add repeated/full-chain dispatch, a live/holistic provider call, Tier B/C, a
-migration, queue, model-authored mechanics, automatic preparation approval, or canon writes.
+Do **not** add chain repetition, a live/holistic provider call, Tier B/C, a migration, queue,
+model-authored mechanics, automatic preparation approval, or canon writes.
 
 ## Authoritative References
 

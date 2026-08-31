@@ -1,12 +1,15 @@
 """Provider-free staged dungeon enrichment planning coverage."""
 
 import json
+from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from uuid import UUID
 
 import pytest
 from pydantic import ValidationError
 
+from dm_assistant.errors import ConflictError
 from dm_assistant.modules.modeling import ModelRunRecord
 from dm_assistant.modules.preparation import (
     ContextSourceLink,
@@ -19,7 +22,11 @@ from dm_assistant.modules.preparation import (
 )
 from dm_assistant.orchestration.dungeons import (
     DungeonCohesionAssessment,
+    DungeonCohesionDimensionDisposition,
+    DungeonCohesionFinding,
+    DungeonCohesionReviewDisposition,
     DungeonCohesionReviewReport,
+    DungeonCohesionTargetedRecommendation,
     DungeonExplorationApproach,
     DungeonExplorationEnrichmentOutput,
     DungeonFeatureInteractionAffordance,
@@ -45,13 +52,18 @@ from dm_assistant.orchestration.dungeons import (
     PromptedDungeonTrapLineage,
     derive_dungeon_creative_continuity,
     plan_dungeon_staged_enrichment,
+    require_dungeon_cohesion_disposition,
     validate_final_staged_dungeon,
 )
 from dm_assistant.orchestration.dungeons.contracts import DungeonGuidePuzzle
 from dm_assistant.orchestration.dungeons.final_validation import (
     DungeonCohesionDimension,
 )
+from dm_assistant.orchestration.dungeons.review import (
+    write_staged_dungeon_review_packet,
+)
 from dm_assistant.orchestration.dungeons.service import (
+    DungeonStudioService,
     build_dungeon_dm_guide,
     build_dungeon_preparation_readiness,
 )
@@ -850,6 +862,387 @@ def test_final_gate_fails_closed_when_a_protected_marker_becomes_player_visible(
         and trap_id in item.component_ids
         for item in result.diagnostics
     )
+
+
+def test_prompted_approval_fails_before_transition_when_final_gate_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    specification = _fully_enriched_specification("approval")
+    report, disposition = _cohesion_evidence(specification)
+    stale_puzzle = specification.puzzle_model_lineage[0].model_copy(
+        update={"source_ids": ("unauthorized_source",)}
+    )
+    broken = specification.model_copy(update={"puzzle_model_lineage": (stale_puzzle,)})
+
+    class _PreparationBoundary:
+        def get_version(self, campaign_id: UUID, version_id: UUID) -> object:
+            del campaign_id, version_id
+            return SimpleNamespace(specification=broken.model_dump(mode="json"))
+
+        def transition_artifact(self, command: object) -> None:
+            del command
+            raise AssertionError("approval transition must not be attempted")
+
+    monkeypatch.setattr(
+        "dm_assistant.orchestration.dungeons.service._load_specification",
+        lambda document: broken,
+    )
+    service = DungeonStudioService(_PreparationBoundary())  # type: ignore[arg-type]
+
+    with pytest.raises(ConflictError, match="final deterministic approval gate"):
+        service.approve(
+            campaign_id=UUID(int=901),
+            artifact_id=UUID(int=902),
+            artifact_version_id=UUID(int=903),
+            actor="synthetic-dm",
+            reason="Synthetic review complete.",
+            cohesion_report=report,
+            cohesion_disposition=disposition,
+        )
+
+
+def _cohesion_evidence(
+    specification: DungeonStudioSpecification,
+    *,
+    actor: str = "synthetic-dm",
+) -> tuple[DungeonCohesionReviewReport, DungeonCohesionReviewDisposition]:
+    validation = validate_final_staged_dungeon(specification)
+    assert validation.valid and validation.creative_continuity_sha256 is not None
+    dimensions: tuple[DungeonCohesionDimension, ...] = (
+        "thematic_reinforcement",
+        "history_environment_causality",
+        "mechanic_objective_unity",
+        "progression",
+        "motif_variation",
+        "selected_lore_consistency",
+    )
+    assessments = tuple(
+        DungeonCohesionAssessment(dimension=dimension, decision="pass")
+        for dimension in dimensions
+    )
+    report = DungeonCohesionReviewReport(
+        specification_sha256=validation.specification_sha256,
+        deterministic_validation_sha256=canonical_json_sha256(
+            validation.model_dump(mode="json")
+        ),
+        creative_continuity_sha256=validation.creative_continuity_sha256,
+        reviewer_kind="human_dm",
+        assessments=assessments,
+    )
+    disposition = DungeonCohesionReviewDisposition(
+        specification_sha256=validation.specification_sha256,
+        report_sha256=canonical_json_sha256(report.model_dump(mode="json")),
+        dm_actor=actor,
+        dispositions=tuple(
+            DungeonCohesionDimensionDisposition(
+                dimension=assessment.dimension,
+                decision="accepted",
+            )
+            for assessment in assessments
+        ),
+    )
+    return report, disposition
+
+
+def test_prompted_approval_requires_six_dimension_dm_disposition(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    specification = _fully_enriched_specification("disposition")
+
+    class _PreparationBoundary:
+        def get_version(self, campaign_id: UUID, version_id: UUID) -> object:
+            del campaign_id, version_id
+            return SimpleNamespace(specification={})
+
+        def transition_artifact(self, command: object) -> None:
+            del command
+            raise AssertionError("approval transition must not be attempted")
+
+    monkeypatch.setattr(
+        "dm_assistant.orchestration.dungeons.service._load_specification",
+        lambda document: specification,
+    )
+    service = DungeonStudioService(_PreparationBoundary())  # type: ignore[arg-type]
+
+    with pytest.raises(ConflictError, match="complete DM cohesion disposition"):
+        service.approve(
+            campaign_id=UUID(int=911),
+            artifact_id=UUID(int=912),
+            artifact_version_id=UUID(int=913),
+            actor="synthetic-dm",
+            reason="Synthetic review complete.",
+        )
+
+
+def test_provider_independent_manual_approval_keeps_readiness_only_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    enriched = _fully_enriched_specification("manual")
+    manual = enriched.model_copy(
+        update={
+            "structural_context": None,
+            "creative_continuity": None,
+            "model_lineage": (),
+            "puzzle_model_lineage": (),
+            "exploration_model_lineage": (),
+            "feature_interaction_model_lineage": (),
+            "trap_model_lineage": (),
+            "objective_model_lineage": (),
+            "room_narrative_model_lineage": (),
+        }
+    )
+    assert manual.preparation_readiness is not None
+    assert manual.preparation_readiness.ready
+
+    class _TransitionReached(Exception):
+        pass
+
+    class _PreparationBoundary:
+        def get_version(self, campaign_id: UUID, version_id: UUID) -> object:
+            del campaign_id, version_id
+            return SimpleNamespace(specification={})
+
+        def transition_artifact(self, command: object) -> None:
+            del command
+            raise _TransitionReached
+
+    monkeypatch.setattr(
+        "dm_assistant.orchestration.dungeons.service._load_specification",
+        lambda document: manual,
+    )
+    service = DungeonStudioService(_PreparationBoundary())  # type: ignore[arg-type]
+
+    with pytest.raises(_TransitionReached):
+        service.approve(
+            campaign_id=UUID(int=916),
+            artifact_id=UUID(int=917),
+            artifact_version_id=UUID(int=918),
+            actor="synthetic-dm",
+            reason="Manual preparation review complete.",
+        )
+
+
+def test_complete_prompted_approval_evidence_reaches_lifecycle_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    specification = _fully_enriched_specification("approved")
+    report, disposition = _cohesion_evidence(specification)
+
+    class _TransitionReached(Exception):
+        pass
+
+    class _PreparationBoundary:
+        def get_version(self, campaign_id: UUID, version_id: UUID) -> object:
+            del campaign_id, version_id
+            return SimpleNamespace(specification={})
+
+        def transition_artifact(self, command: object) -> None:
+            del command
+            raise _TransitionReached
+
+    monkeypatch.setattr(
+        "dm_assistant.orchestration.dungeons.service._load_specification",
+        lambda document: specification,
+    )
+    service = DungeonStudioService(_PreparationBoundary())  # type: ignore[arg-type]
+
+    with pytest.raises(_TransitionReached):
+        service.approve(
+            campaign_id=UUID(int=921),
+            artifact_id=UUID(int=922),
+            artifact_version_id=UUID(int=923),
+            actor="synthetic-dm",
+            reason="Synthetic review complete.",
+            cohesion_report=report,
+            cohesion_disposition=disposition,
+        )
+
+
+def test_cohesion_disposition_binds_all_six_dimensions_and_cannot_clear_blockers() -> (
+    None
+):
+    specification = _fully_enriched_specification("bound")
+    validation = validate_final_staged_dungeon(specification)
+    report, disposition = _cohesion_evidence(specification)
+
+    require_dungeon_cohesion_disposition(
+        validation,
+        report,
+        disposition,
+        dm_actor="synthetic-dm",
+    )
+
+    stale_puzzle = specification.puzzle_model_lineage[0].model_copy(
+        update={"source_ids": ("unauthorized_source",)}
+    )
+    broken = specification.model_copy(update={"puzzle_model_lineage": (stale_puzzle,)})
+    failed_validation = validate_final_staged_dungeon(broken)
+    assert not failed_validation.valid
+    with pytest.raises(ConflictError, match="stale or mismatched"):
+        require_dungeon_cohesion_disposition(
+            failed_validation,
+            report,
+            disposition,
+            dm_actor="synthetic-dm",
+        )
+
+
+def test_targeted_regeneration_disposition_cannot_authorize_approval() -> None:
+    specification = _fully_enriched_specification("targeted")
+    validation = validate_final_staged_dungeon(specification)
+    assert validation.valid and validation.creative_continuity_sha256 is not None
+    dimensions: tuple[DungeonCohesionDimension, ...] = (
+        "thematic_reinforcement",
+        "history_environment_causality",
+        "mechanic_objective_unity",
+        "progression",
+        "motif_variation",
+        "selected_lore_consistency",
+    )
+    room_id = specification.package.rooms[0].id
+    assessments = (
+        DungeonCohesionAssessment(
+            dimension=dimensions[0],
+            decision="needs_dm_disposition",
+            findings=(
+                DungeonCohesionFinding(
+                    finding_code="theme_weak",
+                    severity="blocking_dm_review",
+                    summary="Synthetic thematic concern.",
+                    recommendation=DungeonCohesionTargetedRecommendation(
+                        task_kind="room_narrative",
+                        room_ids=(room_id,),
+                        target_ids=(room_id,),
+                        rationale="Reinforce the selected theme in observable framing.",
+                    ),
+                ),
+            ),
+        ),
+        *tuple(
+            DungeonCohesionAssessment(dimension=dimension, decision="pass")
+            for dimension in dimensions[1:]
+        ),
+    )
+    report = DungeonCohesionReviewReport(
+        specification_sha256=validation.specification_sha256,
+        deterministic_validation_sha256=canonical_json_sha256(
+            validation.model_dump(mode="json")
+        ),
+        creative_continuity_sha256=validation.creative_continuity_sha256,
+        reviewer_kind="human_dm",
+        assessments=assessments,
+    )
+    disposition = DungeonCohesionReviewDisposition(
+        specification_sha256=validation.specification_sha256,
+        report_sha256=canonical_json_sha256(report.model_dump(mode="json")),
+        dm_actor="synthetic-dm",
+        dispositions=(
+            DungeonCohesionDimensionDisposition(
+                dimension=dimensions[0],
+                decision="targeted_regeneration",
+                finding_codes=("theme_weak",),
+                note="Regenerate the exact room-narrative seam.",
+            ),
+            *tuple(
+                DungeonCohesionDimensionDisposition(
+                    dimension=dimension,
+                    decision="accepted",
+                )
+                for dimension in dimensions[1:]
+            ),
+        ),
+    )
+
+    require_dungeon_cohesion_disposition(
+        validation,
+        report,
+        disposition,
+        dm_actor="synthetic-dm",
+        allow_targeted_regeneration=True,
+    )
+    with pytest.raises(ConflictError, match="targeted regeneration before approval"):
+        require_dungeon_cohesion_disposition(
+            validation,
+            report,
+            disposition,
+            dm_actor="synthetic-dm",
+        )
+
+
+def test_staged_review_packet_records_body_free_gate_summary_and_dm_disposition(
+    tmp_path: Path,
+) -> None:
+    specification = _fully_enriched_specification("packet")
+    report, disposition = _cohesion_evidence(specification)
+    output_dir = tmp_path / "staged-review"
+
+    files = write_staged_dungeon_review_packet(
+        specification,
+        output_dir,
+        cohesion_report=report,
+        cohesion_disposition=disposition,
+    )
+
+    names = {item.name for item in files}
+    assert {
+        "final-validation-summary.json",
+        "cohesion-review-report.json",
+        "cohesion-disposition.json",
+        "review-disposition.md",
+        "dm-map.svg",
+        "player-map.svg",
+        "dm-guide.md",
+        "manifest.json",
+    } <= names
+    summary = json.loads(
+        (output_dir / "final-validation-summary.json").read_text(encoding="utf-8")
+    )
+    assert summary["valid"] is True
+    assert "diagnostics" not in summary
+    assert [item["kind"] for item in summary["checks"]] == [
+        "continuity",
+        "sources",
+        "dependencies",
+        "required_content",
+        "lineage",
+        "cross_task",
+        "secrecy",
+    ]
+    serialized_summary = json.dumps(summary)
+    assert "Observable puzzle situation" not in serialized_summary
+    assert "Pale light crosses" not in serialized_summary
+    disposition_document = json.loads(
+        (output_dir / "cohesion-disposition.json").read_text(encoding="utf-8")
+    )
+    assert len(disposition_document["dispositions"]) == 6
+    assert {item["decision"] for item in disposition_document["dispositions"]} == {
+        "accepted"
+    }
+    manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["packet_kind"] == "staged_final_review"
+    assert manifest["targeted_regeneration_required"] is False
+
+
+def test_staged_review_packet_fails_before_writing_when_final_gate_fails(
+    tmp_path: Path,
+) -> None:
+    specification = _fully_enriched_specification("packet_blocked")
+    report, disposition = _cohesion_evidence(specification)
+    stale_puzzle = specification.puzzle_model_lineage[0].model_copy(
+        update={"source_ids": ("unauthorized_source",)}
+    )
+    broken = specification.model_copy(update={"puzzle_model_lineage": (stale_puzzle,)})
+    output_dir = tmp_path / "blocked-review"
+
+    with pytest.raises(ConflictError, match="review-packet gate"):
+        write_staged_dungeon_review_packet(
+            broken,
+            output_dir,
+            cohesion_report=report,
+            cohesion_disposition=disposition,
+        )
+
+    assert not output_dir.exists()
 
 
 def test_cohesion_report_is_six_dimension_read_only_metadata() -> None:

@@ -240,6 +240,154 @@ class DungeonCohesionReviewReport(WorkflowModel):
         return self
 
 
+class DungeonFinalValidationSummary(WorkflowModel):
+    """Persistable body-free summary of one exact final deterministic result."""
+
+    schema_version: Literal["1.0.0"] = "1.0.0"
+    specification_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    deterministic_validation_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    creative_continuity_sha256: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
+    valid: bool
+    checks: tuple[DungeonFinalValidationCheck, ...] = Field(min_length=7, max_length=7)
+
+    @model_validator(mode="after")
+    def require_complete_checks(self) -> DungeonFinalValidationSummary:
+        if tuple(item.kind for item in self.checks) != _CHECK_ORDER:
+            raise ValueError("final validation summary requires every check")
+        if self.valid != all(item.passed for item in self.checks):
+            raise ValueError("final validation summary must match its checks")
+        return self
+
+
+class DungeonCohesionDimensionDisposition(WorkflowModel):
+    """Explicit DM handling of one report dimension and all of its findings."""
+
+    dimension: DungeonCohesionDimension
+    decision: Literal[
+        "accepted",
+        "accepted_with_risk",
+        "targeted_regeneration",
+        "not_applicable",
+    ]
+    finding_codes: tuple[GuideLocalRef, ...] = Field(default=(), max_length=8)
+    note: str | None = Field(default=None, min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def require_unique_findings_and_risk_note(
+        self,
+    ) -> DungeonCohesionDimensionDisposition:
+        if len(self.finding_codes) != len(set(self.finding_codes)):
+            raise ValueError("cohesion disposition finding codes must be unique")
+        if self.decision in {"accepted_with_risk", "targeted_regeneration"}:
+            if self.note is None:
+                raise ValueError("risk or regeneration dispositions require a DM note")
+        return self
+
+
+class DungeonCohesionReviewDisposition(WorkflowModel):
+    """DM-authored disposition record; it does not itself approve preparation."""
+
+    schema_version: Literal["1.0.0"] = "1.0.0"
+    specification_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    report_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    dm_actor: str = Field(min_length=1, max_length=200)
+    dispositions: tuple[DungeonCohesionDimensionDisposition, ...] = Field(
+        min_length=6, max_length=6
+    )
+
+    @model_validator(mode="after")
+    def require_every_dimension_once(self) -> DungeonCohesionReviewDisposition:
+        if tuple(item.dimension for item in self.dispositions) != _COHESION_DIMENSIONS:
+            raise ValueError("cohesion disposition requires every dimension in order")
+        return self
+
+
+def summarize_final_staged_validation(
+    result: DungeonFinalValidationResult,
+) -> DungeonFinalValidationSummary:
+    """Drop diagnostics and retain only exact hashes plus stable check counts."""
+
+    return DungeonFinalValidationSummary(
+        specification_sha256=result.specification_sha256,
+        deterministic_validation_sha256=canonical_json_sha256(
+            result.model_dump(mode="json")
+        ),
+        creative_continuity_sha256=result.creative_continuity_sha256,
+        valid=result.valid,
+        checks=result.checks,
+    )
+
+
+def require_dungeon_cohesion_disposition(
+    final_validation: DungeonFinalValidationResult,
+    report: DungeonCohesionReviewReport,
+    disposition: DungeonCohesionReviewDisposition,
+    *,
+    dm_actor: str,
+    allow_targeted_regeneration: bool = False,
+) -> None:
+    """Validate exact report/disposition binding without editing dungeon state."""
+
+    expected_validation_sha256 = canonical_json_sha256(
+        final_validation.model_dump(mode="json")
+    )
+    expected_report_sha256 = canonical_json_sha256(report.model_dump(mode="json"))
+    if (
+        not final_validation.valid
+        or final_validation.creative_continuity_sha256 is None
+        or report.specification_sha256 != final_validation.specification_sha256
+        or report.deterministic_validation_sha256 != expected_validation_sha256
+        or report.creative_continuity_sha256
+        != final_validation.creative_continuity_sha256
+        or disposition.specification_sha256 != final_validation.specification_sha256
+        or disposition.report_sha256 != expected_report_sha256
+        or disposition.dm_actor != dm_actor
+    ):
+        raise ConflictError("Dungeon cohesion review evidence is stale or mismatched.")
+
+    for assessment, handled in zip(
+        report.assessments, disposition.dispositions, strict=True
+    ):
+        expected_findings = tuple(item.finding_code for item in assessment.findings)
+        if handled.finding_codes != expected_findings:
+            raise ConflictError(
+                "Dungeon cohesion disposition does not cover every exact finding."
+            )
+        if assessment.decision == "pass" and handled.decision != "accepted":
+            raise ConflictError(
+                "Dungeon cohesion pass requires explicit DM acceptance."
+            )
+        if (
+            assessment.decision == "not_applicable"
+            and handled.decision != "not_applicable"
+        ):
+            raise ConflictError(
+                "Dungeon cohesion not-applicable assessment is not dispositioned."
+            )
+        if assessment.decision == "needs_dm_disposition" and handled.decision not in {
+            "accepted_with_risk",
+            "targeted_regeneration",
+        }:
+            raise ConflictError(
+                "Dungeon cohesion findings require an explicit DM disposition."
+            )
+        if handled.decision == "targeted_regeneration" and any(
+            item.recommendation is None for item in assessment.findings
+        ):
+            raise ConflictError(
+                "Targeted regeneration requires an exact existing-seam recommendation."
+            )
+        if (
+            handled.decision == "targeted_regeneration"
+            and not allow_targeted_regeneration
+        ):
+            raise ConflictError(
+                "Dungeon cohesion review requires targeted regeneration before approval."
+            )
+
+
 def validate_final_staged_dungeon(
     specification: DungeonStudioSpecification,
 ) -> DungeonFinalValidationResult:

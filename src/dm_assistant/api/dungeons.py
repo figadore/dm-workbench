@@ -10,8 +10,9 @@ from dm_assistant.auth import BrowserSession, csrf_matches
 from dm_assistant.errors import ForbiddenError, InvalidInputError
 from dm_assistant.modules.preparation import ArtifactRecord
 from dm_assistant.orchestration.dungeons import (
-    ApproveDungeonWorkflow,
     CreateDungeonWorkflow,
+    DungeonCohesionReviewDisposition,
+    DungeonCohesionReviewReport,
     DungeonStudioDetail,
     DungeonStudioService,
     DungeonVersionComparison,
@@ -20,6 +21,20 @@ from dm_assistant.orchestration.dungeons import (
     RegenerateDungeonWorkflow,
 )
 from dm_dungeon import load_layout_request_json
+
+
+class ApproveDungeonApiRequest(BaseModel):
+    """Approval evidence is optional only for provider-independent artifacts."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    campaign_id: uuid.UUID
+    artifact_id: uuid.UUID
+    artifact_version_id: uuid.UUID
+    actor: str = Field(min_length=1, max_length=200)
+    reason: str = Field(min_length=1, max_length=2000)
+    cohesion_report: DungeonCohesionReviewReport | None = None
+    cohesion_disposition: DungeonCohesionReviewDisposition | None = None
 
 
 class GenerateDungeonApiRequest(BaseModel):
@@ -79,7 +94,7 @@ def create_dungeon_api_router(dungeons: DungeonStudioService) -> APIRouter:
 
     @router.post("/approve")
     def approve(
-        command: ApproveDungeonWorkflow,
+        command: ApproveDungeonApiRequest,
         request: Request,
     ) -> DungeonStudioDetail:
         _require_api_csrf(request)
@@ -89,6 +104,8 @@ def create_dungeon_api_router(dungeons: DungeonStudioService) -> APIRouter:
             artifact_version_id=command.artifact_version_id,
             actor=command.actor,
             reason=command.reason,
+            cohesion_report=command.cohesion_report,
+            cohesion_disposition=command.cohesion_disposition,
         )
 
     @router.get("/{artifact_id}")

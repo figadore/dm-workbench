@@ -106,8 +106,10 @@ commits superseded them. This file preserves only compact milestone history:
   sources, dependencies, required content, slot/lineage coverage, typed cross-task
   references, and player secrecy with body-free diagnostics. A separate strict report
   contract covers all six cohesion dimensions without edit, approval, blocker-clearing, or
-  canonical operations. Application-boundary enforcement, DM disposition, repeated
-  orchestration, and staged live evaluation remain incomplete.
+  canonical operations. Prompted approval and staged review packets now enforce the gate;
+  exact-hash-bound DM disposition covers all six dimensions, targeted-regeneration decisions
+  block approval, and packets retain only body-free deterministic hash/check evidence.
+  Broader one-step coordination, repeated orchestration, and staged live evaluation remain.
 
 ### Deployment baseline
 

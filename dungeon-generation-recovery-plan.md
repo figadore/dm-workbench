@@ -510,14 +510,16 @@ body-free. A separate strict read-only cohesion-report contract covers all six d
 and permits only findings, exact evidence IDs, and targeted existing-seam recommendations;
 it cannot carry edits, approval, blocker-clearing, or canonical operations.
 
-Required before chain repetition or live Tier A: enforce the gate at prompted readiness/
-approval and review-packet boundaries, then record explicit DM disposition of the bounded
-whole-dungeon report. A separately budgeted reviewer may diagnose thematic reinforcement,
-history/environment causality, mechanic/objective unity, progression, motif variation, and
-selected-lore consistency, but cannot edit, approve, clear blockers, or write canon.
-Findings are explicitly dispositioned or sent to one targeted enrichment seam. Multi-case
-blinded human evidence remains the quality authority; task contexts remain narrow rather
-than becoming a universal optional-field context or unrestricted corpus/guide dump.
+The final gate now runs at prompted approval and staged review-packet boundaries. Prompted
+approval requires a hash-bound DM disposition of all six whole-dungeon dimensions and every
+finding; targeted-regeneration decisions block lifecycle transition. The packet records only
+the deterministic result hash/check summary plus the non-authoritative report and explicit
+disposition. A separately budgeted reviewer may diagnose thematic reinforcement, history/
+environment causality, mechanic/objective unity, progression, motif variation, and selected-
+lore consistency, but cannot edit, approve, clear blockers, or write canon. Broader resumed
+one-step coordinator coverage remains required before chain repetition or live Tier A.
+Multi-case blinded human evidence remains the quality authority; task contexts stay narrow
+rather than becoming a universal optional-field context or unrestricted corpus/guide dump.
 
 - Add independently bounded puzzle, exploration, other interaction, and narrative tasks
   over exact package IDs; merge accepted output deterministically and preserve the map on

@@ -311,6 +311,11 @@ cross-task references, and player-map secrecy without reading provider bodies. I
 diagnostics contain only codes and exact IDs. The separate six-dimension cohesion-report
 contract is non-authoritative and permits only findings, evidence IDs, and targeted existing-
 seam recommendations—never content edits, approval, blocker clearing, or canon writes.
+Prompted approval now reruns the final gate and requires an exact-hash-bound DM disposition
+for all six dimensions and every finding; targeted-regeneration decisions block the
+lifecycle transition. The staged review-packet writer records only the final result hash and
+seven body-free check summaries alongside the report and explicit disposition. Manually
+authored provider-independent artifacts keep their readiness-based approval path.
 Accepted content remains available to the DM in the artifact,
 while routine attempt reports contain only compact operational metadata and diagnostics;
 raw transport capture requires explicit local debug. Missing enrichment still truthfully
@@ -431,7 +436,7 @@ npm --prefix model-gateway test
 
 After migration, the first prompt/list operation creates an empty `My Campaign` ownership root when needed; create or switch named roots with `dm campaign create` / `dm campaign use`. Then log in at `http://127.0.0.1:8000/login` with `DM_API_TOKEN`. The signed browser session contains no API token; all browser writes require CSRF. Dungeon Studio can ingest a versioned `LayoutRequest` JSON, generate and validate exact geometry, inspect run/input/version lineage, compare/regenerate with locks, preview DM/player maps, create PDF/Roll20 exports, download assets, and explicitly approve preparation for play without a model gateway.
 
-The same application workflow is available through authenticated `/api/dungeons` routes and CLI commands:
+The same provider-independent application workflow is available through authenticated `/api/dungeons` routes and CLI commands. Prompted approval through the JSON API additionally accepts the strict cohesion report and DM disposition evidence; the report itself cannot approve preparation:
 
 ```bash
 uv run --frozen dm dungeon generate /data/campaign/layout-request.json \
@@ -457,15 +462,13 @@ The internal P1-02 Library service now ingests bounded strict-UTF-8 files throug
 
 ## Current Next Step
 
-Continue **P7-14f** by enforcing the provider-free final continuity/readiness gate at the
-prompted preparation-readiness/approval and review-packet boundaries, then add explicit DM
-disposition for the separate non-authoritative cohesion report. The gate already recomputes
-continuity and exact source inheritance, dependencies, required content, lineage, typed
-cross-task references, and player secrecy with bounded body-free diagnostics. The report
-contract covers all six whole-dungeon dimensions but cannot edit content, clear blockers,
-approve preparation, or write canon. Do not add repeated/full-chain dispatch, live calls,
-Tier B/C, a migration, model-authored geometry/mechanics, or canonical writes before those
-application boundaries are proven. See
+Continue **P7-14f** with provider-free resumed one-step coordinator coverage for feature,
+trap, objective, and room-narrative targets. The final deterministic gate is now enforced at
+prompted approval and staged review-packet boundaries, and prompted lifecycle transition
+requires exact-hash-bound DM disposition of all six non-authoritative cohesion dimensions.
+Do not add repeated/full-chain dispatch, live calls, Tier B/C, a migration, model-authored
+geometry/mechanics, or canonical writes before every existing staged seam can resume through
+the same exact-policy coordinator boundary. See
 [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) and
 [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
 

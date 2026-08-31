@@ -1844,13 +1844,16 @@ targeted existing-seam recommendation; it has no content-edit, blocker-clearing,
 or canonical operation. This remains a set of strict task-specific payloads, not a universal
 optional-field generation payload.
 
-Before repeated/full-chain dispatch or a live Tier A run, enforce this final gate at the
-prompted preparation-readiness/approval and review-packet boundaries, then add explicit DM
-disposition for the read-only cohesion report. The DM review must assess thematic
-reinforcement, history-to-environment causality, mechanic/objective unity, progression,
-intentional motif variation, and consistency with every selected campaign fact. Findings
-trigger explicit DM disposition or targeted regeneration of one exact enrichment seam—never
-a broad silent rewrite, canonical write, or model approval.
+The final gate is now enforced before prompted preparation approval and by a staged review-
+packet writer. Prompted approval also requires an exact-hash-bound DM disposition record for
+all six read-only cohesion dimensions; stale/missing evidence and targeted-regeneration
+decisions fail before lifecycle transition. The packet persists only the deterministic
+result hash and seven body-free check summaries alongside the non-authoritative report and
+explicit disposition. Provider-independent manually authored Studio artifacts retain their
+legacy readiness-based approval path. Findings trigger explicit DM disposition or targeted
+regeneration of one exact enrichment seam—never a broad silent rewrite, canonical write, or
+model approval. Broader one-step coordinator coverage remains required before chain
+repetition or a live Tier A run.
 
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
   Its model-visible proposal contains room identity/purpose, critical path, bounded

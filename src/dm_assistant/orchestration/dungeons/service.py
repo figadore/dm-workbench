@@ -1,9 +1,11 @@
 """Provider-independent Dungeon Studio orchestration over pure and prep boundaries."""
 
+from __future__ import annotations
+
 import json
 import uuid
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import JsonValue, ValidationError
 
@@ -179,6 +181,12 @@ from dm_dungeon.export import (
     export_roll20_bundle,
 )
 from dm_dungeon.rendering import SVG_RENDERER_VERSION
+
+if TYPE_CHECKING:
+    from dm_assistant.orchestration.dungeons.final_validation import (
+        DungeonCohesionReviewDisposition,
+        DungeonCohesionReviewReport,
+    )
 
 _STUDIO_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 _VERSION_SCHEMA = "dungeon-studio-v1"
@@ -1882,9 +1890,35 @@ class DungeonStudioService:
         artifact_version_id: uuid.UUID,
         actor: str,
         reason: str,
+        cohesion_report: DungeonCohesionReviewReport | None = None,
+        cohesion_disposition: DungeonCohesionReviewDisposition | None = None,
     ) -> DungeonStudioDetail:
         version = self._preparation.get_version(campaign_id, artifact_version_id)
-        _require_preparation_ready(_load_specification(version.specification))
+        specification = _load_specification(version.specification)
+        _require_preparation_ready(specification)
+        if _requires_final_staged_validation(specification):
+            # Local import avoids an import-time cycle: final validation reuses the
+            # public readiness projection from this module.
+            from dm_assistant.orchestration.dungeons.final_validation import (
+                require_dungeon_cohesion_disposition,
+                validate_final_staged_dungeon,
+            )
+
+            final_validation = validate_final_staged_dungeon(specification)
+            if not final_validation.valid:
+                raise ConflictError(
+                    "Prompted dungeon failed the final deterministic approval gate."
+                )
+            if cohesion_report is None or cohesion_disposition is None:
+                raise ConflictError(
+                    "Prompted dungeon approval requires a complete DM cohesion disposition."
+                )
+            require_dungeon_cohesion_disposition(
+                final_validation,
+                cohesion_report,
+                cohesion_disposition,
+                dm_actor=actor,
+            )
         self._preparation.transition_artifact(
             TransitionArtifact(
                 campaign_id=campaign_id,
@@ -2297,6 +2331,24 @@ class DungeonStudioService:
             generation_run_id=run.id,
             diagnostics=diagnostics,
         )
+
+
+def _requires_final_staged_validation(
+    specification: DungeonStudioSpecification,
+) -> bool:
+    """Distinguish prompted staged artifacts from provider-independent Studio work."""
+
+    return bool(
+        specification.structural_context is not None
+        or specification.creative_continuity is not None
+        or specification.model_lineage
+        or specification.puzzle_model_lineage
+        or specification.exploration_model_lineage
+        or specification.feature_interaction_model_lineage
+        or specification.trap_model_lineage
+        or specification.objective_model_lineage
+        or specification.room_narrative_model_lineage
+    )
 
 
 def _require_preparation_ready(specification: DungeonStudioSpecification) -> None:
