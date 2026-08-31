@@ -436,9 +436,20 @@ class DungeonFeatureInteractionContextSelection(WorkflowModel):
 
     room_id: ExactDungeonComponentId
     feature_id: ExactDungeonComponentId
+    continuity_fact_ids: tuple[str, ...] = Field(default=(), max_length=8)
     interaction_goal: GuideContentText
     stakes: GuideContentText
     constraints: tuple[GuideContentText, ...] = Field(default=(), max_length=8)
+
+    @model_validator(mode="after")
+    def require_unique_continuity_fact_ids(
+        self,
+    ) -> DungeonFeatureInteractionContextSelection:
+        if len(self.continuity_fact_ids) != len(set(self.continuity_fact_ids)):
+            raise ValueError(
+                "feature interaction selection requires unique continuity fact IDs"
+            )
+        return self
 
 
 class DungeonFeatureInteractionRoomContext(WorkflowModel):
@@ -467,6 +478,7 @@ class DungeonFeatureInteractionEnrichmentInput(WorkflowModel):
 
     schema_version: Literal["1.0.0"]
     package_id: ExactDungeonComponentId
+    continuity: DungeonEnrichmentContinuityContext
     room: DungeonFeatureInteractionRoomContext
     feature: DungeonFeatureInteractionFeature
     interaction_goal: GuideContentText
@@ -560,6 +572,7 @@ class PromptedDungeonFeatureInteractionLineage(WorkflowModel):
 
     model_run_id: UUID
     context_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    creative_continuity_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     model_run: ModelRunRecord
     output: DungeonFeatureInteractionEnrichmentOutput
 
@@ -583,8 +596,15 @@ class DungeonTrapContextSelection(WorkflowModel):
 
     room_id: ExactDungeonComponentId
     trap_id: ExactDungeonComponentId
+    continuity_fact_ids: tuple[str, ...] = Field(default=(), max_length=8)
     stakes: GuideContentText
     constraints: tuple[GuideContentText, ...] = Field(default=(), max_length=8)
+
+    @model_validator(mode="after")
+    def require_unique_continuity_fact_ids(self) -> DungeonTrapContextSelection:
+        if len(self.continuity_fact_ids) != len(set(self.continuity_fact_ids)):
+            raise ValueError("trap selection requires unique continuity fact IDs")
+        return self
 
 
 class DungeonTrapRoomContext(WorkflowModel):
@@ -620,6 +640,7 @@ class DungeonTrapEnrichmentInput(WorkflowModel):
 
     schema_version: Literal["1.0.0"]
     package_id: ExactDungeonComponentId
+    continuity: DungeonEnrichmentContinuityContext
     room: DungeonTrapRoomContext
     trap: DungeonTrapMechanic
     stakes: GuideContentText
@@ -707,6 +728,7 @@ class PromptedDungeonTrapLineage(WorkflowModel):
 
     model_run_id: UUID
     context_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    creative_continuity_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     model_run: ModelRunRecord
     output: DungeonTrapEnrichmentOutput
 
@@ -1928,6 +1950,13 @@ class CreatePromptedDungeonFeatureInteractionWorkflow(WorkflowModel):
             raise ValueError(
                 "feature interaction publication requires matching context lineage"
             )
+        if (
+            self.model_lineage.creative_continuity_sha256
+            != self.context.continuity.projection_sha256
+        ):
+            raise ValueError(
+                "feature interaction publication requires matching continuity lineage"
+            )
         return self
 
 
@@ -1961,6 +1990,11 @@ class CreatePromptedDungeonTrapWorkflow(WorkflowModel):
         context_hash = canonical_json_sha256(self.context.model_dump(mode="json"))
         if self.model_lineage.context_sha256 != context_hash:
             raise ValueError("trap publication requires matching context lineage")
+        if (
+            self.model_lineage.creative_continuity_sha256
+            != self.context.continuity.projection_sha256
+        ):
+            raise ValueError("trap publication requires matching continuity lineage")
         return self
 
 

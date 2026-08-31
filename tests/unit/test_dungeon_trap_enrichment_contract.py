@@ -7,7 +7,13 @@ import pytest
 from pydantic import ValidationError
 
 from dm_assistant.errors import ConflictError
+from dm_assistant.modules.preparation import (
+    DungeonGenerationContext,
+    GenerationContextEnvelope,
+    canonical_json_sha256,
+)
 from dm_assistant.orchestration.dungeons import (
+    DungeonCreativeContinuityProjection,
     DungeonGuidePlayerChoice,
     DungeonGuideRunnableContent,
     DungeonTrapContextSelection,
@@ -17,6 +23,9 @@ from dm_assistant.orchestration.dungeons import (
     DungeonTrapMechanic,
     DungeonTrapRoomContext,
     DungeonTrapValidationResult,
+)
+from dm_assistant.orchestration.dungeons.continuity import (
+    derive_dungeon_creative_continuity,
 )
 from dm_assistant.orchestration.dungeons.contracts import (
     DungeonDmGuide,
@@ -126,6 +135,25 @@ def _copper_tide_package() -> tuple[DungeonPlan, LayoutRequest, DungeonPackage]:
     return plan, request, layout.package
 
 
+def _standalone_continuity(
+    plan: DungeonPlan,
+) -> DungeonCreativeContinuityProjection:
+    payload = DungeonGenerationContext(
+        context_version="1.0.0",
+        prompt_input_sha256="b" * 64,
+        preparation_owner_id="dm",
+        context_provenance="synthetic_test",
+    )
+    payload_document = payload.model_dump(mode="json")
+    envelope = GenerationContextEnvelope(
+        context_kind="dungeon_generation",
+        payload_version="1.0.0",
+        payload=payload_document,
+        payload_sha256=canonical_json_sha256(payload_document),
+    )
+    return derive_dungeon_creative_continuity(envelope, plan)
+
+
 def _trap_output(*, package_id: str, room_id: str, trap_id: str) -> dict[str, object]:
     return {
         "schema_version": "1.0.0",
@@ -196,6 +224,7 @@ def test_exact_trap_context_joins_marker_guide_geometry_and_deterministic_mechan
     None
 ):
     plan, request, package = _copper_tide_package()
+    continuity = _standalone_continuity(plan)
     compiled = compile_dungeon_plan(plan)
     assert compiled.certificate is not None
     assert compiled.mechanics_plan is not None
@@ -213,7 +242,13 @@ def test_exact_trap_context_joins_marker_guide_geometry_and_deterministic_mechan
         ),
     )
 
-    context = build_dungeon_trap_enrichment_input(package, guide, selection)
+    context = build_dungeon_trap_enrichment_input(
+        package,
+        guide,
+        selection,
+        plan=plan,
+        creative_continuity=continuity,
+    )
 
     room = next(item for item in package.rooms if item.id == room_ids["sluice"])
     marker = next(
@@ -255,6 +290,7 @@ def test_exact_trap_context_joins_marker_guide_geometry_and_deterministic_mechan
     assert "detection_difficulty" not in output_schema
     assert "disable_difficulty" not in output_schema
     assert "DungeonPlan" not in input_schema
+    assert "continuity" in input_schema
     assert "topology" not in output_schema
     assert "puzzle_content" not in output_schema
 
@@ -263,23 +299,30 @@ def test_exact_trap_context_joins_marker_guide_geometry_and_deterministic_mechan
             package,
             guide,
             selection.model_copy(update={"room_id": "room_from_another_package"}),
+            plan=plan,
+            creative_continuity=continuity,
         )
     with pytest.raises(ConflictError, match="unknown exact room trap"):
         build_dungeon_trap_enrichment_input(
             package,
             guide,
             selection.model_copy(update={"trap_id": "trap_from_another_package"}),
+            plan=plan,
+            creative_continuity=continuity,
         )
     with pytest.raises(ConflictError, match="outside the selected trap room"):
         build_dungeon_trap_enrichment_input(
             package,
             guide,
             selection.model_copy(update={"trap_id": trap_ids[room_ids["vault"]]}),
+            plan=plan,
+            creative_continuity=continuity,
         )
 
 
 def test_trap_output_rejects_foreign_ids_numeric_dcs_and_cross_task_mutation() -> None:
     plan, request, package = _copper_tide_package()
+    continuity = _standalone_continuity(plan)
     compiled = compile_dungeon_plan(plan)
     assert compiled.certificate is not None
     assert compiled.mechanics_plan is not None
@@ -297,6 +340,8 @@ def test_trap_output_rejects_foreign_ids_numeric_dcs_and_cross_task_mutation() -
             trap_id=trap_id,
             stakes="Failure scatters supplies without sealing the route.",
         ),
+        plan=plan,
+        creative_continuity=continuity,
     )
     valid_document = _trap_output(
         package_id=package.id,
@@ -355,6 +400,7 @@ def test_accepted_trap_projects_only_selected_entry_and_clears_only_its_blockers
     None
 ):
     plan, request, package = _copper_tide_package()
+    continuity = _standalone_continuity(plan)
     compiled = compile_dungeon_plan(plan)
     assert compiled.certificate is not None
     assert compiled.mechanics_plan is not None
@@ -371,6 +417,8 @@ def test_accepted_trap_projects_only_selected_entry_and_clears_only_its_blockers
             stakes="The sweep scatters supplies and repositions characters but never seals the only route.",
             constraints=("Do not invent numeric difficulty values",),
         ),
+        plan=plan,
+        creative_continuity=continuity,
     )
     output = DungeonTrapEnrichmentOutput.model_validate(
         _trap_output(
@@ -388,6 +436,7 @@ def test_accepted_trap_projects_only_selected_entry_and_clears_only_its_blockers
         base_guide,
         plan=plan,
         package=package,
+        creative_continuity=continuity,
         context=context,
         validation=validation,
     )
@@ -453,6 +502,7 @@ def test_accepted_trap_projects_only_selected_entry_and_clears_only_its_blockers
             guide,
             plan=plan,
             package=package,
+            creative_continuity=continuity,
             context=context,
             validation=validation,
         )

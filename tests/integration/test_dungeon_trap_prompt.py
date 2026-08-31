@@ -319,6 +319,8 @@ def test_faux_trap_task_repairs_and_publishes_atomic_preserving_child(
     db_engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     prepared = _prepare_featured_copper(db_engine, tmp_path, monkeypatch)
+    assert prepared.specification.creative_continuity is not None
+    continuity_hash = prepared.specification.creative_continuity.projection_sha256
     selection = _selection(prepared)
     valid = _trap_output(
         package_id=prepared.specification.package.id,
@@ -403,6 +405,9 @@ def test_faux_trap_task_repairs_and_publishes_atomic_preserving_child(
     )
     assert child_spec.trap_model_lineage[-1].output.trap_id == selection.trap_id
     assert (
+        child_spec.trap_model_lineage[-1].creative_continuity_sha256 == continuity_hash
+    )
+    assert (
         child_spec.dm_guide is not None and prepared.specification.dm_guide is not None
     )
     assert child_spec.dm_guide.rooms == prepared.specification.dm_guide.rooms
@@ -454,6 +459,9 @@ def test_faux_trap_task_repairs_and_publishes_atomic_preserving_child(
     prompt_document = json.loads(gateway.messages[0][0].content)
     assert prompt_document["context"]["trap"]["trap_id"] == selection.trap_id
     assert prompt_document["context"]["trap"]["detection_difficulty"] >= 0
+    assert (
+        prompt_document["context"]["continuity"]["projection_sha256"] == continuity_hash
+    )
     repair_document = json.loads(gateway.messages[1][0].content)
     assert repair_document["previous_arguments"] == rejected
     assert repair_document["diagnostics"][0]["code"] == "trap_enrichment.trap_mismatch"
@@ -483,6 +491,12 @@ def test_faux_trap_task_repairs_and_publishes_atomic_preserving_child(
     )
     assert artifact_run.generation_kind == "dungeon_trap_enrichment"
     assert artifact_run.model_task_profile_id == profile.task_profile_id
+    assert artifact_run.input_scope["creative_continuity_sha256"] == continuity_hash
+    assert artifact_run.schema_versions["dungeon_creative_continuity"] == "1.0.0"
+    assert (
+        artifact_run.validation_report["trap_enrichment"]["creative_continuity_sha256"]
+        == continuity_hash
+    )
     assert artifact_run.tool_runs[0]["tool_name"] == "submit_dungeon_trap"
 
     parent_assets = prepared.base.base.preparation.list_assets(

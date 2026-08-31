@@ -25,6 +25,8 @@ from dm_assistant.orchestration.dungeons import (
     DungeonFeatureInteractionIssue,
     DungeonFeatureInteractionRoomContext,
     DungeonFeatureInteractionValidationResult,
+    DungeonPuzzleAlternateHandling,
+    DungeonPuzzleClue,
     DungeonPuzzleClueApproval,
     DungeonPuzzleContextSelection,
     DungeonPuzzleEnrichmentOutput,
@@ -52,6 +54,7 @@ from dm_dungeon import (
     compile_dungeon_plan,
     generate_layout,
 )
+from dm_dungeon.contracts import FeatureIntentKind
 from dm_dungeon.layout import ORTHOGONAL_LAYOUT_GENERATOR_VERSION
 
 
@@ -360,6 +363,7 @@ def _feature_output(
 
 def test_exact_guide_feature_builds_local_context_and_rejects_foreign_ids() -> None:
     plan, request, package = _skyroot_package()
+    continuity = _standalone_continuity(plan)
     compiled = compile_dungeon_plan(plan)
     assert compiled.certificate is not None
     assert compiled.mechanics_plan is not None
@@ -374,7 +378,11 @@ def test_exact_guide_feature_builds_local_context_and_rejects_foreign_ids() -> N
     )
 
     context = build_dungeon_feature_interaction_enrichment_input(
-        package, guide, selection
+        package,
+        guide,
+        selection,
+        plan=plan,
+        creative_continuity=continuity,
     )
 
     exact_room = next(room for room in package.rooms if room.id == room_ids["nursery"])
@@ -395,7 +403,7 @@ def test_exact_guide_feature_builds_local_context_and_rejects_foreign_ids() -> N
         room_id=marker.room_id,
         floor_id=marker.floor_id,
         position=marker.position,
-        kind="other",
+        kind=FeatureIntentKind.OTHER,
         name="Mistwheel Console",
         description="A handwheel and two sight glasses regulate mist around the cloud-pine bed.",
     )
@@ -406,7 +414,7 @@ def test_exact_guide_feature_builds_local_context_and_rejects_foreign_ids() -> N
     input_schema = str(DungeonFeatureInteractionEnrichmentInput.model_json_schema())
     output_schema = str(DungeonFeatureInteractionEnrichmentOutput.model_json_schema())
     assert "DungeonPlan" not in input_schema
-    assert "critical_path" not in input_schema
+    assert "continuity" in input_schema
     assert "DungeonPuzzle" not in output_schema
     assert "encounter_content" not in output_schema
     assert "topology" not in output_schema
@@ -416,12 +424,16 @@ def test_exact_guide_feature_builds_local_context_and_rejects_foreign_ids() -> N
             package,
             guide,
             selection.model_copy(update={"room_id": "room_from_another_package"}),
+            plan=plan,
+            creative_continuity=continuity,
         )
     with pytest.raises(ConflictError, match="unknown exact room feature"):
         build_dungeon_feature_interaction_enrichment_input(
             package,
             guide,
             selection.model_copy(update={"feature_id": "feature_from_another_package"}),
+            plan=plan,
+            creative_continuity=continuity,
         )
     with pytest.raises(ConflictError, match="outside the selected feature room"):
         build_dungeon_feature_interaction_enrichment_input(
@@ -430,6 +442,8 @@ def test_exact_guide_feature_builds_local_context_and_rejects_foreign_ids() -> N
             selection.model_copy(
                 update={"feature_id": feature_ids[room_ids["gallery"]]}
             ),
+            plan=plan,
+            creative_continuity=continuity,
         )
 
     valid_document = _feature_output(
@@ -578,17 +592,17 @@ def test_accepted_exploration_projects_one_challenge_without_cross_task_mutation
             "Turn the three pane frames until every pane catches one beam.",
         ),
         clue_path=(
-            {
-                "location_id": feature_ids[room_ids["oriel"]],
-                "observation": "The fixed prism already divides the light evenly.",
-                "inference": "The pane frames, rather than the prism, are meant to move.",
-            },
+            DungeonPuzzleClue(
+                location_id=feature_ids[room_ids["oriel"]],
+                observation="The fixed prism already divides the light evenly.",
+                inference="The pane frames, rather than the prism, are meant to move.",
+            ),
         ),
         alternate_handling=(
-            {
-                "approach": "Reflect the three beams with polished carried objects.",
-                "adjudication": "Three stable reflected beams brighten the panes equally well.",
-            },
+            DungeonPuzzleAlternateHandling(
+                approach="Reflect the three beams with polished carried objects.",
+                adjudication="Three stable reflected beams brighten the panes equally well.",
+            ),
         ),
         success_outcome="The nursery latch opens when all three panes brighten.",
         failure_consequence="A moved frame slowly settles back when no beam reaches it.",
@@ -691,6 +705,8 @@ def test_accepted_exploration_projects_one_challenge_without_cross_task_mutation
         package,
         guide,
         _feature_selection(room_id=room_ids["nursery"], feature_id=feature_id),
+        plan=plan,
+        creative_continuity=continuity,
     )
     feature_output = DungeonFeatureInteractionEnrichmentOutput.model_validate(
         _feature_output(
@@ -707,6 +723,7 @@ def test_accepted_exploration_projects_one_challenge_without_cross_task_mutation
         guide,
         plan=plan,
         package=package,
+        creative_continuity=continuity,
         context=feature_context,
         validation=feature_validation,
     )
@@ -755,6 +772,7 @@ def test_accepted_exploration_projects_one_challenge_without_cross_task_mutation
             guide_with_feature,
             plan=plan,
             package=package,
+            creative_continuity=continuity,
             context=feature_context,
             validation=feature_validation,
         )

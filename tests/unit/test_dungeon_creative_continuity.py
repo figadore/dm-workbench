@@ -19,14 +19,19 @@ from dm_assistant.modules.preparation import (
 from dm_assistant.orchestration.dungeons import (
     DungeonExplorationAffordanceApproval,
     DungeonExplorationContextSelection,
+    DungeonFeatureInteractionContextSelection,
     DungeonPuzzleContextSelection,
+    DungeonTrapContextSelection,
 )
 from dm_assistant.orchestration.dungeons.continuity import (
     derive_dungeon_creative_continuity,
 )
 from dm_assistant.orchestration.dungeons.service import (
+    build_dungeon_dm_guide,
     build_dungeon_exploration_enrichment_input,
+    build_dungeon_feature_interaction_enrichment_input,
     build_dungeon_puzzle_enrichment_input,
+    build_dungeon_trap_enrichment_input,
 )
 from dm_dungeon import (
     DungeonPackage,
@@ -38,7 +43,9 @@ from dm_dungeon import (
 from dm_dungeon.layout import ORTHOGONAL_LAYOUT_GENERATOR_VERSION
 
 
-def _plan_and_package() -> tuple[DungeonPlan, DungeonPackage, dict[str, str]]:
+def _plan_and_package() -> tuple[
+    DungeonPlan, LayoutRequest, DungeonPackage, dict[str, str]
+]:
     plan = DungeonPlan.model_validate_json(
         json.dumps(
             {
@@ -83,6 +90,13 @@ def _plan_and_package() -> tuple[DungeonPlan, DungeonPackage, dict[str, str]]:
                             "description": "A brass frame redirects water between two drains.",
                         },
                     },
+                    {
+                        "room_ref": "quay",
+                        "trap": {
+                            "name": "Tide Mark Sweep",
+                            "challenge": "moderate",
+                        },
+                    },
                     {"room_ref": "vault", "objective": "Tide Ledger"},
                 ],
             }
@@ -108,7 +122,7 @@ def _plan_and_package() -> tuple[DungeonPlan, DungeonPackage, dict[str, str]]:
     layout = generate_layout(request)
     assert layout.success and layout.package is not None
     room_ids = {room.ref: room.room_id for room in compiled.certificate.rooms}
-    return plan, layout.package, room_ids
+    return plan, request, layout.package, room_ids
 
 
 def _envelope(
@@ -185,10 +199,8 @@ def _envelope(
     )
 
 
-def test_puzzle_and_exploration_inherit_one_hash_with_relevant_authorized_facts() -> (
-    None
-):
-    plan, package, room_ids = _plan_and_package()
+def test_local_enrichments_inherit_one_hash_with_relevant_authorized_facts() -> None:
+    plan, request, package, room_ids = _plan_and_package()
     projection = derive_dungeon_creative_continuity(_envelope(), plan)
     feature_id = next(
         marker.id
@@ -222,11 +234,50 @@ def test_puzzle_and_exploration_inherit_one_hash_with_relevant_authorized_facts(
         plan=plan,
         creative_continuity=projection,
     )
+    guide = build_dungeon_dm_guide(request, package, plan)
+    feature = build_dungeon_feature_interaction_enrichment_input(
+        package,
+        guide,
+        DungeonFeatureInteractionContextSelection(
+            room_id=room_ids["channel"],
+            feature_id=feature_id,
+            continuity_fact_ids=("sluice_custom",),
+            interaction_goal="Redirect the rising channel without stopping its flow.",
+            stakes="A poor setting wets supplies without blocking the route.",
+        ),
+        plan=plan,
+        creative_continuity=projection,
+    )
+    trap_id = next(
+        marker.id
+        for marker in package.room_mechanic_markers
+        if marker.room_id == room_ids["quay"] and marker.kind.value == "trap"
+    )
+    trap = build_dungeon_trap_enrichment_input(
+        package,
+        guide,
+        DungeonTrapContextSelection(
+            room_id=room_ids["quay"],
+            trap_id=trap_id,
+            continuity_fact_ids=("tide_history",),
+            stakes="The sweep scatters supplies without sealing the route.",
+        ),
+        plan=plan,
+        creative_continuity=projection,
+    )
 
-    assert puzzle.continuity.projection_version == projection.projection_version
-    assert exploration.continuity.projection_version == projection.projection_version
-    assert puzzle.continuity.projection_sha256 == projection.projection_sha256
-    assert exploration.continuity.projection_sha256 == projection.projection_sha256
+    contexts = (
+        puzzle.continuity,
+        exploration.continuity,
+        feature.continuity,
+        trap.continuity,
+    )
+    assert {context.projection_version for context in contexts} == {
+        projection.projection_version
+    }
+    assert {context.projection_sha256 for context in contexts} == {
+        projection.projection_sha256
+    }
     assert [fact.fact_id for fact in puzzle.continuity.selected_facts] == [
         "tide_history"
     ]
@@ -239,19 +290,29 @@ def test_puzzle_and_exploration_inherit_one_hash_with_relevant_authorized_facts(
     assert [source.source_id for source in exploration.continuity.source_links] == [
         "source_environment"
     ]
+    assert [fact.fact_id for fact in feature.continuity.selected_facts] == [
+        "sluice_custom"
+    ]
+    assert [source.source_id for source in feature.continuity.source_links] == [
+        "source_environment"
+    ]
+    assert [fact.fact_id for fact in trap.continuity.selected_facts] == ["tide_history"]
+    assert [source.source_id for source in trap.continuity.source_links] == [
+        "source_history"
+    ]
     assert "unused_faction" not in {
-        fact.fact_id
-        for context in (puzzle.continuity, exploration.continuity)
-        for fact in context.selected_facts
+        fact.fact_id for context in contexts for fact in context.selected_facts
     }
     assert {room.room_ref for room in puzzle.continuity.room_intents} == {"dial"}
     assert {room.room_ref for room in exploration.continuity.room_intents} == {
         "channel"
     }
+    assert {room.room_ref for room in feature.continuity.room_intents} == {"channel"}
+    assert {room.room_ref for room in trap.continuity.room_intents} == {"quay"}
 
 
 def test_context_builders_reject_stale_projection_and_unauthorized_fact() -> None:
-    plan, package, room_ids = _plan_and_package()
+    plan, request, package, room_ids = _plan_and_package()
     projection = derive_dungeon_creative_continuity(_envelope(), plan)
     stale = projection.model_copy(update={"projection_sha256": "f" * 64})
 
@@ -263,12 +324,40 @@ def test_context_builders_reject_stale_projection_and_unauthorized_fact() -> Non
             creative_continuity=stale,
         )
 
-    with pytest.raises(ConflictError, match="unauthorized or stale fact"):
-        build_dungeon_puzzle_enrichment_input(
+    guide = build_dungeon_dm_guide(request, package, plan)
+    feature_id = next(
+        marker.id
+        for marker in package.room_mechanic_markers
+        if marker.room_id == room_ids["channel"] and marker.kind.value == "feature"
+    )
+    with pytest.raises(ConflictError, match="hash is stale"):
+        build_dungeon_feature_interaction_enrichment_input(
             package,
-            DungeonPuzzleContextSelection(
-                room_id=room_ids["dial"],
+            guide,
+            DungeonFeatureInteractionContextSelection(
+                room_id=room_ids["channel"],
+                feature_id=feature_id,
+                interaction_goal="Redirect the channel.",
+                stakes="Supplies may get wet.",
+            ),
+            plan=plan,
+            creative_continuity=stale,
+        )
+
+    trap_id = next(
+        marker.id
+        for marker in package.room_mechanic_markers
+        if marker.room_id == room_ids["quay"] and marker.kind.value == "trap"
+    )
+    with pytest.raises(ConflictError, match="unauthorized or stale fact"):
+        build_dungeon_trap_enrichment_input(
+            package,
+            guide,
+            DungeonTrapContextSelection(
+                room_id=room_ids["quay"],
+                trap_id=trap_id,
                 continuity_fact_ids=("invented_lore",),
+                stakes="Supplies may scatter.",
             ),
             plan=plan,
             creative_continuity=projection,
@@ -276,7 +365,7 @@ def test_context_builders_reject_stale_projection_and_unauthorized_fact() -> Non
 
 
 def test_projection_rejects_broader_visibility_and_ungrounded_lore() -> None:
-    plan, _, _ = _plan_and_package()
+    plan, _, _, _ = _plan_and_package()
     with pytest.raises(ConflictError, match="source visibility exceeds"):
         derive_dungeon_creative_continuity(
             _envelope(source_visibility=VisibilityPolicy.ALL_CAMPAIGN_PLAYERS),

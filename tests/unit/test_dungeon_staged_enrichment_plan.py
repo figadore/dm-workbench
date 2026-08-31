@@ -153,7 +153,12 @@ def _lineage(lineage_type: type, output: object, sequence: int) -> object:
     continuity = (
         {"creative_continuity_sha256": "f" * 64}
         if lineage_type
-        in (PromptedDungeonPuzzleLineage, PromptedDungeonExplorationLineage)
+        in (
+            PromptedDungeonPuzzleLineage,
+            PromptedDungeonExplorationLineage,
+            PromptedDungeonFeatureInteractionLineage,
+            PromptedDungeonTrapLineage,
+        )
         else {}
     )
     return lineage_type(

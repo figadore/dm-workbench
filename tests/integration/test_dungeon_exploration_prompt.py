@@ -778,6 +778,8 @@ def test_faux_feature_task_repairs_and_preserves_exploration_child(
     db_engine: Engine, tmp_path: Path
 ) -> None:
     prepared = _prepare_explored_skyroot(db_engine, tmp_path)
+    assert prepared.specification.creative_continuity is not None
+    continuity_hash = prepared.specification.creative_continuity.projection_sha256
     selection = _feature_selection(prepared)
     valid = _feature_output(
         package_id=prepared.specification.package.id,
@@ -863,6 +865,10 @@ def test_faux_feature_task_repairs_and_preserves_exploration_child(
     assert child_spec.dm_guide.puzzles == prepared.specification.dm_guide.puzzles
     assert child_spec.dm_guide.rooms == prepared.specification.dm_guide.rooms
     assert child_spec.feature_interaction_model_lineage[-1].output.reset_or_retry
+    assert (
+        child_spec.feature_interaction_model_lineage[-1].creative_continuity_sha256
+        == continuity_hash
+    )
     target = next(
         item
         for item in child_spec.dm_guide.features
@@ -911,6 +917,9 @@ def test_faux_feature_task_repairs_and_preserves_exploration_child(
     assert "DungeonPuzzle" not in schema_text
     prompt_document = json.loads(gateway.messages[0][0].content)
     assert prompt_document["context"]["feature"]["feature_id"] == selection.feature_id
+    assert (
+        prompt_document["context"]["continuity"]["projection_sha256"] == continuity_hash
+    )
     assert "plan" not in prompt_document["context"]
     repair_document = json.loads(gateway.messages[1][0].content)
     assert repair_document["previous_arguments"] == rejected
@@ -940,6 +949,14 @@ def test_faux_feature_task_repairs_and_preserves_exploration_child(
     )
     assert artifact_run.generation_kind == "dungeon_feature_interaction_enrichment"
     assert artifact_run.model_task_profile_id == profile.task_profile_id
+    assert artifact_run.input_scope["creative_continuity_sha256"] == continuity_hash
+    assert artifact_run.schema_versions["dungeon_creative_continuity"] == "1.0.0"
+    assert (
+        artifact_run.validation_report["feature_interaction_enrichment"][
+            "creative_continuity_sha256"
+        ]
+        == continuity_hash
+    )
     assert (
         artifact_run.tool_runs[0]["tool_name"] == "submit_dungeon_feature_interaction"
     )

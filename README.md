@@ -444,10 +444,10 @@ The internal P1-02 Library service now ingests bounded strict-UTF-8 files throug
 
 ## Current Next Step
 
-Continue **P7-14f** by carrying the new provider-free creative-continuity projection
-through feature, trap, objective, and room-narrative contexts before extending resumed
-coordination or adding a repeated runner. Structural publication now derives and persists
-one self-hashed projection; puzzle and exploration tasks inherit the same version/hash and
+Continue **P7-14f** by carrying the provider-free creative-continuity projection through
+objective and room-narrative contexts before extending resumed coordination or adding a
+repeated runner. Structural publication derives and persists one self-hashed projection;
+puzzle, exploration, feature-interaction, and trap tasks inherit the same version/hash and
 only explicitly selected authorized facts/sources, while standalone lore remains unknown.
 Next, finish propagation and add the deterministic final continuity/readiness report and
 non-authoritative whole-dungeon cohesion rubric; models may diagnose but never edit or

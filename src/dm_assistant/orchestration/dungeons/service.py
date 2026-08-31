@@ -508,6 +508,8 @@ class DungeonStudioService:
         if parent.artifact_id != command.artifact_id:
             raise ConflictError("Parent version does not belong to the artifact.")
         specification = _load_specification(parent.specification)
+        plan = _accepted_structural_plan(specification)
+        continuity = _required_creative_continuity(specification)
         if specification.dm_guide is None:
             raise ConflictError(
                 "Feature interaction requires an exact structural guide."
@@ -516,6 +518,8 @@ class DungeonStudioService:
             specification.package,
             specification.dm_guide,
             command.selection,
+            plan=plan,
+            creative_continuity=continuity,
         )
 
     def enrich_prompted_feature_interaction(
@@ -532,6 +536,7 @@ class DungeonStudioService:
             raise ConflictError("Parent version does not belong to the artifact.")
         specification = _load_specification(parent.specification)
         plan = _accepted_structural_plan(specification)
+        continuity = _required_creative_continuity(specification)
         if specification.dm_guide is None:
             raise ConflictError(
                 "Feature interaction enrichment requires an exact structural guide."
@@ -543,6 +548,7 @@ class DungeonStudioService:
             context_kind="dungeon_feature_interaction_enrichment",
             payload_version=command.context.schema_version,
             visibility_policy=VisibilityPolicy.DM_ONLY,
+            source_links=command.context.continuity.source_links,
             payload=context_document,
             payload_sha256=context_hash,
         )
@@ -564,6 +570,9 @@ class DungeonStudioService:
                     "room_id": command.context.room.room_id,
                     "feature_id": command.context.feature.feature_id,
                     "context_sha256": context_hash,
+                    "creative_continuity_sha256": (
+                        command.context.continuity.projection_sha256
+                    ),
                 },
                 input_pins=parent.input_pins,
                 context=context_pin,
@@ -571,6 +580,9 @@ class DungeonStudioService:
                     "dungeon_package": specification.package.schema_version,
                     "dungeon_feature_interaction_enrichment": (
                         DUNGEON_FEATURE_INTERACTION_ENRICHMENT_SCHEMA_VERSION
+                    ),
+                    "dungeon_creative_continuity": (
+                        DUNGEON_CREATIVE_CONTINUITY_VERSION
                     ),
                     "dungeon_studio": _STUDIO_SCHEMA_VERSION,
                     "model_run": "1.0.0",
@@ -597,6 +609,7 @@ class DungeonStudioService:
                 specification.dm_guide,
                 plan=plan,
                 package=specification.package,
+                creative_continuity=continuity,
                 context=command.context,
                 validation=command.validation,
             )
@@ -615,6 +628,9 @@ class DungeonStudioService:
                     "room_id": command.context.room.room_id,
                     "feature_id": command.context.feature.feature_id,
                     "context_sha256": context_hash,
+                    "creative_continuity_sha256": (
+                        command.context.continuity.projection_sha256
+                    ),
                 },
             }
             if readiness is not None:
@@ -759,12 +775,16 @@ class DungeonStudioService:
         if parent.artifact_id != command.artifact_id:
             raise ConflictError("Parent version does not belong to the artifact.")
         specification = _load_specification(parent.specification)
+        plan = _accepted_structural_plan(specification)
+        continuity = _required_creative_continuity(specification)
         if specification.dm_guide is None:
             raise ConflictError("Trap requires an exact structural guide.")
         return build_dungeon_trap_enrichment_input(
             specification.package,
             specification.dm_guide,
             command.selection,
+            plan=plan,
+            creative_continuity=continuity,
         )
 
     def enrich_prompted_trap(
@@ -781,6 +801,7 @@ class DungeonStudioService:
             raise ConflictError("Parent version does not belong to the artifact.")
         specification = _load_specification(parent.specification)
         plan = _accepted_structural_plan(specification)
+        continuity = _required_creative_continuity(specification)
         if specification.dm_guide is None:
             raise ConflictError("Trap enrichment requires an exact structural guide.")
 
@@ -790,6 +811,7 @@ class DungeonStudioService:
             context_kind="dungeon_trap_enrichment",
             payload_version=command.context.schema_version,
             visibility_policy=VisibilityPolicy.DM_ONLY,
+            source_links=command.context.continuity.source_links,
             payload=context_document,
             payload_sha256=context_hash,
         )
@@ -811,12 +833,18 @@ class DungeonStudioService:
                     "room_id": command.context.room.room_id,
                     "trap_id": command.context.trap.trap_id,
                     "context_sha256": context_hash,
+                    "creative_continuity_sha256": (
+                        command.context.continuity.projection_sha256
+                    ),
                 },
                 input_pins=parent.input_pins,
                 context=context_pin,
                 schema_versions={
                     "dungeon_package": specification.package.schema_version,
                     "dungeon_trap_enrichment": (DUNGEON_TRAP_ENRICHMENT_SCHEMA_VERSION),
+                    "dungeon_creative_continuity": (
+                        DUNGEON_CREATIVE_CONTINUITY_VERSION
+                    ),
                     "dungeon_studio": _STUDIO_SCHEMA_VERSION,
                     "model_run": "1.0.0",
                 },
@@ -842,6 +870,7 @@ class DungeonStudioService:
                 specification.dm_guide,
                 plan=plan,
                 package=specification.package,
+                creative_continuity=continuity,
                 context=command.context,
                 validation=command.validation,
             )
@@ -860,6 +889,9 @@ class DungeonStudioService:
                     "room_id": command.context.room.room_id,
                     "trap_id": command.context.trap.trap_id,
                     "context_sha256": context_hash,
+                    "creative_continuity_sha256": (
+                        command.context.continuity.projection_sha256
+                    ),
                 },
             }
             if readiness is not None:
@@ -2630,8 +2662,11 @@ def build_dungeon_feature_interaction_enrichment_input(
     package: DungeonPackage,
     guide: DungeonDmGuide,
     selection: DungeonFeatureInteractionContextSelection,
+    *,
+    plan: DungeonPlan,
+    creative_continuity: DungeonCreativeContinuityProjection,
 ) -> DungeonFeatureInteractionEnrichmentInput:
-    """Slice one exact package/guide feature into a local interaction context."""
+    """Slice one exact feature plus pinned continuity into a local context."""
 
     rooms_by_id = {room.id: room for room in package.rooms}
     room = rooms_by_id.get(selection.room_id)
@@ -2671,9 +2706,17 @@ def build_dungeon_feature_interaction_enrichment_input(
             "Feature interaction guide target does not match the exact feature room."
         )
 
+    continuity = build_dungeon_enrichment_continuity_context(
+        projection=creative_continuity,
+        plan=plan,
+        package=package,
+        room_ids=(room.id,),
+        selected_fact_ids=selection.continuity_fact_ids,
+    )
     return DungeonFeatureInteractionEnrichmentInput(
         schema_version=DUNGEON_FEATURE_INTERACTION_ENRICHMENT_SCHEMA_VERSION,
         package_id=package.id,
+        continuity=continuity,
         room=DungeonFeatureInteractionRoomContext(
             room_id=room.id,
             floor_id=room.floor_id,
@@ -2738,6 +2781,7 @@ def project_dungeon_feature_interaction_enrichment(
     *,
     plan: DungeonPlan,
     package: DungeonPackage,
+    creative_continuity: DungeonCreativeContinuityProjection,
     context: DungeonFeatureInteractionEnrichmentInput,
     validation: DungeonFeatureInteractionValidationResult,
 ) -> DungeonDmGuide:
@@ -2762,10 +2806,15 @@ def project_dungeon_feature_interaction_enrichment(
         DungeonFeatureInteractionContextSelection(
             room_id=context.room.room_id,
             feature_id=context.feature.feature_id,
+            continuity_fact_ids=tuple(
+                fact.fact_id for fact in context.continuity.selected_facts
+            ),
             interaction_goal=context.interaction_goal,
             stakes=context.stakes,
             constraints=context.constraints,
         ),
+        plan=plan,
+        creative_continuity=creative_continuity,
     )
     if rebuilt_context != context:
         raise ConflictError(
@@ -2862,8 +2911,11 @@ def build_dungeon_trap_enrichment_input(
     package: DungeonPackage,
     guide: DungeonDmGuide,
     selection: DungeonTrapContextSelection,
+    *,
+    plan: DungeonPlan,
+    creative_continuity: DungeonCreativeContinuityProjection,
 ) -> DungeonTrapEnrichmentInput:
-    """Join one exact trap marker, guide entry, geometry, and code-owned DCs."""
+    """Join one exact trap, code-owned DCs, and pinned continuity."""
 
     rooms_by_id = {room.id: room for room in package.rooms}
     room = rooms_by_id.get(selection.room_id)
@@ -2896,9 +2948,17 @@ def build_dungeon_trap_enrichment_input(
             "Trap enrichment guide target does not match the exact trap room."
         )
 
+    continuity = build_dungeon_enrichment_continuity_context(
+        projection=creative_continuity,
+        plan=plan,
+        package=package,
+        room_ids=(room.id,),
+        selected_fact_ids=selection.continuity_fact_ids,
+    )
     return DungeonTrapEnrichmentInput(
         schema_version=DUNGEON_TRAP_ENRICHMENT_SCHEMA_VERSION,
         package_id=package.id,
+        continuity=continuity,
         room=DungeonTrapRoomContext(
             room_id=room.id,
             floor_id=room.floor_id,
@@ -2969,6 +3029,7 @@ def project_dungeon_trap_enrichment(
     *,
     plan: DungeonPlan,
     package: DungeonPackage,
+    creative_continuity: DungeonCreativeContinuityProjection,
     context: DungeonTrapEnrichmentInput,
     validation: DungeonTrapValidationResult,
 ) -> DungeonDmGuide:
@@ -2996,9 +3057,14 @@ def project_dungeon_trap_enrichment(
         DungeonTrapContextSelection(
             room_id=context.room.room_id,
             trap_id=context.trap.trap_id,
+            continuity_fact_ids=tuple(
+                fact.fact_id for fact in context.continuity.selected_facts
+            ),
             stakes=context.stakes,
             constraints=context.constraints,
         ),
+        plan=plan,
+        creative_continuity=creative_continuity,
     )
     if rebuilt_context != context:
         raise ConflictError(
