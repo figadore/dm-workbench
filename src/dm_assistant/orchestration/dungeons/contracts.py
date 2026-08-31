@@ -948,13 +948,18 @@ class DungeonRoomNarrativeContextSelection(WorkflowModel):
     """Trusted exact room set and bounded style policy for one narrative task."""
 
     room_ids: tuple[ExactDungeonComponentId, ...] = Field(min_length=1, max_length=8)
+    continuity_fact_ids: tuple[str, ...] = Field(default=(), max_length=8)
     tone: tuple[GuideContentText, ...] = Field(default=(), max_length=4)
     constraints: tuple[GuideContentText, ...] = Field(default=(), max_length=8)
 
     @model_validator(mode="after")
-    def require_unique_room_ids(self) -> DungeonRoomNarrativeContextSelection:
+    def require_unique_selections(self) -> DungeonRoomNarrativeContextSelection:
         if len(self.room_ids) != len(set(self.room_ids)):
             raise ValueError("room narrative context requires unique exact room IDs")
+        if len(self.continuity_fact_ids) != len(set(self.continuity_fact_ids)):
+            raise ValueError(
+                "room narrative context requires unique continuity fact IDs"
+            )
         return self
 
 
@@ -1012,6 +1017,7 @@ class DungeonRoomNarrativeEnrichmentInput(WorkflowModel):
 
     schema_version: Literal["1.0.0"]
     package_id: ExactDungeonComponentId
+    continuity: DungeonEnrichmentContinuityContext
     rooms: tuple[DungeonRoomNarrativeRoomContext, ...] = Field(
         min_length=1, max_length=8
     )
@@ -1086,6 +1092,7 @@ class PromptedDungeonRoomNarrativeLineage(WorkflowModel):
 
     model_run_id: UUID
     context_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    creative_continuity_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     model_run: ModelRunRecord
     output: DungeonRoomNarrativeEnrichmentOutput
 
@@ -2080,6 +2087,13 @@ class CreatePromptedDungeonRoomNarrativeWorkflow(WorkflowModel):
         if self.model_lineage.context_sha256 != context_hash:
             raise ValueError(
                 "room narrative publication requires matching context lineage"
+            )
+        if (
+            self.model_lineage.creative_continuity_sha256
+            != self.context.continuity.projection_sha256
+        ):
+            raise ValueError(
+                "room narrative publication requires matching continuity lineage"
             )
         return self
 

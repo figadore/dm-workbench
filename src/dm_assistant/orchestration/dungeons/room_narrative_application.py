@@ -156,11 +156,15 @@ class DungeonRoomNarrativePromptApplicationService:
                     "room_ids": [room.room_id for room in context.rooms],
                     "room_count": len(context.rooms),
                     "context_sha256": context_hash,
+                    "creative_continuity_sha256": (
+                        context.continuity.projection_sha256
+                    ),
                 },
                 schema_versions={
                     "dungeon_room_narrative_enrichment": (
                         DUNGEON_ROOM_NARRATIVE_ENRICHMENT_SCHEMA_VERSION
-                    )
+                    ),
+                    "dungeon_creative_continuity": context.continuity.projection_version,
                 },
                 model_task_profile_id=profile.task_profile_id,
             )

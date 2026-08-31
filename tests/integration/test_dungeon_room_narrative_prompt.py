@@ -205,6 +205,12 @@ def test_faux_room_narratives_repair_and_publish_atomic_objective_child(
     db_engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     prepared = _prepare_objective_copper(db_engine, tmp_path, monkeypatch)
+    assert prepared.specification.creative_continuity is not None
+    continuity_hash = prepared.specification.creative_continuity.projection_sha256
+    assert (
+        prepared.specification.objective_model_lineage[-1].creative_continuity_sha256
+        == continuity_hash
+    )
     selection = _selection(prepared)
     valid = _narrative_output(prepared.specification.package.id, selection.room_ids)
     rejected = deepcopy(valid)
@@ -280,6 +286,10 @@ def test_faux_room_narratives_repair_and_publish_atomic_objective_child(
         == valid
     )
     assert (
+        child_spec.room_narrative_model_lineage[0].creative_continuity_sha256
+        == continuity_hash
+    )
+    assert (
         child_spec.dm_guide is not None and prepared.specification.dm_guide is not None
     )
     assert (
@@ -353,6 +363,16 @@ def test_faux_room_narratives_repair_and_publish_atomic_objective_child(
     assert [room["room_id"] for room in initial_document["context"]["rooms"]] == list(
         selection.room_ids
     )
+    assert (
+        initial_document["context"]["continuity"]["projection_sha256"]
+        == continuity_hash
+    )
+    assert {
+        item["room_ref"]
+        for item in initial_document["context"]["continuity"]["room_intents"]
+    } == selected_refs
+    assert initial_document["context"]["continuity"]["selected_facts"] == []
+    assert initial_document["context"]["continuity"]["source_links"] == []
     repair_document = json.loads(gateway.messages[1][0].content)
     assert repair_document["context"] == initial_document["context"]
     assert repair_document["previous_arguments"] == rejected
@@ -385,12 +405,23 @@ def test_faux_room_narratives_repair_and_publish_atomic_objective_child(
         attempt_run.validation_report["code"]
         == "dungeon_room_narrative_prompt_completed"
     )
+    assert attempt_run.input_scope["creative_continuity_sha256"] == continuity_hash
+    assert attempt_run.schema_versions["dungeon_creative_continuity"] == "1.0.0"
     assert valid["rooms"][0]["read_aloud"] not in report_text  # type: ignore[index]
     artifact_run = root.preparation.get_generation_run(
         root.campaign_id, attempt.result.generation_run_id
     )
     assert artifact_run.generation_kind == "dungeon_room_narrative_enrichment"
     assert artifact_run.model_task_profile_id == profile.task_profile_id
+    assert artifact_run.input_scope["creative_continuity_sha256"] == continuity_hash
+    assert artifact_run.schema_versions["dungeon_creative_continuity"] == "1.0.0"
+    assert (
+        artifact_run.validation_report["room_narrative_enrichment"][
+            "creative_continuity_sha256"
+        ]
+        == continuity_hash
+    )
+    assert artifact_run.context_source_links == ()
     assert artifact_run.tool_runs[0]["tool_name"] == "submit_dungeon_room_narrative"
 
     parent_assets = root.preparation.list_assets(root.campaign_id, prepared.version_id)

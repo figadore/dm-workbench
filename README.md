@@ -296,11 +296,14 @@ explicitly selected authorized facts/sources, and bounded accepted-mechanic summ
 Foreign objective or mechanic IDs are rejected; accepted content and continuity lineage
 publish in one DM-only child while package/map bytes and all accepted puzzle/exploration/
 feature/trap content remain unchanged. Room narratives now use a separate exact-room
-faux-provider task with the same 6,000-token cumulative/2,048-output and one-repair policy. It returns only concise read-aloud plus
-observable framing for every selected room, retains accepted content and lineage in one
-atomic DM-only child, and preserves package/map bytes, all prior enrichments, unselected
-rooms, and unrelated readiness blockers. Rejection or publication failure leaves the
-objective parent current. Accepted content remains available to the DM in the artifact,
+faux-provider task with the same 6,000-token cumulative/2,048-output and one-repair policy.
+Its strict context inherits that same continuity version/hash while exposing only selected
+room intents, explicitly approved authorized facts and exact sources, and player-observable
+accepted-mechanic summaries. It returns only concise read-aloud plus observable framing for
+every selected room, pins continuity in lineage and compact run metadata, and publishes one
+atomic DM-only child while preserving package/map bytes, all prior enrichments, unselected
+rooms, and unrelated readiness blockers. Stale continuity or unauthorized facts fail before
+dispatch; rejection or publication failure leaves the objective parent current. Accepted content remains available to the DM in the artifact,
 while routine attempt reports contain only compact operational metadata and diagnostics;
 raw transport capture requires explicit local debug. Missing enrichment still truthfully
 blocks preparation readiness. Geometry, visibility, validation, rendering,
@@ -446,16 +449,16 @@ The internal P1-02 Library service now ingests bounded strict-UTF-8 files throug
 
 ## Current Next Step
 
-Continue **P7-14f** by carrying the provider-free creative-continuity projection through
-room-narrative contexts before extending resumed coordination or adding a repeated runner.
-Structural publication derives and persists one self-hashed projection; puzzle,
-exploration, feature-interaction, trap, and objective tasks inherit the same version/hash
-and only explicitly selected authorized facts/sources, while standalone lore remains
-unknown. Next, finish propagation and add the deterministic final continuity/readiness
-report and non-authoritative whole-dungeon cohesion rubric; models may diagnose but never
-edit or approve. Do not add live calls, Tier B/C, a migration, model-authored
-geometry/mechanics,
-or preparation approval in that slice. See
+Continue **P7-14f** with the final deterministic continuity/readiness gate and bounded,
+non-authoritative whole-dungeon cohesion report before extending resumed coordination or
+adding a repeated runner. Structural publication and every puzzle, exploration,
+feature-interaction, trap, objective, and room-narrative task now share one persisted
+creative-continuity version/hash while receiving only task-relevant room intent, explicitly
+selected authorized facts/sources, and bounded prior-task summaries; standalone lore remains
+unknown. The next slice must verify continuity/source inheritance, exact dependencies,
+required content, lineage, and secrecy, then report cohesion findings without editing,
+approving, or writing canon. Do not add live calls, Tier B/C, a migration, model-authored
+geometry/mechanics, or preparation approval in that slice. See
 [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) and
 [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
 

@@ -492,18 +492,20 @@ added.
 
 The provider-free continuity foundation now derives and persists one bounded dungeon-only
 self-hashed projection from the resolved `DungeonGenerationContext` and accepted structural
-plan. Puzzle, exploration, feature-interaction, trap, and objective contexts inherit its
-exact version/hash while selecting only relevant authorized lore, premise/themes, room/
-progression/objective intent, history/environment facts, tone, motif-variation constraints,
-and exact cited sources. Their accepted lineages and generation-run metadata pin the
-shared hash. Deterministic objective projection rebuilds its exact room, selected facts,
-accepted-mechanic summaries, plan, package, guide target, and continuity pin. Stale hashes,
-unauthorized fact IDs, broader-visibility sources, and campaign lore in standalone mode fail
-closed; absent standalone lore remains unknown.
+plan. Puzzle, exploration, feature-interaction, trap, objective, and room-narrative
+contexts inherit its exact version/hash while selecting only relevant authorized lore,
+premise/themes, room/progression/objective intent, history/environment facts, tone,
+motif-variation constraints, and exact cited sources. Their accepted lineages and
+generation-run metadata pin the shared hash. Deterministic objective and room-narrative
+projection rebuild exact selected rooms, facts, accepted-mechanic summaries, plan, package,
+guide state, and continuity pin. Room narrative receives only player-observable mechanic
+summaries. Stale hashes, unauthorized fact IDs, broader-visibility sources, and campaign
+lore in standalone mode fail closed; absent standalone lore remains unknown.
 
-Required before chain repetition or live Tier A: carry this same projection through
-room-narrative contexts and lineages without turning it into a universal optional-field
-context or unrestricted corpus/guide dump.
+Required before chain repetition or live Tier A: add the final deterministic continuity/
+source/dependency/lineage/secrecy gate and bounded non-authoritative cohesion report without
+turning task contexts into a universal optional-field context or unrestricted corpus/guide
+dump.
 
 After required enrichment, run deterministic continuity/source/lineage/dependency/secrecy
 validation and produce a DM-facing whole-dungeon cohesion report. A separately budgeted

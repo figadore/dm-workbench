@@ -2,14 +2,25 @@
 
 import json
 from copy import deepcopy
+from uuid import UUID
 
 import pytest
 from pydantic import ValidationError
 
 from dm_assistant.errors import ConflictError
+from dm_assistant.modules.preparation import (
+    ContextSourceLink,
+    DungeonGenerationContext,
+    DungeonGenerationFact,
+    GenerationContextEnvelope,
+    VisibilityPolicy,
+    canonical_json_sha256,
+)
 from dm_assistant.orchestration.dungeons import (
+    DungeonCreativeContinuityProjection,
     DungeonGuidePlayerChoice,
     DungeonGuideRunnableContent,
+    DungeonObjectiveContextSelection,
     DungeonRoomNarrativeContextSelection,
     DungeonRoomNarrativeEnrichmentInput,
     DungeonRoomNarrativeEnrichmentOutput,
@@ -17,12 +28,16 @@ from dm_assistant.orchestration.dungeons import (
     DungeonRoomNarrativeRoomOutput,
     DungeonRoomNarrativeValidationResult,
 )
+from dm_assistant.orchestration.dungeons.continuity import (
+    derive_dungeon_creative_continuity,
+)
 from dm_assistant.orchestration.dungeons.contracts import (
     DungeonDmGuide,
     DungeonGuidePuzzle,
 )
 from dm_assistant.orchestration.dungeons.service import (
     build_dungeon_dm_guide,
+    build_dungeon_objective_enrichment_input,
     build_dungeon_preparation_readiness,
     build_dungeon_room_narrative_enrichment_input,
     project_dungeon_room_narrative_enrichment,
@@ -114,6 +129,61 @@ def _moonseed_package() -> tuple[DungeonPlan, LayoutRequest, DungeonPackage]:
     return plan, request, layout.package
 
 
+def _creative_continuity(plan: DungeonPlan) -> DungeonCreativeContinuityProjection:
+    payload = DungeonGenerationContext(
+        context_version="1.0.0",
+        prompt_input_sha256="8" * 64,
+        selected_facts=(
+            DungeonGenerationFact(
+                fact_id="aviary_history",
+                kind="history",
+                summary="The aviary records old wind shifts with woven reed vanes.",
+                source_ids=("source_aviary_history",),
+            ),
+        ),
+        grounding_mode="selected_campaign",
+        preparation_owner_id="dm",
+        context_provenance="synthetic_grounded_selection",
+    ).model_dump(mode="json")
+    return derive_dungeon_creative_continuity(
+        GenerationContextEnvelope(
+            context_kind="dungeon_generation",
+            payload_version="1.0.0",
+            campaign_revision_id=UUID(int=1),
+            corpus_snapshot_id=UUID(int=2),
+            rules_profile_id=UUID(int=3),
+            visibility_policy=VisibilityPolicy.DM_ONLY,
+            source_links=(
+                ContextSourceLink(
+                    source_kind="document_revision",
+                    source_id="source_aviary_history",
+                    revision_id="revision_aviary_history",
+                    sha256="9" * 64,
+                    visibility_policy=VisibilityPolicy.DM_ONLY,
+                ),
+            ),
+            payload=payload,
+            payload_sha256=canonical_json_sha256(payload),
+        ),
+        plan,
+    )
+
+
+def _build_context(
+    plan: DungeonPlan,
+    package: DungeonPackage,
+    guide: DungeonDmGuide,
+    selection: DungeonRoomNarrativeContextSelection,
+) -> DungeonRoomNarrativeEnrichmentInput:
+    return build_dungeon_room_narrative_enrichment_input(
+        package,
+        guide,
+        selection,
+        plan=plan,
+        creative_continuity=_creative_continuity(plan),
+    )
+
+
 def _content(label: str) -> DungeonGuideRunnableContent:
     return DungeonGuideRunnableContent(
         situation=f"Observable accepted {label} setup.",
@@ -201,6 +271,7 @@ def _accepted_guide(
 def _selection(room_ids: tuple[str, ...]) -> DungeonRoomNarrativeContextSelection:
     return DungeonRoomNarrativeContextSelection(
         room_ids=room_ids,
+        continuity_fact_ids=("aviary_history",),
         tone=("bright but precarious", "wind carries every small sound"),
         constraints=(
             "Use only player-observable information",
@@ -235,12 +306,46 @@ def test_room_narrative_context_contains_only_selected_geometry_state_and_observ
     guide, room_ids = _accepted_guide(plan, request, package)
     selected_ids = (room_ids["perch"], room_ids["canopy"], room_ids["seedhouse"])
 
-    context = build_dungeon_room_narrative_enrichment_input(
-        package, guide, _selection(selected_ids)
-    )
+    context = _build_context(plan, package, guide, _selection(selected_ids))
 
     assert context.package_id == package.id
     assert tuple(room.room_id for room in context.rooms) == selected_ids
+    projection = _creative_continuity(plan)
+    objective = next(
+        item for item in guide.objectives if item.room_id == room_ids["seedhouse"]
+    )
+    objective_context = build_dungeon_objective_enrichment_input(
+        package,
+        guide,
+        DungeonObjectiveContextSelection(
+            room_id=room_ids["seedhouse"],
+            objective_id=objective.marker_id,
+            continuity_fact_ids=("aviary_history",),
+            stakes="Recover the moonseed before the next gale.",
+        ),
+        plan=plan,
+        creative_continuity=projection,
+    )
+    assert context.continuity.projection_version == (
+        objective_context.continuity.projection_version
+    )
+    assert context.continuity.projection_sha256 == (
+        objective_context.continuity.projection_sha256
+    )
+    assert {room.room_ref for room in context.continuity.room_intents} == {
+        "perch",
+        "canopy",
+        "seedhouse",
+    }
+    assert [fact.fact_id for fact in context.continuity.selected_facts] == [
+        "aviary_history"
+    ]
+    assert [source.source_id for source in context.continuity.source_links] == [
+        "source_aviary_history"
+    ]
+    assert {item.name for item in context.continuity.objective_intents} == {
+        "Synthetic Moonseed"
+    }
     package_rooms = {room.id: room for room in package.rooms}
     guide_rooms = {room.room_id: room for room in guide.rooms}
     for room in context.rooms:
@@ -277,17 +382,42 @@ def test_room_narrative_context_contains_only_selected_geometry_state_and_observ
     assert "objective_content" not in output_schema
 
     with pytest.raises(ConflictError, match="unknown exact narrative room"):
-        build_dungeon_room_narrative_enrichment_input(
-            package, guide, _selection(("room_from_another_package",))
-        )
+        _build_context(plan, package, guide, _selection(("room_from_another_package",)))
     with pytest.raises(ConflictError, match="accepted local mechanics"):
-        build_dungeon_room_narrative_enrichment_input(
+        _build_context(
+            plan,
             package,
             build_dungeon_dm_guide(request, package, plan),
             _selection((room_ids["canopy"],)),
         )
+    stale = _creative_continuity(plan).model_copy(
+        update={"projection_sha256": "f" * 64}
+    )
+    with pytest.raises(ConflictError, match="hash is stale"):
+        build_dungeon_room_narrative_enrichment_input(
+            package,
+            guide,
+            _selection(selected_ids),
+            plan=plan,
+            creative_continuity=stale,
+        )
+    with pytest.raises(ConflictError, match="unauthorized or stale fact"):
+        build_dungeon_room_narrative_enrichment_input(
+            package,
+            guide,
+            _selection(selected_ids).model_copy(
+                update={"continuity_fact_ids": ("invented_lore",)}
+            ),
+            plan=plan,
+            creative_continuity=_creative_continuity(plan),
+        )
     with pytest.raises(ValidationError, match="unique exact room IDs"):
         _selection((room_ids["perch"], room_ids["perch"]))
+    with pytest.raises(ValidationError, match="unique continuity fact IDs"):
+        DungeonRoomNarrativeContextSelection(
+            room_ids=(room_ids["perch"],),
+            continuity_fact_ids=("aviary_history", "aviary_history"),
+        )
 
 
 def test_room_narrative_output_rejects_foreign_duplicate_and_cross_task_targets() -> (
@@ -296,9 +426,7 @@ def test_room_narrative_output_rejects_foreign_duplicate_and_cross_task_targets(
     plan, request, package = _moonseed_package()
     guide, room_ids = _accepted_guide(plan, request, package)
     selected_ids = (room_ids["perch"], room_ids["canopy"])
-    context = build_dungeon_room_narrative_enrichment_input(
-        package, guide, _selection(selected_ids)
-    )
+    context = _build_context(plan, package, guide, _selection(selected_ids))
     valid_document = _output(package.id, selected_ids)
     output = DungeonRoomNarrativeEnrichmentOutput.model_validate(valid_document)
     assert (
@@ -361,7 +489,7 @@ def test_accepted_room_narratives_project_only_selected_rooms_and_room_blockers(
     guide, room_ids = _accepted_guide(plan, request, package)
     selected_ids = (room_ids["perch"], room_ids["canopy"])
     selection = _selection(selected_ids)
-    context = build_dungeon_room_narrative_enrichment_input(package, guide, selection)
+    context = _build_context(plan, package, guide, selection)
     output = DungeonRoomNarrativeEnrichmentOutput.model_validate(
         _output(package.id, selected_ids)
     )
@@ -374,6 +502,7 @@ def test_accepted_room_narratives_project_only_selected_rooms_and_room_blockers(
         guide,
         plan=plan,
         package=package,
+        creative_continuity=_creative_continuity(plan),
         context=context,
         validation=validation,
     )
@@ -426,6 +555,7 @@ def test_accepted_room_narratives_project_only_selected_rooms_and_room_blockers(
             enriched,
             plan=plan,
             package=package,
+            creative_continuity=_creative_continuity(plan),
             context=context,
             validation=validation,
         )
@@ -437,6 +567,7 @@ def test_accepted_room_narratives_project_only_selected_rooms_and_room_blockers(
             guide,
             plan=plan,
             package=package,
+            creative_continuity=_creative_continuity(plan),
             context=context.model_copy(update={"rooms": tuple(tampered_rooms)}),
             validation=validation,
         )

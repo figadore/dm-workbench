@@ -1301,12 +1301,16 @@ class DungeonStudioService:
         if parent.artifact_id != command.artifact_id:
             raise ConflictError("Parent version does not belong to the artifact.")
         specification = _load_specification(parent.specification)
+        plan = _accepted_structural_plan(specification)
+        continuity = _required_creative_continuity(specification)
         if specification.dm_guide is None:
             raise ConflictError("Room narrative requires an exact structural guide.")
         return build_dungeon_room_narrative_enrichment_input(
             specification.package,
             specification.dm_guide,
             command.selection,
+            plan=plan,
+            creative_continuity=continuity,
         )
 
     def enrich_prompted_room_narrative(
@@ -1323,6 +1327,7 @@ class DungeonStudioService:
             raise ConflictError("Parent version does not belong to the artifact.")
         specification = _load_specification(parent.specification)
         plan = _accepted_structural_plan(specification)
+        continuity = _required_creative_continuity(specification)
         if specification.dm_guide is None:
             raise ConflictError(
                 "Room narrative enrichment requires an exact structural guide."
@@ -1334,6 +1339,7 @@ class DungeonStudioService:
             context_kind="dungeon_room_narrative_enrichment",
             payload_version=command.context.schema_version,
             visibility_policy=VisibilityPolicy.DM_ONLY,
+            source_links=command.context.continuity.source_links,
             payload=context_document,
             payload_sha256=context_hash,
         )
@@ -1355,6 +1361,9 @@ class DungeonStudioService:
                     "room_ids": [room.room_id for room in command.context.rooms],
                     "room_count": len(command.context.rooms),
                     "context_sha256": context_hash,
+                    "creative_continuity_sha256": (
+                        command.context.continuity.projection_sha256
+                    ),
                 },
                 input_pins=parent.input_pins,
                 context=context_pin,
@@ -1362,6 +1371,9 @@ class DungeonStudioService:
                     "dungeon_package": specification.package.schema_version,
                     "dungeon_room_narrative_enrichment": (
                         DUNGEON_ROOM_NARRATIVE_ENRICHMENT_SCHEMA_VERSION
+                    ),
+                    "dungeon_creative_continuity": (
+                        DUNGEON_CREATIVE_CONTINUITY_VERSION
                     ),
                     "dungeon_studio": _STUDIO_SCHEMA_VERSION,
                     "model_run": "1.0.0",
@@ -1388,6 +1400,7 @@ class DungeonStudioService:
                 specification.dm_guide,
                 plan=plan,
                 package=specification.package,
+                creative_continuity=continuity,
                 context=command.context,
                 validation=command.validation,
             )
@@ -1406,6 +1419,9 @@ class DungeonStudioService:
                     "room_ids": [room.room_id for room in command.context.rooms],
                     "room_count": len(command.context.rooms),
                     "context_sha256": context_hash,
+                    "creative_continuity_sha256": (
+                        command.context.continuity.projection_sha256
+                    ),
                 },
             }
             if readiness is not None:
@@ -3572,8 +3588,11 @@ def build_dungeon_room_narrative_enrichment_input(
     package: DungeonPackage,
     guide: DungeonDmGuide,
     selection: DungeonRoomNarrativeContextSelection,
+    *,
+    plan: DungeonPlan,
+    creative_continuity: DungeonCreativeContinuityProjection,
 ) -> DungeonRoomNarrativeEnrichmentInput:
-    """Build a homogeneous room-prose context from exact observable state."""
+    """Build a homogeneous room-prose context with pinned creative continuity."""
 
     package_rooms_by_id = {room.id: room for room in package.rooms}
     guide_rooms_by_id = {room.room_id: room for room in guide.rooms}
@@ -3629,9 +3648,17 @@ def build_dungeon_room_narrative_enrichment_input(
                 accepted_mechanics=local_mechanics,
             )
         )
+    continuity = build_dungeon_enrichment_continuity_context(
+        projection=creative_continuity,
+        plan=plan,
+        package=package,
+        room_ids=selection.room_ids,
+        selected_fact_ids=selection.continuity_fact_ids,
+    )
     return DungeonRoomNarrativeEnrichmentInput(
         schema_version=DUNGEON_ROOM_NARRATIVE_ENRICHMENT_SCHEMA_VERSION,
         package_id=package.id,
+        continuity=continuity,
         rooms=tuple(rooms),
         tone=selection.tone,
         constraints=selection.constraints,
@@ -3737,6 +3764,7 @@ def project_dungeon_room_narrative_enrichment(
     *,
     plan: DungeonPlan,
     package: DungeonPackage,
+    creative_continuity: DungeonCreativeContinuityProjection,
     context: DungeonRoomNarrativeEnrichmentInput,
     validation: DungeonRoomNarrativeValidationResult,
 ) -> DungeonDmGuide:
@@ -3756,9 +3784,14 @@ def project_dungeon_room_narrative_enrichment(
         guide,
         DungeonRoomNarrativeContextSelection(
             room_ids=tuple(room.room_id for room in context.rooms),
+            continuity_fact_ids=tuple(
+                fact.fact_id for fact in context.continuity.selected_facts
+            ),
             tone=context.tone,
             constraints=context.constraints,
         ),
+        plan=plan,
+        creative_continuity=creative_continuity,
     )
     if rebuilt_context != context:
         raise ConflictError(

@@ -1820,19 +1820,22 @@ derives one bounded dungeon-only self-hashed projection from the resolved
 progression/objective intent, selected authorized history/environment facts,
 factions/hooks, tone, motif variation constraints, and source/citation references where
 grounding was explicitly enabled. Structural artifacts persist the exact context and
-projection. Puzzle, exploration, feature-interaction, trap, and objective contexts carry
-its same version/hash, select only explicitly approved facts and their exact sources, reject
-stale hashes, unauthorized facts, or broader-visibility sources, and pin the shared hash in
-accepted lineage and generation-run metadata. Deterministic feature/trap/objective
-projection rebuilds the strict context against the persisted plan, package, guide target,
-and continuity projection before changing one guide entry. Objective context remains
-bounded to its exact room intent, selected facts/sources, and selected accepted-mechanic
-summaries. Standalone generation contains no campaign facts by default, and absent history
-or lore remains explicitly unknown.
+projection. Puzzle, exploration, feature-interaction, trap, objective, and room-narrative
+contexts carry its same version/hash, select only explicitly approved facts and their exact
+sources, reject stale hashes, unauthorized facts, or broader-visibility sources, and pin the
+shared hash in accepted lineage and generation-run metadata. Deterministic feature, trap,
+objective, and room-narrative projection rebuilds the strict context against the persisted
+plan, package, guide target, and continuity projection before changing guide state. Objective
+context remains bounded to its exact room intent, selected facts/sources, and selected
+accepted-mechanic summaries; room-narrative context remains bounded to its selected room
+intents, selected facts/sources, and player-observable accepted-mechanic summaries.
+Standalone generation contains no campaign facts by default, and absent history or lore
+remains explicitly unknown.
 
-Before repeated/full-chain dispatch or a live Tier A run, complete that required projection
-through room-narrative contexts and lineages. Each strict task must receive only its relevant
-projection plus the shared hash; this is not a universal optional-field generation payload.
+The required continuity projection now reaches every staged task. Before repeated/full-chain
+dispatch or a live Tier A run, add the final deterministic continuity/source/dependency/
+lineage/secrecy gate and bounded non-authoritative cohesion report. This remains a set of
+strict task-specific payloads, not a universal optional-field generation payload.
 
 After all required enrichments, deterministic validation must verify continuity-hash/
 source inheritance, exact dependencies, required content, lineage, secrecy, and typed

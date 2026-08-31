@@ -95,16 +95,17 @@ commits superseded them. This file preserves only compact milestone history:
   reservation, durable body-free diagnostics, and frozen Tier A canary policy were
   established. Codex ordinary live use remained paused because the pinned transport
   did not send a hard output limit.
-- **P7-14f staged enrichment through feature dispatch:** Removed prose-heavy guide
+- **P7-14f staged enrichment through objective continuity:** Removed prose-heavy guide
   content from the structural proposal and retained truthful readiness blockers
-  (`ae6d406`). Added exact-package puzzle context/projection (`088568d`) and bounded
-  puzzle dispatch (`edc6245`); exact-ID exploration contracts and bounded atomic child
-  publication (`edc6245`, `6667148`); and exact-ID feature-interaction contracts plus
-  bounded dispatch/publication (`95af1c2`, `7387d29`). Every accepted child preserves
-  package/map bytes and prior task content; rejection leaves its parent current with
-  compact body-free diagnostics. The anti-overfitting prompt/canary cleanup is at
-  `ea812d6`. Trap, narrative, automatic staged orchestration, and staged live evaluation
-  remained incomplete at this milestone.
+  (`ae6d406`). Added independently bounded exact-ID puzzle, exploration, feature, trap,
+  and objective contexts, dispatch, deterministic guide projection, accepted lineage,
+  and atomic DM-only child publication through `b9f9371`. A pure planner and one-step
+  coordinator skip accepted work and fail closed on inconsistent state. Every accepted
+  child preserves package/map bytes and prior task content; rejection leaves its parent
+  current with compact body-free diagnostics. One persisted creative-continuity pin now
+  reaches structural, puzzle, exploration, feature, trap, and objective artifacts/tasks.
+  Room-narrative continuity, final readiness/cohesion gates, repeated orchestration, and
+  staged live evaluation remained incomplete at this milestone.
 
 ### Deployment baseline
 
