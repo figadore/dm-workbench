@@ -1807,8 +1807,33 @@ closed on missing/mismatched guide state, stale or duplicate lineage, untracked 
 content, and unsupported blockers. A provider-free one-step coordinator now requires a
 discriminated trusted policy for the selected exact task, invokes exactly one existing
 bounded task seam, and replans only the accepted current child. Rejection preserves the
-current parent and cannot advance to a second staged task. Automatic repetition/full-chain
-dispatch and live calls remain later slices.
+current parent and cannot advance to a second staged task. Resumed exploration coordination
+requires the exact planned encounter-slot ID in addition to the room-local authoring
+selection; one accepted exploration child replans to the next feature target, while a
+mismatched slot fails before any provider call or version write. Broader resumed feature/
+trap/objective/narrative coverage, automatic repetition/full-chain dispatch, and live calls
+remain later slices.
+
+Before repeated/full-chain dispatch or a live Tier A run, add an explicit creative-
+continuity and final-cohesion slice. Trusted Workbench code must derive one bounded dungeon-
+only continuity projection from the resolved `DungeonGenerationContext` and accepted
+structural plan: premise, themes, room purposes, progression/objective intent, selected
+authorized history/environment facts, factions/hooks, tone, motif variation constraints,
+and source/citation references where grounding was explicitly enabled. Pin its version and
+hash to the artifact and every enrichment lineage. Each strict task context receives only
+the relevant projection plus that shared hash; this is not a universal optional-field
+generation payload. Standalone generation continues to contain no campaign facts by
+default, and absent history or lore remains unknown rather than invented.
+
+After all required enrichments, deterministic validation must verify continuity-hash/
+source inheritance, exact dependencies, required content, lineage, secrecy, and typed
+cross-task consistency. A separately bounded read-only holistic review may then report
+whole-dungeon concerns without editing content or approving preparation. Its structured
+report and the DM review packet must assess thematic reinforcement, history-to-environment
+causality, mechanic/objective unity, progression, intentional motif variation, and
+consistency with every selected campaign fact. Findings trigger explicit DM disposition or
+targeted regeneration of one exact enrichment seam—never a broad silent rewrite, canonical
+write, or model approval.
 
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
   Its model-visible proposal contains room identity/purpose, critical path, bounded
@@ -1834,6 +1859,11 @@ dispatch and live calls remain later slices.
   - trap, feature, objective, and narrative work use similarly narrow typed tasks when
     model authorship is required. A homogeneous narrative task may cover the bounded room
     set only after accepted mechanics exist; it cannot invent or change those mechanics.
+- Carry the same pinned creative-continuity hash through every task while projecting only
+  relevant authorized facts, accepted structural intent, and bounded prior-task summaries
+  into that task's strict input. Context builders fail closed on a stale hash, broader-
+  visibility fact, unsupported citation, or contradiction with the accepted plan. They do
+  not copy the entire growing guide or retrieval corpus into every call.
 - Give every enrichment task its own prompt/instruction pin, model/effort selection,
   output and cumulative token budget, bounded repair policy, diagnostics, and durable
   lineage. Keep this proportionate: accepted content belongs in the authorized DM artifact;
@@ -1855,9 +1885,11 @@ dispatch and live calls remain later slices.
 - Replace single-fixture iteration with a small synthetic evaluation set spanning at least
   three materially different, non-copyrighted settings and interaction styles. Compare
   prompt variants, supported effort levels, and model sizes with blinded human ratings for
-  progression, clue logic, player agency, puzzle comprehensibility, exploration quality,
-  prep usefulness, latency, token use, first-pass schema validity, and repair rate. Do not
-  promote a larger model or deeper effort without measured quality improvement.
+  thematic reinforcement across rooms, history/environment causality, mechanic/objective
+  unity, progression, intentional motif variation, campaign-lore consistency when grounded,
+  clue logic, player agency, puzzle comprehensibility, exploration quality, prep usefulness,
+  latency, token use, first-pass schema validity, and repair rate. Do not promote a larger
+  model or deeper effort without measured quality improvement.
 - Fix or replace the live transport so requested output limits are enforced before
   ordinary provider use. Then run the frozen staged Tier A canary before Tier B/C. Tier A
   must produce one accepted structural plan, valid topology/geometry, independently
@@ -1877,6 +1909,11 @@ dispatch and live calls remain later slices.
 - Provider-free/faux orchestration tests prove exact-ID context slicing, independent task
   budgets/repairs/lineage, deterministic merge, no cross-task mutation, readiness blockers
   on partial enrichment, and atomic publication on complete enrichment.
+- Creative-continuity tests prove every task inherits the same version/hash, receives only
+  authorized relevant facts and accepted intent, rejects stale or visibility-invalid
+  projections, and leaves ungrounded standalone lore unknown. Final-report tests prove the
+  holistic reviewer can emit diagnostics and targeted-task recommendations but cannot edit
+  an artifact, clear deterministic blockers, approve preparation, or write canon.
 - Puzzle and exploration contract tests use positive and negative cases that are not
   derived from the archive fixture. Eval reports preserve scores and safe measurements,
   never provider response bodies or copyrighted content.
@@ -1890,6 +1927,9 @@ dispatch and live calls remain later slices.
   body-free.
 - The multi-case Tier A evaluation shows which prompt/model/effort profile improves
   puzzle and exploration quality without relying on repeated edits to one fixture.
+- Every required enrichment pins the same creative-continuity projection lineage, and the
+  final deterministic plus DM-reviewed cohesion report explicitly disposes all six
+  whole-dungeon dimensions without allowing a model to approve its own result.
 - Tier B/C remain deferred until these Tier A conditions hold.
 
 **Phase gate P7-14 Tier A**
@@ -1906,7 +1946,12 @@ dispatch and live calls remain later slices.
   package IDs produce the runnable guide and cannot mutate the package.
 - Human quality evidence comes from materially different Tier A cases, including at least
   one staged live artifact, rather than repeated rewrites of one fixed archive fixture.
-  Every evaluated case records explicit decisions and ratings for the required dimensions.
+  Every evaluated case records explicit decisions and ratings for thematic reinforcement,
+  history/environment causality, mechanic/objective unity, progression, motif variation,
+  lore consistency when grounded, and the existing playability/usefulness dimensions.
+- Every enrichment lineage pins the same bounded creative-continuity version/hash and
+  authorized sources; final deterministic validation plus a non-authoritative holistic/DM
+  review runs before preparation approval and can request only targeted follow-up work.
 - Measured output or cumulative usage over each task's pinned ceiling cannot publish its
   result, and no repair starts when its estimated complete input cannot fit the measured
   remaining budget.

@@ -444,12 +444,15 @@ The internal P1-02 Library service now ingests bounded strict-UTF-8 files throug
 
 ## Current Next Step
 
-Continue **P7-14f** by extending the provider-free one-step staged coordinator regression
-across resumed exploration, feature, trap, objective, and narrative selections before any
-repeated/full-chain runner is introduced. Preserve explicit task-specific policy inputs,
-one atomic child per accepted task, resumable parent/child lineage, bounded failure, and no
-topology/map regeneration. Do not add live calls, Tier B/C, a migration, model-authored
-geometry/mechanics, or preparation approval in that slice. See
+Continue **P7-14f** by defining the provider-free dungeon creative-continuity projection
+before extending resumed feature/trap/objective/narrative coordination or adding a repeated
+runner. Derive it from the resolved `DungeonGenerationContext` and accepted structural
+plan, pin one version/hash across every strict enrichment context, preserve authorized
+source visibility, and leave standalone lore unknown unless grounding is explicitly
+selected. Add the final deterministic continuity/readiness report and non-authoritative
+whole-dungeon cohesion rubric to the plan; models may diagnose but never edit or approve.
+Then resume exact one-step coordinator coverage. Do not add live calls, Tier B/C, a
+migration, model-authored geometry/mechanics, or preparation approval in that slice. See
 [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) and
 [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
 

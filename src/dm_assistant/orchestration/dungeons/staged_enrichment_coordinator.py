@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated, Literal
 
-from pydantic import Field
+from pydantic import Field, ValidationError
 
 from dm_assistant.errors import ConflictError
 from dm_assistant.modules.modeling import ResolvedModelRunProfile
@@ -20,6 +21,7 @@ from dm_assistant.orchestration.dungeons.contracts import (
     DungeonRoomNarrativeContextSelection,
     DungeonStudioSpecification,
     DungeonTrapContextSelection,
+    ExactDungeonComponentId,
     PromptDungeonExplorationWorkflow,
     PromptDungeonFeatureInteractionWorkflow,
     PromptDungeonObjectiveWorkflow,
@@ -70,6 +72,7 @@ class DungeonStagedExplorationPolicy(WorkflowModel):
     """Trusted exploration-only IDs and authoring policy for the selected task."""
 
     kind: Literal["exploration"] = "exploration"
+    encounter_slot_id: ExactDungeonComponentId
     selection: DungeonExplorationContextSelection
 
 
@@ -241,7 +244,12 @@ class DungeonStagedEnrichmentCoordinator:
             artifact = self._preparation.get_artifact(campaign_id, artifact_id)
             if artifact.current_version_id != version_id:
                 raise ConflictError("Staged enrichment requires the current version.")
-        specification = DungeonStudioSpecification.model_validate(version.specification)
+        try:
+            specification = DungeonStudioSpecification.model_validate_json(
+                json.dumps(version.specification, separators=(",", ":"), sort_keys=True)
+            )
+        except ValidationError as error:
+            raise ConflictError("Stored dungeon specification is invalid.") from error
         return plan_dungeon_staged_enrichment(specification)
 
     def _dispatch(
@@ -271,7 +279,12 @@ class DungeonStagedEnrichmentCoordinator:
                 debug=debug,
             )
         if isinstance(policy, DungeonStagedExplorationPolicy):
-            self._require_exact_policy(task, policy.kind, policy.selection.room_id)
+            self._require_exact_policy(
+                task,
+                policy.kind,
+                policy.selection.room_id,
+                policy.encounter_slot_id,
+            )
             exploration_service = self._require_service(self._exploration, policy.kind)
             return exploration_service.execute(
                 PromptDungeonExplorationWorkflow(

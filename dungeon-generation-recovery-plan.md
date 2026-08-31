@@ -483,14 +483,38 @@ targets from package slots, current guide state, and accepted lineage; it skips 
 tasks and fails closed on inconsistent or unsupported state. A provider-free one-step
 coordinator now requires an exact task-specific trusted policy, invokes only the selected
 existing bounded seam, and replans an accepted current child; rejection preserves the
-parent and cannot dispatch the next task. It does not repeat the chain. No live provider
-was contacted, and no redaction/logging subsystem or new persistence store was added.
+parent and cannot dispatch the next task. Resumed exploration policy includes the exact
+planned encounter-slot ID: acceptance publishes one exploration child and replans the next
+feature, while a slot mismatch makes no provider call and no version. Broader resumed
+feature/trap/objective/narrative coverage and chain repetition remain pending. No live
+provider was contacted, and no redaction/logging subsystem or new persistence store was
+added.
+
+Required before chain repetition or live Tier A: derive and pin one bounded dungeon-only
+creative-continuity projection from the resolved `DungeonGenerationContext` and accepted
+structural plan. Every strict enrichment context must inherit its version/hash while
+receiving only relevant authorized lore, premise/themes, room/progression/objective intent,
+history/environment facts, tone, motif-variation constraints, and bounded accepted-task
+summaries. Standalone mode remains ungrounded by default and must report absent lore as
+unknown. This shared continuity boundary must not become a universal optional-field context
+or an unrestricted corpus/guide dump.
+
+After required enrichment, run deterministic continuity/source/lineage/dependency/secrecy
+validation and produce a DM-facing whole-dungeon cohesion report. A separately budgeted
+read-only reviewer may diagnose thematic reinforcement, history/environment causality,
+mechanic/objective unity, progression, motif variation, and selected-lore consistency, but
+cannot edit, approve, clear blockers, or write canon. Findings are explicitly dispositioned
+or sent to one targeted enrichment seam. Multi-case blinded human evidence remains the
+quality authority.
 
 - Add independently bounded puzzle, exploration, other interaction, and narrative tasks
   over exact package IDs; merge accepted output deterministically and preserve the map on
   partial failure.
 - Replace single-archive prompt iteration with multi-case semantic/DM rubrics and blinded
-  prompt/model/effort comparisons. Keep the archive packet only as a technical regression.
+  prompt/model/effort comparisons. Rate thematic reinforcement, history/environment
+  causality, mechanic/objective unity, progression, intentional motif variation, and
+  selected-lore consistency in addition to playability and preparation usefulness. Keep
+  the archive packet only as a technical regression.
 - Resolve hard provider output-cap behavior, then run the frozen staged Tier A canary after
   provider-free and faux gates pass. Ordinary rollout requires evidence that requested
   output ceilings bound reported usage; the sole exception remains one frozen, explicitly
