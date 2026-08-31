@@ -480,9 +480,11 @@ unselected room state, and unrelated blockers; rejection or publication failure 
 the objective parent current and stores no rejected body. A provider-free staged planner
 now orders exact puzzle, exploration, feature, trap, objective, and bounded narrative
 targets from package slots, current guide state, and accepted lineage; it skips completed
-tasks and fails closed on inconsistent or unsupported state. It does not dispatch or
-repeat the chain. No live provider was contacted, and no redaction/logging subsystem or
-new persistence store was added.
+tasks and fails closed on inconsistent or unsupported state. A provider-free one-step
+coordinator now requires an exact task-specific trusted policy, invokes only the selected
+existing bounded seam, and replans an accepted current child; rejection preserves the
+parent and cannot dispatch the next task. It does not repeat the chain. No live provider
+was contacted, and no redaction/logging subsystem or new persistence store was added.
 
 - Add independently bounded puzzle, exploration, other interaction, and narrative tasks
   over exact package IDs; merge accepted output deterministically and preserve the map on

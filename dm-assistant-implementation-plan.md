@@ -1804,8 +1804,11 @@ guide projection and retained accepted lineage, skips completed work, selects th
 single mechanic task in deterministic puzzle/exploration/feature/trap/objective order, and
 selects the bounded narrative room set only after local mechanics are accepted. It fails
 closed on missing/mismatched guide state, stale or duplicate lineage, untracked projected
-content, and unsupported blockers. Automatic dispatch/repetition and live calls remain
-later slices.
+content, and unsupported blockers. A provider-free one-step coordinator now requires a
+discriminated trusted policy for the selected exact task, invokes exactly one existing
+bounded task seam, and replans only the accepted current child. Rejection preserves the
+current parent and cannot advance to a second staged task. Automatic repetition/full-chain
+dispatch and live calls remain later slices.
 
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
   Its model-visible proposal contains room identity/purpose, critical path, bounded

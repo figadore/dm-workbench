@@ -444,11 +444,11 @@ The internal P1-02 Library service now ingests bounded strict-UTF-8 files throug
 
 ## Current Next Step
 
-Continue **P7-14f** by wiring the provider-free exact-slot planner into a one-step staged
-coordinator across the existing puzzle, exploration, feature, trap, objective, and room-
-narrative seams. Preserve explicit task-policy inputs, one atomic child per accepted task,
-resumable parent/child lineage, bounded failure, and no topology/map regeneration. Do not
-add repeated/full-chain dispatch, live calls, Tier B/C, a migration, model-authored
+Continue **P7-14f** by extending the provider-free one-step staged coordinator regression
+across resumed exploration, feature, trap, objective, and narrative selections before any
+repeated/full-chain runner is introduced. Preserve explicit task-specific policy inputs,
+one atomic child per accepted task, resumable parent/child lineage, bounded failure, and no
+topology/map regeneration. Do not add live calls, Tier B/C, a migration, model-authored
 geometry/mechanics, or preparation approval in that slice. See
 [`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) and
 [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
