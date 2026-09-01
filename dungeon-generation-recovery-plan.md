@@ -530,8 +530,11 @@ The active provider-free manifest now freezes three materially different origina
 Tier A settings/interaction styles and three opaque variant IDs. Strict run measurements pin
 only hashes, latency, token usage, first-pass/final validity, and bounded repair count; strict
 human reviews contain only blinded IDs and the documented semantic, playability, and DM-prep
-ratings. Provider responses/excerpts are forbidden. Matrix validation, aggregation, and
-actual human/live evidence remain pending.
+ratings. Provider responses/excerpts are forbidden. Provider-free matrix validation now
+enforces exact case/variant coverage, stable assignment hashes, final-valid artifact joins,
+and correct lore applicability; its body-free blinded aggregate includes every rating mean
+plus the lore denominator, latency/token means, first-pass-validity rate, and repair rate by
+opaque variant only. Actual human/live evidence remains pending.
 
 - Add independently bounded puzzle, exploration, other interaction, and narrative tasks
   over exact package IDs; merge accepted output deterministically and preserve the map on

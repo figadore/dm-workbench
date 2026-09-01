@@ -7,12 +7,12 @@
 ## Current State
 
 - **Updated:** 2026-08-31
-- **Branch/HEAD:** `fast-track-prompt-to-dungeon` at `b6977e1`, six commits ahead of
+- **Branch/HEAD:** `fast-track-prompt-to-dungeon` at `ca9ce7d`, aligned with
   `origin/fast-track-prompt-to-dungeon`, plus the uncommitted slice below.
 - **Current task:** **P7-14f — Staged Tier A authoring and anti-overfitting evaluation.**
-- **Task state:** the first provider-free multi-case evaluation manifest and strict
-  body-free evidence contracts are implemented. Evidence-matrix validation, blinded
-  aggregation, actual human ratings, and live staged Tier A remain pending.
+- **Task state:** provider-free Tier A evidence-matrix validation and blinded aggregation
+  are implemented. Actual human ratings, a transport-enforced output limit, and live staged
+  Tier A remain pending.
 - **Schema head:** `0008_workbench_defaults`; no migration changed or is pending.
 - **Retention gate:** **not crossed.** Active V1 contracts evolve in place; there is no
   retained real-user artifact, external consumer, non-disposable deployment, or promised
@@ -20,43 +20,34 @@
 
 ## Implemented This Slice
 
-The new Tier A anti-overfitting protocol freezes three original, non-copyrighted synthetic
-briefs that differ in setting and interaction style:
+The evaluator-side matrix now fails closed unless every frozen manifest case/opaque-variant
+pair has exactly one body-free run measurement and one blinded human review. Validation also
+enforces:
 
-- a standalone salt-marsh signal house focused on environmental navigation;
-- a synthetic-grounded rootbound embassy focused on social inference and ecological
-  affordances; and
-- a standalone ashfall gallery focused on investigative reconstruction and risk tradeoffs.
+- no missing or duplicate run/review pairs and globally unique run/review IDs;
+- manifest-matching measurement/rubric pins;
+- one stable assignment hash per opaque variant across all cases;
+- one matching final-valid artifact hash at the run/review join; and
+- omitted lore ratings for standalone cases and required lore ratings for grounded cases.
 
-The manifest pins three opaque stable variant IDs, hides their prompt/model/effort
-assignments from reviewers, and declares one five-point quality scale. Strict models now
-separate:
-
-- body-free run measurements: stable case/variant/run IDs, assignment and artifact hashes,
-  cumulative latency and measured token usage, first-pass validity, bounded repair count,
-  and final validity; and
-- blinded human reviews: stable reviewer/case/variant/artifact IDs plus all six cohesion
-  dimensions, clue logic, player agency, puzzle comprehensibility, exploration quality,
-  and DM preparation usefulness. Lore consistency is nullable for standalone cases.
-
-Extra fields fail closed, so provider responses/excerpts cannot enter either evidence
-record. Run validation enforces coherent first-pass, repair, final-validity, and artifact-
-hash relationships. This is protocol/fixture coverage only; it is not generated quality
-evidence and the Synthetic Constructive Archive remains only a technical regression.
+Aggregation accepts only that validated matrix and groups by opaque variant ID. Its strict
+body-free result includes means for all six cohesion ratings, clue logic, player agency,
+puzzle comprehensibility, exploration quality, and DM preparation usefulness; it also
+includes the applicable lore-rating denominator, mean latency/input/output/total tokens,
+first-pass-validity rate, and repair rate. Assignment hashes, artifact/run/reviewer IDs, and
+content do not enter the aggregate. Test ratings exercise arithmetic only and are not stored
+or claimed as quality evidence.
 
 ## Active Boundaries and Known Issues
 
-- There is no matrix validator yet to join manifest cases, blinded variants, run
-  measurements, and human reviews or enforce exact case-by-variant coverage, stable
-  assignment hashes, lore-rating applicability, and artifact-hash matching.
-- No aggregate semantic/usefulness scores, latency/usage statistics, first-pass-validity
-  rate, or repair rate have been calculated; no rating values are stored as evidence.
+- There are no actual generated-artifact ratings or aggregate quality conclusions. The
+  frozen synthetic briefs and arithmetic fixtures remain protocol/regression coverage only.
 - There is still no staged live result, Tier B/C work, or resumed output/print work.
 - There is no bounded cohesion-reviewer model call. Current strict report/disposition
-  evidence is provider-free/human-constructible and non-authoritative.
-- Live provider use remains paused. Pinned `@earendil-works/pi-ai` Codex transport does not
-  serialize the requested hard output limit; post-response checks protect publication but
-  cannot prevent provider usage.
+  evidence remains provider-free/human-constructible and non-authoritative.
+- Live provider use remains paused. Pinned `@earendil-works/pi-ai` Codex transport receives
+  the gateway `maxTokens` option but has not been proven to serialize/enforce the requested
+  hard output limit; post-response checks protect publication but cannot prevent usage.
 - Package and root pytest suites must run separately because duplicate test module basenames
   cause import-file-mismatch when collected in one process.
 - No provider was contacted. No credential, canon write, preparation approval, migration,
@@ -64,11 +55,10 @@ evidence and the Synthetic Constructive Archive remains only a technical regress
 
 ## Current Files and Verification
 
-Uncommitted production/eval fixture/tests:
+Uncommitted production/tests:
 
 - `src/dm_assistant/orchestration/dungeons/evals.py`
 - `tests/evals/test_dungeon_evals.py`
-- `tests/evals/golden/dungeon_tier_a_manifest.json`
 
 Uncommitted documentation:
 
@@ -79,24 +69,24 @@ Uncommitted documentation:
 
 Recorded for this slice:
 
-- `uv run pytest -q tests/unit tests/evals` -> **226 passed**.
+- `uv run pytest -q tests/unit tests/evals` -> **230 passed**.
 - `uv run pytest -q packages/dungeon-engine/tests` -> **139 passed**.
 - strict mypy over the changed Python files -> **passed**.
 - Ruff lint/format over the changed Python files -> **passed**.
-- JSON parsing for the new manifest -> **passed**.
+- `git diff --check` -> **passed**.
 
-Suggested commit subject: `P7-14f freeze blinded multi-case Tier A eval protocol`
+Suggested commit subject: `P7-14f validate and aggregate blinded Tier A evidence`
 
 ## Single Next Recommended Task
 
-**Add provider-free Tier A evidence-matrix validation and blinded aggregation.**
+**Resolve hard provider output-limit enforcement without making a live provider call.**
 
-**First concrete action:** add a failing eval test that supplies one body-free run and one
-human review for every manifest case/variant pair, then prove missing/duplicate pairs,
-variant assignment-hash drift, mismatched artifact hashes, and standalone/grounded lore-
-rating mistakes fail closed. Aggregate by opaque variant ID only, including every semantic
-and DM-usefulness mean plus latency, token usage, first-pass-validity rate, and repair rate.
-Do not store provider bodies or claim synthetic test values as quality evidence.
+**First concrete action:** add a failing model-gateway transport test around the pinned
+`@earendil-works/pi-ai` `openai-codex` path that captures the outbound provider request and
+proves the requested `outputTokenLimit` is serialized as the provider's hard output-limit
+field. If the pinned library cannot express it, document and implement the narrowest pinned
+transport replacement/update before changing canary policy. Do not use post-response usage
+rejection as evidence of provider-side enforcement.
 
 Do **not** start a live provider call, Tier B/C, a migration, queue, model-authored mechanics,
 automatic preparation approval, canon writes, or output/print work.

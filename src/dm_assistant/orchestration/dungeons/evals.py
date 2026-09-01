@@ -231,6 +231,288 @@ class DungeonTierAHumanReview(_EvalModel):
     dm_prep_usefulness: DungeonTierAScore
 
 
+class DungeonTierAEvidenceMatrix(_EvalModel):
+    """Validated evaluator-side join; this is not a reviewer-facing packet."""
+
+    manifest: DungeonTierAEvalManifest
+    run_measurements: tuple[DungeonTierARunMeasurement, ...]
+    human_reviews: tuple[DungeonTierAHumanReview, ...]
+
+    @model_validator(mode="after")
+    def validate_matrix(self) -> Self:
+        _validate_dungeon_tier_a_evidence_matrix(
+            self.manifest,
+            self.run_measurements,
+            self.human_reviews,
+        )
+        return self
+
+
+class DungeonTierAVariantAggregate(_EvalModel):
+    """Body-free descriptive statistics for one still-opaque variant."""
+
+    variant_id: str = Field(pattern=r"^variant_[0-9]{2}$")
+    case_count: int = Field(ge=1)
+    thematic_reinforcement_mean: float = Field(ge=1, le=5)
+    history_environment_causality_mean: float = Field(ge=1, le=5)
+    mechanic_objective_unity_mean: float = Field(ge=1, le=5)
+    progression_mean: float = Field(ge=1, le=5)
+    intentional_motif_variation_mean: float = Field(ge=1, le=5)
+    lore_consistency_mean: float | None = Field(default=None, ge=1, le=5)
+    lore_consistency_rating_count: int = Field(ge=0)
+    clue_logic_mean: float = Field(ge=1, le=5)
+    player_agency_mean: float = Field(ge=1, le=5)
+    puzzle_comprehensibility_mean: float = Field(ge=1, le=5)
+    exploration_quality_mean: float = Field(ge=1, le=5)
+    dm_prep_usefulness_mean: float = Field(ge=1, le=5)
+    mean_latency_milliseconds: float = Field(ge=0)
+    mean_input_tokens: float = Field(ge=0)
+    mean_output_tokens: float = Field(ge=0)
+    mean_total_tokens: float = Field(ge=0)
+    first_pass_validity_rate: float = Field(ge=0, le=1)
+    repair_rate: float = Field(ge=0, le=1)
+
+    @model_validator(mode="after")
+    def validate_lore_aggregate(self) -> Self:
+        if self.lore_consistency_rating_count > self.case_count:
+            raise ValueError("lore rating count cannot exceed the case count")
+        if (self.lore_consistency_mean is None) != (
+            self.lore_consistency_rating_count == 0
+        ):
+            raise ValueError("lore mean and rating count must be present together")
+        return self
+
+
+class DungeonTierABlindedAggregate(_EvalModel):
+    """Comparison statistics with no assignment, artifact, run, or reviewer IDs."""
+
+    aggregation_version: Literal["dungeon-tier-a-blinded-aggregate-v1"]
+    rubric_version: Literal["dungeon-tier-a-human-rubric-v1"]
+    measurement_version: Literal["dungeon-tier-a-run-measurement-v1"]
+    variants: tuple[DungeonTierAVariantAggregate, ...] = Field(
+        min_length=2, max_length=8
+    )
+
+    @model_validator(mode="after")
+    def validate_variants(self) -> Self:
+        variant_ids = [item.variant_id for item in self.variants]
+        if len(variant_ids) != len(set(variant_ids)):
+            raise ValueError("blinded aggregate variant IDs must be unique")
+        if variant_ids != sorted(variant_ids):
+            raise ValueError("blinded aggregate variants must be sorted by opaque ID")
+        return self
+
+
+def validate_dungeon_tier_a_evidence_matrix(
+    manifest: DungeonTierAEvalManifest,
+    run_measurements: tuple[DungeonTierARunMeasurement, ...],
+    human_reviews: tuple[DungeonTierAHumanReview, ...],
+) -> DungeonTierAEvidenceMatrix:
+    """Fail closed unless every manifest pair has one coherent run and review."""
+
+    return DungeonTierAEvidenceMatrix(
+        manifest=manifest,
+        run_measurements=tuple(
+            sorted(
+                run_measurements,
+                key=lambda item: (item.variant_id, item.case_id),
+            )
+        ),
+        human_reviews=tuple(
+            sorted(
+                human_reviews,
+                key=lambda item: (item.variant_id, item.case_id),
+            )
+        ),
+    )
+
+
+def aggregate_dungeon_tier_a_evidence(
+    matrix: DungeonTierAEvidenceMatrix,
+) -> DungeonTierABlindedAggregate:
+    """Aggregate validated evidence without revealing the variant assignments."""
+
+    aggregates: list[DungeonTierAVariantAggregate] = []
+    for variant in sorted(matrix.manifest.variants, key=lambda item: item.variant_id):
+        runs = tuple(
+            item
+            for item in matrix.run_measurements
+            if item.variant_id == variant.variant_id
+        )
+        reviews = tuple(
+            item
+            for item in matrix.human_reviews
+            if item.variant_id == variant.variant_id
+        )
+        count = len(runs)
+        lore_scores = tuple(
+            item.lore_consistency
+            for item in reviews
+            if item.lore_consistency is not None
+        )
+        aggregates.append(
+            DungeonTierAVariantAggregate(
+                variant_id=variant.variant_id,
+                case_count=count,
+                thematic_reinforcement_mean=_mean(
+                    tuple(item.thematic_reinforcement for item in reviews)
+                ),
+                history_environment_causality_mean=_mean(
+                    tuple(item.history_environment_causality for item in reviews)
+                ),
+                mechanic_objective_unity_mean=_mean(
+                    tuple(item.mechanic_objective_unity for item in reviews)
+                ),
+                progression_mean=_mean(tuple(item.progression for item in reviews)),
+                intentional_motif_variation_mean=_mean(
+                    tuple(item.intentional_motif_variation for item in reviews)
+                ),
+                lore_consistency_mean=(_mean(lore_scores) if lore_scores else None),
+                lore_consistency_rating_count=len(lore_scores),
+                clue_logic_mean=_mean(tuple(item.clue_logic for item in reviews)),
+                player_agency_mean=_mean(tuple(item.player_agency for item in reviews)),
+                puzzle_comprehensibility_mean=_mean(
+                    tuple(item.puzzle_comprehensibility for item in reviews)
+                ),
+                exploration_quality_mean=_mean(
+                    tuple(item.exploration_quality for item in reviews)
+                ),
+                dm_prep_usefulness_mean=_mean(
+                    tuple(item.dm_prep_usefulness for item in reviews)
+                ),
+                mean_latency_milliseconds=_mean(
+                    tuple(item.latency_milliseconds for item in runs)
+                ),
+                mean_input_tokens=_mean(tuple(item.input_tokens for item in runs)),
+                mean_output_tokens=_mean(tuple(item.output_tokens for item in runs)),
+                mean_total_tokens=_mean(
+                    tuple(item.input_tokens + item.output_tokens for item in runs)
+                ),
+                first_pass_validity_rate=_rate(
+                    tuple(item.first_pass_valid for item in runs)
+                ),
+                repair_rate=_rate(tuple(item.repair_count == 1 for item in runs)),
+            )
+        )
+    return DungeonTierABlindedAggregate(
+        aggregation_version="dungeon-tier-a-blinded-aggregate-v1",
+        rubric_version=matrix.manifest.rubric_version,
+        measurement_version=matrix.manifest.measurement_version,
+        variants=tuple(aggregates),
+    )
+
+
+def _validate_dungeon_tier_a_evidence_matrix(
+    manifest: DungeonTierAEvalManifest,
+    run_measurements: tuple[DungeonTierARunMeasurement, ...],
+    human_reviews: tuple[DungeonTierAHumanReview, ...],
+) -> None:
+    expected_pairs = {
+        (case.case_id, variant.variant_id)
+        for case in manifest.cases
+        for variant in manifest.variants
+    }
+    run_by_pair = _index_tier_a_evidence_pairs(run_measurements, "run")
+    review_by_pair = _index_tier_a_evidence_pairs(human_reviews, "review")
+    _require_exact_tier_a_pairs(expected_pairs, set(run_by_pair), "run")
+    _require_exact_tier_a_pairs(expected_pairs, set(review_by_pair), "review")
+
+    if len({item.run_id for item in run_measurements}) != len(run_measurements):
+        raise ValueError("Tier A run IDs must be unique")
+    if len({item.review_id for item in human_reviews}) != len(human_reviews):
+        raise ValueError("Tier A review IDs must be unique")
+    if any(
+        item.measurement_version != manifest.measurement_version
+        for item in run_measurements
+    ):
+        raise ValueError("Tier A run measurement version does not match manifest")
+    if any(item.rubric_version != manifest.rubric_version for item in human_reviews):
+        raise ValueError("Tier A human rubric version does not match manifest")
+
+    for variant in manifest.variants:
+        assignment_hashes = {
+            item.variant_assignment_hash
+            for item in run_measurements
+            if item.variant_id == variant.variant_id
+        }
+        if len(assignment_hashes) != 1:
+            raise ValueError(
+                f"Tier A variant assignment hash drift: {variant.variant_id}"
+            )
+
+    cases_by_id = {case.case_id: case for case in manifest.cases}
+    for pair in sorted(expected_pairs):
+        run = run_by_pair[pair]
+        review = review_by_pair[pair]
+        if not run.final_valid or run.artifact_hash is None:
+            raise ValueError(
+                "Tier A reviewed run must be final-valid: "
+                f"{run.case_id}/{run.variant_id}"
+            )
+        if review.artifact_hash != run.artifact_hash:
+            raise ValueError(
+                f"Tier A artifact hash mismatch: {run.case_id}/{run.variant_id}"
+            )
+        case = cases_by_id[run.case_id]
+        if case.grounding == "standalone" and review.lore_consistency is not None:
+            raise ValueError(
+                "Tier A standalone review must omit lore consistency: "
+                f"{run.case_id}/{run.variant_id}"
+            )
+        if case.grounding == "synthetic_grounded" and review.lore_consistency is None:
+            raise ValueError(
+                "Tier A grounded review requires lore consistency: "
+                f"{run.case_id}/{run.variant_id}"
+            )
+
+
+def _index_tier_a_evidence_pairs[
+    Evidence: (DungeonTierARunMeasurement, DungeonTierAHumanReview)
+](
+    evidence: tuple[Evidence, ...],
+    evidence_kind: Literal["run", "review"],
+) -> dict[tuple[str, str], Evidence]:
+    indexed: dict[tuple[str, str], Evidence] = {}
+    for item in evidence:
+        pair = (item.case_id, item.variant_id)
+        if pair in indexed:
+            raise ValueError(
+                f"Tier A duplicate {evidence_kind} evidence: "
+                f"{item.case_id}/{item.variant_id}"
+            )
+        indexed[pair] = item
+    return indexed
+
+
+def _require_exact_tier_a_pairs(
+    expected_pairs: set[tuple[str, str]],
+    actual_pairs: set[tuple[str, str]],
+    evidence_kind: Literal["run", "review"],
+) -> None:
+    missing = sorted(expected_pairs - actual_pairs)
+    if missing:
+        case_id, variant_id = missing[0]
+        raise ValueError(
+            f"Tier A missing {evidence_kind} evidence: {case_id}/{variant_id}"
+        )
+    unexpected = sorted(actual_pairs - expected_pairs)
+    if unexpected:
+        case_id, variant_id = unexpected[0]
+        raise ValueError(
+            f"Tier A unexpected {evidence_kind} evidence: {case_id}/{variant_id}"
+        )
+
+
+def _mean(values: tuple[int, ...]) -> float:
+    if not values:
+        raise ValueError("cannot aggregate an empty Tier A evidence set")
+    return sum(values) / len(values)
+
+
+def _rate(values: tuple[bool, ...]) -> float:
+    return _mean(tuple(int(value) for value in values))
+
+
 def evaluate_dungeon_guide_quality(
     specification: DungeonStudioSpecification,
 ) -> DungeonGuideQualityResult:

@@ -1866,7 +1866,12 @@ assignment/artifact hashes, latency, measured token usage, first-pass/final vali
 bounded repair count. Strict blinded human evidence can retain only stable IDs and 1–5
 ratings for all six cohesion dimensions, clue logic, player agency, puzzle comprehensibility,
 exploration quality, and DM preparation usefulness; provider responses and excerpts are
-forbidden. Evidence-matrix validation, blinded aggregation, and actual ratings remain pending.
+forbidden. Provider-free matrix validation now requires exactly one run and one review per
+case/opaque-variant pair, stable per-variant assignment hashes, matching final-valid artifact
+hashes, and grounding-correct lore applicability. Blinded aggregation exposes every rating
+mean plus lore denominator, latency/token means, first-pass-validity rate, and repair rate by
+opaque variant only. Synthetic arithmetic fixtures are not quality evidence; actual ratings
+remain pending.
 
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
   Its model-visible proposal contains room identity/purpose, critical path, bounded

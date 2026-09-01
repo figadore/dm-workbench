@@ -115,8 +115,10 @@ commits superseded them. This file preserves only compact milestone history:
   rejection or its explicit limit without approval/canonical operations. The subsequent
   anti-overfitting foundation froze three materially different original synthetic Tier A
   cases, three opaque variant IDs, strict body-free run measurements, and strict blinded
-  human-rating contracts. Matrix aggregation, actual quality evidence, and staged live
-  evaluation remain.
+  human-rating contracts (`ca9ce7d`). The next provider-free slice added fail-closed exact
+  evidence-matrix joins, assignment/artifact hash coherence, grounding-aware lore rules, and
+  body-free rating/latency/usage/validity/repair aggregates by opaque variant. Actual quality
+  evidence and staged live evaluation remain.
 
 ### Deployment baseline
 

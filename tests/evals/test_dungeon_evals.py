@@ -12,9 +12,12 @@ from dm_assistant.orchestration.dungeons.evals import (
     DungeonTierAEvalManifest,
     DungeonTierAHumanReview,
     DungeonTierARunMeasurement,
+    DungeonTierAScore,
+    aggregate_dungeon_tier_a_evidence,
     evaluate_dungeon_intent_cases,
     render_dungeon_intent_eval_report,
     summarize_dungeon_intent_evals,
+    validate_dungeon_tier_a_evidence_matrix,
 )
 
 _GOLDEN_PATH = Path(__file__).parent / "golden" / "dungeon_intent.json"
@@ -145,6 +148,165 @@ def test_tier_a_evidence_requires_body_free_quality_and_run_fields() -> None:
         DungeonTierAHumanReview.model_validate(
             {**review.model_dump(), "provider_response": "must not be retained"}
         )
+
+
+def _tier_a_evidence() -> tuple[
+    DungeonTierAEvalManifest,
+    tuple[DungeonTierARunMeasurement, ...],
+    tuple[DungeonTierAHumanReview, ...],
+]:
+    manifest = DungeonTierAEvalManifest.model_validate_json(
+        _TIER_A_MANIFEST_PATH.read_text(encoding="utf-8")
+    )
+    measurements: list[DungeonTierARunMeasurement] = []
+    reviews: list[DungeonTierAHumanReview] = []
+    for variant_number, variant in enumerate(manifest.variants, start=1):
+        score: DungeonTierAScore = (3, 4, 5)[variant_number - 1]
+        assignment_hash = f"{variant_number:x}" * 64
+        for case_number, case in enumerate(manifest.cases, start=1):
+            artifact_hash = f"{variant_number:x}{case_number:x}" * 32
+            measurements.append(
+                DungeonTierARunMeasurement(
+                    measurement_version=manifest.measurement_version,
+                    run_id=f"run_{case_number}_{variant_number}",
+                    case_id=case.case_id,
+                    variant_id=variant.variant_id,
+                    variant_assignment_hash=assignment_hash,
+                    artifact_hash=artifact_hash,
+                    latency_milliseconds=variant_number * 1_000 + case_number * 100,
+                    input_tokens=variant_number * 100 + case_number * 10,
+                    output_tokens=variant_number * 50 + case_number * 5,
+                    first_pass_schema_valid=case_number != 1,
+                    first_pass_semantic_valid=case_number != 1,
+                    first_pass_valid=case_number != 1,
+                    repair_count=1 if case_number == 1 else 0,
+                    final_valid=True,
+                )
+            )
+            reviews.append(
+                DungeonTierAHumanReview(
+                    rubric_version=manifest.rubric_version,
+                    review_id=f"review_{case_number}_{variant_number}",
+                    reviewer_id="reviewer_fixture",
+                    case_id=case.case_id,
+                    variant_id=variant.variant_id,
+                    artifact_hash=artifact_hash,
+                    thematic_reinforcement=score,
+                    history_environment_causality=score,
+                    mechanic_objective_unity=score,
+                    progression=score,
+                    intentional_motif_variation=score,
+                    lore_consistency=(
+                        score if case.grounding == "synthetic_grounded" else None
+                    ),
+                    clue_logic=score,
+                    player_agency=score,
+                    puzzle_comprehensibility=score,
+                    exploration_quality=score,
+                    dm_prep_usefulness=score,
+                )
+            )
+    return manifest, tuple(measurements), tuple(reviews)
+
+
+def test_tier_a_evidence_matrix_requires_exact_coherent_coverage() -> None:
+    manifest, measurements, reviews = _tier_a_evidence()
+    matrix = validate_dungeon_tier_a_evidence_matrix(manifest, measurements, reviews)
+
+    assert len(matrix.run_measurements) == 9
+    assert len(matrix.human_reviews) == 9
+
+    with pytest.raises(ValueError, match="missing run evidence"):
+        validate_dungeon_tier_a_evidence_matrix(manifest, measurements[:-1], reviews)
+    with pytest.raises(ValueError, match="duplicate run evidence"):
+        validate_dungeon_tier_a_evidence_matrix(
+            manifest, (*measurements, measurements[0]), reviews
+        )
+    with pytest.raises(ValueError, match="missing review evidence"):
+        validate_dungeon_tier_a_evidence_matrix(manifest, measurements, reviews[:-1])
+    with pytest.raises(ValueError, match="duplicate review evidence"):
+        validate_dungeon_tier_a_evidence_matrix(
+            manifest, measurements, (*reviews, reviews[0])
+        )
+
+    drifted_runs = (
+        measurements[0].model_copy(update={"variant_assignment_hash": "f" * 64}),
+        *measurements[1:],
+    )
+    with pytest.raises(ValueError, match="assignment hash drift"):
+        validate_dungeon_tier_a_evidence_matrix(manifest, drifted_runs, reviews)
+
+    mismatched_reviews = (
+        reviews[0].model_copy(update={"artifact_hash": "e" * 64}),
+        *reviews[1:],
+    )
+    with pytest.raises(ValueError, match="artifact hash mismatch"):
+        validate_dungeon_tier_a_evidence_matrix(
+            manifest, measurements, mismatched_reviews
+        )
+
+
+@pytest.mark.parametrize(
+    ("review_index", "lore_consistency", "message"),
+    (
+        (0, 3, "standalone review must omit lore consistency"),
+        (1, None, "grounded review requires lore consistency"),
+    ),
+)
+def test_tier_a_evidence_matrix_enforces_lore_applicability(
+    review_index: int,
+    lore_consistency: int | None,
+    message: str,
+) -> None:
+    manifest, measurements, reviews = _tier_a_evidence()
+    invalid_reviews = list(reviews)
+    invalid_reviews[review_index] = invalid_reviews[review_index].model_copy(
+        update={"lore_consistency": lore_consistency}
+    )
+
+    with pytest.raises(ValueError, match=message):
+        validate_dungeon_tier_a_evidence_matrix(
+            manifest, measurements, tuple(invalid_reviews)
+        )
+
+
+def test_tier_a_blinded_aggregation_includes_all_ratings_and_run_statistics() -> None:
+    manifest, measurements, reviews = _tier_a_evidence()
+    matrix = validate_dungeon_tier_a_evidence_matrix(manifest, measurements, reviews)
+    aggregate = aggregate_dungeon_tier_a_evidence(matrix)
+
+    assert tuple(item.variant_id for item in aggregate.variants) == (
+        "variant_01",
+        "variant_02",
+        "variant_03",
+    )
+    first = aggregate.variants[0]
+    assert first.case_count == 3
+    assert first.thematic_reinforcement_mean == 3.0
+    assert first.history_environment_causality_mean == 3.0
+    assert first.mechanic_objective_unity_mean == 3.0
+    assert first.progression_mean == 3.0
+    assert first.intentional_motif_variation_mean == 3.0
+    assert first.lore_consistency_mean == 3.0
+    assert first.lore_consistency_rating_count == 1
+    assert first.clue_logic_mean == 3.0
+    assert first.player_agency_mean == 3.0
+    assert first.puzzle_comprehensibility_mean == 3.0
+    assert first.exploration_quality_mean == 3.0
+    assert first.dm_prep_usefulness_mean == 3.0
+    assert first.mean_latency_milliseconds == 1_200.0
+    assert first.mean_input_tokens == 120.0
+    assert first.mean_output_tokens == 60.0
+    assert first.mean_total_tokens == 180.0
+    assert first.first_pass_validity_rate == pytest.approx(2 / 3)
+    assert first.repair_rate == pytest.approx(1 / 3)
+
+    # Fixture scores exercise arithmetic only and are not stored quality evidence.
+    blinded_json = aggregate.model_dump_json()
+    assert "variant_assignment_hash" not in blinded_json
+    assert "artifact_hash" not in blinded_json
+    assert "reviewer_id" not in blinded_json
+    assert "run_id" not in blinded_json
 
 
 def test_eval_summary_passes_only_the_synthetic_thresholds() -> None:
