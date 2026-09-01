@@ -1707,11 +1707,10 @@ and resumable slices are in
   request budget before validation/publication; persist only body-free overage metadata.
   Do not resume ordinary use of a provider whose reported usage exceeds the requested
   transport cap until that behavior is resolved or the budget policy is explicitly
-  remeasured and revised. Freeze one current one-floor Tier A canary prompt and seed. Its
-  non-production CLI-only acknowledged override may make only the output-cap acceptance
-  check advisory for one stop-on-failure `openai-codex` canary; retain the requested cap,
-  measured 12,000-token cumulative publication ceiling, repair reservation, body-free
-  attempt policy, and accepted model lineage.
+  remeasured and revised. Freeze one current one-floor Tier A canary prompt and seed. The
+  retired pre-fix advisory override is not part of the active alpha path: every canary now
+  enforces both its requested output cap and measured 12,000-token cumulative publication
+  ceiling, repair reservation, body-free attempt policy, and accepted model lineage.
 - Build exact keyed guide content after geometry; use separate entry-first sequential
   presentation numbers and concise valid Markdown/HTML with useful read-aloud text plus
   locally grouped actionable state, checks, clues, triggers, and consequences. Omit
@@ -1873,6 +1872,15 @@ mean plus lore denominator, latency/token means, first-pass-validity rate, and r
 opaque variant only. Synthetic arithmetic fixtures are not quality evidence; actual ratings
 remain pending.
 
+The pinned `@earendil-works/pi-ai` Codex adapter accepts `maxTokens` but does not project it
+into its Responses payload. The private gateway now uses that adapter's pre-dispatch payload
+boundary to overlay the exact requested `max_output_tokens` value after the adapter builds
+the request and before either SSE or WebSocket dispatch. A provider-free transport test uses
+synthetic OAuth, forced SSE, an injected fetch, and decompression of the actual outbound body
+to prove the hard field is present without retaining the prompt/body. The V1 request and
+package pin stay in place; post-response usage checks remain defense in depth rather than the
+provider-limit mechanism. No live generation has yet exercised the corrected transport.
+
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
   Its model-visible proposal contains room identity/purpose, critical path, bounded
   branches/loop, gate/dependency placement, named objective, and typed content slots with
@@ -1928,12 +1936,12 @@ remain pending.
   clue logic, player agency, puzzle comprehensibility, exploration quality, prep usefulness,
   latency, token use, first-pass schema validity, and repair rate. Do not promote a larger
   model or deeper effort without measured quality improvement.
-- Fix or replace the live transport so requested output limits are enforced before
-  ordinary provider use. Then run the frozen staged Tier A canary before Tier B/C. Tier A
+- Keep the gateway's tested Codex `max_output_tokens` payload overlay in place so requested
+  output limits are expressed before provider dispatch. Then run the frozen staged Tier A
+  canary before Tier B/C. Tier A
   must produce one accepted structural plan, valid topology/geometry, independently
   accepted required enrichments, a preparation-ready guide, secrecy-clean assets, bounded
-  usage, and one atomic draft. The existing advisory Codex exception remains a narrowly
-  recorded operator-risk escape hatch, not a substitute for the transport fix.
+  usage, and one atomic draft. There is no advisory output-cap publication exception.
 - Defer Tier B vertical composition and Tier C dense graphs until the staged live Tier A
   path has produced a usable artifact and the bounded Tier A evaluation set demonstrates
   dependable generation. B/C test scalability; they are not prerequisites for proving

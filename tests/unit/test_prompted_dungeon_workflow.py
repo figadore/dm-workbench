@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from dm_assistant.config import RuntimeEnvironment
 from dm_assistant.errors import ConflictError
 from dm_assistant.modules.modeling import (
     ModelRunInput,
@@ -22,7 +21,6 @@ from dm_assistant.orchestration.dungeons import (
     DungeonStudioSpecification,
     DungeonSubmissionService,
     PromptDungeonWorkflow,
-    apply_advisory_output_cap_override,
 )
 from dm_assistant.orchestration.dungeons.application import (
     _failure_code,
@@ -595,83 +593,6 @@ def test_structured_submission_fails_closed_on_measured_token_overages() -> None
         )
         assert report["usage"]["input_tokens"] == input_tokens
         assert report["usage"]["output_tokens"] == output_tokens
-
-
-def test_manual_canary_override_keeps_cumulative_limit_and_durable_profile() -> None:
-    proposal = _tier_a_proposal()
-    profile = apply_advisory_output_cap_override(
-        resolve_dungeon_prompt_profile(
-            provider_id="openai-codex",
-            model_id="synthetic-codex",
-            capabilities=("text", "tool_calls"),
-            context_window_tokens=128_000,
-            output_token_limit=16_384,
-        ),
-        environment=RuntimeEnvironment.DEVELOPMENT,
-    )
-    accepted_gateway = FakeGatewayClient(
-        (
-            GatewayCompletion(
-                tool_calls=(
-                    ToolCall(
-                        tool_name="submit_dungeon_plan",
-                        call_id="advisory-output-overage",
-                        arguments=proposal,
-                    ),
-                ),
-                input_tokens=3_885,
-                output_tokens=7_747,
-            ),
-        )
-    )
-
-    accepted = DungeonSubmissionService(accepted_gateway).submit(
-        profile=profile,
-        run_input=ModelRunInput(
-            messages=(PromptMessage(role="user", content="synthetic request"),)
-        ),
-        seed=1842,
-    )
-
-    assert accepted.model_run.resolved_profile.override_notes == profile.override_notes
-    assert accepted.model_run.usage_input_tokens == 3_885
-    assert accepted.model_run.usage_output_tokens == 7_747
-    policy_report = _failure_report(
-        ModelRunAbstained("synthetic failure"),
-        "dungeon_prompt_failed",
-        profile=profile,
-    )
-    assert policy_report["run_policy"] == {
-        "canary_id": "tier-a-live-canary-v1",
-        "output_cap_enforcement": "advisory_manual_canary",
-        "requested_output_token_limit": 4096,
-        "cumulative_token_limit": 12_000,
-    }
-
-    cumulative_gateway = FakeGatewayClient(
-        (
-            GatewayCompletion(
-                tool_calls=(
-                    ToolCall(
-                        tool_name="submit_dungeon_plan",
-                        call_id="advisory-cumulative-overage",
-                        arguments=proposal,
-                    ),
-                ),
-                input_tokens=9_000,
-                output_tokens=3_500,
-            ),
-        )
-    )
-    with pytest.raises(StructuredSubmissionBudgetExceeded) as captured:
-        DungeonSubmissionService(cumulative_gateway).submit(
-            profile=profile,
-            run_input=ModelRunInput(
-                messages=(PromptMessage(role="user", content="synthetic request"),)
-            ),
-            seed=1842,
-        )
-    assert captured.value.limit_kind == "cumulative"
 
 
 def test_repair_does_not_start_when_estimated_input_cannot_fit() -> None:

@@ -134,7 +134,6 @@ def test_canary_command_pins_exact_prompt_seed_and_explicit_model(
             "openai-codex",
             "--model",
             "gpt-synthetic",
-            "--acknowledge-advisory-output-cap",
         ],
     )
 
@@ -144,7 +143,7 @@ def test_canary_command_pins_exact_prompt_seed_and_explicit_model(
     assert captured["provider"] == "openai-codex"
     assert captured["model"] == "gpt-synthetic"
     assert captured["effort"] is ReasoningEffort.FAST
-    assert captured["acknowledge_advisory_output_cap"] is True
+    assert "acknowledge_advisory_output_cap" not in captured
     assert "Stop on the first failure" in result.output
 
 

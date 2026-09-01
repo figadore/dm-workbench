@@ -337,24 +337,20 @@ when the measured remaining budget cannot fit that input. Use transient `--debug
 only when sensitive bodies are explicitly needed for local diagnosis.
 
 The current live canary is a committed one-floor Tier A prompt with seed `714000001`,
-exposed only through `dm dungeon canary`; provider and model must be explicit. Keep live
-use paused until the staged enrichment path passes provider-free/faux gates and requested
-output limits are enforced by the transport; Tier B/C remain deferred. For the known
-non-production Codex transport limitation, one operator may explicitly acknowledge that
-the requested output cap is advisory:
+exposed only through `dm dungeon canary`; provider and model must be explicit. The private
+gateway now serializes the requested Codex `max_output_tokens` hard-limit field before
+provider dispatch, and the former advisory-cap override has been removed:
 
 ```bash
 uv run --frozen dm dungeon canary \
   --provider openai-codex \
-  --model <contract-tested-model-id> \
-  --acknowledge-advisory-output-cap
+  --model <contract-tested-model-id>
 ```
 
-That flag is rejected for ordinary prompts, other providers, or production. It does not
-raise or disable the 12,000 measured-token cumulative publication ceiling, repair-input
-reservation, validation, secrecy, or atomic-publication gates. The attempt report and any
-accepted model lineage record the canary ID and policy. Stop after this one attempt on
-success or failure; post-response checks cannot recover provider tokens already consumed.
+The canary retains the strict per-request output check, 12,000 measured-token cumulative
+publication ceiling, repair-input reservation, validation, secrecy, and atomic-publication
+gates. Stop after this one attempt on success or failure; post-response checks remain
+defense in depth and cannot recover provider tokens already consumed.
 
 The frozen provider-free V1 suite is synthetic and safe for CI:
 

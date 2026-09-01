@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { zstdDecompressSync } from "node:zlib";
 
 import {
   fauxAssistantMessage,
@@ -70,6 +71,50 @@ test("health, catalog, and streams require the internal caller token", async (t)
   assert.match(events, /event: usage/);
   assert.match(events, /"input_tokens":\d+,"output_tokens":\d+/);
   assert.match(events, /event: done/);
+});
+
+test("the pinned Codex transport serializes the requested hard output limit", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "dm-gateway-"));
+  const credentials = new FileCredentialStore(join(directory, "credentials.json"));
+  await credentials.modify("openai-codex", async () => ({
+    type: "oauth",
+    access: syntheticCodexAccessToken(),
+    refresh: "synthetic-refresh-token",
+    expires: Number.MAX_SAFE_INTEGER,
+  }));
+
+  let capturedPayload: Record<string, unknown> | undefined;
+  const providerFetch: typeof fetch = async (_input, init) => {
+    const headers = new Headers(init?.headers);
+    const body = init?.body;
+    assert.ok(typeof body === "string" || body instanceof Uint8Array);
+    const encoded = Buffer.from(body);
+    const decoded = headers.get("content-encoding") === "zstd"
+      ? zstdDecompressSync(encoded)
+      : encoded;
+    capturedPayload = JSON.parse(decoded.toString("utf8")) as Record<string, unknown>;
+    return new Response(JSON.stringify({ error: { message: "synthetic stop" } }), {
+      status: 400,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  const runtime = createPiAiRuntime({
+    credentials,
+    providerFetch,
+    providerTransport: "sse",
+  });
+  const request = parseStreamRequest(fauxStreamRequest({
+    provider: "openai-codex",
+    model: "gpt-5.4",
+    output_token_limit: 321,
+  }));
+
+  for await (const _event of runtime.stream(request, new AbortController().signal)) {
+    // The synthetic 400 response ends the stream after the outbound request is captured.
+  }
+
+  assert.equal(capturedPayload?.max_output_tokens, 321);
+  assert.equal(capturedPayload?.model, "gpt-5.4");
 });
 
 test("normalized transcript roles preserve tool continuity without user-message flattening", () => {
@@ -286,6 +331,19 @@ test("an internal caller can cancel an active normalized stream", async (t) => {
   assert.equal(cancellation.status, 202);
   assert.match(await stream.text(), /"code":"cancelled"/);
 });
+
+function syntheticCodexAccessToken(): string {
+  const encode = (value: object): string => Buffer.from(JSON.stringify(value)).toString("base64url");
+  return [
+    encode({ alg: "none", typ: "JWT" }),
+    encode({
+      "https://api.openai.com/auth": {
+        chatgpt_account_id: "synthetic-account",
+      },
+    }),
+    "synthetic-signature",
+  ].join(".");
+}
 
 function authorization(): Record<string, string> {
   return { authorization: `Bearer ${INTERNAL_TOKEN}` };

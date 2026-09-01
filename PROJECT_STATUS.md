@@ -7,12 +7,12 @@
 ## Current State
 
 - **Updated:** 2026-08-31
-- **Branch/HEAD:** `fast-track-prompt-to-dungeon` at `ca9ce7d`, aligned with
+- **Branch/HEAD:** `fast-track-prompt-to-dungeon` at `814679d`, aligned with
   `origin/fast-track-prompt-to-dungeon`, plus the uncommitted slice below.
 - **Current task:** **P7-14f — Staged Tier A authoring and anti-overfitting evaluation.**
-- **Task state:** provider-free Tier A evidence-matrix validation and blinded aggregation
-  are implemented. Actual human ratings, a transport-enforced output limit, and live staged
-  Tier A remain pending.
+- **Task state:** the hard Codex output-limit transport seam is implemented and the old
+  advisory publication bypass is removed. A complete staged canary run, actual human
+  ratings, and live Tier A evidence remain pending.
 - **Schema head:** `0008_workbench_defaults`; no migration changed or is pending.
 - **Retention gate:** **not crossed.** Active V1 contracts evolve in place; there is no
   retained real-user artifact, external consumer, non-disposable deployment, or promised
@@ -20,48 +20,58 @@
 
 ## Implemented This Slice
 
-The evaluator-side matrix now fails closed unless every frozen manifest case/opaque-variant
-pair has exactly one body-free run measurement and one blinded human review. Validation also
-enforces:
+Pinned `@earendil-works/pi-ai` `0.84.1` accepts the gateway's generic `maxTokens` option but
+omits `max_output_tokens` from its Codex Responses body. The private gateway now overlays the
+exact Workbench-requested `max_output_tokens` value through pi-ai's `onPayload` boundary
+after payload construction and before either SSE or WebSocket dispatch. The transform
+overrides any stale adapter value and fails closed if the payload is not an object.
 
-- no missing or duplicate run/review pairs and globally unique run/review IDs;
-- manifest-matching measurement/rubric pins;
-- one stable assignment hash per opaque variant across all cases;
-- one matching final-valid artifact hash at the run/review join; and
-- omitted lore ratings for standalone cases and required lore ratings for grounded cases.
+A provider-free gateway test uses a synthetic non-expiring OAuth JWT, forced SSE, and an
+injected fetch. It captures and zstd-decompresses the actual outbound request and proves the
+requested value is serialized. The body exists only in test memory and is not logged or
+stored. Post-response measured output and cumulative checks remain defense in depth.
 
-Aggregation accepts only that validated matrix and groups by opaque variant ID. Its strict
-body-free result includes means for all six cohesion ratings, clue logic, player agency,
-puzzle comprehensibility, exploration quality, and DM preparation usefulness; it also
-includes the applicable lore-rating denominator, mean latency/input/output/total tokens,
-first-pass-validity rate, and repair rate. Assignment hashes, artifact/run/reviewer IDs, and
-content do not enter the aggregate. Test ratings exercise arithmetic only and are not stored
-or claimed as quality evidence.
+The pre-fix advisory-cap path was deleted in place under the pre-retention policy:
+
+- the CLI no longer accepts `--acknowledge-advisory-output-cap` for prompt or canary runs;
+- canary profiles no longer carry advisory policy overrides or durable bypass reports; and
+- structured submissions always reject measured output above the pinned per-request limit,
+  in addition to enforcing the cumulative limit.
+
+The frozen prompt, seed, explicit provider/model selection, stop-on-failure message, and
+body-free canary attempt surface remain unchanged.
 
 ## Active Boundaries and Known Issues
 
-- There are no actual generated-artifact ratings or aggregate quality conclusions. The
-  frozen synthetic briefs and arithmetic fixtures remain protocol/regression coverage only.
-- There is still no staged live result, Tier B/C work, or resumed output/print work.
+- `dm dungeon canary` still performs the structural prompt workflow only. It does not yet
+  drive the accepted structural child through all independently bounded staged enrichment
+  tasks and the final continuity/readiness gate.
+- No live model generation was run, and there are no generated-artifact ratings or aggregate
+  quality conclusions. Tier B/C and output/print work remain deferred.
+- During the first failing transport-test setup, a synthetic OAuth credential with only a
+  60-second future expiry fell inside pi-ai's refresh skew, causing one invalid synthetic
+  refresh request to reach OpenAI's auth endpoint. It contained no real credential and made
+  no model-generation request. The test now uses a non-expiring synthetic credential plus
+  injected provider fetch; subsequent runs are provider-free.
 - There is no bounded cohesion-reviewer model call. Current strict report/disposition
   evidence remains provider-free/human-constructible and non-authoritative.
-- Live provider use remains paused. Pinned `@earendil-works/pi-ai` Codex transport receives
-  the gateway `maxTokens` option but has not been proven to serialize/enforce the requested
-  hard output limit; post-response checks protect publication but cannot prevent usage.
 - Package and root pytest suites must run separately because duplicate test module basenames
   cause import-file-mismatch when collected in one process.
-- No provider was contacted. No credential, canon write, preparation approval, migration,
-  queue, redaction system, second persistence store, or model-authored mechanics were added.
+- No canon write, preparation approval, migration, queue, redaction system, second
+  persistence store, or model-authored mechanics were added.
 
 ## Current Files and Verification
 
-Uncommitted production/tests:
+Uncommitted gateway/runtime/tests:
 
-- `src/dm_assistant/orchestration/dungeons/evals.py`
-- `tests/evals/test_dungeon_evals.py`
+- `model-gateway/{src/runtime.ts,tests/gateway.test.ts}`
+- `src/dm_assistant/cli/main.py`
+- `src/dm_assistant/orchestration/{dungeons,modeling}/` targeted output-cap/canary files
+- `tests/{unit,integration}/` targeted output-cap/canary tests
 
 Uncommitted documentation:
 
+- `README.md`
 - `dm-assistant-{implementation-plan,technical-architecture}.md`
 - `dungeon-generation-recovery-plan.md`
 - `PROJECT_HISTORY.md`
@@ -69,27 +79,35 @@ Uncommitted documentation:
 
 Recorded for this slice:
 
-- `uv run pytest -q tests/unit tests/evals` -> **230 passed**.
+- `npm --prefix model-gateway run check` -> **passed**.
+- `npm --prefix model-gateway test` -> **9 passed**.
+- `npm --prefix model-gateway run build` -> **passed**.
+- `uv run pytest -q tests/unit tests/evals` -> **228 passed**.
 - `uv run pytest -q packages/dungeon-engine/tests` -> **139 passed**.
-- strict mypy over the changed Python files -> **passed**.
-- Ruff lint/format over the changed Python files -> **passed**.
+- `uv run pytest -q tests/integration/test_dungeon_studio_cli.py` -> **2 skipped**
+  because the disposable integration database was unavailable.
+- Ruff lint/format over changed Python -> **passed**.
+- `uv run dm dungeon canary --help` check -> **retired advisory option absent**.
+- Strict mypy over changed production modules and the canary test -> **passed**. A broader
+  changed-test invocation still reports 40 existing typing errors in `test_cli.py` and
+  `test_prompted_dungeon_workflow.py`; runtime tests for those files pass.
 - `git diff --check` -> **passed**.
 
-Suggested commit subject: `P7-14f validate and aggregate blinded Tier A evidence`
+Suggested commit subject: `P7-14f enforce Codex output caps before dispatch`
 
 ## Single Next Recommended Task
 
-**Resolve hard provider output-limit enforcement without making a live provider call.**
+**Wire the frozen canary to the complete staged enrichment path provider-free first.**
 
-**First concrete action:** add a failing model-gateway transport test around the pinned
-`@earendil-works/pi-ai` `openai-codex` path that captures the outbound provider request and
-proves the requested `outputTokenLimit` is serialized as the provider's hard output-limit
-field. If the pinned library cannot express it, document and implement the narrowest pinned
-transport replacement/update before changing canary policy. Do not use post-response usage
-rejection as evidence of provider-side enforcement.
+**First concrete action:** add a failing faux CLI/application test proving one frozen canary
+structural child is resumed through the existing bounded one-step/chain coordinator with
+independently resolved puzzle, exploration, feature, trap, objective, and narrative profiles,
+then passes the final continuity/readiness gate. It must stop on the first rejected task,
+leave the last accepted child current, never approve preparation or write canon, and retain
+only body-free attempt diagnostics. Do not make a live provider call in that wiring slice.
 
-Do **not** start a live provider call, Tier B/C, a migration, queue, model-authored mechanics,
-automatic preparation approval, canon writes, or output/print work.
+Do **not** start Tier B/C, a migration, queue, model-authored mechanics, automatic preparation
+approval, canon writes, or output/print work.
 
 ## Authoritative References
 

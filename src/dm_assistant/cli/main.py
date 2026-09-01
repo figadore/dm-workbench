@@ -68,7 +68,6 @@ from dm_assistant.orchestration.dungeons import (
     ExportDungeonWorkflow,
     PromptDungeonWorkflow,
     RegenerateDungeonWorkflow,
-    apply_advisory_output_cap_override,
     resolve_dungeon_prompt_profile,
 )
 from dm_assistant.orchestration.modeling import ModelRunAbstained
@@ -466,13 +465,6 @@ def dungeon_prompt(
             help="Stream the model/harness exchange to stderr; it is not persisted.",
         ),
     ] = False,
-    acknowledge_advisory_output_cap: Annotated[
-        bool,
-        typer.Option(
-            "--acknowledge-advisory-output-cap",
-            help="Frozen Tier A canary only: accept measured output above the requested provider cap while retaining the cumulative ceiling.",
-        ),
-    ] = False,
     created_by: Annotated[str, typer.Option("--created-by")] = "dm",
 ) -> None:
     """Generate a standalone draft with active campaign and model defaults."""
@@ -516,17 +508,6 @@ def dungeon_prompt(
                 prompt == DUNGEON_TIER_A_CANARY.prompt
                 and resolved_seed == DUNGEON_TIER_A_CANARY.seed
             )
-            if acknowledge_advisory_output_cap and not is_frozen_canary:
-                raise InvalidInputError(
-                    "The advisory output-cap override is restricted to the frozen Tier A canary prompt and seed."
-                )
-            if acknowledge_advisory_output_cap and (
-                runtime.settings.environment is RuntimeEnvironment.PRODUCTION
-                or selected_provider.id != "openai-codex"
-            ):
-                raise InvalidInputError(
-                    "The advisory output-cap override requires non-production openai-codex."
-                )
             try:
                 profile = resolve_dungeon_prompt_profile(
                     provider_id=selected_provider.id,
@@ -536,15 +517,6 @@ def dungeon_prompt(
                     output_token_limit=selected_model.max_output_tokens,
                     requested_effort=selected_effort,
                 )
-                if acknowledge_advisory_output_cap:
-                    profile = apply_advisory_output_cap_override(
-                        profile,
-                        environment=runtime.settings.environment,
-                    )
-                    typer.echo(
-                        "WARNING: provider output-cap enforcement is advisory for this one canary; the 12,000 measured-token cumulative publication ceiling remains enforced. Stop after this attempt.",
-                        err=True,
-                    )
                 attempt = prompted.execute(
                     PromptDungeonWorkflow(
                         campaign_id=resolved_campaign_id,
@@ -617,13 +589,6 @@ def dungeon_canary(
     model: Annotated[str, typer.Option("--model")],
     campaign_id: Annotated[UUID | None, typer.Option("--campaign")] = None,
     effort: Annotated[ReasoningEffort, typer.Option("--effort")] = ReasoningEffort.FAST,
-    acknowledge_advisory_output_cap: Annotated[
-        bool,
-        typer.Option(
-            "--acknowledge-advisory-output-cap",
-            help="Acknowledge the known Codex transport cap limitation for this one frozen canary.",
-        ),
-    ] = False,
     debug: Annotated[
         bool,
         typer.Option(
@@ -649,7 +614,6 @@ def dungeon_canary(
         effort=effort,
         constraint=None,
         debug=debug,
-        acknowledge_advisory_output_cap=acknowledge_advisory_output_cap,
         created_by=created_by,
     )
 

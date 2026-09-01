@@ -117,8 +117,13 @@ commits superseded them. This file preserves only compact milestone history:
   cases, three opaque variant IDs, strict body-free run measurements, and strict blinded
   human-rating contracts (`ca9ce7d`). The next provider-free slice added fail-closed exact
   evidence-matrix joins, assignment/artifact hash coherence, grounding-aware lore rules, and
-  body-free rating/latency/usage/validity/repair aggregates by opaque variant. Actual quality
-  evidence and staged live evaluation remain.
+  body-free rating/latency/usage/validity/repair aggregates by opaque variant (`814679d`).
+  The following transport slice compensated for the pinned Codex adapter's omitted Responses
+  hard-limit field with an exact pre-dispatch `max_output_tokens` overlay and provider-free
+  capture/decompression coverage of the outbound request. It also removed the pre-fix CLI/
+  submission advisory-cap bypass so every active canary response remains subject to both
+  measured output and cumulative publication ceilings. Actual quality evidence and staged
+  live evaluation remain.
 
 ### Deployment baseline
 

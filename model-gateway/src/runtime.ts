@@ -8,8 +8,10 @@ import {
   type AuthType,
   type CredentialStore,
   type FauxResponseStep,
+  type FetchFunction,
   type MutableModels,
   type Tool,
+  type Transport,
 } from "@earendil-works/pi-ai";
 import { githubCopilotProvider } from "@earendil-works/pi-ai/providers/github-copilot";
 import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-codex";
@@ -58,11 +60,17 @@ export interface GatewayRuntime {
 export interface PiAiRuntimeOptions {
   readonly credentials: CredentialStore;
   readonly fauxResponses?: readonly FauxResponseStep[];
+  readonly providerFetch?: FetchFunction;
+  readonly providerTransport?: Transport;
 }
 
 export function createPiAiRuntime(options: PiAiRuntimeOptions): GatewayRuntime {
   const models = createAllowlistedModels(options.credentials, options.fauxResponses);
-  return new PiAiGatewayRuntime(models);
+  return new PiAiGatewayRuntime(
+    models,
+    options.providerFetch,
+    options.providerTransport,
+  );
 }
 
 function createAllowlistedModels(
@@ -94,7 +102,11 @@ function createAllowlistedModels(
 }
 
 class PiAiGatewayRuntime implements GatewayRuntime {
-  constructor(private readonly models: MutableModels) {}
+  constructor(
+    private readonly models: MutableModels,
+    private readonly providerFetch?: FetchFunction,
+    private readonly providerTransport?: Transport,
+  ) {}
 
   async listProviders(): Promise<readonly GatewayProviderStatus[]> {
     return Promise.all(
@@ -211,10 +223,31 @@ class PiAiGatewayRuntime implements GatewayRuntime {
         sessionId: request.sessionId,
         reasoning: toPiEffort(request.effort),
         signal,
+        fetch: this.providerFetch,
+        transport: this.providerTransport,
+        ...(request.provider === "openai-codex"
+          ? {
+              onPayload: (payload: unknown) =>
+                withCodexOutputTokenLimit(payload, request.outputTokenLimit),
+            }
+          : {}),
       },
     );
     yield* stream;
   }
+}
+
+function withCodexOutputTokenLimit(
+  payload: unknown,
+  outputTokenLimit: number,
+): Record<string, unknown> {
+  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error("Codex provider payload must be an object");
+  }
+  return {
+    ...(payload as Record<string, unknown>),
+    max_output_tokens: outputTokenLimit,
+  };
 }
 
 function toPiTool(tool: GatewayStreamRequest["tools"][number]): Tool {

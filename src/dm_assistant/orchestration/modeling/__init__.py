@@ -10,7 +10,6 @@ from dm_assistant.orchestration.modeling.service import (
     build_dungeon_intent_tool_result,
 )
 from dm_assistant.orchestration.modeling.submission import (
-    ADVISORY_STRUCTURED_OUTPUT_CAP_POLICY,
     StructuredSubmissionBudgetExceeded,
     StructuredSubmissionRejected,
     StructuredSubmissionRunner,
@@ -18,7 +17,6 @@ from dm_assistant.orchestration.modeling.submission import (
 )
 
 __all__ = [
-    "ADVISORY_STRUCTURED_OUTPUT_CAP_POLICY",
     "GatewayClient",
     "GatewayCompletion",
     "GatewayToolSchema",

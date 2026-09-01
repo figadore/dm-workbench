@@ -29,8 +29,6 @@ from dm_assistant.orchestration.modeling.service import (
 
 SubmissionModel = TypeVar("SubmissionModel", bound=BaseModel)
 
-ADVISORY_STRUCTURED_OUTPUT_CAP_POLICY = "advisory_manual_canary"
-
 
 @dataclass(frozen=True, slots=True)
 class StructuredSubmissionTool:
@@ -219,14 +217,8 @@ def _enforce_measured_usage(
     if completion.input_tokens is None or completion.output_tokens is None:
         return
     configured_output = profile.override_notes.get("output_token_limit")
-    advisory_output_cap = (
-        profile.override_notes.get("output_cap_enforcement")
-        == ADVISORY_STRUCTURED_OUTPUT_CAP_POLICY
-    )
-    if (
-        not advisory_output_cap
-        and isinstance(configured_output, int)
-        and completion.output_tokens > min(configured_output, profile.token_budget)
+    if isinstance(configured_output, int) and completion.output_tokens > min(
+        configured_output, profile.token_budget
     ):
         raise StructuredSubmissionBudgetExceeded(
             limit_kind="output",

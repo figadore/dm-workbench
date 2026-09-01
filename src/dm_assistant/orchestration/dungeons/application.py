@@ -27,7 +27,6 @@ from dm_assistant.orchestration.dungeons.prompting import (
     DungeonProposalRejectedAfterRepair,
 )
 from dm_assistant.orchestration.modeling import (
-    ADVISORY_STRUCTURED_OUTPUT_CAP_POLICY,
     ModelRunAbstained,
     StructuredSubmissionBudgetExceeded,
 )
@@ -51,8 +50,6 @@ def _failure_code(error: Exception) -> str:
 def _failure_report(
     error: Exception,
     code: str,
-    *,
-    profile: ResolvedModelRunProfile | None = None,
 ) -> dict[str, JsonValue]:
     """Build durable body-free failure details for the run inspector."""
     if isinstance(error, DungeonProposalRejectedAfterRepair) and error.failures:
@@ -75,30 +72,7 @@ def _failure_report(
         }
     else:
         report = {"stage": "model_submission", "code": code}
-    policy = _manual_canary_policy_report(profile)
-    if policy is not None:
-        report["run_policy"] = policy
     return report
-
-
-def _manual_canary_policy_report(
-    profile: ResolvedModelRunProfile | None,
-) -> dict[str, JsonValue] | None:
-    """Project only bounded server-authored manual-canary policy into durable state."""
-    if profile is None or profile.override_notes.get("output_cap_enforcement") != (
-        ADVISORY_STRUCTURED_OUTPUT_CAP_POLICY
-    ):
-        return None
-    output_limit = profile.override_notes.get("output_token_limit")
-    canary_id = profile.override_notes.get("canary_id")
-    return {
-        "canary_id": canary_id if isinstance(canary_id, str) else "unknown",
-        "output_cap_enforcement": ADVISORY_STRUCTURED_OUTPUT_CAP_POLICY,
-        "requested_output_token_limit": output_limit
-        if isinstance(output_limit, int)
-        else None,
-        "cumulative_token_limit": profile.token_budget,
-    }
 
 
 def _failure_diagnostic_codes(error: Exception) -> list[str]:
@@ -165,7 +139,7 @@ class DungeonPromptApplicationService:
                     "cancel" in str(error).lower()
                 )
                 code = "dungeon_prompt_cancelled" if cancelled else _failure_code(error)
-                failure_report = _failure_report(error, code, profile=profile)
+                failure_report = _failure_report(error, code)
                 logger.warning(
                     "dungeon prompt attempt stopped",
                     extra={
@@ -204,9 +178,6 @@ class DungeonPromptApplicationService:
                 if result.artifact_version_id
                 else None,
             }
-            manual_policy = _manual_canary_policy_report(profile)
-            if manual_policy is not None:
-                completion_report["run_policy"] = manual_policy
             self._finish(
                 command.campaign_id,
                 attempt_id,

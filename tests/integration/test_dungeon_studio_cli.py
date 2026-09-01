@@ -380,7 +380,6 @@ def test_cli_prompt_uses_private_gateway_and_persists_package(
             "openai-codex",
             "--model",
             "synthetic-codex",
-            "--acknowledge-advisory-output-cap",
         ],
     )
     assert canary.exit_code == 0, canary.output
@@ -396,11 +395,7 @@ def test_cli_prompt_uses_private_gateway_and_persists_package(
     )
     assert canary_specification.model_lineage
     canary_profile = canary_specification.model_lineage[0].model_run.resolved_profile
-    assert canary_profile.override_notes["canary_id"] == "tier-a-live-canary-v1"
-    assert (
-        canary_profile.override_notes["output_cap_enforcement"]
-        == "advisory_manual_canary"
-    )
+    assert canary_profile.override_notes == {"output_token_limit": 4096}
     with db_engine.connect() as connection:
         canary_attempt = connection.execute(
             text(
@@ -411,12 +406,7 @@ def test_cli_prompt_uses_private_gateway_and_persists_package(
             {"campaign_id": uuid.UUID(campaign_id)},
         ).one()
     assert canary_attempt.input_scope["surface"] == "tier-a-live-canary-v1"
-    assert canary_attempt.validation_report["run_policy"] == {
-        "canary_id": "tier-a-live-canary-v1",
-        "output_cap_enforcement": "advisory_manual_canary",
-        "requested_output_token_limit": 4096,
-        "cumulative_token_limit": 12000,
-    }
+    assert "run_policy" not in canary_attempt.validation_report
 
     invalid_proposal = deepcopy(proposal)
     invalid_plan = invalid_proposal["plan"]

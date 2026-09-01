@@ -5,13 +5,11 @@ from dm_assistant.orchestration.dungeons.application import (
     DungeonPromptAttemptResult,
 )
 from dm_assistant.orchestration.dungeons.canary import (
-    ADVISORY_OUTPUT_CAP_POLICY,
     DUNGEON_TIER_A_CANARY,
     DUNGEON_TIER_A_CANARY_ID,
     DUNGEON_TIER_A_CANARY_PROMPT,
     DUNGEON_TIER_A_CANARY_SEED,
     DungeonTierACanary,
-    apply_advisory_output_cap_override,
 )
 from dm_assistant.orchestration.dungeons.continuity import (
     build_dungeon_enrichment_continuity_context,
@@ -250,7 +248,6 @@ from dm_assistant.orchestration.dungeons.web_prompt import (
 )
 
 __all__ = [
-    "ADVISORY_OUTPUT_CAP_POLICY",
     "ApproveDungeonWorkflow",
     "DUNGEON_TIER_A_CANARY",
     "DUNGEON_TIER_A_CANARY_ID",
@@ -442,7 +439,6 @@ __all__ = [
     "PromptedDungeonRoomNarrativeLineage",
     "PromptedDungeonTrapLineage",
     "RegenerateDungeonWorkflow",
-    "apply_advisory_output_cap_override",
     "build_dungeon_enrichment_continuity_context",
     "derive_dungeon_creative_continuity",
     "plan_dungeon_staged_enrichment",

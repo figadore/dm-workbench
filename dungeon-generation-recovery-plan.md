@@ -182,12 +182,10 @@ started only when a conservative estimate of its complete canonical message plus
 schema leaves output room inside the measured cumulative budget. Measured output or total
 usage above a pinned ceiling fails before publication and is durably inspectable without
 retaining provider/model bodies. Provider-reported usage above a requested transport cap blocks ordinary live rollout:
-rejecting the result cannot recover already consumed usage. One frozen non-production
-Tier A canary may use its dedicated CLI command with an explicit acknowledged
-`openai-codex` advisory-output policy. That exception leaves the requested cap in the
-transport request, retains the measured 12,000-token cumulative publication ceiling and
-repair reservation, records durable policy lineage, and permits only one stop-on-failure
-operator run after the other gates pass.
+rejecting the result cannot recover already consumed usage. The former pre-fix advisory
+Codex canary exception is retired. The frozen Tier A canary uses its dedicated CLI command
+with the same strict requested output cap, measured 12,000-token cumulative publication
+ceiling, repair reservation, and stop-on-failure policy as the active path.
 
 ## 6. Topology construction and proof
 
@@ -534,7 +532,11 @@ ratings. Provider responses/excerpts are forbidden. Provider-free matrix validat
 enforces exact case/variant coverage, stable assignment hashes, final-valid artifact joins,
 and correct lore applicability; its body-free blinded aggregate includes every rating mean
 plus the lore denominator, latency/token means, first-pass-validity rate, and repair rate by
-opaque variant only. Actual human/live evidence remains pending.
+opaque variant only. The private gateway now compensates for the pinned Codex adapter's
+omitted hard-limit projection by overlaying the exact requested `max_output_tokens` value at
+its pre-dispatch payload boundary. A synthetic-OAuth, injected-fetch transport test captures
+and decompresses the actual outbound SSE body; the same transformed payload precedes either
+SSE or WebSocket dispatch. Actual human/live evidence remains pending.
 
 - Add independently bounded puzzle, exploration, other interaction, and narrative tasks
   over exact package IDs; merge accepted output deterministically and preserve the map on
@@ -544,8 +546,8 @@ opaque variant only. Actual human/live evidence remains pending.
   causality, mechanic/objective unity, progression, intentional motif variation, and
   selected-lore consistency in addition to playability and preparation usefulness. Keep
   the archive packet only as a technical regression.
-- Resolve hard provider output-cap behavior, then run the frozen staged Tier A canary after
-  provider-free and faux gates pass. Ordinary rollout requires evidence that requested
+- Preserve the tested Codex hard output-cap payload overlay, then run the frozen staged Tier
+  A canary after provider-free and faux gates pass. Ordinary rollout requires evidence that requested
   output ceilings bound reported usage; the sole exception remains one frozen, explicitly
   acknowledged, non-production Tier A canary that retains the measured cumulative ceiling
   and durable override lineage.
