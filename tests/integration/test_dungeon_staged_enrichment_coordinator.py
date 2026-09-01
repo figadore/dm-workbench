@@ -410,8 +410,14 @@ def _narrative_output(
 class _DynamicCanaryGateway:
     """Faux provider that authors only from each exact task context."""
 
-    def __init__(self, *, reject_feature: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        reject_feature: bool = False,
+        overpopulate_exploration: bool = False,
+    ) -> None:
         self.reject_feature = reject_feature
+        self.overpopulate_exploration = overpopulate_exploration
         self.messages: list[tuple[PromptMessage, ...]] = []
         self.profiles: list[ResolvedModelRunProfile] = []
         self.allowed_tools: list[tuple[str, ...]] = []
@@ -432,6 +438,14 @@ class _DynamicCanaryGateway:
         tool_name = allowed_tools[0]
         if tool_name == "submit_dungeon_plan":
             arguments = _canary_proposal()
+            if self.overpopulate_exploration:
+                plan = arguments["plan"]
+                assert isinstance(plan, dict)
+                rooms = plan["rooms"]
+                assert isinstance(rooms, list)
+                for room in rooms:
+                    assert isinstance(room, dict)
+                    room["encounter"] = "exploration"
         else:
             document = json.loads(messages[0].content)
             context = document["context"]
@@ -1611,6 +1625,67 @@ def test_frozen_canary_resumes_structural_child_through_all_tasks_and_final_gate
         ("submit_dungeon_room_narrative",),
     ]
     assert len({profile.task_profile_id for profile in gateway.profiles}) == 7
+
+
+def test_frozen_canary_stops_before_enrichment_when_structural_slots_are_overpopulated(
+    db_engine: Engine,
+    tmp_path: Path,
+) -> None:
+    campaign_id = _campaign(db_engine)
+    studio, preparation = _studio(db_engine, tmp_path)
+    gateway = _DynamicCanaryGateway(overpopulate_exploration=True)
+    application = _canary_application(
+        studio=studio, preparation=preparation, gateway=gateway
+    )
+    structural_profile = resolve_dungeon_prompt_profile(
+        provider_id="faux",
+        model_id="faux_deterministic_v1",
+        capabilities=("text", "tool_calls"),
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+    )
+
+    outcome = application.execute(
+        PromptDungeonWorkflow(
+            campaign_id=campaign_id,
+            prompt=DUNGEON_TIER_A_CANARY.prompt,
+            seed=DUNGEON_TIER_A_CANARY.seed,
+            created_by="synthetic-dm",
+            scope=resolve_task_scope(
+                dm_principal_id="dm",
+                campaign_owner_id="dm",
+                task_type=TaskType.STANDALONE_DUNGEON,
+            ),
+        ),
+        structural_profile,
+        resolve_dungeon_tier_a_canary_profiles(
+            provider_id="faux",
+            model_id="faux_deterministic_v1",
+            capabilities=("text", "tool_calls"),
+            context_window_tokens=16_384,
+            output_token_limit=4_096,
+            requested_effort=structural_profile.requested_effort,
+        ),
+        surface=DUNGEON_TIER_A_CANARY.canary_id,
+    )
+
+    assert not outcome.success
+    assert outcome.public_code == "dungeon_tier_a_canary_structural_requirements_failed"
+    assert outcome.validation_codes == (
+        "canary.structural_exploration_count_mismatch",
+        "canary.exploration_affordance_missing",
+    )
+    assert outcome.chain is None
+    assert outcome.final_validation is None
+    assert outcome.task_attempt_run_ids == ()
+    assert outcome.current_version_id is not None
+    assert gateway.allowed_tools == [("submit_dungeon_plan",)]
+    structural_result = outcome.structural_attempt.result
+    assert structural_result is not None and structural_result.artifact_id is not None
+    artifact = preparation.get_artifact(campaign_id, structural_result.artifact_id)
+    assert artifact.current_version_id == outcome.current_version_id
+    assert artifact.lifecycle.value == "draft"
+    assert len(preparation.list_versions(campaign_id, artifact.id)) == 1
 
 
 def test_frozen_canary_stops_on_first_rejected_task_with_body_free_attempt(

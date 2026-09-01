@@ -348,7 +348,11 @@ uv run --frozen dm dungeon canary \
 
 The canary retains the strict per-request output check, 12,000 measured-token cumulative
 publication ceiling, repair-input reservation, validation, secrecy, and atomic-publication
-gates. Stop after this one attempt on success or failure. Codex subscription requests omit the
+gates. Stop after this one attempt on success or failure. For a Compose deployment, rebuild and
+explicitly recreate the Workbench container first, then verify that its image ID matches the newly
+built tag; some Podman Compose versions can build a new tag without replacing an already-running
+container. A successful health check alone does not prove that the running container uses the new
+image. Codex subscription requests omit the
 unsupported `max_output_tokens`, `max_tokens`, and `max_completion_tokens` fields and therefore
 do not pre-cap consumed subscription quota. Timeouts, cancellation, repair reservation, and
 strict measured per-response/cumulative checks still apply, and an over-cap or unknown-usage

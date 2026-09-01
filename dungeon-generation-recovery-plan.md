@@ -564,8 +564,15 @@ authorized frozen canary published a valid structural draft, then stopped after 
 initial and repair submissions both failed schema validation. Provider-free hardening now keeps
 each rejected puzzle request's measured usage and duration as body-free attempt totals and emits
 distinct stable diagnostics for duplicate clue locations and an overlong assembled guide
-projection. No narrower model-visible prose bound is inferred from this single canary. A
-preparation-ready live artifact and human quality evidence remain pending.
+projection. No narrower model-visible prose bound is inferred from this single canary. A later
+authorized standard-effort run used its bounded repair after `plan.duplicate_room_content` and
+produced a valid five-room structural draft but reserved an exploration task in every room rather
+than only the requested branch; three lacked a local feature
+affordance, so no enrichment call ran. The old Workbench image surfaced the deterministic conflict
+as a generic CLI failure. Provider-free hardening now states that each non-null encounter creates
+one later task, preflights the frozen requested counts and local affordance requirement, and returns
+body-free codes while preserving the draft. The run was not retried. A preparation-ready live
+artifact and human quality evidence remain pending.
 
 - Add independently bounded puzzle, exploration, other interaction, and narrative tasks
   over exact package IDs; merge accepted output deterministically and preserve the map on

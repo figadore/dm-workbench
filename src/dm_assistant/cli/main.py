@@ -711,6 +711,7 @@ def _run_dungeon_staged_canary(
                     "chain_stop_reason": (
                         outcome.chain.stop_reason if outcome.chain is not None else None
                     ),
+                    "validation_codes": list(outcome.validation_codes),
                     "final_validation": (
                         final_validation.model_dump(mode="json")
                         if final_validation is not None

@@ -125,8 +125,12 @@ commits superseded them. This file preserves only compact milestone history:
   advisory bypass (`e13510e`). One later authorized frozen canary published a valid structural
   draft but stopped after puzzle initial/repair schema rejection. Provider-free hardening now
   retains rejected puzzle usage/duration as body-free attempt totals and distinguishes duplicate
-  clue-location from assembled-guide-length validator failures. Preparation-ready live and human
-  quality evidence remain pending.
+  clue-location from assembled-guide-length validator failures (`894fe26`). A subsequent authorized
+  run used its one repair after `plan.duplicate_room_content`, produced another valid structural
+  draft, then overpopulated all five rooms with exploration slots; deterministic dispatch found
+  missing room-local affordances and made no enrichment call.
+  The provider-free follow-up adds explicit minimal-slot guidance plus a body-free frozen-canary
+  semantic preflight. Preparation-ready live and human quality evidence remain pending.
 
 ### Deployment baseline
 

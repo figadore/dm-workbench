@@ -204,6 +204,12 @@ def test_prompt_explains_tier_a_plan_constraints() -> None:
     assert "room_contents[].objective" in message
     assert "typed content slots" in message
     assert "conservative spatial demand" in message
+    assert (
+        "each non-null rooms[].encounter creates a separate later authoring task"
+        in message
+    )
+    assert "leave it null in every room without a requested encounter" in message
+    assert "do not repeat an encounter kind" in message
     assert "Do not design puzzle solutions" in message
     assert "exploration approaches or outcomes" in message
     assert "guide_content" not in message

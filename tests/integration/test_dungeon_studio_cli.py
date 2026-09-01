@@ -389,6 +389,7 @@ def test_cli_prompt_uses_private_gateway_and_persists_package(
     assert canary_result["artifact_id"] is None
     assert canary_result["artifact_version_id"] is None
     assert canary_result["task_attempt_run_ids"] == []
+    assert canary_result["validation_codes"] == []
     assert canary_result["resolved"]["seed"] == 714_000_001
     with db_engine.connect() as connection:
         canary_attempt = connection.execute(

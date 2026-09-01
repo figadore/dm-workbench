@@ -1922,16 +1922,26 @@ both failed schema validation; no later staged task ran. Provider-free hardening
 rejected puzzle request's measured input/output usage and duration as body-free attempt totals and
 classifies duplicate clue locations separately from an overlong assembled guide projection. It
 does not narrow model-visible prose bounds from one canary result; that requires multi-case
-evidence. The disposable PostgreSQL-backed tests still require the integration database, and a
-preparation-ready live artifact remains pending.
+evidence. A later authorized standard-effort run used its bounded repair after
+`plan.duplicate_room_content` and produced another valid five-room structural draft, but the model
+reserved an exploration task in all five rooms rather than the one requested; three
+of those slots had no exact local feature affordance. Dispatch construction therefore stopped
+before the first enrichment call, but the old running Workbench image surfaced that safe conflict
+as a generic CLI execution failure. The provider-free path now explicitly tells the structural
+model that every non-null encounter creates a separate later task, validates the frozen canary's
+exact requested slot counts and required local exploration affordance before dispatch, and returns
+only body-free allowlisted codes while preserving the draft. No retry was made. The disposable
+PostgreSQL-backed tests still require the integration database, and a preparation-ready live
+artifact remains pending.
 
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
   Its model-visible proposal contains room identity/purpose, critical path, bounded
   branches/loop, gate/dependency placement, named objective, and typed content slots with
-  conservative spatial demand. Remove prose-heavy `guide_content` from this structural
-  root in place under the pre-retention V1 policy. The structural model does not write a
-  complete puzzle, exploration encounter, trap/feature interaction, and room prose in the
-  same response.
+  conservative spatial demand. Each non-null room encounter reserves one later task, so
+  guidance requires only the requested slot kinds/counts and leaves unrelated room encounters
+  null. Remove prose-heavy `guide_content` from this structural root in place under the
+  pre-retention V1 policy. The structural model does not write a complete puzzle, exploration
+  encounter, trap/feature interaction, and room prose in the same response.
 - Compile, certify, lay out, and independently validate that structural result before any
   enrichment. Deterministic code owns exact topology, IDs, geometry, visibility, room
   demand, map references, DC policy, rendering, and publication. An enrichment failure

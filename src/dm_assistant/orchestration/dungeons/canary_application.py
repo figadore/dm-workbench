@@ -6,6 +6,7 @@ import json
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Literal
 
 from pydantic import ValidationError
 
@@ -78,6 +79,22 @@ class DungeonTierACanaryProfiles:
     room_narrative: ResolvedModelRunProfile
 
 
+DungeonTierACanaryValidationCode = Literal[
+    "canary.dispatch_policy_invalid",
+    "canary.exploration_affordance_missing",
+    "canary.structural_branch_count_mismatch",
+    "canary.structural_exploration_count_mismatch",
+    "canary.structural_feature_missing",
+    "canary.structural_gate_count_mismatch",
+    "canary.structural_objective_count_mismatch",
+    "canary.structural_objective_name_mismatch",
+    "canary.structural_puzzle_count_mismatch",
+    "canary.structural_room_count_mismatch",
+    "canary.structural_secret_loop_count_mismatch",
+    "canary.structural_trap_count_mismatch",
+]
+
+
 @dataclass(frozen=True, slots=True)
 class DungeonTierACanaryRunResult:
     """Body-free canary outcome; accepted content remains in the DM-only artifact."""
@@ -87,6 +104,7 @@ class DungeonTierACanaryRunResult:
     final_validation: DungeonFinalValidationResult | None
     current_version_id: uuid.UUID | None
     public_code: str
+    validation_codes: tuple[DungeonTierACanaryValidationCode, ...] = ()
 
     @property
     def success(self) -> bool:
@@ -168,9 +186,29 @@ class DungeonTierACanaryApplicationService:
         specification = self._load_specification(
             command.campaign_id, structural_result.artifact_version_id
         )
-        dispatches = build_dungeon_tier_a_canary_dispatches(
-            specification, staged_profiles
-        )
+        validation_codes = _canary_structural_validation_codes(specification)
+        if validation_codes:
+            return DungeonTierACanaryRunResult(
+                structural_attempt=structural_attempt,
+                chain=None,
+                final_validation=None,
+                current_version_id=structural_result.artifact_version_id,
+                public_code="dungeon_tier_a_canary_structural_requirements_failed",
+                validation_codes=validation_codes,
+            )
+        try:
+            dispatches = build_dungeon_tier_a_canary_dispatches(
+                specification, staged_profiles
+            )
+        except ConflictError:
+            return DungeonTierACanaryRunResult(
+                structural_attempt=structural_attempt,
+                chain=None,
+                final_validation=None,
+                current_version_id=structural_result.artifact_version_id,
+                public_code="dungeon_tier_a_canary_dispatch_blocked",
+                validation_codes=("canary.dispatch_policy_invalid",),
+            )
         chain = self._chain.execute(
             PromptDungeonStagedEnrichmentChainWorkflow(
                 campaign_id=command.campaign_id,
@@ -218,6 +256,63 @@ class DungeonTierACanaryApplicationService:
             )
         except ValidationError as error:
             raise ConflictError("Stored dungeon specification is invalid.") from error
+
+
+def _canary_structural_validation_codes(
+    specification: DungeonStudioSpecification,
+) -> tuple[DungeonTierACanaryValidationCode, ...]:
+    """Check frozen canary semantics before any enrichment provider dispatch."""
+
+    package = specification.package
+    topology = package.topology
+    puzzle_rooms = tuple(room for room in package.rooms if room.role is RoomRole.PUZZLE)
+    exploration_slots = tuple(
+        slot
+        for slot in package.encounter_slots
+        if EncounterSlotIntent.EXPLORATION.value in slot.tags
+    )
+    features = tuple(
+        marker
+        for marker in package.room_mechanic_markers
+        if marker.kind is RoomMechanicMarkerKind.FEATURE
+    )
+    traps = tuple(
+        marker
+        for marker in package.room_mechanic_markers
+        if marker.kind is RoomMechanicMarkerKind.TRAP
+    )
+    objectives = tuple(
+        marker
+        for marker in package.room_mechanic_markers
+        if marker.kind is RoomMechanicMarkerKind.OBJECTIVE
+    )
+    feature_room_ids = {marker.room_id for marker in features}
+    objective_plans = specification.layout_request.mechanics_plan.room_objectives
+
+    codes: list[DungeonTierACanaryValidationCode] = []
+    if len(package.rooms) != 5:
+        codes.append("canary.structural_room_count_mismatch")
+    if len(topology.branches) != 1:
+        codes.append("canary.structural_branch_count_mismatch")
+    if len(topology.loops) != 1 or len(topology.secret_bypasses) != 1:
+        codes.append("canary.structural_secret_loop_count_mismatch")
+    if len(topology.gates) != 1:
+        codes.append("canary.structural_gate_count_mismatch")
+    if len(puzzle_rooms) != 1:
+        codes.append("canary.structural_puzzle_count_mismatch")
+    if len(exploration_slots) != 1:
+        codes.append("canary.structural_exploration_count_mismatch")
+    if not features:
+        codes.append("canary.structural_feature_missing")
+    if len(traps) != 1:
+        codes.append("canary.structural_trap_count_mismatch")
+    if len(objectives) != 1 or len(objective_plans) != 1:
+        codes.append("canary.structural_objective_count_mismatch")
+    elif objective_plans[0].name != "Windglass Seed":
+        codes.append("canary.structural_objective_name_mismatch")
+    if any(slot.room_id not in feature_room_ids for slot in exploration_slots):
+        codes.append("canary.exploration_affordance_missing")
+    return tuple(codes)
 
 
 def resolve_dungeon_tier_a_canary_profiles(
