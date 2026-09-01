@@ -1814,7 +1814,7 @@ mismatched slot fails before any provider call or version write. Resumed one-ste
 now exercises feature, trap, objective, and bounded room-narrative policies through their
 existing task-specific seams: each accepted child advances only to the next deterministic
 target, while a mismatched exact target fails before provider contact or version creation.
-Automatic repetition/full-chain dispatch and live calls remain later slices.
+A bounded provider-free chain coordinator now repeats only that proven one-step primitive over an ordered set of trusted exact policies and independently resolved task profiles. It carries each accepted child forward as the next current parent, stops immediately on rejection or a blocked/complete replan, and reports dispatch exhaustion separately from its explicit 32-task hard ceiling. A rejected task leaves the last accepted parent current and prevents every later policy from reaching its provider seam; the chain performs no approval or canonical operation. Live calls remain a later slice.
 
 The first explicit creative-continuity slice is now provider-free. Trusted Workbench code
 derives one bounded dungeon-only self-hashed projection from the resolved
@@ -1854,8 +1854,10 @@ result hash and seven body-free check summaries alongside the non-authoritative 
 explicit disposition. Provider-independent manually authored Studio artifacts retain their
 legacy readiness-based approval path. Findings trigger explicit DM disposition or targeted
 regeneration of one exact enrichment seam—never a broad silent rewrite, canonical write, or
-model approval. The required one-step coordinator coverage now spans every staged task;
-chain repetition remains a separate provider-free boundary before a live Tier A run.
+model approval. The required one-step coordinator coverage now spans every staged task. A
+bounded provider-free chain repeats only that one-step boundary with exact policy/profile
+pairs, advances only accepted current children, and stops on completion, blocking, rejection,
+dispatch exhaustion, or its explicit task limit before a live Tier A run.
 
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
   Its model-visible proposal contains room identity/purpose, critical path, bounded

@@ -38,7 +38,9 @@ from dm_assistant.orchestration.dungeons import (
     DungeonRoomNarrativeContextSelection,
     DungeonRoomNarrativePromptApplicationService,
     DungeonRoomNarrativePromptService,
+    DungeonStagedEnrichmentChainCoordinator,
     DungeonStagedEnrichmentCoordinator,
+    DungeonStagedEnrichmentDispatch,
     DungeonStagedExplorationPolicy,
     DungeonStagedFeatureInteractionPolicy,
     DungeonStagedObjectivePolicy,
@@ -51,6 +53,7 @@ from dm_assistant.orchestration.dungeons import (
     DungeonTrapPromptApplicationService,
     DungeonTrapPromptService,
     DungeonWorkflowResult,
+    PromptDungeonStagedEnrichmentChainWorkflow,
     PromptDungeonStagedEnrichmentWorkflow,
     PromptDungeonWorkflow,
     resolve_dungeon_exploration_prompt_profile,
@@ -1300,3 +1303,206 @@ def test_resumed_feature_trap_objective_and_narrative_each_dispatch_one_exact_se
         preparation.get_artifact(campaign_id, artifact_id).current_version_id
         == final_version_id
     )
+
+
+def test_repeated_coordinator_stops_after_third_task_rejection(
+    db_engine: Engine,
+    tmp_path: Path,
+) -> None:
+    campaign_id = _campaign(db_engine)
+    studio, preparation = _studio(db_engine, tmp_path)
+    structural, _ = _structural_parent(campaign_id=campaign_id, studio=studio)
+    parent_version_id = structural.artifact_version_id
+    artifact_id = structural.artifact_id
+    assert isinstance(parent_version_id, uuid.UUID)
+    assert isinstance(artifact_id, uuid.UUID)
+    parent = preparation.get_version(campaign_id, parent_version_id)
+    specification = DungeonStudioSpecification.model_validate_json(
+        json.dumps(parent.specification)
+    )
+    package_id = specification.package.id
+    puzzle_policy = _coordinator_command(
+        campaign_id=campaign_id,
+        artifact_id=artifact_id,
+        parent_version_id=parent_version_id,
+        specification=specification,
+    ).policy
+    assert isinstance(puzzle_policy, DungeonStagedPuzzlePolicy)
+    puzzle_room_id = puzzle_policy.selection.room_id
+    exploration_policy = _exploration_policy(specification)
+    feature = next(
+        marker
+        for marker in specification.package.room_mechanic_markers
+        if marker.kind.value == "feature"
+    )
+    feature_policy = DungeonStagedFeatureInteractionPolicy(
+        selection=DungeonFeatureInteractionContextSelection(
+            room_id=feature.room_id,
+            feature_id=feature.id,
+            interaction_goal="Stabilize the model planets before crossing the gallery.",
+            stakes="A poor adjustment delays the crossing without closing the route.",
+            constraints=("Do not author numeric difficulties.",),
+        )
+    )
+    trap = next(
+        marker
+        for marker in specification.package.room_mechanic_markers
+        if marker.kind.value == "trap"
+    )
+    trap_policy = DungeonStagedTrapPolicy(
+        selection=DungeonTrapContextSelection(
+            room_id=trap.room_id,
+            trap_id=trap.id,
+            stakes="The falling lens delays entry without sealing the observatory.",
+            constraints=("Do not author numeric difficulties.",),
+        )
+    )
+
+    puzzle_gateway = FakeGatewayClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_puzzle",
+                        call_id="chain-puzzle",
+                        arguments=cast(
+                            dict[str, JsonValue],
+                            _puzzle_output(
+                                package_id=package_id,
+                                room_id=puzzle_room_id,
+                                clue_location_id=puzzle_room_id,
+                            ),
+                        ),
+                    ),
+                ),
+                input_tokens=200,
+                output_tokens=350,
+            ),
+        )
+    )
+    exploration_gateway = FakeGatewayClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_exploration",
+                        call_id="chain-exploration",
+                        arguments=cast(
+                            dict[str, JsonValue],
+                            _exploration_output(
+                                package_id=package_id,
+                                room_id=exploration_policy.selection.room_id,
+                                encounter_slot_id=exploration_policy.encounter_slot_id,
+                                affordance_id=(
+                                    exploration_policy.selection.affordances[
+                                        0
+                                    ].affordance_id
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                input_tokens=210,
+                output_tokens=360,
+            ),
+        )
+    )
+    feature_gateway = FakeGatewayClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_feature_interaction",
+                        call_id="chain-feature-over-budget",
+                        arguments=cast(
+                            dict[str, JsonValue],
+                            _feature_output(
+                                package_id=package_id,
+                                room_id=feature.room_id,
+                                feature_id=feature.id,
+                            ),
+                        ),
+                    ),
+                ),
+                input_tokens=220,
+                output_tokens=2_049,
+            ),
+        )
+    )
+    trap_gateway = FakeGatewayClient(())
+    one_step = DungeonStagedEnrichmentCoordinator(
+        preparation,
+        puzzle=DungeonPuzzlePromptApplicationService(
+            preparation, DungeonPuzzlePromptService(studio, puzzle_gateway)
+        ),
+        exploration=DungeonExplorationPromptApplicationService(
+            preparation, DungeonExplorationPromptService(studio, exploration_gateway)
+        ),
+        feature_interaction=DungeonFeatureInteractionPromptApplicationService(
+            preparation,
+            DungeonFeatureInteractionPromptService(studio, feature_gateway),
+        ),
+        trap=DungeonTrapPromptApplicationService(
+            preparation, DungeonTrapPromptService(studio, trap_gateway)
+        ),
+    )
+
+    chain = DungeonStagedEnrichmentChainCoordinator(one_step).execute(
+        PromptDungeonStagedEnrichmentChainWorkflow(
+            campaign_id=campaign_id,
+            artifact_id=artifact_id,
+            parent_version_id=parent_version_id,
+            dispatches=(
+                DungeonStagedEnrichmentDispatch(
+                    policy=puzzle_policy,
+                    profile=_profile(),
+                ),
+                DungeonStagedEnrichmentDispatch(
+                    policy=exploration_policy,
+                    profile=_exploration_profile(),
+                ),
+                DungeonStagedEnrichmentDispatch(
+                    policy=feature_policy,
+                    profile=_feature_profile(),
+                ),
+                DungeonStagedEnrichmentDispatch(
+                    policy=trap_policy,
+                    profile=_trap_profile(),
+                ),
+            ),
+            maximum_tasks=4,
+            created_by="synthetic-dm",
+        ),
+        surface="integration",
+    )
+
+    assert chain.stop_reason == "task_rejected"
+    assert len(chain.steps) == 3
+    assert chain.steps[-1].public_code == (
+        "dungeon_feature_interaction_prompt_token_budget_exhausted"
+    )
+    assert chain.steps[-1].plan_before.next_task is not None
+    assert chain.steps[-1].plan_before.next_task.kind == "feature_interaction"
+    assert chain.plan_after == chain.steps[-1].plan_before
+    assert chain.current_version_id == (
+        chain.steps[1].attempt.result.artifact_version_id  # type: ignore[union-attr]
+    )
+    assert (
+        preparation.get_artifact(campaign_id, artifact_id).current_version_id
+        == chain.current_version_id
+    )
+    assert len(preparation.list_versions(campaign_id, artifact_id)) == 3
+    assert (
+        sum(
+            len(gateway.messages)
+            for gateway in (
+                puzzle_gateway,
+                exploration_gateway,
+                feature_gateway,
+                trap_gateway,
+            )
+        )
+        == 3
+    )
+    assert trap_gateway.messages == []
+    assert preparation.get_artifact(campaign_id, artifact_id).lifecycle.value == "draft"

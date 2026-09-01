@@ -109,9 +109,11 @@ commits superseded them. This file preserves only compact milestone history:
   canonical operations. Prompted approval and staged review packets now enforce the gate;
   exact-hash-bound DM disposition covers all six dimensions, targeted-regeneration decisions
   block approval, and packets retain only body-free deterministic hash/check evidence.
-  Resumed one-step coverage now proves exact-policy dispatch and pre-provider mismatch
-  rejection for exploration, feature, trap, objective, and bounded room narrative. Repeated
-  orchestration and staged live evaluation remain.
+  Resumed one-step coverage proves exact-policy dispatch and pre-provider mismatch rejection
+  for every staged kind. A bounded chain now repeats only the one-step primitive with trusted
+  policy/profile pairs, advances only accepted current children, and stops fail-closed on
+  rejection or its explicit limit without approval/canonical operations. Multi-case quality
+  evidence and staged live evaluation remain.
 
 ### Deployment baseline
 

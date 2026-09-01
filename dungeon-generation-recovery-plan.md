@@ -519,8 +519,10 @@ the deterministic result hash/check summary plus the non-authoritative report an
 disposition. A separately budgeted reviewer may diagnose thematic reinforcement, history/
 environment causality, mechanic/objective unity, progression, motif variation, and selected-
 lore consistency, but cannot edit, approve, clear blockers, or write canon. One-step
-coordinator coverage now spans all staged task kinds; chain repetition remains a separate
-provider-free boundary before live Tier A.
+coordinator coverage now spans all staged task kinds. A bounded provider-free chain repeats
+only that one-step boundary over trusted exact policy/profile pairs, carries accepted
+children forward, and stops on rejection, blocking, completion, policy exhaustion, or its
+explicit task ceiling before live Tier A.
 Multi-case blinded human evidence remains the quality authority; task contexts stay narrow
 rather than becoming a universal optional-field context or unrestricted corpus/guide dump.
 

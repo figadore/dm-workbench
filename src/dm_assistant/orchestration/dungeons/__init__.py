@@ -216,7 +216,11 @@ from dm_assistant.orchestration.dungeons.staged_enrichment import (
     plan_dungeon_staged_enrichment,
 )
 from dm_assistant.orchestration.dungeons.staged_enrichment_coordinator import (
+    DungeonStagedEnrichmentChainCoordinator,
+    DungeonStagedEnrichmentChainResult,
+    DungeonStagedEnrichmentChainStopReason,
     DungeonStagedEnrichmentCoordinator,
+    DungeonStagedEnrichmentDispatch,
     DungeonStagedEnrichmentPolicy,
     DungeonStagedEnrichmentStepResult,
     DungeonStagedExplorationPolicy,
@@ -225,6 +229,7 @@ from dm_assistant.orchestration.dungeons.staged_enrichment_coordinator import (
     DungeonStagedPuzzlePolicy,
     DungeonStagedRoomNarrativePolicy,
     DungeonStagedTrapPolicy,
+    PromptDungeonStagedEnrichmentChainWorkflow,
     PromptDungeonStagedEnrichmentWorkflow,
 )
 from dm_assistant.orchestration.dungeons.trap_application import (
@@ -388,7 +393,11 @@ __all__ = [
     "DungeonStudioService",
     "DungeonStudioSpecification",
     "DungeonStagedEnrichmentBlocker",
+    "DungeonStagedEnrichmentChainCoordinator",
+    "DungeonStagedEnrichmentChainResult",
+    "DungeonStagedEnrichmentChainStopReason",
     "DungeonStagedEnrichmentCoordinator",
+    "DungeonStagedEnrichmentDispatch",
     "DungeonStagedEnrichmentPlan",
     "DungeonStagedEnrichmentPolicy",
     "DungeonStagedEnrichmentStepResult",
@@ -421,6 +430,7 @@ __all__ = [
     "PromptDungeonObjectiveWorkflow",
     "PromptDungeonPuzzleWorkflow",
     "PromptDungeonRoomNarrativeWorkflow",
+    "PromptDungeonStagedEnrichmentChainWorkflow",
     "PromptDungeonStagedEnrichmentWorkflow",
     "PromptDungeonTrapWorkflow",
     "PromptDungeonWorkflow",

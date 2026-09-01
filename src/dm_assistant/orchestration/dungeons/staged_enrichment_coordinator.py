@@ -1,4 +1,4 @@
-"""One-step coordination for independently bounded dungeon enrichment tasks."""
+"""Bounded coordination for independently failable dungeon enrichment tasks."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import json
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Protocol
 
 from pydantic import Field, ValidationError
 
@@ -122,6 +122,26 @@ class PromptDungeonStagedEnrichmentWorkflow(WorkflowModel):
     artifact_id: uuid.UUID
     parent_version_id: uuid.UUID
     policy: DungeonStagedEnrichmentPolicy
+    created_by: str = Field(min_length=1, max_length=200)
+
+
+class DungeonStagedEnrichmentDispatch(WorkflowModel):
+    """One trusted exact policy and its independently resolved task profile."""
+
+    policy: DungeonStagedEnrichmentPolicy
+    profile: ResolvedModelRunProfile
+
+
+class PromptDungeonStagedEnrichmentChainWorkflow(WorkflowModel):
+    """Repeat trusted one-step dispatches under an explicit task ceiling."""
+
+    campaign_id: uuid.UUID
+    artifact_id: uuid.UUID
+    parent_version_id: uuid.UUID
+    dispatches: tuple[DungeonStagedEnrichmentDispatch, ...] = Field(
+        min_length=1, max_length=32
+    )
+    maximum_tasks: int = Field(ge=1, le=32)
     created_by: str = Field(min_length=1, max_length=200)
 
 
@@ -415,3 +435,120 @@ class DungeonStagedEnrichmentCoordinator:
         if service is None:
             raise ConflictError(f"The {kind} staged task service is unavailable.")
         return service
+
+
+DungeonStagedEnrichmentChainStopReason = Literal[
+    "complete",
+    "blocked",
+    "task_rejected",
+    "task_limit_reached",
+    "dispatches_exhausted",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class DungeonStagedEnrichmentChainResult:
+    """Bounded sequence outcome with the last accepted version kept current."""
+
+    steps: tuple[DungeonStagedEnrichmentStepResult, ...]
+    plan_after: DungeonStagedEnrichmentPlan
+    current_version_id: uuid.UUID
+    stop_reason: DungeonStagedEnrichmentChainStopReason
+
+
+class _DungeonStagedEnrichmentStepExecutor(Protocol):
+    def execute(
+        self,
+        command: PromptDungeonStagedEnrichmentWorkflow,
+        profile: ResolvedModelRunProfile,
+        *,
+        surface: str,
+        debug: Callable[[str, dict[str, object]], None] | None = None,
+    ) -> DungeonStagedEnrichmentStepResult: ...
+
+
+class DungeonStagedEnrichmentChainCoordinator:
+    """Repeat only the proven one-step primitive and stop at the first failure.
+
+    This boundary performs no preparation approval or canonical operation. Every accepted
+    task publishes through its existing task-specific seam; any rejection leaves the last
+    accepted parent current and prevents later dispatches.
+    """
+
+    def __init__(self, one_step: _DungeonStagedEnrichmentStepExecutor) -> None:
+        self._one_step = one_step
+
+    def execute(
+        self,
+        command: PromptDungeonStagedEnrichmentChainWorkflow,
+        *,
+        surface: str,
+        debug: Callable[[str, dict[str, object]], None] | None = None,
+    ) -> DungeonStagedEnrichmentChainResult:
+        """Run no more than ``maximum_tasks`` trusted one-step dispatches."""
+
+        current_version_id = command.parent_version_id
+        steps: list[DungeonStagedEnrichmentStepResult] = []
+        for dispatch in command.dispatches[: command.maximum_tasks]:
+            step = self._one_step.execute(
+                PromptDungeonStagedEnrichmentWorkflow(
+                    campaign_id=command.campaign_id,
+                    artifact_id=command.artifact_id,
+                    parent_version_id=current_version_id,
+                    policy=dispatch.policy,
+                    created_by=command.created_by,
+                ),
+                dispatch.profile,
+                surface=surface,
+                debug=debug,
+            )
+            steps.append(step)
+
+            if step.attempt is None:
+                return DungeonStagedEnrichmentChainResult(
+                    steps=tuple(steps),
+                    plan_after=step.plan_after,
+                    current_version_id=current_version_id,
+                    stop_reason=(
+                        "complete"
+                        if step.plan_after.status == "complete"
+                        else "blocked"
+                    ),
+                )
+
+            attempt_result = step.attempt.result
+            if (
+                attempt_result is None
+                or not attempt_result.success
+                or attempt_result.artifact_version_id is None
+            ):
+                return DungeonStagedEnrichmentChainResult(
+                    steps=tuple(steps),
+                    plan_after=step.plan_after,
+                    current_version_id=current_version_id,
+                    stop_reason="task_rejected",
+                )
+
+            current_version_id = attempt_result.artifact_version_id
+            if step.plan_after.status != "ready":
+                return DungeonStagedEnrichmentChainResult(
+                    steps=tuple(steps),
+                    plan_after=step.plan_after,
+                    current_version_id=current_version_id,
+                    stop_reason=(
+                        "complete"
+                        if step.plan_after.status == "complete"
+                        else "blocked"
+                    ),
+                )
+
+        return DungeonStagedEnrichmentChainResult(
+            steps=tuple(steps),
+            plan_after=steps[-1].plan_after,
+            current_version_id=current_version_id,
+            stop_reason=(
+                "task_limit_reached"
+                if len(steps) == command.maximum_tasks
+                else "dispatches_exhausted"
+            ),
+        )
