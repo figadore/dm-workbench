@@ -130,7 +130,12 @@ commits superseded them. This file preserves only compact milestone history:
   draft, then overpopulated all five rooms with exploration slots; deterministic dispatch found
   missing room-local affordances and made no enrichment call.
   The provider-free follow-up adds explicit minimal-slot guidance plus a body-free frozen-canary
-  semantic preflight. Preparation-ready live and human quality evidence remain pending.
+  semantic preflight (`983d5dc`). The next authorized run stopped before publication after
+  schema-invalid objective values and a repair with duplicate room content and three objective
+  slots; no artifact or enrichment call resulted. Provider-free follow-up retained the original
+  structural instruction during repair, clarified unique/nonempty room-content records, and added
+  body-free rejected-request duration/usage evidence. Preparation-ready live and human quality
+  evidence remain pending.
 
 ### Deployment baseline
 

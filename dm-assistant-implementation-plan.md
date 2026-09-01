@@ -1930,16 +1930,25 @@ before the first enrichment call, but the old running Workbench image surfaced t
 as a generic CLI execution failure. The provider-free path now explicitly tells the structural
 model that every non-null encounter creates a separate later task, validates the frozen canary's
 exact requested slot counts and required local exploration affordance before dispatch, and returns
-only body-free allowlisted codes while preserving the draft. No retry was made. The disposable
-PostgreSQL-backed tests still require the integration database, and a preparation-ready live
-artifact remains pending.
+only body-free allowlisted codes while preserving the draft. No retry was made. One later authorized
+standard-effort run stopped before publication after the initial submission used schema-invalid
+objective values and its one repair produced duplicate room content plus three named objective
+slots. No enrichment call or artifact resulted, and the run was not retried. The provider-free
+follow-up now requires at most one nonempty room-content record per room, makes non-objective values
+null or omitted rather than empty, carries the complete original structural instruction into repair,
+and retains rejected structural request duration and measured usage in the body-free attempt report.
+The disposable PostgreSQL-backed tests still require the integration database, and a preparation-ready
+live artifact remains pending.
 
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
   Its model-visible proposal contains room identity/purpose, critical path, bounded
   branches/loop, gate/dependency placement, named objective, and typed content slots with
   conservative spatial demand. Each non-null room encounter reserves one later task, so
   guidance requires only the requested slot kinds/counts and leaves unrelated room encounters
-  null. Remove prose-heavy `guide_content` from this structural root in place under the
+  null. Use at most one nonempty `room_contents` record per room, and leave optional objective
+  values null or omitted rather than empty outside the one named objective room. A repair must
+  retain the complete original structural instruction and body-free measured request totals.
+  Remove prose-heavy `guide_content` from this structural root in place under the
   pre-retention V1 policy. The structural model does not write a complete puzzle, exploration
   encounter, trap/feature interaction, and room prose in the same response.
 - Compile, certify, lay out, and independently validate that structural result before any
@@ -2008,8 +2017,9 @@ artifact remains pending.
 - Model-visible schema tests prove `submit_dungeon_plan` has no `guide_content` field and
   that no one request schema combines structural planning, puzzle design, and exploration
   design.
-- Provider-free/faux orchestration tests prove exact-ID context slicing, independent task
-  budgets/repairs/lineage, deterministic merge, no cross-task mutation, readiness blockers
+- Provider-free/faux orchestration tests prove structural repair retains its original instruction
+  and rejected-request usage, plus exact-ID context slicing, independent task budgets/repairs/lineage,
+  deterministic merge, no cross-task mutation, readiness blockers
   on partial enrichment, and atomic publication on complete enrichment.
 - Creative-continuity tests prove every task inherits the same version/hash, receives only
   authorized relevant facts and accepted intent, rejects stale or visibility-invalid

@@ -571,8 +571,13 @@ than only the requested branch; three lacked a local feature
 affordance, so no enrichment call ran. The old Workbench image surfaced the deterministic conflict
 as a generic CLI failure. Provider-free hardening now states that each non-null encounter creates
 one later task, preflights the frozen requested counts and local affordance requirement, and returns
-body-free codes while preserving the draft. The run was not retried. A preparation-ready live
-artifact and human quality evidence remain pending.
+body-free codes while preserving the draft. The run was not retried. One later authorized run
+stopped at structural initial/repair rejection: schema-invalid objective values were followed by
+one duplicate room-content record and three named objectives. It created no artifact or enrichment
+attempt and was not retried. Provider-free hardening now requires unique nonempty room-content
+records, null or omitted non-objective values, complete original-instruction retention during repair,
+and body-free rejected structural duration/usage evidence. A preparation-ready live artifact and
+human quality evidence remain pending.
 
 - Add independently bounded puzzle, exploration, other interaction, and narrative tasks
   over exact package IDs; merge accepted output deterministically and preserve the map on

@@ -80,8 +80,11 @@ _PLAN_GUIDANCE = (
     "when concealment is intended. Add at most one gate on a constructed public path "
     "edge; put its key or clue in a public room reachable before that gate. Name the "
     "final objective in exactly one room_contents[].objective field for the objective "
-    "room. Use room roles, encounter intent, and room_contents only as typed content "
-    "slots with conservative spatial demand. Reserve only the content slots and counts "
+    "room. Use at most one room_contents record per room, omit content records that "
+    "reserve no trap, feature, or objective, and leave objective null or omitted rather "
+    "than empty in every non-objective record. Use room roles, encounter intent, and "
+    "room_contents only as typed content slots with conservative spatial demand. Reserve "
+    "only the content slots and counts "
     "the request actually needs: each non-null rooms[].encounter creates a separate later "
     "authoring task, so leave it null in every room without a requested encounter and do "
     "not repeat an encounter kind across rooms unless the request asks for multiples. Keep "
@@ -199,6 +202,30 @@ class DungeonSubmissionFailure:
     attempt: Literal["initial", "repair"]
     stage: DungeonSubmissionFailureStage
     diagnostics: tuple[dict[str, JsonValue], ...]
+    duration_ms: int
+    usage_measured: bool
+    usage_input_tokens: int | None
+    usage_output_tokens: int | None
+
+    @classmethod
+    def from_record(
+        cls,
+        *,
+        attempt: Literal["initial", "repair"],
+        stage: DungeonSubmissionFailureStage,
+        diagnostics: tuple[dict[str, JsonValue], ...],
+        record: ModelRunRecord,
+    ) -> DungeonSubmissionFailure:
+        """Discard model bodies while retaining measured operational totals."""
+        return cls(
+            attempt=attempt,
+            stage=stage,
+            diagnostics=diagnostics,
+            duration_ms=record.duration_ms,
+            usage_measured=record.usage_measured,
+            usage_input_tokens=record.usage_input_tokens,
+            usage_output_tokens=record.usage_output_tokens,
+        )
 
     def report(self) -> dict[str, JsonValue]:
         """Return the bounded JSON document safe to persist on an attempt run."""
@@ -206,6 +233,12 @@ class DungeonSubmissionFailure:
             "attempt": self.attempt,
             "stage": self.stage,
             "diagnostics": [dict(item) for item in self.diagnostics],
+            "duration_ms": self.duration_ms,
+            "usage": {
+                "measured": self.usage_measured,
+                "input_tokens": self.usage_input_tokens,
+                "output_tokens": self.usage_output_tokens,
+            },
         }
 
 
@@ -330,10 +363,11 @@ class DungeonSubmissionService:
         except StructuredSubmissionRejected as rejected:
             record = rejected.record
             runs = [record]
-            initial_failure = DungeonSubmissionFailure(
+            initial_failure = DungeonSubmissionFailure.from_record(
                 attempt="initial",
                 stage="model_submission",
                 diagnostics=rejected.diagnostics,
+                record=record,
             )
             repair_input = _repair_model_input(
                 command=run_input,
@@ -352,10 +386,11 @@ class DungeonSubmissionService:
                     deadline_monotonic=deadline,
                 )
             except StructuredSubmissionRejected as error:
-                repair_failure = DungeonSubmissionFailure(
+                repair_failure = DungeonSubmissionFailure.from_record(
                     attempt="repair",
                     stage="model_submission",
                     diagnostics=error.diagnostics,
+                    record=error.record,
                 )
                 raise DungeonProposalRejectedAfterRepair(
                     failures=(initial_failure, repair_failure)
@@ -391,10 +426,11 @@ class DungeonSubmissionService:
                         deadline_monotonic=deadline,
                     )
                 except StructuredSubmissionRejected as error:
-                    repair_failure = DungeonSubmissionFailure(
+                    repair_failure = DungeonSubmissionFailure.from_record(
                         attempt="repair",
                         stage="model_submission",
                         diagnostics=error.diagnostics,
+                        record=error.record,
                     )
                     raise DungeonProposalRejectedAfterRepair(
                         failures=(initial_failure, repair_failure)
@@ -591,10 +627,11 @@ def _repair_model_input(
     repair_document = {
         "task": _DUNGEON_SCHEMA_NAME,
         "instruction": (
-            "Submit one complete corrected replacement proposal. Preserve the original "
-            "requested dungeon and every valid prior field; change only fields named "
-            "by the diagnostics."
+            "Submit one complete corrected replacement proposal. Obey the original "
+            "instruction and requested dungeon. Preserve every valid prior field; change "
+            "only fields named by the diagnostics."
         ),
+        "original_instruction": initial.get("instruction"),
         "prompt": initial.get("prompt"),
         "context": initial.get("context"),
         "previous_arguments": prior_arguments,
@@ -687,10 +724,11 @@ def _submission_failure(
         code = payload.get("code")
         if isinstance(code, str):
             diagnostics.append({"code": code})
-    return DungeonSubmissionFailure(
+    return DungeonSubmissionFailure.from_record(
         attempt=attempt,
         stage=stage,
         diagnostics=tuple(diagnostics),
+        record=record,
     )
 
 

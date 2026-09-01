@@ -32,6 +32,7 @@ from dm_assistant.orchestration.dungeons.prompting import (
     _build_standalone_context,
     _initial_model_input,
     _lineage,
+    _repair_model_input,
     resolve_dungeon_prompt_profile,
 )
 from dm_assistant.orchestration.dungeons.service import (
@@ -202,6 +203,9 @@ def test_prompt_explains_tier_a_plan_constraints() -> None:
     assert "do not add a proposal envelope" in message
     assert "DungeonPlan schema version 1.0.0" in message
     assert "room_contents[].objective" in message
+    assert "at most one room_contents record per room" in message
+    assert "omit content records" in message
+    assert "leave objective null or omitted rather than empty" in message
     assert "typed content slots" in message
     assert "conservative spatial demand" in message
     assert (
@@ -213,6 +217,43 @@ def test_prompt_explains_tier_a_plan_constraints() -> None:
     assert "Do not design puzzle solutions" in message
     assert "exploration approaches or outcomes" in message
     assert "guide_content" not in message
+
+
+def test_structural_repair_retains_the_original_instruction() -> None:
+    command = PromptDungeonWorkflow(
+        campaign_id=uuid.UUID("10000000-0000-0000-0000-000000000001"),
+        prompt="Synthetic hidden archive.",
+        seed=1842,
+        created_by="dm",
+        scope=resolve_task_scope(
+            dm_principal_id="dm",
+            campaign_owner_id="dm",
+            task_type=TaskType.STANDALONE_DUNGEON,
+        ),
+    )
+    initial_input = _initial_model_input(command, _build_standalone_context(command))
+    initial_document = json.loads(initial_input.messages[0].content)
+
+    repair_input = _repair_model_input(
+        command=initial_input,
+        prior_arguments=_tier_a_proposal(),
+        diagnostics=(
+            {
+                "code": "submission.schema_invalid",
+                "path": "/plan/room_contents/0/objective",
+                "affected_refs": [],
+                "repair": "provide a value matching the submitted tool schema",
+            },
+        ),
+    )
+
+    repair_document = json.loads(repair_input.messages[0].content)
+    assert repair_document["original_instruction"] == initial_document["instruction"]
+    assert (
+        "at most one room_contents record per room"
+        in (repair_document["original_instruction"])
+    )
+    assert "Obey the original instruction" in repair_document["instruction"]
 
 
 def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
@@ -408,6 +449,18 @@ def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
     attempts = report["submission_attempts"]
     assert isinstance(attempts, list)
     assert attempts[1]["diagnostics"][0]["code"] == ("plan.gate_dependency_unreachable")
+    assert attempts[0]["usage"] == {
+        "measured": True,
+        "input_tokens": 10,
+        "output_tokens": 10,
+    }
+    assert attempts[1]["usage"] == {
+        "measured": True,
+        "input_tokens": 10,
+        "output_tokens": 10,
+    }
+    assert isinstance(attempts[0]["duration_ms"], int)
+    assert isinstance(attempts[1]["duration_ms"], int)
 
     schema_invalid = deepcopy(proposal)
     schema_plan = schema_invalid["plan"]
@@ -490,7 +543,11 @@ def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
         "model_submission",
         "model_submission",
     ]
-    final_schema_diagnostic = schema_rejected.value.failures[1].diagnostics[0]
+    final_schema_failure = schema_rejected.value.failures[1]
+    final_schema_diagnostic = final_schema_failure.diagnostics[0]
+    assert final_schema_failure.usage_measured
+    assert final_schema_failure.usage_input_tokens == 10
+    assert final_schema_failure.usage_output_tokens == 10
     assert final_schema_diagnostic["code"] == "submission.schema_invalid"
     assert final_schema_diagnostic["path"].endswith("/encounter")
     assert "allowed values" in final_schema_diagnostic["repair"]
