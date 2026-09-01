@@ -1881,6 +1881,20 @@ to prove the hard field is present without retaining the prompt/body. The V1 req
 package pin stay in place; post-response usage checks remain defense in depth rather than the
 provider-limit mechanism. No live generation has yet exercised the corrected transport.
 
+The frozen canary is now wired provider-free through its complete application path. After
+one accepted structural child, Workbench derives exact trusted policies from that package,
+uses six independently resolved task profiles, runs the existing stop-on-first-failure chain,
+and invokes the read-only final continuity/readiness gate only on completion. A rejected task
+keeps the last accepted child current and prevents every later provider seam. CLI output and
+durable attempts retain only IDs, stop codes, usage, and body-free validation evidence; the
+artifact remains a draft, and the path has no preparation-approval or canonical dependency.
+An accepted structural key/clue name and exact dependency room now produce only a deterministic
+ordinary-presence discovery statement, so removed structural guide prose is not required to
+resume staged authoring; richer gate interaction content remains optional. Provider-free faux
+coverage includes both complete final-gate success and a third-task output-cap rejection. The
+disposable PostgreSQL-backed tests still require the integration database, and no live model
+call has run.
+
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
   Its model-visible proposal contains room identity/purpose, critical path, bounded
   branches/loop, gate/dependency placement, named objective, and typed content slots with

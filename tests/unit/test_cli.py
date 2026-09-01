@@ -24,7 +24,6 @@ from dm_assistant.cli.main import (
     app,
 )
 from dm_assistant.modules.modeling import ReasoningEffort
-from dm_assistant.orchestration.dungeons import DUNGEON_TIER_A_CANARY
 from dm_assistant.orchestration.modeling import ModelRunAbstained
 
 runner = CliRunner()
@@ -124,7 +123,7 @@ def test_canary_command_pins_exact_prompt_seed_and_explicit_model(
     def capture(**kwargs: object) -> None:
         captured.update(kwargs)
 
-    monkeypatch.setattr("dm_assistant.cli.main.dungeon_prompt", capture)
+    monkeypatch.setattr("dm_assistant.cli.main._run_dungeon_staged_canary", capture)
     result = runner.invoke(
         app,
         [
@@ -138,11 +137,11 @@ def test_canary_command_pins_exact_prompt_seed_and_explicit_model(
     )
 
     assert result.exit_code == 0, result.output
-    assert captured["prompt"] == DUNGEON_TIER_A_CANARY.prompt
-    assert captured["seed"] == DUNGEON_TIER_A_CANARY.seed
     assert captured["provider"] == "openai-codex"
     assert captured["model"] == "gpt-synthetic"
     assert captured["effort"] is ReasoningEffort.FAST
+    assert "prompt" not in captured
+    assert "seed" not in captured
     assert "acknowledge_advisory_output_cap" not in captured
     assert "Stop on the first failure" in result.output
 

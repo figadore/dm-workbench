@@ -11,6 +11,13 @@ from dm_assistant.orchestration.dungeons.canary import (
     DUNGEON_TIER_A_CANARY_SEED,
     DungeonTierACanary,
 )
+from dm_assistant.orchestration.dungeons.canary_application import (
+    DungeonTierACanaryApplicationService,
+    DungeonTierACanaryProfiles,
+    DungeonTierACanaryRunResult,
+    build_dungeon_tier_a_canary_dispatches,
+    resolve_dungeon_tier_a_canary_profiles,
+)
 from dm_assistant.orchestration.dungeons.continuity import (
     build_dungeon_enrichment_continuity_context,
     derive_dungeon_creative_continuity,
@@ -290,6 +297,9 @@ __all__ = [
     "DungeonSubmissionResult",
     "DungeonSubmissionService",
     "DungeonTierACanary",
+    "DungeonTierACanaryApplicationService",
+    "DungeonTierACanaryProfiles",
+    "DungeonTierACanaryRunResult",
     "DungeonExplorationAffordance",
     "DungeonExplorationAffordanceApproval",
     "DungeonExplorationApproach",
@@ -440,8 +450,10 @@ __all__ = [
     "PromptedDungeonTrapLineage",
     "RegenerateDungeonWorkflow",
     "build_dungeon_enrichment_continuity_context",
+    "build_dungeon_tier_a_canary_dispatches",
     "derive_dungeon_creative_continuity",
     "plan_dungeon_staged_enrichment",
+    "resolve_dungeon_tier_a_canary_profiles",
     "resolve_dungeon_exploration_prompt_profile",
     "resolve_dungeon_feature_interaction_prompt_profile",
     "resolve_dungeon_objective_prompt_profile",

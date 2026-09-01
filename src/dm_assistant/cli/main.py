@@ -69,6 +69,7 @@ from dm_assistant.orchestration.dungeons import (
     PromptDungeonWorkflow,
     RegenerateDungeonWorkflow,
     resolve_dungeon_prompt_profile,
+    resolve_dungeon_tier_a_canary_profiles,
 )
 from dm_assistant.orchestration.modeling import ModelRunAbstained
 from dm_assistant.paths import resolve_allowlisted_file
@@ -583,6 +584,139 @@ def dungeon_prompt(
                 raise typer.Exit(code=1)
 
 
+def _run_dungeon_staged_canary(
+    *,
+    campaign_id: UUID | None,
+    provider: str,
+    model: str,
+    effort: ReasoningEffort,
+    debug: bool,
+    created_by: str,
+) -> None:
+    """Run the complete frozen canary through shared application boundaries."""
+
+    with _render_domain_errors():
+        with workbench_runtime() as runtime:
+            gateway = _require_model_gateway(runtime.model_gateway)
+            canary = runtime.dungeon_canary_application
+            if canary is None:
+                raise InvalidInputError("The model gateway is not enabled.")
+            resolved_campaign_id = (
+                campaign_id
+                if campaign_id is not None
+                else runtime.campaigns.ensure_active_campaign().id
+            )
+            selected_provider, selected_model, selected_effort = (
+                _resolve_dungeon_model_selection(
+                    gateway=gateway,
+                    saved=runtime.model_selections.get("dungeon_generation_intent_v1"),
+                    provider_override=provider,
+                    model_override=model,
+                    effort_override=effort,
+                    allow_faux=(
+                        runtime.settings.environment is RuntimeEnvironment.TEST
+                    ),
+                )
+            )
+            typer.echo(
+                f"Using {selected_model.name} via {selected_provider.name} "
+                f"at {selected_effort.value} effort.",
+                err=True,
+            )
+            runtime.model_selections.save(
+                task_name="dungeon_generation_intent_v1",
+                provider_id=selected_provider.id,
+                model_id=selected_model.id,
+                effort=selected_effort,
+                selection_policy="dungeon-task-baseline-v1",
+            )
+            try:
+                outcome = canary.execute(
+                    PromptDungeonWorkflow(
+                        campaign_id=resolved_campaign_id,
+                        prompt=DUNGEON_TIER_A_CANARY.prompt,
+                        seed=DUNGEON_TIER_A_CANARY.seed,
+                        created_by=created_by,
+                        scope=resolve_task_scope(
+                            dm_principal_id=created_by,
+                            campaign_owner_id=created_by,
+                            task_type=TaskType.STANDALONE_DUNGEON,
+                        ),
+                    ),
+                    resolve_dungeon_prompt_profile(
+                        provider_id=selected_provider.id,
+                        model_id=selected_model.id,
+                        capabilities=selected_model.capabilities,
+                        context_window_tokens=selected_model.context_window,
+                        output_token_limit=selected_model.max_output_tokens,
+                        requested_effort=selected_effort,
+                    ),
+                    resolve_dungeon_tier_a_canary_profiles(
+                        provider_id=selected_provider.id,
+                        model_id=selected_model.id,
+                        capabilities=selected_model.capabilities,
+                        context_window_tokens=selected_model.context_window,
+                        output_token_limit=selected_model.max_output_tokens,
+                        requested_effort=selected_effort,
+                    ),
+                    surface=DUNGEON_TIER_A_CANARY.canary_id,
+                    debug=_emit_debug_event if debug else None,
+                )
+            except ModelGatewayTransportError as error:
+                raise InvalidInputError(str(error)) from None
+            except AssetCorruptionError as error:
+                raise _prompt_execution_error(error) from None
+            except AssetStorageError as error:
+                raise _prompt_execution_error(error) from None
+            except ValueError as error:
+                raise _prompt_execution_error(error) from None
+            except Exception as error:
+                raise _prompt_execution_error(error) from None
+
+            structural_result = outcome.structural_attempt.result
+            artifact_id = (
+                structural_result.artifact_id if structural_result is not None else None
+            )
+            final_validation = outcome.final_validation
+            _emit_document(
+                {
+                    "success": outcome.success,
+                    "public_code": outcome.public_code,
+                    "artifact_id": str(artifact_id)
+                    if artifact_id is not None
+                    else None,
+                    "artifact_version_id": (
+                        str(outcome.current_version_id)
+                        if outcome.current_version_id is not None
+                        else None
+                    ),
+                    "structural_attempt_run_id": str(
+                        outcome.structural_attempt.attempt_run_id
+                    ),
+                    "task_attempt_run_ids": [
+                        str(run_id) for run_id in outcome.task_attempt_run_ids
+                    ],
+                    "chain_stop_reason": (
+                        outcome.chain.stop_reason if outcome.chain is not None else None
+                    ),
+                    "final_validation": (
+                        final_validation.model_dump(mode="json")
+                        if final_validation is not None
+                        else None
+                    ),
+                    "resolved": {
+                        "campaign_id": str(resolved_campaign_id),
+                        "provider": selected_provider.id,
+                        "model": selected_model.id,
+                        "effort": selected_effort.value,
+                        "seed": DUNGEON_TIER_A_CANARY.seed,
+                    },
+                }
+            )
+            if not outcome.success:
+                raise typer.Exit(code=1)
+
+
 @dungeon_app.command("canary")
 def dungeon_canary(
     provider: Annotated[str, typer.Option("--provider")],
@@ -598,21 +732,17 @@ def dungeon_canary(
     ] = False,
     created_by: Annotated[str, typer.Option("--created-by")] = "dm",
 ) -> None:
-    """Run the frozen one-floor Tier A prompt and seed exactly once."""
+    """Run the frozen Tier A prompt through every staged authoring gate."""
     typer.echo(
         f"Canary {DUNGEON_TIER_A_CANARY.canary_id}; seed "
         f"{DUNGEON_TIER_A_CANARY.seed}. Stop on the first failure.",
         err=True,
     )
-    dungeon_prompt(
-        prompt=DUNGEON_TIER_A_CANARY.prompt,
+    _run_dungeon_staged_canary(
         campaign_id=campaign_id,
         provider=provider,
         model=model,
-        seed=DUNGEON_TIER_A_CANARY.seed,
-        title=None,
         effort=effort,
-        constraint=None,
         debug=debug,
         created_by=created_by,
     )

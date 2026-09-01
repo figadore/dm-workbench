@@ -20,6 +20,7 @@ from dm_assistant.modules.modeling import (
 from dm_assistant.modules.preparation import PreparationService
 from dm_assistant.modules.scope import TaskType, resolve_task_scope
 from dm_assistant.orchestration.dungeons import (
+    DUNGEON_TIER_A_CANARY,
     DungeonExplorationAffordanceApproval,
     DungeonExplorationContextSelection,
     DungeonExplorationPromptApplicationService,
@@ -30,6 +31,7 @@ from dm_assistant.orchestration.dungeons import (
     DungeonObjectiveContextSelection,
     DungeonObjectivePromptApplicationService,
     DungeonObjectivePromptService,
+    DungeonPromptApplicationService,
     DungeonPromptService,
     DungeonPuzzleClueApproval,
     DungeonPuzzleContextSelection,
@@ -49,6 +51,7 @@ from dm_assistant.orchestration.dungeons import (
     DungeonStagedTrapPolicy,
     DungeonStudioService,
     DungeonStudioSpecification,
+    DungeonTierACanaryApplicationService,
     DungeonTrapContextSelection,
     DungeonTrapPromptApplicationService,
     DungeonTrapPromptService,
@@ -62,7 +65,9 @@ from dm_assistant.orchestration.dungeons import (
     resolve_dungeon_prompt_profile,
     resolve_dungeon_puzzle_prompt_profile,
     resolve_dungeon_room_narrative_prompt_profile,
+    resolve_dungeon_tier_a_canary_profiles,
     resolve_dungeon_trap_prompt_profile,
+    validate_final_staged_dungeon,
 )
 from dm_assistant.orchestration.modeling import GatewayCompletion, GatewayToolSchema
 
@@ -144,6 +149,94 @@ def _proposal() -> dict[str, object]:
                     },
                 },
                 {"room_ref": "cradle", "objective": "Synthetic Star Seed"},
+            ],
+        },
+    }
+
+
+def _canary_proposal() -> dict[str, object]:
+    """One provider-free structural child for staged canary wiring coverage."""
+
+    return {
+        "proposal_version": "1",
+        "plan": {
+            "schema_version": "1.0.0",
+            "title": "Windglass Shrine",
+            "premise": "Recover the Windglass Seed from an abandoned mountain shrine.",
+            "themes": ["wind-carved stone", "colored mountain glass"],
+            "rooms": [
+                {
+                    "ref": "entry",
+                    "name": "Pilgrim Threshold",
+                    "role": "entrance",
+                    "purpose": "Establish the abandoned windswept shrine.",
+                },
+                {
+                    "ref": "gallery",
+                    "name": "Bell Gallery",
+                    "role": "transition",
+                    "purpose": "Carry the route toward the inner shrine.",
+                },
+                {
+                    "ref": "lens",
+                    "name": "Windglass Lens",
+                    "role": "puzzle",
+                    "purpose": "Align colored windglass before the inner sanctuary.",
+                },
+                {
+                    "ref": "vault",
+                    "name": "Seed Sanctuary",
+                    "role": "objective",
+                    "purpose": "Hold the named Windglass Seed objective.",
+                },
+                {
+                    "ref": "branch",
+                    "name": "Windswept Reliquary",
+                    "role": "optional",
+                    "purpose": "Offer an optional environmental crossing and bypass.",
+                    "encounter": "exploration",
+                },
+            ],
+            "critical_path": ["entry", "gallery", "lens", "vault"],
+            "branches": [
+                {
+                    "ref": "reliquary_branch",
+                    "from_room": "gallery",
+                    "rooms": ["branch"],
+                }
+            ],
+            "loops": [
+                {
+                    "ref": "reliquary_bypass",
+                    "from_room": "branch",
+                    "to_room": "vault",
+                    "secret": True,
+                }
+            ],
+            "gates": [
+                {
+                    "ref": "seed_gate",
+                    "between_rooms": ["gallery", "lens"],
+                    "kind": "locked",
+                    "dependency_kind": "key",
+                    "dependency_room": "branch",
+                    "dependency_name": "Windglass Reliquary Key",
+                }
+            ],
+            "room_contents": [
+                {
+                    "room_ref": "lens",
+                    "trap": {"name": "Falling Windglass", "challenge": "moderate"},
+                },
+                {
+                    "room_ref": "branch",
+                    "feature": {
+                        "kind": "other",
+                        "name": "Reliquary Wind Brake",
+                        "description": "A brass brake changes the force across the ledge.",
+                    },
+                },
+                {"room_ref": "vault", "objective": "Windglass Seed"},
             ],
         },
     }
@@ -314,6 +407,94 @@ def _narrative_output(
     }
 
 
+class _DynamicCanaryGateway:
+    """Faux provider that authors only from each exact task context."""
+
+    def __init__(self, *, reject_feature: bool = False) -> None:
+        self.reject_feature = reject_feature
+        self.messages: list[tuple[PromptMessage, ...]] = []
+        self.profiles: list[ResolvedModelRunProfile] = []
+        self.allowed_tools: list[tuple[str, ...]] = []
+        self.tool_schemas: list[tuple[GatewayToolSchema, ...]] = []
+
+    def complete(
+        self,
+        *,
+        profile: ResolvedModelRunProfile,
+        messages: tuple[PromptMessage, ...],
+        allowed_tools: tuple[str, ...],
+        tool_schemas: tuple[GatewayToolSchema, ...],
+    ) -> GatewayCompletion:
+        self.messages.append(messages)
+        self.profiles.append(profile)
+        self.allowed_tools.append(allowed_tools)
+        self.tool_schemas.append(tool_schemas)
+        tool_name = allowed_tools[0]
+        if tool_name == "submit_dungeon_plan":
+            arguments = _canary_proposal()
+        else:
+            document = json.loads(messages[0].content)
+            context = document["context"]
+            package_id = context["package_id"]
+            room_id = context["room"]["room_id"]
+            if tool_name == "submit_dungeon_puzzle":
+                arguments = _puzzle_output(
+                    package_id=package_id,
+                    room_id=room_id,
+                    clue_location_id=context["clue_locations"][0]["location_id"],
+                )
+            elif tool_name == "submit_dungeon_exploration":
+                arguments = _exploration_output(
+                    package_id=package_id,
+                    room_id=room_id,
+                    encounter_slot_id=context["room"]["encounter_slot_id"],
+                    affordance_id=context["affordances"][0]["affordance_id"],
+                )
+            elif tool_name == "submit_dungeon_feature_interaction":
+                arguments = _feature_output(
+                    package_id=package_id,
+                    room_id=room_id,
+                    feature_id=context["feature"]["feature_id"],
+                )
+            elif tool_name == "submit_dungeon_trap":
+                arguments = _trap_output(
+                    package_id=package_id,
+                    room_id=room_id,
+                    trap_id=context["trap"]["trap_id"],
+                )
+            elif tool_name == "submit_dungeon_objective":
+                arguments = _objective_output(
+                    package_id=package_id,
+                    room_id=room_id,
+                    objective_id=context["objective"]["objective_id"],
+                    mechanic_ids=tuple(
+                        item["mechanic_id"] for item in context["accepted_mechanics"]
+                    ),
+                )
+            else:
+                assert tool_name == "submit_dungeon_room_narrative"
+                arguments = _narrative_output(
+                    package_id=package_id,
+                    room_ids=tuple(item["room_id"] for item in context["rooms"]),
+                )
+        return GatewayCompletion(
+            tool_calls=(
+                ToolCall(
+                    tool_name=tool_name,
+                    call_id=f"dynamic-{len(self.allowed_tools)}",
+                    arguments=cast(dict[str, JsonValue], arguments),
+                ),
+            ),
+            input_tokens=200,
+            output_tokens=(
+                2_049
+                if self.reject_feature
+                and tool_name == "submit_dungeon_feature_interaction"
+                else 350
+            ),
+        )
+
+
 def _campaign(engine: Engine) -> uuid.UUID:
     campaign_id = uuid.uuid4()
     with transactional_session(build_session_factory(engine)) as session:
@@ -329,6 +510,43 @@ def _studio(
         LocalAssetStore(tmp_path / "staged-assets", tmp_path / "staged-scratch"),
     )
     return DungeonStudioService(preparation), preparation
+
+
+def _canary_application(
+    *,
+    studio: DungeonStudioService,
+    preparation: PreparationService,
+    gateway: _DynamicCanaryGateway,
+) -> DungeonTierACanaryApplicationService:
+    structural = DungeonPromptApplicationService(
+        preparation, DungeonPromptService(studio, gateway)
+    )
+    one_step = DungeonStagedEnrichmentCoordinator(
+        preparation,
+        puzzle=DungeonPuzzlePromptApplicationService(
+            preparation, DungeonPuzzlePromptService(studio, gateway)
+        ),
+        exploration=DungeonExplorationPromptApplicationService(
+            preparation, DungeonExplorationPromptService(studio, gateway)
+        ),
+        feature_interaction=DungeonFeatureInteractionPromptApplicationService(
+            preparation, DungeonFeatureInteractionPromptService(studio, gateway)
+        ),
+        trap=DungeonTrapPromptApplicationService(
+            preparation, DungeonTrapPromptService(studio, gateway)
+        ),
+        objective=DungeonObjectivePromptApplicationService(
+            preparation, DungeonObjectivePromptService(studio, gateway)
+        ),
+        room_narrative=DungeonRoomNarrativePromptApplicationService(
+            preparation, DungeonRoomNarrativePromptService(studio, gateway)
+        ),
+    )
+    return DungeonTierACanaryApplicationService(
+        preparation,
+        structural,
+        DungeonStagedEnrichmentChainCoordinator(one_step),
+    )
 
 
 def _structural_parent(
@@ -1303,6 +1521,176 @@ def test_resumed_feature_trap_objective_and_narrative_each_dispatch_one_exact_se
         preparation.get_artifact(campaign_id, artifact_id).current_version_id
         == final_version_id
     )
+
+
+def test_frozen_canary_resumes_structural_child_through_all_tasks_and_final_gate(
+    db_engine: Engine,
+    tmp_path: Path,
+) -> None:
+    campaign_id = _campaign(db_engine)
+    studio, preparation = _studio(db_engine, tmp_path)
+    gateway = _DynamicCanaryGateway()
+    application = _canary_application(
+        studio=studio, preparation=preparation, gateway=gateway
+    )
+    structural_profile = resolve_dungeon_prompt_profile(
+        provider_id="faux",
+        model_id="faux_deterministic_v1",
+        capabilities=("text", "tool_calls"),
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+    )
+    staged_profiles = resolve_dungeon_tier_a_canary_profiles(
+        provider_id="faux",
+        model_id="faux_deterministic_v1",
+        capabilities=("text", "tool_calls"),
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+        requested_effort=structural_profile.requested_effort,
+    )
+
+    outcome = application.execute(
+        PromptDungeonWorkflow(
+            campaign_id=campaign_id,
+            prompt=DUNGEON_TIER_A_CANARY.prompt,
+            seed=DUNGEON_TIER_A_CANARY.seed,
+            created_by="synthetic-dm",
+            scope=resolve_task_scope(
+                dm_principal_id="synthetic-dm",
+                campaign_owner_id="synthetic-dm",
+                task_type=TaskType.STANDALONE_DUNGEON,
+            ),
+        ),
+        structural_profile,
+        staged_profiles,
+        surface=DUNGEON_TIER_A_CANARY.canary_id,
+    )
+
+    assert outcome.success
+    assert outcome.public_code == "dungeon_tier_a_canary_completed"
+    assert outcome.chain is not None and outcome.chain.stop_reason == "complete"
+    assert len(outcome.chain.steps) == 6
+    assert len(outcome.task_attempt_run_ids) == 6
+    assert outcome.final_validation is not None and outcome.final_validation.valid
+    assert outcome.current_version_id is not None
+    final_version = preparation.get_version(campaign_id, outcome.current_version_id)
+    final_specification = DungeonStudioSpecification.model_validate_json(
+        json.dumps(final_version.specification)
+    )
+    assert validate_final_staged_dungeon(final_specification).valid
+    structural_result = outcome.structural_attempt.result
+    assert structural_result is not None
+    assert structural_result.artifact_id is not None
+    assert structural_result.artifact_version_id is not None
+    structural_specification = DungeonStudioSpecification.model_validate_json(
+        json.dumps(
+            preparation.get_version(
+                campaign_id, structural_result.artifact_version_id
+            ).specification
+        )
+    )
+    assert (
+        final_specification.package.model_dump_json()
+        == structural_specification.package.model_dump_json()
+    )
+    assert (
+        len(preparation.list_versions(campaign_id, structural_result.artifact_id)) == 7
+    )
+    artifact = preparation.get_artifact(campaign_id, structural_result.artifact_id)
+    assert artifact.current_version_id == outcome.current_version_id
+    assert artifact.lifecycle.value == "draft"
+    assert gateway.allowed_tools == [
+        ("submit_dungeon_plan",),
+        ("submit_dungeon_puzzle",),
+        ("submit_dungeon_exploration",),
+        ("submit_dungeon_feature_interaction",),
+        ("submit_dungeon_trap",),
+        ("submit_dungeon_objective",),
+        ("submit_dungeon_room_narrative",),
+    ]
+    assert len({profile.task_profile_id for profile in gateway.profiles}) == 7
+
+
+def test_frozen_canary_stops_on_first_rejected_task_with_body_free_attempt(
+    db_engine: Engine,
+    tmp_path: Path,
+) -> None:
+    campaign_id = _campaign(db_engine)
+    studio, preparation = _studio(db_engine, tmp_path)
+    gateway = _DynamicCanaryGateway(reject_feature=True)
+    application = _canary_application(
+        studio=studio, preparation=preparation, gateway=gateway
+    )
+    structural_profile = resolve_dungeon_prompt_profile(
+        provider_id="faux",
+        model_id="faux_deterministic_v1",
+        capabilities=("text", "tool_calls"),
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+    )
+
+    outcome = application.execute(
+        PromptDungeonWorkflow(
+            campaign_id=campaign_id,
+            prompt=DUNGEON_TIER_A_CANARY.prompt,
+            seed=DUNGEON_TIER_A_CANARY.seed,
+            created_by="synthetic-dm",
+            scope=resolve_task_scope(
+                dm_principal_id="synthetic-dm",
+                campaign_owner_id="synthetic-dm",
+                task_type=TaskType.STANDALONE_DUNGEON,
+            ),
+        ),
+        structural_profile,
+        resolve_dungeon_tier_a_canary_profiles(
+            provider_id="faux",
+            model_id="faux_deterministic_v1",
+            capabilities=("text", "tool_calls"),
+            context_window_tokens=16_384,
+            output_token_limit=4_096,
+            requested_effort=structural_profile.requested_effort,
+        ),
+        surface=DUNGEON_TIER_A_CANARY.canary_id,
+    )
+
+    assert not outcome.success
+    assert outcome.public_code == "dungeon_tier_a_canary_task_rejected"
+    assert outcome.chain is not None
+    assert outcome.chain.stop_reason == "task_rejected"
+    assert len(outcome.chain.steps) == 3
+    assert outcome.final_validation is None
+    assert gateway.allowed_tools == [
+        ("submit_dungeon_plan",),
+        ("submit_dungeon_puzzle",),
+        ("submit_dungeon_exploration",),
+        ("submit_dungeon_feature_interaction",),
+    ]
+    assert outcome.current_version_id is not None
+    structural_result = outcome.structural_attempt.result
+    assert structural_result is not None and structural_result.artifact_id is not None
+    artifact = preparation.get_artifact(campaign_id, structural_result.artifact_id)
+    assert artifact.current_version_id == outcome.current_version_id
+    assert artifact.lifecycle.value == "draft"
+    assert (
+        len(preparation.list_versions(campaign_id, structural_result.artifact_id)) == 3
+    )
+    failed_attempt = outcome.chain.steps[-1].attempt
+    assert failed_attempt is not None
+    report = preparation.get_generation_run(
+        campaign_id, failed_attempt.attempt_run_id
+    ).validation_report
+    assert report == {
+        "stage": "model_submission",
+        "code": "dungeon_feature_interaction_prompt_token_budget_exhausted",
+        "usage": {
+            "limit_kind": "per_request_output",
+            "token_limit": 2048,
+            "input_tokens": 200,
+            "output_tokens": 2049,
+        },
+    }
+    assert "observable_setup" not in json.dumps(report)
+    assert "Reliquary Wind Brake" not in json.dumps(report)
 
 
 def test_repeated_coordinator_stops_after_third_task_rejection(

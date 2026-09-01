@@ -362,7 +362,6 @@ def test_faux_puzzle_task_has_independent_budget_and_persists_exact_guide_versio
     assert not child_spec.preparation_readiness.ready
     assert {issue.kind for issue in child_spec.dm_guide.content_issues} == {
         "room",
-        "gate_dependency",
         "feature",
         "objective",
     }

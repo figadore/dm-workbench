@@ -7,12 +7,13 @@
 ## Current State
 
 - **Updated:** 2026-08-31
-- **Branch/HEAD:** `fast-track-prompt-to-dungeon` at `814679d`, aligned with
+- **Branch/HEAD:** `fast-track-prompt-to-dungeon` at `ade318c`, one commit ahead of
   `origin/fast-track-prompt-to-dungeon`, plus the uncommitted slice below.
 - **Current task:** **P7-14f — Staged Tier A authoring and anti-overfitting evaluation.**
-- **Task state:** the hard Codex output-limit transport seam is implemented and the old
-  advisory publication bypass is removed. A complete staged canary run, actual human
-  ratings, and live Tier A evidence remain pending.
+- **Task state:** the frozen canary is wired through the complete staged application path
+  provider-free. Root/package tests pass; the new PostgreSQL-backed faux success/rejection
+  tests are collected but skipped because no disposable integration database is configured.
+  No live provider call or human quality rating has run.
 - **Schema head:** `0008_workbench_defaults`; no migration changed or is pending.
 - **Retention gate:** **not crossed.** Active V1 contracts evolve in place; there is no
   retained real-user artifact, external consumer, non-disposable deployment, or promised
@@ -20,94 +21,100 @@
 
 ## Implemented This Slice
 
-Pinned `@earendil-works/pi-ai` `0.84.1` accepts the gateway's generic `maxTokens` option but
-omits `max_output_tokens` from its Codex Responses body. The private gateway now overlays the
-exact Workbench-requested `max_output_tokens` value through pi-ai's `onPayload` boundary
-after payload construction and before either SSE or WebSocket dispatch. The transform
-overrides any stale adapter value and fails closed if the payload is not an object.
+`dm dungeon canary` no longer stops at structural publication. A shared canary application
+service now:
 
-A provider-free gateway test uses a synthetic non-expiring OAuth JWT, forced SSE, and an
-injected fetch. It captures and zstd-decompresses the actual outbound request and proves the
-requested value is serialized. The body exists only in test memory and is not logged or
-stored. Post-response measured output and cumulative checks remain defense in depth.
+1. enforces the exact frozen prompt, seed, and canary surface;
+2. publishes one accepted structural draft through the existing application seam;
+3. derives exact trusted puzzle, exploration, feature, trap, objective, and bounded
+   narrative policies from that package;
+4. resolves all six task profiles independently;
+5. resumes the current child through the existing bounded one-step/chain coordinator; and
+6. invokes the read-only final continuity/readiness gate only after chain completion.
 
-The pre-fix advisory-cap path was deleted in place under the pre-retention policy:
+A failed structural call performs no enrichment. A rejected enrichment stops the chain,
+keeps the last accepted child current, and prevents all later provider seams. The CLI emits
+only artifact/run IDs, stop/public codes, resolved selection, and body-free final-validation
+evidence. It never approves preparation or calls a canonical service; every artifact remains
+`draft`.
 
-- the CLI no longer accepts `--acknowledge-advisory-output-cap` for prompt or canary runs;
-- canary profiles no longer carry advisory policy overrides or durable bypass reports; and
-- structured submissions always reject measured output above the pinned per-request limit,
-  in addition to enforcing the cumulative limit.
+The Workbench runtime now composes all six existing task-specific application services over
+the configured private gateway and exposes only the complete canary application to the CLI.
+Each accepted task still creates its own atomic DM-only child with unchanged package/map
+bytes and task-specific lineage/budget enforcement.
 
-The frozen prompt, seed, explicit provider/model selection, stop-on-failure message, and
-body-free canary attempt surface remain unchanged.
+The provider-free faux application coverage uses an original five-room Windglass Shrine
+plan matching the frozen Tier A structure: optional branch, secret loop, locked gate/key,
+puzzle, exploration slot with local feature, moderate trap, and named objective. It covers:
+
+- six accepted enrichments followed by a valid final deterministic gate; and
+- output-cap rejection on the third enrichment, no later dispatch, last accepted child
+  current, draft lifecycle, and a body-free durable usage report.
+
+Because structural `guide_content` was removed, a named structural key/clue dependency no
+longer requires a prose-heavy gate entry merely to enter staged authoring. Deterministic code
+projects only the accepted dependency name and exact room as an ordinary-presence discovery
+statement. It does not invent concealment, acquisition checks, consequences, or richer gate
+interaction content.
 
 ## Active Boundaries and Known Issues
 
-- `dm dungeon canary` still performs the structural prompt workflow only. It does not yet
-  drive the accepted structural child through all independently bounded staged enrichment
-  tasks and the final continuity/readiness gate.
-- No live model generation was run, and there are no generated-artifact ratings or aggregate
-  quality conclusions. Tier B/C and output/print work remain deferred.
-- During the first failing transport-test setup, a synthetic OAuth credential with only a
-  60-second future expiry fell inside pi-ai's refresh skew, causing one invalid synthetic
-  refresh request to reach OpenAI's auth endpoint. It contained no real credential and made
-  no model-generation request. The test now uses a non-expiring synthetic credential plus
-  injected provider fetch; subsequent runs are provider-free.
+- The new complete faux application tests require `DM_TEST_DATABASE_URL` naming a disposable
+  `*_test` PostgreSQL database. They were skipped in this environment and therefore still
+  need one database-backed execution before a live canary.
+- No live model generation was run. There are no generated-artifact ratings or aggregate
+  quality conclusions; actual blinded human evidence remains pending.
 - There is no bounded cohesion-reviewer model call. Current strict report/disposition
   evidence remains provider-free/human-constructible and non-authoritative.
 - Package and root pytest suites must run separately because duplicate test module basenames
   cause import-file-mismatch when collected in one process.
 - No canon write, preparation approval, migration, queue, redaction system, second
-  persistence store, or model-authored mechanics were added.
+  persistence store, or model-authored mechanics was added.
+- Tier B/C and output/print work remain deferred.
 
 ## Current Files and Verification
 
-Uncommitted gateway/runtime/tests:
+Uncommitted production code:
 
-- `model-gateway/{src/runtime.ts,tests/gateway.test.ts}`
 - `src/dm_assistant/cli/main.py`
-- `src/dm_assistant/orchestration/{dungeons,modeling}/` targeted output-cap/canary files
-- `tests/{unit,integration}/` targeted output-cap/canary tests
+- `src/dm_assistant/runtime.py`
+- `src/dm_assistant/orchestration/dungeons/{__init__,canary_application,service}.py`
+
+Uncommitted tests:
+
+- `tests/unit/{test_cli,test_dungeon_canary,test_dungeon_puzzle_enrichment_contract}.py`
+- `tests/integration/{test_dungeon_puzzle_prompt,test_dungeon_staged_enrichment_coordinator,test_dungeon_studio_cli}.py`
 
 Uncommitted documentation:
 
-- `README.md`
 - `dm-assistant-{implementation-plan,technical-architecture}.md`
 - `dungeon-generation-recovery-plan.md`
-- `PROJECT_HISTORY.md`
 - `PROJECT_STATUS.md`
 
 Recorded for this slice:
 
-- `npm --prefix model-gateway run check` -> **passed**.
-- `npm --prefix model-gateway test` -> **9 passed**.
-- `npm --prefix model-gateway run build` -> **passed**.
-- `uv run pytest -q tests/unit tests/evals` -> **228 passed**.
+- `uv run pytest -q tests/unit tests/evals` -> **229 passed**.
 - `uv run pytest -q packages/dungeon-engine/tests` -> **139 passed**.
-- `uv run pytest -q tests/integration/test_dungeon_studio_cli.py` -> **2 skipped**
-  because the disposable integration database was unavailable.
+- Targeted integration collection -> **12 skipped** because `DM_TEST_DATABASE_URL` is absent.
+- Targeted strict mypy over changed production and typed tests -> **passed**.
 - Ruff lint/format over changed Python -> **passed**.
-- `uv run dm dungeon canary --help` check -> **retired advisory option absent**.
-- Strict mypy over changed production modules and the canary test -> **passed**. A broader
-  changed-test invocation still reports 40 existing typing errors in `test_cli.py` and
-  `test_prompted_dungeon_workflow.py`; runtime tests for those files pass.
-- `git diff --check` -> **passed**.
+- Provider-free compile check for the exact five-room faux canary plan -> **accepted**.
+- `git diff --check` -> **passed** after the final handoff update.
 
-Suggested commit subject: `P7-14f enforce Codex output caps before dispatch`
+Suggested commit subject: `P7-14f wire frozen canary through staged enrichment`
 
 ## Single Next Recommended Task
 
-**Wire the frozen canary to the complete staged enrichment path provider-free first.**
+**Execute the complete faux canary gates against disposable PostgreSQL, then fix only any
+wiring defects they expose.**
 
-**First concrete action:** add a failing faux CLI/application test proving one frozen canary
-structural child is resumed through the existing bounded one-step/chain coordinator with
-independently resolved puzzle, exploration, feature, trap, objective, and narrative profiles,
-then passes the final continuity/readiness gate. It must stop on the first rejected task,
-leave the last accepted child current, never approve preparation or write canon, and retain
-only body-free attempt diagnostics. Do not make a live provider call in that wiring slice.
+**First concrete action:** set `DM_TEST_DATABASE_URL` to an empty `*_test` database and run
+`uv run pytest -q tests/integration/test_dungeon_staged_enrichment_coordinator.py tests/integration/test_dungeon_studio_cli.py`. Confirm the complete six-task/final-gate case and
+the third-task rejection case pass before making any live provider call.
 
-Do **not** start Tier B/C, a migration, queue, model-authored mechanics, automatic preparation
-approval, canon writes, or output/print work.
+After that gate is green, the next separate slice may run the frozen staged live canary once
+with explicit provider/model selection and stop on its first failure. Do **not** start Tier
+B/C, a migration, queue, automatic approval, canon writes, or output/print work.
 
 ## Authoritative References
 

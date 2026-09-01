@@ -4368,9 +4368,6 @@ def validate_dungeon_guide_content(
         ]
     ] = []
     required_targets.extend(
-        ("gate_dependency", gate.ref, gate.dependency_room) for gate in plan.gates
-    )
-    required_targets.extend(
         ("encounter", room.ref, room.ref)
         for room in plan.rooms
         if room.encounter is not None
@@ -4681,7 +4678,12 @@ def build_dungeon_dm_guide(
                 room_id=room_id,
                 room_map_reference=reference,
                 discovery=(
-                    gate_content.discovery if gate_content is not None else None
+                    gate_content.discovery
+                    if gate_content is not None
+                    else (
+                        f"{gate_intent.dependency_name} is present in "
+                        f"{plan_rooms_by_ref[gate_intent.dependency_room].name}."
+                    )
                 ),
                 content=(
                     _runnable_content(gate_content)

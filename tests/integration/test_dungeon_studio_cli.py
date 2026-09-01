@@ -382,20 +382,14 @@ def test_cli_prompt_uses_private_gateway_and_persists_package(
             "synthetic-codex",
         ],
     )
-    assert canary.exit_code == 0, canary.output
+    assert canary.exit_code == 1, canary.output
     canary_result = _output_document(canary.output)
-    assert canary_result["success"] is True
+    assert canary_result["success"] is False
+    assert canary_result["public_code"] == "dungeon_prompt_token_budget_exhausted"
+    assert canary_result["artifact_id"] is None
+    assert canary_result["artifact_version_id"] is None
+    assert canary_result["task_attempt_run_ids"] == []
     assert canary_result["resolved"]["seed"] == 714_000_001
-    canary_version = preparation.get_version(
-        uuid.UUID(campaign_id),
-        uuid.UUID(str(canary_result["artifact_version_id"])),
-    )
-    canary_specification = DungeonStudioSpecification.model_validate_json(
-        json.dumps(canary_version.specification)
-    )
-    assert canary_specification.model_lineage
-    canary_profile = canary_specification.model_lineage[0].model_run.resolved_profile
-    assert canary_profile.override_notes == {"output_token_limit": 4096}
     with db_engine.connect() as connection:
         canary_attempt = connection.execute(
             text(

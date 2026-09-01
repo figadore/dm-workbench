@@ -464,10 +464,12 @@ def test_accepted_puzzle_projects_into_exact_guide_without_mutating_package() ->
     )
     assert {issue.kind for issue in guide.content_issues} == {
         "room",
-        "gate_dependency",
         "feature",
         "objective",
     }
+    assert guide.dependencies[0].discovery == (
+        "Procession Relief is present in Weathered Nave."
+    )
     readiness = build_dungeon_preparation_readiness(guide)
     assert readiness is not None and not readiness.ready
     assert {item.code for item in readiness.diagnostics} == {

@@ -21,9 +21,24 @@ from dm_assistant.modules.modeling import ModelTaskSelectionStore
 from dm_assistant.modules.preparation import PreparationService
 from dm_assistant.observability import configure_logging
 from dm_assistant.orchestration.dungeons import (
+    DungeonExplorationPromptApplicationService,
+    DungeonExplorationPromptService,
+    DungeonFeatureInteractionPromptApplicationService,
+    DungeonFeatureInteractionPromptService,
+    DungeonObjectivePromptApplicationService,
+    DungeonObjectivePromptService,
     DungeonPromptApplicationService,
     DungeonPromptService,
+    DungeonPuzzlePromptApplicationService,
+    DungeonPuzzlePromptService,
+    DungeonRoomNarrativePromptApplicationService,
+    DungeonRoomNarrativePromptService,
+    DungeonStagedEnrichmentChainCoordinator,
+    DungeonStagedEnrichmentCoordinator,
     DungeonStudioService,
+    DungeonTierACanaryApplicationService,
+    DungeonTrapPromptApplicationService,
+    DungeonTrapPromptService,
 )
 
 
@@ -37,6 +52,7 @@ class WorkbenchRuntime:
     model_gateway: PiGatewayClient | None
     dungeon_prompts: DungeonPromptService | None
     dungeon_prompt_application: DungeonPromptApplicationService | None
+    dungeon_canary_application: DungeonTierACanaryApplicationService | None
     model_selections: ModelTaskSelectionStore
     library_catalog: LibraryDocumentCatalog
     library_ingestion: LibraryIngestionService
@@ -69,6 +85,40 @@ def workbench_runtime(settings: Settings | None = None) -> Iterator[WorkbenchRun
     dungeon_prompts = (
         None if model_gateway is None else DungeonPromptService(dungeons, model_gateway)
     )
+    dungeon_prompt_application = (
+        None
+        if dungeon_prompts is None
+        else DungeonPromptApplicationService(preparation, dungeon_prompts)
+    )
+    dungeon_canary_application = None
+    if model_gateway is not None and dungeon_prompt_application is not None:
+        one_step = DungeonStagedEnrichmentCoordinator(
+            preparation,
+            puzzle=DungeonPuzzlePromptApplicationService(
+                preparation, DungeonPuzzlePromptService(dungeons, model_gateway)
+            ),
+            exploration=DungeonExplorationPromptApplicationService(
+                preparation, DungeonExplorationPromptService(dungeons, model_gateway)
+            ),
+            feature_interaction=DungeonFeatureInteractionPromptApplicationService(
+                preparation,
+                DungeonFeatureInteractionPromptService(dungeons, model_gateway),
+            ),
+            trap=DungeonTrapPromptApplicationService(
+                preparation, DungeonTrapPromptService(dungeons, model_gateway)
+            ),
+            objective=DungeonObjectivePromptApplicationService(
+                preparation, DungeonObjectivePromptService(dungeons, model_gateway)
+            ),
+            room_narrative=DungeonRoomNarrativePromptApplicationService(
+                preparation, DungeonRoomNarrativePromptService(dungeons, model_gateway)
+            ),
+        )
+        dungeon_canary_application = DungeonTierACanaryApplicationService(
+            preparation,
+            dungeon_prompt_application,
+            DungeonStagedEnrichmentChainCoordinator(one_step),
+        )
     try:
         yield WorkbenchRuntime(
             settings=resolved,
@@ -78,10 +128,8 @@ def workbench_runtime(settings: Settings | None = None) -> Iterator[WorkbenchRun
             dungeons=dungeons,
             model_gateway=model_gateway,
             dungeon_prompts=dungeon_prompts,
-            dungeon_prompt_application=(
-                None if dungeon_prompts is None
-                else DungeonPromptApplicationService(preparation, dungeon_prompts)
-            ),
+            dungeon_prompt_application=dungeon_prompt_application,
+            dungeon_canary_application=dungeon_canary_application,
             model_selections=ModelTaskSelectionStore(engine),
             library_catalog=LibraryDocumentCatalog(engine),
             library_ingestion=library_ingestion,

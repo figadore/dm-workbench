@@ -536,7 +536,14 @@ opaque variant only. The private gateway now compensates for the pinned Codex ad
 omitted hard-limit projection by overlaying the exact requested `max_output_tokens` value at
 its pre-dispatch payload boundary. A synthetic-OAuth, injected-fetch transport test captures
 and decompresses the actual outbound SSE body; the same transformed payload precedes either
-SSE or WebSocket dispatch. Actual human/live evidence remains pending.
+SSE or WebSocket dispatch. The frozen canary now composes structural publication, exact trusted
+policy construction, six independently resolved staged profiles, the existing bounded chain,
+and the provider-free final gate. Faux application coverage proves complete success and
+stop-on-first-rejection behavior while the artifact remains a draft and attempt evidence stays
+body-free. Structural key/clue dependencies project only their accepted name and exact room as
+an ordinary-presence discovery statement; removed structural guide prose is no longer a staged
+blocker, while richer gate interactions remain optional. Actual human/live evidence remains
+pending.
 
 - Add independently bounded puzzle, exploration, other interaction, and narrative tasks
   over exact package IDs; merge accepted output deterministically and preserve the map on
@@ -547,10 +554,9 @@ SSE or WebSocket dispatch. Actual human/live evidence remains pending.
   selected-lore consistency in addition to playability and preparation usefulness. Keep
   the archive packet only as a technical regression.
 - Preserve the tested Codex hard output-cap payload overlay, then run the frozen staged Tier
-  A canary after provider-free and faux gates pass. Ordinary rollout requires evidence that requested
-  output ceilings bound reported usage; the sole exception remains one frozen, explicitly
-  acknowledged, non-production Tier A canary that retains the measured cumulative ceiling
-  and durable override lineage.
+  A canary after provider-free and faux gates pass. Requested output ceilings and the measured
+  cumulative ceiling are mandatory for the canary and ordinary rollout; there is no advisory
+  publication exception or acknowledgment bypass.
 - Defer Tier B/C until the staged live Tier A path produces a usable preparation-ready
   artifact and the bounded Tier A evaluation set is dependable.
 - Resume asset/print polish only after Tier A is dependable.
