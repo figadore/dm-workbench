@@ -1810,9 +1810,11 @@ bounded task seam, and replans only the accepted current child. Rejection preser
 current parent and cannot advance to a second staged task. Resumed exploration coordination
 requires the exact planned encounter-slot ID in addition to the room-local authoring
 selection; one accepted exploration child replans to the next feature target, while a
-mismatched slot fails before any provider call or version write. Broader resumed feature/
-trap/objective/narrative coverage, automatic repetition/full-chain dispatch, and live calls
-remain later slices.
+mismatched slot fails before any provider call or version write. Resumed one-step coverage
+now exercises feature, trap, objective, and bounded room-narrative policies through their
+existing task-specific seams: each accepted child advances only to the next deterministic
+target, while a mismatched exact target fails before provider contact or version creation.
+Automatic repetition/full-chain dispatch and live calls remain later slices.
 
 The first explicit creative-continuity slice is now provider-free. Trusted Workbench code
 derives one bounded dungeon-only self-hashed projection from the resolved
@@ -1852,8 +1854,8 @@ result hash and seven body-free check summaries alongside the non-authoritative 
 explicit disposition. Provider-independent manually authored Studio artifacts retain their
 legacy readiness-based approval path. Findings trigger explicit DM disposition or targeted
 regeneration of one exact enrichment seam—never a broad silent rewrite, canonical write, or
-model approval. Broader one-step coordinator coverage remains required before chain
-repetition or a live Tier A run.
+model approval. The required one-step coordinator coverage now spans every staged task;
+chain repetition remains a separate provider-free boundary before a live Tier A run.
 
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
   Its model-visible proposal contains room identity/purpose, critical path, bounded

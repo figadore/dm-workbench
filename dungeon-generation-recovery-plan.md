@@ -485,8 +485,10 @@ coordinator now requires an exact task-specific trusted policy, invokes only the
 existing bounded seam, and replans an accepted current child; rejection preserves the
 parent and cannot dispatch the next task. Resumed exploration policy includes the exact
 planned encounter-slot ID: acceptance publishes one exploration child and replans the next
-feature, while a slot mismatch makes no provider call and no version. Broader resumed
-feature/trap/objective/narrative coverage and chain repetition remain pending. No live
+feature, while a slot mismatch makes no provider call and no version. Resumed feature,
+trap, objective, and bounded room-narrative coverage proves the same one-step exact-policy
+boundary through every existing seam: one accepted child replans once, and each mismatched
+target makes no provider call and no version. Chain repetition remains pending. No live
 provider was contacted, and no redaction/logging subsystem or new persistence store was
 added.
 
@@ -516,8 +518,9 @@ finding; targeted-regeneration decisions block lifecycle transition. The packet 
 the deterministic result hash/check summary plus the non-authoritative report and explicit
 disposition. A separately budgeted reviewer may diagnose thematic reinforcement, history/
 environment causality, mechanic/objective unity, progression, motif variation, and selected-
-lore consistency, but cannot edit, approve, clear blockers, or write canon. Broader resumed
-one-step coordinator coverage remains required before chain repetition or live Tier A.
+lore consistency, but cannot edit, approve, clear blockers, or write canon. One-step
+coordinator coverage now spans all staged task kinds; chain repetition remains a separate
+provider-free boundary before live Tier A.
 Multi-case blinded human evidence remains the quality authority; task contexts stay narrow
 rather than becoming a universal optional-field context or unrestricted corpus/guide dump.
 

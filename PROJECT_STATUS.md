@@ -7,15 +7,11 @@
 ## Current State
 
 - **Updated:** 2026-08-31
-- **Branch/HEAD:** `fast-track-prompt-to-dungeon` at `2d0e78a`, three commits ahead of
+- **Branch/HEAD:** `fast-track-prompt-to-dungeon` at `223211d`, four commits ahead of
   `origin/fast-track-prompt-to-dungeon`, plus the uncommitted slice below.
-- **Working tree:** **uncommitted P7-14f prompted approval and staged review-packet final-
-  gate enforcement**. No migration, provider call, credential, canonical campaign path,
-  chain dispatcher, or pure-package behavior is partially edited.
 - **Current task:** **P7-14f — Staged Tier A authoring and anti-overfitting evaluation.**
-- **Task state:** the final deterministic gate now blocks prompted preparation approval and
-  staged review packets; all six cohesion dimensions require explicit hash-bound DM
-  disposition. Broader resumed one-step coordinator coverage remains before repetition.
+- **Task state:** resumed one-step coordinator coverage now spans every staged enrichment
+  kind. Automatic repetition/full-chain dispatch remains deliberately unimplemented.
 - **Schema head:** `0008_workbench_defaults`; no migration changed or is pending.
 - **Retention gate:** **not crossed.** Active V1 contracts evolve in place; there is no
   retained real-user artifact, external consumer, non-disposable deployment, or promised
@@ -23,84 +19,51 @@
 
 ## Implemented This Slice
 
-Prompted approval now:
+The faux-provider coordinator scenario now resumes from an accepted puzzle child and covers
+exploration, feature interaction, trap, objective, and one bounded room-narrative set through
+the existing task-specific application seams.
 
-- distinguishes prompted/staged specifications from provider-independent manually authored
-  Studio artifacts;
-- retains the existing preparation-readiness check for every artifact;
-- reruns `validate_final_staged_dungeon()` before any prompted lifecycle transition;
-- fails closed when continuity, sources, dependencies, required content, lineage, typed
-  cross-task references, or player secrecy fail;
-- requires a strict cohesion report plus DM-authored disposition bound to the exact
-  specification, deterministic-result, continuity, and report hashes;
-- requires disposition of all six dimensions and every exact finding; and
-- blocks `targeted_regeneration` decisions while preserving the report's inability to edit,
-  clear blockers, approve preparation, or write canon.
+For feature, trap, objective, and room narrative it proves that:
 
-The JSON approval API can carry the strict report/disposition models. Existing CLI/browser
-approval remains sufficient for provider-independent artifacts; a prompted artifact cannot
-use those evidence-free adapters to bypass the gate.
+- the trusted discriminated policy must match the planner's exact room and target IDs;
+- mismatched IDs/room sets fail before provider contact and create no artifact version;
+- a matching policy invokes only the selected task tool;
+- one accepted child becomes current and is replanned exactly once;
+- the expected deterministic next kind is selected without automatic dispatch; and
+- completing narratives leaves the plan complete while package bytes remain unchanged.
 
-The staged provider-free review-packet writer now:
-
-- reruns the same final gate and refuses an invalid staged specification;
-- validates the exact report/disposition binding without performing lifecycle or canonical
-  operations;
-- emits exact DM/player maps, guide, rubric, report, disposition JSON, and a readable DM
-  disposition record; and
-- persists only the deterministic result hash and seven body-free check summaries, never
-  final-gate diagnostics or provider bodies.
-
-The existing fixed synthetic archive packet remains a renderer/secrecy regression and the
-provider-independent approval workflow retains its readiness-based path.
-
-## Tests Added/Extended
-
-Provider-free tests prove:
-
-- a fully enriched prompted artifact with stale source lineage fails before the preparation
-  transition even when supplied with a previously valid cohesion report/disposition;
-- a valid prompted artifact cannot transition without all six DM dispositions;
-- exact valid evidence reaches the lifecycle boundary;
-- a report/disposition cannot clear a failed deterministic gate;
-- staged review output contains all seven check families but no diagnostics or guide body in
-  its deterministic summary; and
-- the existing provider-independent workflow test still exercises readiness-based approval
-  unchanged (integration is locally skipped without its database fixture).
+The synthetic coordinator proposal now includes one trap so the resumed scenario covers the
+full puzzle/exploration/feature/trap/objective/narrative order. No coordinator production
+branch changed; this slice supplies the missing end-to-end evidence for branches already
+present behind the discriminated policy boundary.
 
 ## Active Boundaries and Known Issues
 
-- Broader resumed feature/trap/objective/narrative coordinator coverage, automatic chain
-  repetition, multi-case quality comparison, staged live result, Tier B/C, and resumed
-  output/print work remain pending.
-- There is no bounded cohesion-reviewer model call yet. Current strict report and disposition
-  evidence is provider-free/human-constructible and non-authoritative.
-- The browser/CLI do not yet collect prompted report/disposition documents; this fails closed
-  rather than permitting evidence-free prompted approval. The authenticated JSON API accepts
-  the strict evidence.
+- There is still no automatic chain repetition/full-chain dispatcher, multi-case quality
+  comparison, staged live result, Tier B/C work, or resumed output/print work.
+- There is no bounded cohesion-reviewer model call. Current strict report/disposition evidence
+  is provider-free/human-constructible and non-authoritative.
+- The browser/CLI do not collect prompted cohesion report/disposition documents; this fails
+  closed. The authenticated JSON API accepts the strict evidence.
 - Live provider use remains paused. Pinned `@earendil-works/pi-ai` Codex transport does not
   serialize the requested hard output limit; post-response checks protect publication but
-  cannot prevent provider usage. The frozen-canary exception remains operator risk, not
-  ordinary rollout permission.
+  cannot prevent provider usage.
 - Package and root pytest suites must run separately because duplicate test module basenames
-  cause an import-file-mismatch when collected in one process.
+  cause import-file-mismatch when collected in one process.
 - Disposable-PostgreSQL integration is skipped locally because `DM_TEST_DATABASE_URL` is
-  unset and Docker is unavailable.
+  unset and Docker/PostgreSQL are unavailable. The expanded coordinator test therefore
+  collected but did not execute against PostgreSQL in this environment.
 - No provider was contacted. No credential, canon write, migration, queue, redaction system,
-  second persistence store, or model-authored mechanics are present.
+  second persistence store, or model-authored mechanics were added.
 
 ## Current Files and Verification
 
-Uncommitted production/tests:
+Uncommitted test:
 
-- `src/dm_assistant/orchestration/dungeons/{final_validation,review,service}.py`
-- `src/dm_assistant/orchestration/dungeons/__init__.py`
-- `src/dm_assistant/api/dungeons.py`
-- `tests/unit/test_dungeon_staged_enrichment_plan.py`
+- `tests/integration/test_dungeon_staged_enrichment_coordinator.py`
 
 Uncommitted documentation:
 
-- `README.md`
 - `dm-assistant-{implementation-plan,technical-architecture}.md`
 - `dungeon-generation-recovery-plan.md`
 - `PROJECT_HISTORY.md`
@@ -110,27 +73,30 @@ Recorded for this slice:
 
 - `uv run pytest -q tests/unit tests/evals` -> **221 passed**.
 - `uv run pytest -q packages/dungeon-engine/tests` -> **139 passed**.
-- focused staged/review-packet tests -> **16 passed**.
-- focused PostgreSQL workflow -> **2 skipped** (database fixture unavailable).
-- strict mypy over every changed production Python file and focused test -> **passed**.
-- Ruff lint/format over every changed Python file -> **passed**.
-- `git diff --check` -> **passed** before documentation refresh.
+- `uv run pytest -q tests/integration/test_dungeon_staged_enrichment_coordinator.py` ->
+  **5 skipped** (database fixture unavailable).
+- strict mypy with `MYPYPATH=src:packages/dungeon-engine/src` over the changed test ->
+  **passed**.
+- Ruff lint/format over the changed test -> **passed**.
+- direct Pydantic validation of the new feature/trap/objective/narrative faux outputs ->
+  **passed**.
+- `git diff --check` -> **passed** before final documentation refresh.
 
-Suggested commit subject: `P7-14f enforce final gate at prompted approval`
+Suggested commit subject: `P7-14f cover every resumed staged coordinator seam`
 
 ## Single Next Recommended Task
 
-**Add provider-free resumed one-step coordinator coverage for feature, trap, objective, and
-room-narrative targets before any automatic repetition/full-chain dispatcher.**
+**Add a bounded provider-free repeated/full-chain coordinator over the proven one-step
+boundary.**
 
-**First concrete action:** add a failing coordinator test for the exact next feature target
-proving a matching trusted feature policy invokes only that one existing seam and replans the
-accepted child, while a mismatched feature ID makes no provider call and writes no version.
-Then repeat that established discriminated-policy pattern for trap, objective, and bounded
-room narrative without adding a loop.
+**First concrete action:** add a failing test that supplies trusted exact policies for the
+remaining deterministic plan, accepts two successive fake task children, then rejects the
+third and proves repetition stops immediately with that parent current, no fourth provider
+call/version, and no approval or canonical operation. Keep an explicit maximum task bound
+and preserve the existing one-step coordinator as the only dispatch primitive.
 
-Do **not** add chain repetition, a live/holistic provider call, Tier B/C, a migration, queue,
-model-authored mechanics, automatic preparation approval, or canon writes.
+Do **not** start a live/holistic provider call, Tier B/C, a migration, queue, model-authored
+mechanics, automatic preparation approval, canon writes, or output/print work.
 
 ## Authoritative References
 

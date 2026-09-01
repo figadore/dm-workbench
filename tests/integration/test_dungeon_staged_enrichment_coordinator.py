@@ -24,22 +24,42 @@ from dm_assistant.orchestration.dungeons import (
     DungeonExplorationContextSelection,
     DungeonExplorationPromptApplicationService,
     DungeonExplorationPromptService,
+    DungeonFeatureInteractionContextSelection,
+    DungeonFeatureInteractionPromptApplicationService,
+    DungeonFeatureInteractionPromptService,
+    DungeonObjectiveContextSelection,
+    DungeonObjectivePromptApplicationService,
+    DungeonObjectivePromptService,
     DungeonPromptService,
     DungeonPuzzleClueApproval,
     DungeonPuzzleContextSelection,
     DungeonPuzzlePromptApplicationService,
     DungeonPuzzlePromptService,
+    DungeonRoomNarrativeContextSelection,
+    DungeonRoomNarrativePromptApplicationService,
+    DungeonRoomNarrativePromptService,
     DungeonStagedEnrichmentCoordinator,
     DungeonStagedExplorationPolicy,
+    DungeonStagedFeatureInteractionPolicy,
+    DungeonStagedObjectivePolicy,
     DungeonStagedPuzzlePolicy,
+    DungeonStagedRoomNarrativePolicy,
+    DungeonStagedTrapPolicy,
     DungeonStudioService,
     DungeonStudioSpecification,
+    DungeonTrapContextSelection,
+    DungeonTrapPromptApplicationService,
+    DungeonTrapPromptService,
     DungeonWorkflowResult,
     PromptDungeonStagedEnrichmentWorkflow,
     PromptDungeonWorkflow,
     resolve_dungeon_exploration_prompt_profile,
+    resolve_dungeon_feature_interaction_prompt_profile,
+    resolve_dungeon_objective_prompt_profile,
     resolve_dungeon_prompt_profile,
     resolve_dungeon_puzzle_prompt_profile,
+    resolve_dungeon_room_narrative_prompt_profile,
+    resolve_dungeon_trap_prompt_profile,
 )
 from dm_assistant.orchestration.modeling import GatewayCompletion, GatewayToolSchema
 
@@ -108,6 +128,10 @@ def _proposal() -> dict[str, object]:
             ],
             "critical_path": ["threshold", "gallery", "orrery", "cradle"],
             "room_contents": [
+                {
+                    "room_ref": "threshold",
+                    "trap": {"name": "Falling Lens", "challenge": "moderate"},
+                },
                 {
                     "room_ref": "gallery",
                     "feature": {
@@ -188,6 +212,102 @@ def _exploration_output(
         ],
         "escalation": "After a prolonged delay, the fastest planet reaches the brass walk.",
         "recovery": "Releasing the counterweight returns every orbit to its marked start.",
+    }
+
+
+def _feature_output(
+    *, package_id: str, room_id: str, feature_id: str
+) -> dict[str, object]:
+    return {
+        "schema_version": "1.0.0",
+        "package_id": package_id,
+        "room_id": room_id,
+        "feature_id": feature_id,
+        "observable_setup": [
+            "Two cobalt counterweight handles sit at different heights.",
+            "Moving either handle changes the nearest model planet's orbit.",
+        ],
+        "affordances": [
+            {
+                "action": "Pull both handles until the orbit tracks align.",
+                "adjudication": "Coordinated pulls hold the hanging planets apart.",
+                "consequence": "The gallery crossing remains open while both handles are held.",
+            },
+            {
+                "action": "Brace one handle and feather the other.",
+                "adjudication": "Small adjustments move one planet at a time.",
+                "consequence": "The crossing opens more slowly but needs only one operator.",
+            },
+        ],
+        "reset_or_retry": "Releasing both handles returns the planets to their marked starts.",
+    }
+
+
+def _trap_output(*, package_id: str, room_id: str, trap_id: str) -> dict[str, object]:
+    return {
+        "schema_version": "1.0.0",
+        "package_id": package_id,
+        "room_id": room_id,
+        "trap_id": trap_id,
+        "observable_warning": "A cracked lens hangs above a bright wear mark.",
+        "trigger": "Opening the weather door releases the lens frame.",
+        "effect_narration": "The lens drops across the marked threshold.",
+        "detection_method": "Inspect the loose hinge and taut release wire.",
+        "disable_operation": "Brace the frame and slacken the wire before opening the door.",
+        "consequences": ["The fallen lens blocks the direct threshold."],
+        "reset_or_recovery": "The frame can be lifted back onto its hinge.",
+    }
+
+
+def _objective_output(
+    *,
+    package_id: str,
+    room_id: str,
+    objective_id: str,
+    mechanic_ids: tuple[str, ...],
+) -> dict[str, object]:
+    return {
+        "schema_version": "1.0.0",
+        "package_id": package_id,
+        "room_id": room_id,
+        "objective_id": objective_id,
+        "observable_goal": "The synthetic star seed rests inside the cobalt cradle.",
+        "resolution_guidance": "Reward plans that reuse the observatory's understood mechanisms.",
+        "resolutions": [
+            {
+                "mechanic_ids": list(mechanic_ids[:2]),
+                "action": "Align the model sky and steady the gallery orbit.",
+                "outcome": "The cradle opens while the approach remains stable.",
+            },
+            {
+                "mechanic_ids": list(mechanic_ids[2:]),
+                "action": "Brace the threshold lens and counterweight before lifting the seed.",
+                "outcome": "The seed comes free without disturbing the model sky.",
+            },
+        ],
+        "setback_or_aftermath": "A rushed attempt closes the cradle until the orbit resets.",
+    }
+
+
+def _narrative_output(
+    *, package_id: str, room_ids: tuple[str, ...]
+) -> dict[str, object]:
+    return {
+        "schema_version": "1.0.0",
+        "package_id": package_id,
+        "rooms": [
+            {
+                "room_id": room_id,
+                "read_aloud": (
+                    f"Cobalt light crosses weathered brass in observatory chamber {index}."
+                ),
+                "observable_framing": [
+                    "Wind turns a visible model star.",
+                    "Bright wear marks interrupt the blue patina.",
+                ],
+            }
+            for index, room_id in enumerate(room_ids, start=1)
+        ],
     }
 
 
@@ -296,6 +416,46 @@ def _profile() -> ResolvedModelRunProfile:
 
 def _exploration_profile() -> ResolvedModelRunProfile:
     return resolve_dungeon_exploration_prompt_profile(
+        provider_id="faux",
+        model_id="faux_deterministic_v1",
+        capabilities=("text", "tool_calls"),
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+    )
+
+
+def _feature_profile() -> ResolvedModelRunProfile:
+    return resolve_dungeon_feature_interaction_prompt_profile(
+        provider_id="faux",
+        model_id="faux_deterministic_v1",
+        capabilities=("text", "tool_calls"),
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+    )
+
+
+def _trap_profile() -> ResolvedModelRunProfile:
+    return resolve_dungeon_trap_prompt_profile(
+        provider_id="faux",
+        model_id="faux_deterministic_v1",
+        capabilities=("text", "tool_calls"),
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+    )
+
+
+def _objective_profile() -> ResolvedModelRunProfile:
+    return resolve_dungeon_objective_prompt_profile(
+        provider_id="faux",
+        model_id="faux_deterministic_v1",
+        capabilities=("text", "tool_calls"),
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+    )
+
+
+def _narrative_profile() -> ResolvedModelRunProfile:
+    return resolve_dungeon_room_narrative_prompt_profile(
         provider_id="faux",
         model_id="faux_deterministic_v1",
         capabilities=("text", "tool_calls"),
@@ -696,3 +856,447 @@ def test_resumed_exploration_rejects_mismatched_slot_before_provider_call(
         == puzzle_child_id
     )
     assert len(preparation.list_versions(campaign_id, artifact_id)) == 2
+
+
+def test_resumed_feature_trap_objective_and_narrative_each_dispatch_one_exact_seam(
+    db_engine: Engine,
+    tmp_path: Path,
+) -> None:
+    campaign_id = _campaign(db_engine)
+    studio, preparation = _studio(db_engine, tmp_path)
+    artifact_id, current_version_id, specification = _accepted_puzzle_child(
+        campaign_id=campaign_id,
+        studio=studio,
+        preparation=preparation,
+    )
+    original_package = specification.package.model_dump_json()
+
+    exploration_policy = _exploration_policy(specification)
+    exploration_gateway = FakeGatewayClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_exploration",
+                        call_id="setup-exploration",
+                        arguments=cast(
+                            dict[str, JsonValue],
+                            _exploration_output(
+                                package_id=specification.package.id,
+                                room_id=exploration_policy.selection.room_id,
+                                encounter_slot_id=exploration_policy.encounter_slot_id,
+                                affordance_id=(
+                                    exploration_policy.selection.affordances[
+                                        0
+                                    ].affordance_id
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                input_tokens=210,
+                output_tokens=360,
+            ),
+        )
+    )
+    exploration_step = DungeonStagedEnrichmentCoordinator(
+        preparation,
+        exploration=DungeonExplorationPromptApplicationService(
+            preparation, DungeonExplorationPromptService(studio, exploration_gateway)
+        ),
+    ).execute(
+        PromptDungeonStagedEnrichmentWorkflow(
+            campaign_id=campaign_id,
+            artifact_id=artifact_id,
+            parent_version_id=current_version_id,
+            policy=exploration_policy,
+            created_by="synthetic-dm",
+        ),
+        _exploration_profile(),
+        surface="integration-setup",
+    )
+    assert exploration_step.attempt is not None
+    assert exploration_step.attempt.result is not None
+    assert exploration_step.attempt.result.artifact_version_id is not None
+    current_version_id = exploration_step.attempt.result.artifact_version_id
+    specification = DungeonStudioSpecification.model_validate_json(
+        json.dumps(
+            preparation.get_version(campaign_id, current_version_id).specification
+        )
+    )
+    assert exploration_step.plan_after.next_task is not None
+    assert exploration_step.plan_after.next_task.kind == "feature_interaction"
+
+    feature_task = exploration_step.plan_after.next_task
+    feature_policy = DungeonStagedFeatureInteractionPolicy(
+        selection=DungeonFeatureInteractionContextSelection(
+            room_id=feature_task.room_ids[0],
+            feature_id=feature_task.target_ids[0],
+            interaction_goal="Stabilize the model planets before crossing the gallery.",
+            stakes="A poor adjustment delays the crossing without closing the route.",
+            constraints=("Do not author numeric difficulties.",),
+        )
+    )
+    version_count = len(preparation.list_versions(campaign_id, artifact_id))
+    mismatched_feature_gateway = FakeGatewayClient(())
+    with pytest.raises(ConflictError, match="staged exact target"):
+        DungeonStagedEnrichmentCoordinator(
+            preparation,
+            feature_interaction=DungeonFeatureInteractionPromptApplicationService(
+                preparation,
+                DungeonFeatureInteractionPromptService(
+                    studio, mismatched_feature_gateway
+                ),
+            ),
+        ).execute(
+            PromptDungeonStagedEnrichmentWorkflow(
+                campaign_id=campaign_id,
+                artifact_id=artifact_id,
+                parent_version_id=current_version_id,
+                policy=feature_policy.model_copy(
+                    update={
+                        "selection": feature_policy.selection.model_copy(
+                            update={"feature_id": "foreign_feature"}
+                        )
+                    }
+                ),
+                created_by="synthetic-dm",
+            ),
+            _feature_profile(),
+            surface="integration",
+        )
+    assert mismatched_feature_gateway.messages == []
+    assert len(preparation.list_versions(campaign_id, artifact_id)) == version_count
+
+    feature_gateway = FakeGatewayClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_feature_interaction",
+                        call_id="accepted-feature",
+                        arguments=cast(
+                            dict[str, JsonValue],
+                            _feature_output(
+                                package_id=specification.package.id,
+                                room_id=feature_policy.selection.room_id,
+                                feature_id=feature_policy.selection.feature_id,
+                            ),
+                        ),
+                    ),
+                ),
+                input_tokens=220,
+                output_tokens=340,
+            ),
+        )
+    )
+    feature_step = DungeonStagedEnrichmentCoordinator(
+        preparation,
+        feature_interaction=DungeonFeatureInteractionPromptApplicationService(
+            preparation, DungeonFeatureInteractionPromptService(studio, feature_gateway)
+        ),
+    ).execute(
+        PromptDungeonStagedEnrichmentWorkflow(
+            campaign_id=campaign_id,
+            artifact_id=artifact_id,
+            parent_version_id=current_version_id,
+            policy=feature_policy,
+            created_by="synthetic-dm",
+        ),
+        _feature_profile(),
+        surface="integration",
+    )
+    assert feature_step.attempt is not None and feature_step.attempt.result is not None
+    assert feature_step.attempt.result.artifact_version_id is not None
+    current_version_id = feature_step.attempt.result.artifact_version_id
+    assert feature_step.plan_after.next_task is not None
+    assert feature_step.plan_after.next_task.kind == "trap"
+    assert len(feature_gateway.messages) == 1
+    assert feature_gateway.allowed_tools == [("submit_dungeon_feature_interaction",)]
+    assert len(preparation.list_versions(campaign_id, artifact_id)) == version_count + 1
+    specification = DungeonStudioSpecification.model_validate_json(
+        json.dumps(
+            preparation.get_version(campaign_id, current_version_id).specification
+        )
+    )
+
+    trap_task = feature_step.plan_after.next_task
+    trap_policy = DungeonStagedTrapPolicy(
+        selection=DungeonTrapContextSelection(
+            room_id=trap_task.room_ids[0],
+            trap_id=trap_task.target_ids[0],
+            stakes="The falling lens delays entry without sealing the observatory.",
+            constraints=("Do not author numeric difficulties.",),
+        )
+    )
+    version_count = len(preparation.list_versions(campaign_id, artifact_id))
+    mismatched_trap_gateway = FakeGatewayClient(())
+    with pytest.raises(ConflictError, match="staged exact target"):
+        DungeonStagedEnrichmentCoordinator(
+            preparation,
+            trap=DungeonTrapPromptApplicationService(
+                preparation, DungeonTrapPromptService(studio, mismatched_trap_gateway)
+            ),
+        ).execute(
+            PromptDungeonStagedEnrichmentWorkflow(
+                campaign_id=campaign_id,
+                artifact_id=artifact_id,
+                parent_version_id=current_version_id,
+                policy=trap_policy.model_copy(
+                    update={
+                        "selection": trap_policy.selection.model_copy(
+                            update={"trap_id": "foreign_trap"}
+                        )
+                    }
+                ),
+                created_by="synthetic-dm",
+            ),
+            _trap_profile(),
+            surface="integration",
+        )
+    assert mismatched_trap_gateway.messages == []
+    assert len(preparation.list_versions(campaign_id, artifact_id)) == version_count
+
+    trap_gateway = FakeGatewayClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_trap",
+                        call_id="accepted-trap",
+                        arguments=cast(
+                            dict[str, JsonValue],
+                            _trap_output(
+                                package_id=specification.package.id,
+                                room_id=trap_policy.selection.room_id,
+                                trap_id=trap_policy.selection.trap_id,
+                            ),
+                        ),
+                    ),
+                ),
+                input_tokens=220,
+                output_tokens=340,
+            ),
+        )
+    )
+    trap_step = DungeonStagedEnrichmentCoordinator(
+        preparation,
+        trap=DungeonTrapPromptApplicationService(
+            preparation, DungeonTrapPromptService(studio, trap_gateway)
+        ),
+    ).execute(
+        PromptDungeonStagedEnrichmentWorkflow(
+            campaign_id=campaign_id,
+            artifact_id=artifact_id,
+            parent_version_id=current_version_id,
+            policy=trap_policy,
+            created_by="synthetic-dm",
+        ),
+        _trap_profile(),
+        surface="integration",
+    )
+    assert trap_step.attempt is not None and trap_step.attempt.result is not None
+    assert trap_step.attempt.result.artifact_version_id is not None
+    current_version_id = trap_step.attempt.result.artifact_version_id
+    assert trap_step.plan_after.next_task is not None
+    assert trap_step.plan_after.next_task.kind == "objective"
+    assert len(trap_gateway.messages) == 1
+    assert trap_gateway.allowed_tools == [("submit_dungeon_trap",)]
+    assert len(preparation.list_versions(campaign_id, artifact_id)) == version_count + 1
+    specification = DungeonStudioSpecification.model_validate_json(
+        json.dumps(
+            preparation.get_version(campaign_id, current_version_id).specification
+        )
+    )
+
+    objective_task = trap_step.plan_after.next_task
+    mechanic_ids = (
+        specification.puzzle_model_lineage[-1].output.room_id,
+        specification.exploration_model_lineage[-1].output.encounter_slot_id,
+        specification.feature_interaction_model_lineage[-1].output.feature_id,
+        specification.trap_model_lineage[-1].output.trap_id,
+    )
+    objective_policy = DungeonStagedObjectivePolicy(
+        selection=DungeonObjectiveContextSelection(
+            room_id=objective_task.room_ids[0],
+            objective_id=objective_task.target_ids[0],
+            mechanic_ids=mechanic_ids,
+            stakes="Recover the star seed intact; setbacks cost time only.",
+            constraints=("Offer at least two credible resolutions.",),
+        )
+    )
+    version_count = len(preparation.list_versions(campaign_id, artifact_id))
+    mismatched_objective_gateway = FakeGatewayClient(())
+    with pytest.raises(ConflictError, match="staged exact target"):
+        DungeonStagedEnrichmentCoordinator(
+            preparation,
+            objective=DungeonObjectivePromptApplicationService(
+                preparation,
+                DungeonObjectivePromptService(studio, mismatched_objective_gateway),
+            ),
+        ).execute(
+            PromptDungeonStagedEnrichmentWorkflow(
+                campaign_id=campaign_id,
+                artifact_id=artifact_id,
+                parent_version_id=current_version_id,
+                policy=objective_policy.model_copy(
+                    update={
+                        "selection": objective_policy.selection.model_copy(
+                            update={"objective_id": "foreign_objective"}
+                        )
+                    }
+                ),
+                created_by="synthetic-dm",
+            ),
+            _objective_profile(),
+            surface="integration",
+        )
+    assert mismatched_objective_gateway.messages == []
+    assert len(preparation.list_versions(campaign_id, artifact_id)) == version_count
+
+    objective_gateway = FakeGatewayClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_objective",
+                        call_id="accepted-objective",
+                        arguments=cast(
+                            dict[str, JsonValue],
+                            _objective_output(
+                                package_id=specification.package.id,
+                                room_id=objective_policy.selection.room_id,
+                                objective_id=objective_policy.selection.objective_id,
+                                mechanic_ids=mechanic_ids,
+                            ),
+                        ),
+                    ),
+                ),
+                input_tokens=240,
+                output_tokens=380,
+            ),
+        )
+    )
+    objective_step = DungeonStagedEnrichmentCoordinator(
+        preparation,
+        objective=DungeonObjectivePromptApplicationService(
+            preparation, DungeonObjectivePromptService(studio, objective_gateway)
+        ),
+    ).execute(
+        PromptDungeonStagedEnrichmentWorkflow(
+            campaign_id=campaign_id,
+            artifact_id=artifact_id,
+            parent_version_id=current_version_id,
+            policy=objective_policy,
+            created_by="synthetic-dm",
+        ),
+        _objective_profile(),
+        surface="integration",
+    )
+    assert objective_step.attempt is not None
+    assert objective_step.attempt.result is not None
+    assert objective_step.attempt.result.artifact_version_id is not None
+    current_version_id = objective_step.attempt.result.artifact_version_id
+    assert objective_step.plan_after.next_task is not None
+    assert objective_step.plan_after.next_task.kind == "room_narrative"
+    assert len(objective_gateway.messages) == 1
+    assert objective_gateway.allowed_tools == [("submit_dungeon_objective",)]
+    assert len(preparation.list_versions(campaign_id, artifact_id)) == version_count + 1
+    specification = DungeonStudioSpecification.model_validate_json(
+        json.dumps(
+            preparation.get_version(campaign_id, current_version_id).specification
+        )
+    )
+
+    narrative_task = objective_step.plan_after.next_task
+    narrative_policy = DungeonStagedRoomNarrativePolicy(
+        selection=DungeonRoomNarrativeContextSelection(
+            room_ids=narrative_task.room_ids,
+            tone=("wind-worn astronomical mystery",),
+            constraints=("Use only player-observable information.",),
+        )
+    )
+    assert len(narrative_task.room_ids) > 1
+    version_count = len(preparation.list_versions(campaign_id, artifact_id))
+    mismatched_narrative_gateway = FakeGatewayClient(())
+    with pytest.raises(ConflictError, match="staged room set"):
+        DungeonStagedEnrichmentCoordinator(
+            preparation,
+            room_narrative=DungeonRoomNarrativePromptApplicationService(
+                preparation,
+                DungeonRoomNarrativePromptService(studio, mismatched_narrative_gateway),
+            ),
+        ).execute(
+            PromptDungeonStagedEnrichmentWorkflow(
+                campaign_id=campaign_id,
+                artifact_id=artifact_id,
+                parent_version_id=current_version_id,
+                policy=narrative_policy.model_copy(
+                    update={
+                        "selection": narrative_policy.selection.model_copy(
+                            update={"room_ids": narrative_task.room_ids[:-1]}
+                        )
+                    }
+                ),
+                created_by="synthetic-dm",
+            ),
+            _narrative_profile(),
+            surface="integration",
+        )
+    assert mismatched_narrative_gateway.messages == []
+    assert len(preparation.list_versions(campaign_id, artifact_id)) == version_count
+
+    narrative_gateway = FakeGatewayClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_room_narrative",
+                        call_id="accepted-narratives",
+                        arguments=cast(
+                            dict[str, JsonValue],
+                            _narrative_output(
+                                package_id=specification.package.id,
+                                room_ids=narrative_policy.selection.room_ids,
+                            ),
+                        ),
+                    ),
+                ),
+                input_tokens=250,
+                output_tokens=400,
+            ),
+        )
+    )
+    narrative_step = DungeonStagedEnrichmentCoordinator(
+        preparation,
+        room_narrative=DungeonRoomNarrativePromptApplicationService(
+            preparation, DungeonRoomNarrativePromptService(studio, narrative_gateway)
+        ),
+    ).execute(
+        PromptDungeonStagedEnrichmentWorkflow(
+            campaign_id=campaign_id,
+            artifact_id=artifact_id,
+            parent_version_id=current_version_id,
+            policy=narrative_policy,
+            created_by="synthetic-dm",
+        ),
+        _narrative_profile(),
+        surface="integration",
+    )
+    assert narrative_step.attempt is not None
+    assert narrative_step.attempt.result is not None
+    assert narrative_step.attempt.result.artifact_version_id is not None
+    final_version_id = narrative_step.attempt.result.artifact_version_id
+    assert narrative_step.plan_after.status == "complete"
+    assert narrative_step.plan_after.next_task is None
+    assert len(narrative_gateway.messages) == 1
+    assert narrative_gateway.allowed_tools == [("submit_dungeon_room_narrative",)]
+    assert len(preparation.list_versions(campaign_id, artifact_id)) == version_count + 1
+    final_specification = DungeonStudioSpecification.model_validate_json(
+        json.dumps(preparation.get_version(campaign_id, final_version_id).specification)
+    )
+    assert final_specification.package.model_dump_json() == original_package
+    assert (
+        preparation.get_artifact(campaign_id, artifact_id).current_version_id
+        == final_version_id
+    )
