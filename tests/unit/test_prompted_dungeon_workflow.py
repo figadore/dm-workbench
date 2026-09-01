@@ -48,6 +48,7 @@ from dm_assistant.orchestration.modeling import (
     GatewayCompletion,
     GatewayToolSchema,
     ModelRunAbstained,
+    ModelTransportError,
     StructuredSubmissionBudgetExceeded,
 )
 from dm_dungeon import (
@@ -593,6 +594,22 @@ def test_structured_submission_fails_closed_on_measured_token_overages() -> None
         )
         assert report["usage"]["input_tokens"] == input_tokens
         assert report["usage"]["output_tokens"] == output_tokens
+
+
+def test_prompt_failure_report_retains_only_safe_transport_category() -> None:
+    error = ModelTransportError(
+        "The selected model provider rejected the request contract.",
+        code="provider_request_rejected",
+    )
+
+    assert _failure_report(error, "dungeon_prompt_failed") == {
+        "stage": "model_submission",
+        "code": "dungeon_prompt_failed",
+        "transport_error_code": "provider_request_rejected",
+    }
+    assert ModelTransportError("safe", code="private-provider-detail").code == (
+        "model_transport_error"
+    )
 
 
 def test_repair_does_not_start_when_estimated_input_cannot_fit() -> None:

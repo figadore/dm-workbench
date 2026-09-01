@@ -1880,7 +1880,8 @@ the request and before either SSE or WebSocket dispatch. A provider-free transpo
 synthetic OAuth, forced SSE, an injected fetch, and decompression of the actual outbound body
 to prove the hard field is present without retaining the prompt/body. The V1 request and
 package pin stay in place; post-response usage checks remain defense in depth rather than the
-provider-limit mechanism. No live generation has yet exercised the corrected transport.
+provider-limit mechanism. The first live canary exercised this path but its initial stream
+was rejected before model output, so provider-side acceptance/enforcement remains unproven.
 
 The frozen canary is now wired provider-free through its complete application path. After
 one accepted structural child, Workbench derives exact trusted policies from that package,
@@ -1893,8 +1894,14 @@ An accepted structural key/clue name and exact dependency room now produce only 
 ordinary-presence discovery statement, so removed structural guide prose is not required to
 resume staged authoring; richer gate interaction content remains optional. Provider-free faux
 coverage includes both complete final-gate success and a third-task output-cap rejection. The
-disposable PostgreSQL-backed tests still require the integration database, and no live model
-call has run.
+first non-debug live call stopped at the initial structural stream with normalized
+`provider_error`, no content/usage, and no artifact; it was not retried. That failure exposed
+that the gateway discarded provider HTTP status after `pi-ai` formed its final error. The
+provider-free repair now combines transient text patterns with response status to emit only
+allowlisted usage/rate, authentication/access, model/provider availability, request-contract,
+or generic categories. Workbench persists only that safe category on failed prompt attempts;
+provider text/body remains absent. The disposable PostgreSQL-backed tests still require the
+integration database, and a valid live artifact remains pending.
 
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
   Its model-visible proposal contains room identity/purpose, critical path, bounded

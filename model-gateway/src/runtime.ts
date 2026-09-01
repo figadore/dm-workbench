@@ -18,12 +18,16 @@ import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-code
 import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
 
 import type { GatewayStreamRequest } from "./contracts.js";
+import {
+  classifyProviderError,
+  type SafeProviderErrorCode,
+} from "./provider-errors.js";
 
 const FAUX_PROVIDER_ID = "faux";
 
 export class GatewayRuntimeError extends Error {
   constructor(
-    readonly code: "model_unavailable" | "authentication_required",
+    readonly code: SafeProviderErrorCode,
     message: string,
   ) {
     super(message);
@@ -180,6 +184,7 @@ class PiAiGatewayRuntime implements GatewayRuntime {
       }
     }
 
+    let providerHttpStatus: number | undefined;
     const stream = this.models.streamSimple(
       model,
       {
@@ -225,6 +230,9 @@ class PiAiGatewayRuntime implements GatewayRuntime {
         signal,
         fetch: this.providerFetch,
         transport: this.providerTransport,
+        onResponse: (response) => {
+          providerHttpStatus = response.status;
+        },
         ...(request.provider === "openai-codex"
           ? {
               onPayload: (payload: unknown) =>
@@ -233,7 +241,15 @@ class PiAiGatewayRuntime implements GatewayRuntime {
           : {}),
       },
     );
-    yield* stream;
+    for await (const event of stream) {
+      if (event.type === "error") {
+        const safeError = classifyProviderError(event.error, providerHttpStatus);
+        if (safeError.code !== "provider_error") {
+          throw new GatewayRuntimeError(safeError.code, safeError.message);
+        }
+      }
+      yield event;
+    }
   }
 }
 

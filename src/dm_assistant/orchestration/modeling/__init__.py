@@ -6,6 +6,7 @@ from dm_assistant.orchestration.modeling.service import (
     GatewayToolSchema,
     ModelRunAbstained,
     ModelTaskRunner,
+    ModelTransportError,
     ServerTool,
     build_dungeon_intent_tool_result,
 )
@@ -22,6 +23,7 @@ __all__ = [
     "GatewayToolSchema",
     "ModelRunAbstained",
     "ModelTaskRunner",
+    "ModelTransportError",
     "ServerTool",
     "StructuredSubmissionBudgetExceeded",
     "StructuredSubmissionRejected",

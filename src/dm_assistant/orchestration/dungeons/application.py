@@ -28,6 +28,7 @@ from dm_assistant.orchestration.dungeons.prompting import (
 )
 from dm_assistant.orchestration.modeling import (
     ModelRunAbstained,
+    ModelTransportError,
     StructuredSubmissionBudgetExceeded,
 )
 
@@ -70,6 +71,12 @@ def _failure_report(
                 "output_tokens": error.output_tokens,
             },
         }
+    elif isinstance(error, ModelTransportError):
+        report = {
+            "stage": "model_submission",
+            "code": code,
+            "transport_error_code": error.code,
+        }
     else:
         report = {"stage": "model_submission", "code": code}
     return report
@@ -77,6 +84,8 @@ def _failure_report(
 
 def _failure_diagnostic_codes(error: Exception) -> list[str]:
     """Return stable codes suitable for ordinary structured logs."""
+    if isinstance(error, ModelTransportError):
+        return [error.code]
     if not isinstance(error, DungeonProposalRejectedAfterRepair):
         return []
     return [

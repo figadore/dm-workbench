@@ -16,7 +16,12 @@ import {
 
 import { FileCredentialStore } from "../src/credentials.js";
 import { parseStreamRequest, type GatewayStreamRequest } from "../src/contracts.js";
-import { createPiAiRuntime, type GatewayRuntime } from "../src/runtime.js";
+import { classifyProviderError } from "../src/provider-errors.js";
+import {
+  createPiAiRuntime,
+  GatewayRuntimeError,
+  type GatewayRuntime,
+} from "../src/runtime.js";
 import { createGatewayServer } from "../src/server.js";
 
 const INTERNAL_TOKEN = "a".repeat(32);
@@ -93,7 +98,7 @@ test("the pinned Codex transport serializes the requested hard output limit", as
       ? zstdDecompressSync(encoded)
       : encoded;
     capturedPayload = JSON.parse(decoded.toString("utf8")) as Record<string, unknown>;
-    return new Response(JSON.stringify({ error: { message: "synthetic stop" } }), {
+    return new Response(JSON.stringify({ error: { message: "private rejection detail" } }), {
       status: 400,
       headers: { "content-type": "application/json" },
     });
@@ -109,9 +114,19 @@ test("the pinned Codex transport serializes the requested hard output limit", as
     output_token_limit: 321,
   }));
 
-  for await (const _event of runtime.stream(request, new AbortController().signal)) {
-    // The synthetic 400 response ends the stream after the outbound request is captured.
-  }
+  await assert.rejects(
+    async () => {
+      for await (const _event of runtime.stream(request, new AbortController().signal)) {
+        // The synthetic response is consumed only to exercise the transport boundary.
+      }
+    },
+    (error: unknown) => {
+      assert.ok(error instanceof GatewayRuntimeError);
+      assert.equal(error.code, "provider_request_rejected");
+      assert.doesNotMatch(error.message, /private rejection detail/);
+      return true;
+    },
+  );
 
   assert.equal(capturedPayload?.max_output_tokens, 321);
   assert.equal(capturedPayload?.model, "gpt-5.4");
@@ -244,6 +259,25 @@ test("login coordination exposes device and manual-code events without credentia
   assert.equal((await completed.json() as { status: string }).status, "completed");
 });
 
+test("safe provider classification distinguishes operational failure categories", () => {
+  const cases: readonly [unknown, number | undefined, string][] = [
+    [{ errorMessage: "private usage limit reached" }, undefined, "usage_limit"],
+    [{ errorMessage: "private token expired" }, undefined, "authentication_required"],
+    [{ errorMessage: "private access denied" }, undefined, "provider_access_denied"],
+    [{ errorMessage: "private unknown model" }, undefined, "model_unavailable"],
+    [{ errorMessage: "private unknown parameter" }, undefined, "provider_request_rejected"],
+    [{ errorMessage: "private opaque failure" }, 429, "rate_limited"],
+    [{ errorMessage: "private opaque failure" }, 503, "provider_unavailable"],
+    [{ errorMessage: "private opaque failure" }, undefined, "provider_error"],
+  ];
+
+  for (const [value, status, expectedCode] of cases) {
+    const classified = classifyProviderError(value, status);
+    assert.equal(classified.code, expectedCode);
+    assert.doesNotMatch(classified.message, /private/);
+  }
+});
+
 test("provider usage errors are classified without exposing provider text", async (t) => {
   const runtime: GatewayRuntime = {
     async listProviders() {
@@ -274,6 +308,38 @@ test("provider usage errors are classified without exposing provider text", asyn
   const events = await stream.text();
   assert.match(events, /"code":"usage_limit"/);
   assert.doesNotMatch(events, /secret detail|Codex error/);
+});
+
+test("provider request errors are classified without exposing provider text", async (t) => {
+  const runtime: GatewayRuntime = {
+    async listProviders() {
+      return [];
+    },
+    async login() {},
+    async logout() {},
+    async *stream(): AsyncIterable<AssistantMessageEvent> {
+      yield {
+        type: "error",
+        reason: "error",
+        error: fauxAssistantMessage("", {
+          stopReason: "error",
+          errorMessage: "Codex error: Unsupported parameter max_output_tokens; private detail",
+        }),
+      };
+    },
+  };
+  const server = createGatewayServer({ runtime, internalToken: INTERNAL_TOKEN });
+  const baseUrl = await listen(server);
+  t.after(() => close(server));
+
+  const stream = await fetch(`${baseUrl}/v1/streams`, {
+    method: "POST",
+    headers: { ...authorization(), "content-type": "application/json" },
+    body: JSON.stringify(fauxStreamRequest()),
+  });
+  const events = await stream.text();
+  assert.match(events, /"code":"provider_request_rejected"/);
+  assert.doesNotMatch(events, /max_output_tokens|private detail|Codex error/);
 });
 
 test("the gateway aborts a stalled stream at the caller's bounded time limit", async (t) => {

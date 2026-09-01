@@ -287,8 +287,45 @@ def test_private_gateway_client_rejects_error_events_without_echoing_provider_te
             tool_schemas=(),
         )
 
+    assert captured.value.code == "usage_limit"
     assert "provider secret" not in str(captured.value)
     assert "usage limit has been reached" in str(captured.value)
+
+
+def test_private_gateway_client_retains_safe_provider_request_category(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    response = FakeSseResponse(
+        (
+            b"event: error\n",
+            b'data: {"code":"provider_request_rejected","message":"private provider detail"}\n',
+            b"\n",
+        )
+    )
+
+    def fake_urlopen(request: Request, *, timeout: int) -> FakeSseResponse:
+        del request, timeout
+        return response
+
+    monkeypatch.setattr("dm_assistant.adapters.model_gateway.urlopen", fake_urlopen)
+    client = PiGatewayClient(
+        base_url="http://model-gateway:3000",
+        internal_token="gateway-test-token-00000000000000",
+    )
+
+    with pytest.raises(ModelGatewayTransportError) as captured:
+        client.complete(
+            profile=_profile(),
+            messages=(
+                PromptMessage(role="user", content="Create a synthetic dungeon."),
+            ),
+            allowed_tools=(),
+            tool_schemas=(),
+        )
+
+    assert captured.value.code == "provider_request_rejected"
+    assert "private provider detail" not in str(captured.value)
+    assert "rejected the request contract" in str(captured.value)
 
 
 def test_private_gateway_client_requires_enabled_private_settings(

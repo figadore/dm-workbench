@@ -542,8 +542,11 @@ and the provider-free final gate. Faux application coverage proves complete succ
 stop-on-first-rejection behavior while the artifact remains a draft and attempt evidence stays
 body-free. Structural key/clue dependencies project only their accepted name and exact room as
 an ordinary-presence discovery statement; removed structural guide prose is no longer a staged
-blocker, while richer gate interactions remain optional. Actual human/live evidence remains
-pending.
+blocker, while richer gate interactions remain optional. The first live call stopped before
+content at its structural provider stream and was not retried. Provider-free error handling now
+reduces transient provider text plus response status to one allowlisted operational category
+and persists only that category, never provider text/body. A valid live artifact and human
+quality evidence remain pending.
 
 - Add independently bounded puzzle, exploration, other interaction, and narrative tasks
   over exact package IDs; merge accepted output deterministically and preserve the map on

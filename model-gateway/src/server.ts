@@ -5,6 +5,7 @@ import { type Usage } from "@earendil-works/pi-ai";
 
 import { GatewayRequestError, parseStreamRequest } from "./contracts.js";
 import { LoginCoordinator } from "./login.js";
+import { classifyProviderError } from "./provider-errors.js";
 import { GatewayRuntimeError, type GatewayRuntime } from "./runtime.js";
 
 const MAX_REQUEST_BYTES = 256 * 1024;
@@ -251,30 +252,11 @@ function writePiEvent(response: ServerResponse, event: { readonly type: string; 
       return;
     }
     case "error": {
-      const error = safeProviderError(event.error);
+      const error = classifyProviderError(event.error);
       logGatewayEvent("model provider stream error", { code: error.code });
       writeEvent(response, "error", error);
     }
   }
-}
-
-function safeProviderError(value: unknown): { code: string; message: string } {
-  const errorMessage =
-    value !== null && typeof value === "object" && "errorMessage" in value
-      ? (value as { errorMessage?: unknown }).errorMessage
-      : undefined;
-  if (typeof errorMessage === "string") {
-    if (/usage limit|insufficient_quota|quota[^.]*reached|quota[^.]*exceeded/i.test(errorMessage)) {
-      return { code: "usage_limit", message: "model provider usage limit reached" };
-    }
-    if (/rate limit|too many requests/i.test(errorMessage)) {
-      return { code: "rate_limited", message: "model provider rate limit reached" };
-    }
-    if (/unauthorized|authentication|credential/i.test(errorMessage)) {
-      return { code: "authentication_required", message: "provider authentication is required" };
-    }
-  }
-  return { code: "provider_error", message: "model stream failed" };
 }
 
 function normalizeUsage(value: unknown): { input_tokens: number; output_tokens: number } | undefined {

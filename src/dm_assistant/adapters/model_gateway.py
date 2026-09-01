@@ -22,10 +22,11 @@ from dm_assistant.modules.modeling import (
 from dm_assistant.orchestration.modeling import (
     GatewayCompletion,
     GatewayToolSchema,
+    ModelTransportError,
 )
 
 
-class ModelGatewayTransportError(RuntimeError):
+class ModelGatewayTransportError(ModelTransportError):
     """Raised when the private gateway cannot return a valid bounded completion."""
 
 
@@ -381,15 +382,25 @@ def _decode_sse(
                         "usage_limit": "The selected model provider usage limit has been reached.",
                         "rate_limited": "The selected model provider is temporarily rate limited.",
                         "authentication_required": "The selected model provider requires login.",
+                        "provider_access_denied": "The selected model provider denied access to the request.",
+                        "model_unavailable": "The selected model is unavailable from the provider.",
+                        "provider_request_rejected": "The selected model provider rejected the request contract.",
+                        "provider_unavailable": "The selected model provider is unavailable.",
                         "cancelled": "The model gateway cancelled the dungeon stream.",
                         "provider_error": "The selected model provider ended the dungeon stream without a usable response.",
                         "timeout": "The selected model did not finish within the dungeon run time limit.",
                     }
+                    safe_code = (
+                        code
+                        if isinstance(code, str) and code in safe_messages
+                        else "model_gateway_error"
+                    )
                     raise ModelGatewayTransportError(
                         safe_messages.get(
-                            code if isinstance(code, str) else "",
+                            safe_code,
                             "The model gateway reported an error.",
-                        )
+                        ),
+                        code=safe_code,
                     )
                 elif event_name == "done":
                     break

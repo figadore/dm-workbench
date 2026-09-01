@@ -49,6 +49,36 @@ class GatewayToolSchema(BaseModel):
     constrained_sampling: Literal["prefer", "require"] | None = None
 
 
+_SAFE_MODEL_TRANSPORT_ERROR_CODES = frozenset(
+    {
+        "model_transport_error",
+        "model_gateway_error",
+        "usage_limit",
+        "rate_limited",
+        "authentication_required",
+        "provider_access_denied",
+        "model_unavailable",
+        "provider_request_rejected",
+        "provider_unavailable",
+        "provider_error",
+        "cancelled",
+        "timeout",
+    }
+)
+
+
+class ModelTransportError(RuntimeError):
+    """Body-free failure returned by a model transport boundary."""
+
+    def __init__(self, message: str, *, code: str = "model_transport_error") -> None:
+        super().__init__(message)
+        self.code = (
+            code
+            if code in _SAFE_MODEL_TRANSPORT_ERROR_CODES
+            else "model_transport_error"
+        )
+
+
 class GatewayClient(Protocol):
     """Minimal gateway client used by the bounded prompt loop."""
 
