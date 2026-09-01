@@ -6,14 +6,13 @@
 
 ## Current State
 
-- **Updated:** 2026-08-31
-- **Branch/HEAD:** `fast-track-prompt-to-dungeon` at `ade318c`, one commit ahead of
-  `origin/fast-track-prompt-to-dungeon`, plus the uncommitted slice below.
+- **Updated:** 2026-09-01
+- **Branch/HEAD:** `fast-track-prompt-to-dungeon` at `4e870bc`, two commits ahead of
+  `origin/fast-track-prompt-to-dungeon`, plus the uncommitted gate-repair slice below.
 - **Current task:** **P7-14f — Staged Tier A authoring and anti-overfitting evaluation.**
-- **Task state:** the frozen canary is wired through the complete staged application path
-  provider-free. Root/package tests pass; the new PostgreSQL-backed faux success/rejection
-  tests are collected but skipped because no disposable integration database is configured.
-  No live provider call or human quality rating has run.
+- **Task state:** the complete frozen faux canary now passes against disposable PostgreSQL:
+  both six-task/final-gate success and third-task output-cap rejection are proven through
+  the shared application path. No live provider call or human quality rating has run.
 - **Schema head:** `0008_workbench_defaults`; no migration changed or is pending.
 - **Retention gate:** **not crossed.** Active V1 contracts evolve in place; there is no
   retained real-user artifact, external consumer, non-disposable deployment, or promised
@@ -21,51 +20,45 @@
 
 ## Implemented This Slice
 
-`dm dungeon canary` no longer stops at structural publication. A shared canary application
-service now:
+The PostgreSQL gate exposed four defects hidden while the new tests were skipped:
 
-1. enforces the exact frozen prompt, seed, and canary surface;
-2. publishes one accepted structural draft through the existing application seam;
-3. derives exact trusted puzzle, exploration, feature, trap, objective, and bounded
-   narrative policies from that package;
-4. resolves all six task profiles independently;
-5. resumes the current child through the existing bounded one-step/chain coordinator; and
-6. invokes the read-only final continuity/readiness gate only after chain completion.
+1. the faux workflows supplied `synthetic-dm` to the single-DM scope contract instead of
+   the authenticated `dm` principal;
+2. exploration context incorrectly required `RoomRole.EXPLORATION`, although the Tier A
+   compiler requires every branch room to retain `RoomRole.OPTIONAL`; the exact accepted
+   exploration encounter slot/intent is now authoritative and projection still rechecks
+   that intent against the accepted plan;
+3. the dynamic faux gateway assumed every staged payload had singular `context.room`, so
+   it failed on the bounded `context.rooms` narrative task; and
+4. the rejection assertion used a retired limit-kind spelling rather than the emitted
+   body-free `output` code.
 
-A failed structural call performs no enrichment. A rejected enrichment stops the chain,
-keeps the last accepted child current, and prevents all later provider seams. The CLI emits
-only artifact/run IDs, stop/public codes, resolved selection, and body-free final-validation
-evidence. It never approves preparation or calls a canonical service; every artifact remains
-`draft`.
+The complete success case now publishes six atomic DM-only enrichment children after the
+structural version, reaches the deterministic final gate, preserves package/map bytes,
+keeps the artifact `draft`, and contacts exactly the seven expected tool seams. The
+rejection case stops on feature output overage, leaves the puzzle/exploration child current,
+persists only body-free usage evidence, and makes no later provider call.
 
-The Workbench runtime now composes all six existing task-specific application services over
-the configured private gateway and exposes only the complete canary application to the CLI.
-Each accepted task still creates its own atomic DM-only child with unchanged package/map
-bytes and task-specific lineage/budget enforcement.
-
-The provider-free faux application coverage uses an original five-room Windglass Shrine
-plan matching the frozen Tier A structure: optional branch, secret loop, locked gate/key,
-puzzle, exploration slot with local feature, moderate trap, and named objective. It covers:
-
-- six accepted enrichments followed by a valid final deterministic gate; and
-- output-cap rejection on the third enrichment, no later dispatch, last accepted child
-  current, draft lifecycle, and a body-free durable usage report.
-
-Because structural `guide_content` was removed, a named structural key/clue dependency no
-longer requires a prose-heavy gate entry merely to enter staged authoring. Deterministic code
-projects only the accepted dependency name and exact room as an ordinary-presence discovery
-statement. It does not invent concealment, acquisition checks, consequences, or richer gate
-interaction content.
+A stale browser integration assertion now expects the intentional deterministic ordinary-
+presence discovery statement for a structural gate dependency. Architecture and plan text
+clarify that an exact exploration slot is authoritative for optional branch rooms; this is
+an in-place alpha V1 clarification, not a version bump.
 
 ## Active Boundaries and Known Issues
 
-- The new complete faux application tests require `DM_TEST_DATABASE_URL` naming a disposable
-  `*_test` PostgreSQL database. They were skipped in this environment and therefore still
-  need one database-backed execution before a live canary.
 - No live model generation was run. There are no generated-artifact ratings or aggregate
   quality conclusions; actual blinded human evidence remains pending.
 - There is no bounded cohesion-reviewer model call. Current strict report/disposition
   evidence remains provider-free/human-constructible and non-authoritative.
+- A broad disposable-PostgreSQL integration run reached **65 passed, 4 failed**. The one
+  stale dungeon web assertion was corrected and passes in the focused gate. Three unrelated
+  Library/schema failures remain: metadata reports 18 constraint diffs, one embedding run
+  can set `finished_at` before database-authored `started_at`, and one direct document-
+  revision fixture violates the source-history trigger. Do not conflate these with the
+  green staged-canary gate; investigate them only as a separate task.
+- Strict mypy over the changed production service and typed coordinator test passes. Adding
+  the older web integration module to that command exposes nine pre-existing typing errors
+  in its `Settings` construction/JSON indexing; this slice did not broaden into that cleanup.
 - Package and root pytest suites must run separately because duplicate test module basenames
   cause import-file-mismatch when collected in one process.
 - No canon write, preparation approval, migration, queue, redaction system, second
@@ -76,45 +69,48 @@ interaction content.
 
 Uncommitted production code:
 
-- `src/dm_assistant/cli/main.py`
-- `src/dm_assistant/runtime.py`
-- `src/dm_assistant/orchestration/dungeons/{__init__,canary_application,service}.py`
+- `src/dm_assistant/orchestration/dungeons/service.py`
 
 Uncommitted tests:
 
-- `tests/unit/{test_cli,test_dungeon_canary,test_dungeon_puzzle_enrichment_contract}.py`
-- `tests/integration/{test_dungeon_puzzle_prompt,test_dungeon_staged_enrichment_coordinator,test_dungeon_studio_cli}.py`
+- `tests/integration/test_dungeon_staged_enrichment_coordinator.py`
+- `tests/integration/test_dungeon_studio_web_prompt.py`
 
 Uncommitted documentation:
 
-- `dm-assistant-{implementation-plan,technical-architecture}.md`
-- `dungeon-generation-recovery-plan.md`
+- `dm-assistant-implementation-plan.md`
+- `dm-assistant-technical-architecture.md`
 - `PROJECT_STATUS.md`
 
 Recorded for this slice:
 
+- Required PostgreSQL gate over coordinator + CLI -> **10 passed**.
+- Focused PostgreSQL gate including browser prompt -> **11 passed**.
 - `uv run pytest -q tests/unit tests/evals` -> **229 passed**.
 - `uv run pytest -q packages/dungeon-engine/tests` -> **139 passed**.
-- Targeted integration collection -> **12 skipped** because `DM_TEST_DATABASE_URL` is absent.
-- Targeted strict mypy over changed production and typed tests -> **passed**.
+- Full `tests/integration` attempt -> **65 passed, 4 failed** before the relevant stale
+  browser assertion was fixed; the three remaining failures are listed above.
+- Strict mypy over changed production + typed coordinator test -> **passed**.
 - Ruff lint/format over changed Python -> **passed**.
-- Provider-free compile check for the exact five-room faux canary plan -> **accepted**.
 - `git diff --check` -> **passed** after the final handoff update.
 
-Suggested commit subject: `P7-14f wire frozen canary through staged enrichment`
+Suggested commit subject: `P7-14f pass staged faux canary PostgreSQL gate`
 
 ## Single Next Recommended Task
 
-**Execute the complete faux canary gates against disposable PostgreSQL, then fix only any
-wiring defects they expose.**
+**Run the frozen staged live Tier A canary exactly once with explicit provider/model/effort,
+then stop on its first failure and retain only the existing body-free operational evidence.**
 
-**First concrete action:** set `DM_TEST_DATABASE_URL` to an empty `*_test` database and run
-`uv run pytest -q tests/integration/test_dungeon_staged_enrichment_coordinator.py tests/integration/test_dungeon_studio_cli.py`. Confirm the complete six-task/final-gate case and
-the third-task rejection case pass before making any live provider call.
+**First concrete action:** rebuild/restart the private model-gateway and Workbench containers
+from current HEAD so the tested Codex `max_output_tokens` overlay and complete staged CLI are
+active. Re-list authenticated providers, explicitly select the intended provider/model and
+supported effort, then invoke `dm dungeon canary` once without transient debug-body logging.
+Do not retry a failed stage or switch models in the same slice.
 
-After that gate is green, the next separate slice may run the frozen staged live canary once
-with explicit provider/model selection and stop on its first failure. Do **not** start Tier
-B/C, a migration, queue, automatic approval, canon writes, or output/print work.
+After that one run, record its IDs, stop/public code, measured usage, final deterministic
+result, and whether a preparation-ready draft exists. Human quality review and the frozen
+multi-case blinded matrix remain subsequent evidence work. Do **not** start Tier B/C, a
+migration, queue, automatic approval, canon writes, or output/print work.
 
 ## Authoritative References
 

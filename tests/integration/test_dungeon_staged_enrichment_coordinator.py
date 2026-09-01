@@ -436,47 +436,49 @@ class _DynamicCanaryGateway:
             document = json.loads(messages[0].content)
             context = document["context"]
             package_id = context["package_id"]
-            room_id = context["room"]["room_id"]
-            if tool_name == "submit_dungeon_puzzle":
-                arguments = _puzzle_output(
-                    package_id=package_id,
-                    room_id=room_id,
-                    clue_location_id=context["clue_locations"][0]["location_id"],
-                )
-            elif tool_name == "submit_dungeon_exploration":
-                arguments = _exploration_output(
-                    package_id=package_id,
-                    room_id=room_id,
-                    encounter_slot_id=context["room"]["encounter_slot_id"],
-                    affordance_id=context["affordances"][0]["affordance_id"],
-                )
-            elif tool_name == "submit_dungeon_feature_interaction":
-                arguments = _feature_output(
-                    package_id=package_id,
-                    room_id=room_id,
-                    feature_id=context["feature"]["feature_id"],
-                )
-            elif tool_name == "submit_dungeon_trap":
-                arguments = _trap_output(
-                    package_id=package_id,
-                    room_id=room_id,
-                    trap_id=context["trap"]["trap_id"],
-                )
-            elif tool_name == "submit_dungeon_objective":
-                arguments = _objective_output(
-                    package_id=package_id,
-                    room_id=room_id,
-                    objective_id=context["objective"]["objective_id"],
-                    mechanic_ids=tuple(
-                        item["mechanic_id"] for item in context["accepted_mechanics"]
-                    ),
-                )
-            else:
-                assert tool_name == "submit_dungeon_room_narrative"
+            if tool_name == "submit_dungeon_room_narrative":
                 arguments = _narrative_output(
                     package_id=package_id,
                     room_ids=tuple(item["room_id"] for item in context["rooms"]),
                 )
+            else:
+                room_id = context["room"]["room_id"]
+                if tool_name == "submit_dungeon_puzzle":
+                    arguments = _puzzle_output(
+                        package_id=package_id,
+                        room_id=room_id,
+                        clue_location_id=context["clue_locations"][0]["location_id"],
+                    )
+                elif tool_name == "submit_dungeon_exploration":
+                    arguments = _exploration_output(
+                        package_id=package_id,
+                        room_id=room_id,
+                        encounter_slot_id=context["room"]["encounter_slot_id"],
+                        affordance_id=context["affordances"][0]["affordance_id"],
+                    )
+                elif tool_name == "submit_dungeon_feature_interaction":
+                    arguments = _feature_output(
+                        package_id=package_id,
+                        room_id=room_id,
+                        feature_id=context["feature"]["feature_id"],
+                    )
+                elif tool_name == "submit_dungeon_trap":
+                    arguments = _trap_output(
+                        package_id=package_id,
+                        room_id=room_id,
+                        trap_id=context["trap"]["trap_id"],
+                    )
+                else:
+                    assert tool_name == "submit_dungeon_objective"
+                    arguments = _objective_output(
+                        package_id=package_id,
+                        room_id=room_id,
+                        objective_id=context["objective"]["objective_id"],
+                        mechanic_ids=tuple(
+                            item["mechanic_id"]
+                            for item in context["accepted_mechanics"]
+                        ),
+                    )
         return GatewayCompletion(
             tool_calls=(
                 ToolCall(
@@ -1556,8 +1558,8 @@ def test_frozen_canary_resumes_structural_child_through_all_tasks_and_final_gate
             seed=DUNGEON_TIER_A_CANARY.seed,
             created_by="synthetic-dm",
             scope=resolve_task_scope(
-                dm_principal_id="synthetic-dm",
-                campaign_owner_id="synthetic-dm",
+                dm_principal_id="dm",
+                campaign_owner_id="dm",
                 task_type=TaskType.STANDALONE_DUNGEON,
             ),
         ),
@@ -1636,8 +1638,8 @@ def test_frozen_canary_stops_on_first_rejected_task_with_body_free_attempt(
             seed=DUNGEON_TIER_A_CANARY.seed,
             created_by="synthetic-dm",
             scope=resolve_task_scope(
-                dm_principal_id="synthetic-dm",
-                campaign_owner_id="synthetic-dm",
+                dm_principal_id="dm",
+                campaign_owner_id="dm",
                 task_type=TaskType.STANDALONE_DUNGEON,
             ),
         ),
@@ -1683,7 +1685,7 @@ def test_frozen_canary_stops_on_first_rejected_task_with_body_free_attempt(
         "stage": "model_submission",
         "code": "dungeon_feature_interaction_prompt_token_budget_exhausted",
         "usage": {
-            "limit_kind": "per_request_output",
+            "limit_kind": "output",
             "token_limit": 2048,
             "input_tokens": 200,
             "output_tokens": 2049,

@@ -245,7 +245,9 @@ def test_browser_prompt_faux_gateway_persists_draft(
     assert len(guide.dependencies) == 1
     assert guide.dependencies[0].name == "Three-Wave Brass Key"
     assert guide.dependencies[0].content is None
-    assert guide.dependencies[0].discovery is None
+    assert guide.dependencies[0].discovery == (
+        "Three-Wave Brass Key is present in Flooded Cataloguing Annex."
+    )
     assert guide.traps[0].effect == (
         "The trip lever rings the bell and its clockwork bolt locks the buttons for 10 "
         "minutes. On the first ring only, the hammer's lower arm flips the full ink cup "

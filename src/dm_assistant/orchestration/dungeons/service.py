@@ -2496,11 +2496,6 @@ def build_dungeon_exploration_enrichment_input(
         raise ConflictError(
             "Exploration context selected an unknown exact exploration room."
         )
-    if room.role is not RoomRole.EXPLORATION:
-        raise ConflictError(
-            "Exploration context selected a room without an exploration role."
-        )
-
     encounter_slots = tuple(
         slot
         for slot in package.encounter_slots
@@ -2680,10 +2675,7 @@ def project_dungeon_exploration_enrichment(
     if room_ref is None:
         raise ConflictError("Exploration enrichment targets an unknown planned room.")
     planned_room = next(room for room in plan.rooms if room.ref == room_ref)
-    if (
-        planned_room.role is not RoomRole.EXPLORATION
-        or planned_room.encounter is not EncounterSlotIntent.EXPLORATION
-    ):
+    if planned_room.encounter is not EncounterSlotIntent.EXPLORATION:
         raise ConflictError(
             "Exploration enrichment targets a room without exploration intent."
         )
