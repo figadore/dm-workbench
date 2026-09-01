@@ -7,6 +7,11 @@ import pytest
 from pydantic import ValidationError
 
 from dm_assistant.errors import ConflictError
+from dm_assistant.modules.modeling import (
+    PromptMessage,
+    ResolvedModelRunProfile,
+    ToolCall,
+)
 from dm_assistant.modules.preparation import (
     DungeonGenerationContext,
     GenerationContextEnvelope,
@@ -20,6 +25,9 @@ from dm_assistant.orchestration.dungeons import (
     DungeonPuzzleEnrichmentInput,
     DungeonPuzzleEnrichmentOutput,
     DungeonPuzzleObjectiveApproval,
+    DungeonPuzzleRejectedAfterRepair,
+    DungeonPuzzleSubmissionService,
+    resolve_dungeon_puzzle_prompt_profile,
 )
 from dm_assistant.orchestration.dungeons.continuity import (
     derive_dungeon_creative_continuity,
@@ -31,6 +39,7 @@ from dm_assistant.orchestration.dungeons.service import (
     project_dungeon_puzzle_enrichment,
     validate_dungeon_puzzle_enrichment,
 )
+from dm_assistant.orchestration.modeling import GatewayCompletion, GatewayToolSchema
 from dm_dungeon import (
     DungeonPackage,
     DungeonPlan,
@@ -475,6 +484,118 @@ def test_accepted_puzzle_projects_into_exact_guide_without_mutating_package() ->
     assert {item.code for item in readiness.diagnostics} == {
         "dungeon_preparation.guide_content_missing"
     }
+
+
+class _FakePuzzleGateway:
+    def __init__(self, completions: tuple[GatewayCompletion, ...]) -> None:
+        self._completions = list(completions)
+        self.messages: list[tuple[PromptMessage, ...]] = []
+
+    def complete(
+        self,
+        *,
+        profile: ResolvedModelRunProfile,
+        messages: tuple[PromptMessage, ...],
+        allowed_tools: tuple[str, ...],
+        tool_schemas: tuple[GatewayToolSchema, ...],
+    ) -> GatewayCompletion:
+        del profile, allowed_tools, tool_schemas
+        self.messages.append(messages)
+        if not self._completions:
+            raise AssertionError("unexpected extra puzzle completion")
+        return self._completions.pop(0)
+
+
+def test_rejected_puzzle_records_safe_usage_and_distinct_model_invariants() -> None:
+    duplicate_clue = deepcopy(_wind_shrine_output())
+    duplicate_path = duplicate_clue["clue_path"]
+    assert isinstance(duplicate_path, list)
+    duplicate_path[1]["location_id"] = duplicate_path[0]["location_id"]
+    duplicate_path[1]["observation"] = "REJECTED_DUPLICATE_CLUE_BODY"
+
+    oversized_guide = deepcopy(_wind_shrine_output())
+    oversized_path = oversized_guide["clue_path"]
+    assert isinstance(oversized_path, list)
+    oversized_path[0]["observation"] = "REJECTED_OVERSIZED_GUIDE_BODY" + ("x" * 900)
+    oversized_path[0]["inference"] = "y" * 900
+    oversized_guide["failure_consequence"] = "z" * 300
+
+    gateway = _FakePuzzleGateway(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_puzzle",
+                        call_id="duplicate-clue",
+                        arguments=duplicate_clue,
+                    ),
+                ),
+                input_tokens=101,
+                output_tokens=202,
+            ),
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_puzzle",
+                        call_id="oversized-guide",
+                        arguments=oversized_guide,
+                    ),
+                ),
+                input_tokens=303,
+                output_tokens=404,
+            ),
+        )
+    )
+
+    with pytest.raises(DungeonPuzzleRejectedAfterRepair) as rejected:
+        DungeonPuzzleSubmissionService(gateway).submit(
+            profile=resolve_dungeon_puzzle_prompt_profile(
+                provider_id="faux",
+                model_id="faux_deterministic_v1",
+                capabilities=("text", "tool_calls"),
+                context_window_tokens=16_384,
+                output_token_limit=4_096,
+            ),
+            context=DungeonPuzzleEnrichmentInput.model_validate(_wind_shrine_input()),
+        )
+
+    reports = [failure.report() for failure in rejected.value.failures]
+    repair_document = json.loads(gateway.messages[1][0].content)
+    assert repair_document["diagnostics"][0] == {
+        "affected_refs": [],
+        "code": "submission.puzzle_clue_location_duplicate",
+        "path": "/clue_path",
+        "repair": "use each clue location ID at most once",
+    }
+    assert [report["attempt"] for report in reports] == ["initial", "repair"]
+    assert [report["diagnostics"][0]["code"] for report in reports] == [
+        "submission.puzzle_clue_location_duplicate",
+        "submission.puzzle_guide_projection_too_long",
+    ]
+    assert [report["diagnostics"][0]["path"] for report in reports] == [
+        "/clue_path",
+        "/",
+    ]
+    assert reports[0]["usage"] == {
+        "measured": True,
+        "input_tokens": 101,
+        "output_tokens": 202,
+    }
+    assert reports[1]["usage"] == {
+        "measured": True,
+        "input_tokens": 303,
+        "output_tokens": 404,
+    }
+    assert all(
+        isinstance(report["duration_ms"], int) and report["duration_ms"] >= 0
+        for report in reports
+    )
+    body_free_report = json.dumps(reports)
+    assert "REJECTED_DUPLICATE_CLUE_BODY" not in body_free_report
+    assert "REJECTED_OVERSIZED_GUIDE_BODY" not in body_free_report
+    assert "arguments" not in body_free_report
+    assert "run_input" not in body_free_report
+    assert "output_payload" not in body_free_report
 
 
 def test_puzzle_enrichment_rejects_cross_task_mutation_and_unknown_ids() -> None:

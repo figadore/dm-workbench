@@ -118,12 +118,15 @@ commits superseded them. This file preserves only compact milestone history:
   human-rating contracts (`ca9ce7d`). The next provider-free slice added fail-closed exact
   evidence-matrix joins, assignment/artifact hash coherence, grounding-aware lore rules, and
   body-free rating/latency/usage/validity/repair aggregates by opaque variant (`814679d`).
-  The following transport slice compensated for the pinned Codex adapter's omitted Responses
-  hard-limit field with an exact pre-dispatch `max_output_tokens` overlay and provider-free
-  capture/decompression coverage of the outbound request. It also removed the pre-fix CLI/
-  submission advisory-cap bypass so every active canary response remains subject to both
-  measured output and cumulative publication ceilings. Actual quality evidence and staged
-  live evaluation remain.
+  The following transport investigation proved that Codex subscription rejects the attempted
+  `max_output_tokens` overlay and exposes no supported hard-cap alternative. The provider-aware
+  policy now omits unsupported fields for Codex, advertises `hard_output_token_limit` only for
+  provider-free-tested transports, and retains strict measured publication ceilings without an
+  advisory bypass (`e13510e`). One later authorized frozen canary published a valid structural
+  draft but stopped after puzzle initial/repair schema rejection. Provider-free hardening now
+  retains rejected puzzle usage/duration as body-free attempt totals and distinguishes duplicate
+  clue-location from assembled-guide-length validator failures. Preparation-ready live and human
+  quality evidence remain pending.
 
 ### Deployment baseline
 

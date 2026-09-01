@@ -1916,8 +1916,14 @@ task dispatch. A separately authorized diagnostic call at the same boundary emit
 transient bounded fingerprint proving the provider error named `max_output_tokens` as a rejected
 parameter; it retained no provider text/body and did not place the fingerprint in ordinary logs
 or the attempt report. The rejected overlay is now removed under the provider-aware alpha policy,
-while every Workbench publication ceiling remains strict. The disposable PostgreSQL-backed tests
-still require the integration database, and a valid live artifact remains pending.
+while every Workbench publication ceiling remains strict. The next authorized frozen canary
+published a valid structural draft, then stopped after the first puzzle submission and its repair
+both failed schema validation; no later staged task ran. Provider-free hardening now retains each
+rejected puzzle request's measured input/output usage and duration as body-free attempt totals and
+classifies duplicate clue locations separately from an overlong assembled guide projection. It
+does not narrow model-visible prose bounds from one canary result; that requires multi-case
+evidence. The disposable PostgreSQL-backed tests still require the integration database, and a
+preparation-ready live artifact remains pending.
 
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
   Its model-visible proposal contains room identity/purpose, critical path, bounded

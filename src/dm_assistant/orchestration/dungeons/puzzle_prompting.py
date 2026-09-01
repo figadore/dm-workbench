@@ -92,12 +92,42 @@ class DungeonPuzzleSubmissionFailure:
     attempt: Literal["initial", "repair"]
     stage: PuzzleSubmissionFailureStage
     diagnostics: tuple[dict[str, JsonValue], ...]
+    duration_ms: int
+    usage_measured: bool
+    usage_input_tokens: int | None
+    usage_output_tokens: int | None
+
+    @classmethod
+    def from_record(
+        cls,
+        *,
+        attempt: Literal["initial", "repair"],
+        stage: PuzzleSubmissionFailureStage,
+        diagnostics: tuple[dict[str, JsonValue], ...],
+        record: ModelRunRecord,
+    ) -> DungeonPuzzleSubmissionFailure:
+        """Discard model bodies while retaining measured operational totals."""
+        return cls(
+            attempt=attempt,
+            stage=stage,
+            diagnostics=diagnostics,
+            duration_ms=record.duration_ms,
+            usage_measured=record.usage_measured,
+            usage_input_tokens=record.usage_input_tokens,
+            usage_output_tokens=record.usage_output_tokens,
+        )
 
     def report(self) -> dict[str, JsonValue]:
         return {
             "attempt": self.attempt,
             "stage": self.stage,
             "diagnostics": [dict(item) for item in self.diagnostics],
+            "duration_ms": self.duration_ms,
+            "usage": {
+                "measured": self.usage_measured,
+                "input_tokens": self.usage_input_tokens,
+                "output_tokens": self.usage_output_tokens,
+            },
         }
 
 
@@ -307,10 +337,11 @@ class DungeonPuzzleSubmissionService:
         except StructuredSubmissionRejected as error:
             return _PuzzleAttempt(
                 record=error.record,
-                failure=DungeonPuzzleSubmissionFailure(
+                failure=DungeonPuzzleSubmissionFailure.from_record(
                     attempt=attempt,
                     stage="model_submission",
                     diagnostics=error.diagnostics,
+                    record=error.record,
                 ),
             )
         assert isinstance(submitted, DungeonPuzzleEnrichmentOutput)
@@ -318,10 +349,11 @@ class DungeonPuzzleSubmissionService:
         if validation.accepted_output is None:
             return _PuzzleAttempt(
                 record=record,
-                failure=DungeonPuzzleSubmissionFailure(
+                failure=DungeonPuzzleSubmissionFailure.from_record(
                     attempt=attempt,
                     stage="semantic_validation",
                     diagnostics=_semantic_diagnostics(validation),
+                    record=record,
                 ),
             )
         return _PuzzleAttempt(

@@ -29,6 +29,22 @@ from dm_assistant.orchestration.modeling.service import (
 
 SubmissionModel = TypeVar("SubmissionModel", bound=BaseModel)
 
+_CUSTOM_SCHEMA_DIAGNOSTICS: dict[str, tuple[str, str, str]] = {
+    "puzzle_clue_location_duplicate": (
+        "submission.puzzle_clue_location_duplicate",
+        "/clue_path",
+        "use each clue location ID at most once",
+    ),
+    "puzzle_guide_projection_too_long": (
+        "submission.puzzle_guide_projection_too_long",
+        "/",
+        (
+            "shorten puzzle prose so each assembled situation, solution, and "
+            "adjudication section is at most 2000 characters"
+        ),
+    ),
+}
+
 
 @dataclass(frozen=True, slots=True)
 class StructuredSubmissionTool:
@@ -160,13 +176,7 @@ class StructuredSubmissionRunner:
         except ValidationError as error:
             diagnostic_values: list[dict[str, JsonValue]] = []
             for detail in error.errors(include_url=False, include_context=True)[:8]:
-                diagnostic: dict[str, JsonValue] = {
-                    "code": "submission.schema_invalid",
-                    "path": "/" + "/".join(str(item) for item in detail["loc"]),
-                    "affected_refs": [],
-                    "repair": _schema_repair_hint(detail),
-                }
-                diagnostic_values.append(diagnostic)
+                diagnostic_values.append(_schema_diagnostic(detail))
             diagnostics = tuple(diagnostic_values)
             result = ToolResult(
                 tool_name=tool.name,
@@ -233,6 +243,33 @@ def _enforce_measured_usage(
             input_tokens=completion.input_tokens,
             output_tokens=completion.output_tokens,
         )
+
+
+def _schema_diagnostic(detail: Mapping[str, object]) -> dict[str, JsonValue]:
+    """Reduce one validation detail to allowlisted, body-free schema evidence."""
+    error_type = detail.get("type")
+    custom = (
+        _CUSTOM_SCHEMA_DIAGNOSTICS.get(error_type)
+        if isinstance(error_type, str)
+        else None
+    )
+    if custom is not None:
+        code, path, repair = custom
+    else:
+        code = "submission.schema_invalid"
+        location = detail.get("loc")
+        path = (
+            "/" + "/".join(str(item) for item in location)
+            if isinstance(location, tuple)
+            else "/"
+        )
+        repair = _schema_repair_hint(detail)
+    return {
+        "code": code,
+        "path": path,
+        "affected_refs": [],
+        "repair": repair,
+    }
 
 
 def _schema_repair_hint(detail: Mapping[str, object]) -> str:

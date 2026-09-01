@@ -574,6 +574,16 @@ def test_failed_faux_puzzle_task_keeps_parent_and_persists_only_safe_diagnostics
     attempt_run = preparation.get_generation_run(campaign_id, attempt.attempt_run_id)
     assert attempt_run.status.value == "failed"
     assert attempt_run.validation_report["repair_attempted"] is True
+    submission_attempts = attempt_run.validation_report["submission_attempts"]
+    assert isinstance(submission_attempts, list)
+    assert [item["usage"] for item in submission_attempts] == [
+        {"measured": True, "input_tokens": 300, "output_tokens": 400},
+        {"measured": True, "input_tokens": 300, "output_tokens": 400},
+    ]
+    assert all(
+        isinstance(item["duration_ms"], int) and item["duration_ms"] >= 0
+        for item in submission_attempts
+    )
     report_text = json.dumps(attempt_run.validation_report)
     assert "puzzle_enrichment.clue_location_invalid" in report_text
     assert "forbidden_rejected_value" not in report_text

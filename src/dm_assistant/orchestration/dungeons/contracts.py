@@ -7,6 +7,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
+from pydantic_core import PydanticCustomError
 
 from dm_assistant.modules.modeling import ModelRunRecord
 from dm_assistant.modules.preparation import (
@@ -1299,14 +1300,20 @@ class DungeonPuzzleEnrichmentOutput(WorkflowModel):
     ) -> DungeonPuzzleEnrichmentOutput:
         location_ids = [item.location_id for item in self.clue_path]
         if len(location_ids) != len(set(location_ids)):
-            raise ValueError("puzzle enrichment clue path requires unique location IDs")
+            raise PydanticCustomError(
+                "puzzle_clue_location_duplicate",
+                "puzzle enrichment clue path requires unique location IDs",
+            )
         projected_fields = (
             self.guide_situation(),
             self.guide_solution(),
             self.guide_adjudication(),
         )
         if any(len(value) > 2_000 for value in projected_fields):
-            raise ValueError("puzzle enrichment exceeds bounded guide projection text")
+            raise PydanticCustomError(
+                "puzzle_guide_projection_too_long",
+                "puzzle enrichment exceeds bounded guide projection text",
+            )
         return self
 
     def guide_situation(self) -> str:
