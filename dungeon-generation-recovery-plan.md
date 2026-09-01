@@ -488,9 +488,10 @@ planned encounter-slot ID: acceptance publishes one exploration child and replan
 feature, while a slot mismatch makes no provider call and no version. Resumed feature,
 trap, objective, and bounded room-narrative coverage proves the same one-step exact-policy
 boundary through every existing seam: one accepted child replans once, and each mismatched
-target makes no provider call and no version. Chain repetition remains pending. No live
-provider was contacted, and no redaction/logging subsystem or new persistence store was
-added.
+target makes no provider call and no version. A bounded provider-free chain repeats only
+that one-step primitive, advances only accepted children, and stops on completion, blocking,
+rejection, dispatch exhaustion, or its explicit task ceiling. No live provider was
+contacted, and no redaction/logging subsystem or new persistence store was added.
 
 The provider-free continuity foundation now derives and persists one bounded dungeon-only
 self-hashed projection from the resolved `DungeonGenerationContext` and accepted structural
@@ -525,6 +526,12 @@ children forward, and stops on rejection, blocking, completion, policy exhaustio
 explicit task ceiling before live Tier A.
 Multi-case blinded human evidence remains the quality authority; task contexts stay narrow
 rather than becoming a universal optional-field context or unrestricted corpus/guide dump.
+The active provider-free manifest now freezes three materially different original synthetic
+Tier A settings/interaction styles and three opaque variant IDs. Strict run measurements pin
+only hashes, latency, token usage, first-pass/final validity, and bounded repair count; strict
+human reviews contain only blinded IDs and the documented semantic, playability, and DM-prep
+ratings. Provider responses/excerpts are forbidden. Matrix validation, aggregation, and
+actual human/live evidence remain pending.
 
 - Add independently bounded puzzle, exploration, other interaction, and narrative tasks
   over exact package IDs; merge accepted output deterministically and preserve the map on

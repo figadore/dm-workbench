@@ -8,9 +8,9 @@ not test-suite behavior.
 from __future__ import annotations
 
 from hashlib import sha256
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from dm_assistant.orchestration.dungeons.contracts import (
     DungeonGenerationProposal,
@@ -99,6 +99,136 @@ class DungeonGuideQualityResult(_EvalModel):
     checks: tuple[DungeonGuideQualityCheck, ...] = Field(min_length=4, max_length=4)
     automated_pass: bool
     human_review_required: Literal[True] = True
+
+
+DungeonTierAGrounding = Literal["standalone", "synthetic_grounded"]
+DungeonTierAScore = Literal[1, 2, 3, 4, 5]
+
+
+class DungeonTierAEvalCase(_EvalModel):
+    """One original synthetic Tier A brief, never a retained provider response."""
+
+    case_id: str = Field(pattern=r"^tier_a_case_[0-9]{2}$")
+    title: str = Field(min_length=1, max_length=120)
+    setting: str = Field(min_length=20, max_length=500)
+    interaction_style: str = Field(min_length=20, max_length=300)
+    grounding: DungeonTierAGrounding
+    authorized_facts: tuple[str, ...] = Field(max_length=8)
+    prompt: str = Field(min_length=1, max_length=4_000)
+
+    @model_validator(mode="after")
+    def validate_grounding(self) -> Self:
+        if self.grounding == "standalone" and self.authorized_facts:
+            raise ValueError("standalone eval cases cannot contain authorized facts")
+        if self.grounding == "synthetic_grounded" and not self.authorized_facts:
+            raise ValueError("grounded eval cases require synthetic authorized facts")
+        return self
+
+
+class DungeonTierAEvalVariant(_EvalModel):
+    """A stable blind ID whose assignment stays out of the reviewer packet."""
+
+    variant_id: str = Field(pattern=r"^variant_[0-9]{2}$")
+
+
+class DungeonTierAEvalManifest(_EvalModel):
+    """Frozen provider-free protocol for multi-case Tier A comparison."""
+
+    schema_version: Literal["dungeon-tier-a-eval-manifest-v1"]
+    rubric_version: Literal["dungeon-tier-a-human-rubric-v1"]
+    measurement_version: Literal["dungeon-tier-a-run-measurement-v1"]
+    content_policy: Literal["synthetic-non-copyrighted-only"]
+    blinding_policy: Literal["variant-assignment-hidden-from-reviewers"]
+    score_policy: Literal["five-point-quality-1-unusable-3-usable-5-excellent"]
+    variants: tuple[DungeonTierAEvalVariant, ...] = Field(min_length=2, max_length=8)
+    cases: tuple[DungeonTierAEvalCase, ...] = Field(min_length=3, max_length=8)
+
+    @model_validator(mode="after")
+    def validate_distinct_cases_and_variants(self) -> Self:
+        case_ids = [case.case_id for case in self.cases]
+        variant_ids = [variant.variant_id for variant in self.variants]
+        if len(set(case_ids)) != len(case_ids):
+            raise ValueError("Tier A eval case IDs must be unique")
+        if len(set(variant_ids)) != len(variant_ids):
+            raise ValueError("Tier A eval variant IDs must be unique")
+        if len({case.setting.casefold() for case in self.cases}) != len(self.cases):
+            raise ValueError("Tier A eval settings must be distinct")
+        if len({case.interaction_style.casefold() for case in self.cases}) != len(
+            self.cases
+        ):
+            raise ValueError("Tier A eval interaction styles must be distinct")
+        return self
+
+
+class DungeonTierARunMeasurement(_EvalModel):
+    """Body-free operational evidence for one case/variant execution."""
+
+    measurement_version: Literal["dungeon-tier-a-run-measurement-v1"]
+    run_id: str = Field(pattern=r"^run_[a-z0-9_]+$")
+    case_id: str = Field(pattern=r"^tier_a_case_[0-9]{2}$")
+    variant_id: str = Field(pattern=r"^variant_[0-9]{2}$")
+    variant_assignment_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    artifact_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    latency_milliseconds: int = Field(
+        ge=0, description="Cumulative initial-plus-repair wall latency."
+    )
+    input_tokens: int = Field(
+        ge=0, description="Measured cumulative initial-plus-repair input usage."
+    )
+    output_tokens: int = Field(
+        ge=0, description="Measured cumulative initial-plus-repair output usage."
+    )
+    first_pass_schema_valid: bool
+    first_pass_semantic_valid: bool
+    first_pass_valid: bool = Field(
+        description="Whether the initial output passed both strict validity checks."
+    )
+    repair_count: int = Field(
+        ge=0, le=1, description="The bounded repair count used to compute repair rate."
+    )
+    final_valid: bool
+
+    @model_validator(mode="after")
+    def validate_attempt_outcome(self) -> Self:
+        if self.first_pass_semantic_valid and not self.first_pass_schema_valid:
+            raise ValueError("semantic validity requires a schema-valid first pass")
+        if self.first_pass_valid != (
+            self.first_pass_schema_valid and self.first_pass_semantic_valid
+        ):
+            raise ValueError(
+                "first-pass validity must match schema and semantic validity"
+            )
+        if self.first_pass_valid and self.repair_count:
+            raise ValueError("a first-pass-valid run cannot have a repair")
+        if self.first_pass_valid and not self.final_valid:
+            raise ValueError("a first-pass-valid run must remain valid")
+        if not self.first_pass_valid and self.final_valid and self.repair_count != 1:
+            raise ValueError("a repaired valid run must record exactly one repair")
+        if self.final_valid != (self.artifact_hash is not None):
+            raise ValueError("only a final-valid run can identify a review artifact")
+        return self
+
+
+class DungeonTierAHumanReview(_EvalModel):
+    """Blinded ratings only; provider prompts, responses, and excerpts are forbidden."""
+
+    rubric_version: Literal["dungeon-tier-a-human-rubric-v1"]
+    review_id: str = Field(pattern=r"^review_[a-z0-9_]+$")
+    reviewer_id: str = Field(pattern=r"^reviewer_[a-z0-9_]+$")
+    case_id: str = Field(pattern=r"^tier_a_case_[0-9]{2}$")
+    variant_id: str = Field(pattern=r"^variant_[0-9]{2}$")
+    artifact_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    thematic_reinforcement: DungeonTierAScore
+    history_environment_causality: DungeonTierAScore
+    mechanic_objective_unity: DungeonTierAScore
+    progression: DungeonTierAScore
+    intentional_motif_variation: DungeonTierAScore
+    lore_consistency: DungeonTierAScore | None
+    clue_logic: DungeonTierAScore
+    player_agency: DungeonTierAScore
+    puzzle_comprehensibility: DungeonTierAScore
+    exploration_quality: DungeonTierAScore
+    dm_prep_usefulness: DungeonTierAScore
 
 
 def evaluate_dungeon_guide_quality(

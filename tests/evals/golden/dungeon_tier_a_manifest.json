@@ -1,0 +1,45 @@
+{
+  "schema_version": "dungeon-tier-a-eval-manifest-v1",
+  "rubric_version": "dungeon-tier-a-human-rubric-v1",
+  "measurement_version": "dungeon-tier-a-run-measurement-v1",
+  "content_policy": "synthetic-non-copyrighted-only",
+  "blinding_policy": "variant-assignment-hidden-from-reviewers",
+  "score_policy": "five-point-quality-1-unusable-3-usable-5-excellent",
+  "variants": [
+    {"variant_id": "variant_01"},
+    {"variant_id": "variant_02"},
+    {"variant_id": "variant_03"}
+  ],
+  "cases": [
+    {
+      "case_id": "tier_a_case_01",
+      "title": "Salt-Marsh Signal House",
+      "setting": "A storm-damaged signal house stranded among salt marsh channels.",
+      "interaction_style": "environmental navigation with changing safe routes and spatial clues",
+      "grounding": "standalone",
+      "authorized_facts": [],
+      "prompt": "Create a one-floor, five-room signal house dungeon. The party must recover an unsent warning before the spring tide isolates the site. Include one loop, one gate with a discoverable dependency, one secret route, a puzzle whose clues remain understandable without a single prescribed manipulation, and an exploration challenge built around wind, brackish water, and visible changes in safe footing. Offer meaningful setback and recovery rather than an alarm or combat response."
+    },
+    {
+      "case_id": "tier_a_case_02",
+      "title": "Rootbound Embassy",
+      "setting": "An abandoned greenhouse embassy where living partitions preserve traces of a failed accord.",
+      "interaction_style": "social inference through environmental evidence and reciprocal affordances",
+      "grounding": "synthetic_grounded",
+      "authorized_facts": [
+        "The Reed Delegation marked honest concessions with paired knots.",
+        "The Orchard Delegation diverted the last shared cistern during a drought."
+      ],
+      "prompt": "Create a one-floor, six-room greenhouse embassy dungeon grounded only in the authorized synthetic facts. The party seeks the dormant treaty seed. Include one loop, one gate with a discoverable dependency, one secret route, a puzzle about reconstructing reciprocal concessions from player-observable evidence, and an exploration challenge in which the living partitions can be approached in multiple ways. Consequences should reinforce the failed accord without inventing additional campaign history."
+    },
+    {
+      "case_id": "tier_a_case_03",
+      "title": "Ashfall Memory Gallery",
+      "setting": "A civic gallery half buried by warm volcanic ash after an orderly evacuation.",
+      "interaction_style": "investigative reconstruction with risk and resource tradeoffs",
+      "grounding": "standalone",
+      "authorized_facts": [],
+      "prompt": "Create a one-floor, seven-room civic memory gallery dungeon. The party must determine which evacuation record was deliberately left incomplete. Include one loop, one gate with a discoverable dependency, one secret route, a puzzle solved by comparing incomplete public exhibits, and an exploration challenge involving unstable ash drifts, heat vents, and choices about preserving or disturbing evidence. Support multiple reasonable approaches, clear clues, setbacks, and recovery without defaulting to linked machinery."
+    }
+  ]
+}

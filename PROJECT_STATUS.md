@@ -7,12 +7,12 @@
 ## Current State
 
 - **Updated:** 2026-08-31
-- **Branch/HEAD:** `fast-track-prompt-to-dungeon` at `8f5fd98`, five commits ahead of
+- **Branch/HEAD:** `fast-track-prompt-to-dungeon` at `b6977e1`, six commits ahead of
   `origin/fast-track-prompt-to-dungeon`, plus the uncommitted slice below.
 - **Current task:** **P7-14f — Staged Tier A authoring and anti-overfitting evaluation.**
-- **Task state:** bounded provider-free chain repetition is implemented over the proven
-  one-step staged-enrichment boundary. Multi-case quality evidence and live staged Tier A
-  remain pending.
+- **Task state:** the first provider-free multi-case evaluation manifest and strict
+  body-free evidence contracts are implemented. Evidence-matrix validation, blinded
+  aggregation, actual human ratings, and live staged Tier A remain pending.
 - **Schema head:** `0008_workbench_defaults`; no migration changed or is pending.
 - **Retention gate:** **not crossed.** Active V1 contracts evolve in place; there is no
   retained real-user artifact, external consumer, non-disposable deployment, or promised
@@ -20,48 +20,55 @@
 
 ## Implemented This Slice
 
-`DungeonStagedEnrichmentChainCoordinator` now consumes an ordered set of trusted exact
-policy/profile pairs and repeats only `DungeonStagedEnrichmentCoordinator.execute`:
+The new Tier A anti-overfitting protocol freezes three original, non-copyrighted synthetic
+briefs that differ in setting and interaction style:
 
-- every accepted child version becomes the next current parent;
-- rejection stops immediately and leaves the last accepted parent current;
-- blocked and complete replans stop without another dispatch;
-- policy exhaustion and the explicit 32-task hard ceiling are distinct outcomes; and
-- the boundary has no preparation-approval or canonical operation.
+- a standalone salt-marsh signal house focused on environmental navigation;
+- a synthetic-grounded rootbound embassy focused on social inference and ecological
+  affordances; and
+- a standalone ashfall gallery focused on investigative reconstruction and risk tradeoffs.
 
-Provider-free unit coverage proves two accepted fake children followed by a rejected third
-never invoke the fourth dispatch, a complete accepted child ends the chain, and the task
-ceiling is never exceeded. The faux-provider PostgreSQL scenario supplies puzzle,
-exploration, feature, and trap policies: puzzle and exploration publish, the feature call
-fails its hard output check, and the trap provider is never contacted. The artifact remains
-`draft`, only the two accepted children exist, and the exploration child remains current.
+The manifest pins three opaque stable variant IDs, hides their prompt/model/effort
+assignments from reviewers, and declares one five-point quality scale. Strict models now
+separate:
+
+- body-free run measurements: stable case/variant/run IDs, assignment and artifact hashes,
+  cumulative latency and measured token usage, first-pass validity, bounded repair count,
+  and final validity; and
+- blinded human reviews: stable reviewer/case/variant/artifact IDs plus all six cohesion
+  dimensions, clue logic, player agency, puzzle comprehensibility, exploration quality,
+  and DM preparation usefulness. Lore consistency is nullable for standalone cases.
+
+Extra fields fail closed, so provider responses/excerpts cannot enter either evidence
+record. Run validation enforces coherent first-pass, repair, final-validity, and artifact-
+hash relationships. This is protocol/fixture coverage only; it is not generated quality
+evidence and the Synthetic Constructive Archive remains only a technical regression.
 
 ## Active Boundaries and Known Issues
 
-- There is still no multi-case quality comparison, staged live result, Tier B/C work, or
-  resumed output/print work.
+- There is no matrix validator yet to join manifest cases, blinded variants, run
+  measurements, and human reviews or enforce exact case-by-variant coverage, stable
+  assignment hashes, lore-rating applicability, and artifact-hash matching.
+- No aggregate semantic/usefulness scores, latency/usage statistics, first-pass-validity
+  rate, or repair rate have been calculated; no rating values are stored as evidence.
+- There is still no staged live result, Tier B/C work, or resumed output/print work.
 - There is no bounded cohesion-reviewer model call. Current strict report/disposition
   evidence is provider-free/human-constructible and non-authoritative.
-- The browser/CLI do not collect prompted cohesion report/disposition documents; this fails
-  closed. The authenticated JSON API accepts the strict evidence.
 - Live provider use remains paused. Pinned `@earendil-works/pi-ai` Codex transport does not
   serialize the requested hard output limit; post-response checks protect publication but
   cannot prevent provider usage.
 - Package and root pytest suites must run separately because duplicate test module basenames
   cause import-file-mismatch when collected in one process.
-- Disposable-PostgreSQL integration is skipped locally because `DM_TEST_DATABASE_URL` is
-  unset and Docker/PostgreSQL are unavailable. The chain integration test collected but did
-  not execute against PostgreSQL in this environment.
 - No provider was contacted. No credential, canon write, preparation approval, migration,
   queue, redaction system, second persistence store, or model-authored mechanics were added.
 
 ## Current Files and Verification
 
-Uncommitted production/tests:
+Uncommitted production/eval fixture/tests:
 
-- `src/dm_assistant/orchestration/dungeons/{__init__,staged_enrichment_coordinator}.py`
-- `tests/unit/test_dungeon_staged_enrichment_chain.py`
-- `tests/integration/test_dungeon_staged_enrichment_coordinator.py`
+- `src/dm_assistant/orchestration/dungeons/evals.py`
+- `tests/evals/test_dungeon_evals.py`
+- `tests/evals/golden/dungeon_tier_a_manifest.json`
 
 Uncommitted documentation:
 
@@ -72,26 +79,24 @@ Uncommitted documentation:
 
 Recorded for this slice:
 
-- `uv run pytest -q tests/unit tests/evals` -> **224 passed**.
+- `uv run pytest -q tests/unit tests/evals` -> **226 passed**.
 - `uv run pytest -q packages/dungeon-engine/tests` -> **139 passed**.
-- `uv run pytest -q tests/integration/test_dungeon_staged_enrichment_coordinator.py` ->
-  **6 skipped** (database fixture unavailable).
-- strict mypy with `MYPYPATH=src:packages/dungeon-engine/src` over the coordinator and its
-  changed tests -> **passed**.
+- strict mypy over the changed Python files -> **passed**.
 - Ruff lint/format over the changed Python files -> **passed**.
-- `git diff --check` -> **passed** after the final documentation refresh.
+- JSON parsing for the new manifest -> **passed**.
 
-Suggested commit subject: `P7-14f bound repeated staged enrichment dispatch`
+Suggested commit subject: `P7-14f freeze blinded multi-case Tier A eval protocol`
 
 ## Single Next Recommended Task
 
-**Start the small multi-case Tier A anti-overfitting evaluation set.**
+**Add provider-free Tier A evidence-matrix validation and blinded aggregation.**
 
-**First concrete action:** add a failing provider-free eval test for a manifest of at least
-three materially different synthetic, non-copyrighted settings/interaction styles. Require
-stable blinded case/variant IDs and the documented semantic, DM-usefulness, latency, usage,
-first-pass validity, and repair-rate rating fields without storing provider bodies. Keep the
-Synthetic Constructive Archive only as a technical renderer/secrecy regression.
+**First concrete action:** add a failing eval test that supplies one body-free run and one
+human review for every manifest case/variant pair, then prove missing/duplicate pairs,
+variant assignment-hash drift, mismatched artifact hashes, and standalone/grounded lore-
+rating mistakes fail closed. Aggregate by opaque variant ID only, including every semantic
+and DM-usefulness mean plus latency, token usage, first-pass-validity rate, and repair rate.
+Do not store provider bodies or claim synthetic test values as quality evidence.
 
 Do **not** start a live provider call, Tier B/C, a migration, queue, model-authored mechanics,
 automatic preparation approval, canon writes, or output/print work.

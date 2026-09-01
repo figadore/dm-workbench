@@ -112,8 +112,11 @@ commits superseded them. This file preserves only compact milestone history:
   Resumed one-step coverage proves exact-policy dispatch and pre-provider mismatch rejection
   for every staged kind. A bounded chain now repeats only the one-step primitive with trusted
   policy/profile pairs, advances only accepted current children, and stops fail-closed on
-  rejection or its explicit limit without approval/canonical operations. Multi-case quality
-  evidence and staged live evaluation remain.
+  rejection or its explicit limit without approval/canonical operations. The subsequent
+  anti-overfitting foundation froze three materially different original synthetic Tier A
+  cases, three opaque variant IDs, strict body-free run measurements, and strict blinded
+  human-rating contracts. Matrix aggregation, actual quality evidence, and staged live
+  evaluation remain.
 
 ### Deployment baseline
 

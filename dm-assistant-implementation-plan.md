@@ -1859,6 +1859,15 @@ bounded provider-free chain repeats only that one-step boundary with exact polic
 pairs, advances only accepted current children, and stops on completion, blocking, rejection,
 dispatch exhaustion, or its explicit task limit before a live Tier A run.
 
+The provider-free anti-overfitting foundation now freezes three original synthetic Tier A
+settings with materially different interaction styles, including standalone and synthetic-
+grounded context, plus three stable opaque variant IDs. Strict run evidence can retain only
+assignment/artifact hashes, latency, measured token usage, first-pass/final validity, and the
+bounded repair count. Strict blinded human evidence can retain only stable IDs and 1–5
+ratings for all six cohesion dimensions, clue logic, player agency, puzzle comprehensibility,
+exploration quality, and DM preparation usefulness; provider responses and excerpts are
+forbidden. Evidence-matrix validation, blinded aggregation, and actual ratings remain pending.
+
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
   Its model-visible proposal contains room identity/purpose, critical path, bounded
   branches/loop, gate/dependency placement, named objective, and typed content slots with
