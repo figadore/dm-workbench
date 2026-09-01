@@ -16,6 +16,8 @@ from dm_assistant.cli.main import (
     _default_model,
     _emit_debug_event,
     _emit_dungeon_failure_summary,
+    _emit_output_limit_policy,
+    _emit_provider_contract_diagnostic,
     _model_run_rejected_error,
     _prompt_execution_error,
     _provider_smoke_profile,
@@ -35,6 +37,48 @@ def test_debug_event_is_json_on_stderr(capsys: pytest.CaptureFixture[str]) -> No
     assert capsys.readouterr().err == (
         '{"data":{"data":{"delta":"x"},"event":"text_delta"},"debug":"gateway_event"}\n'
     )
+
+
+def test_output_limit_policy_discloses_application_only_enforcement(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _emit_output_limit_policy(("text", "tool_calls"))
+    assert "application-only" in capsys.readouterr().err
+
+    _emit_output_limit_policy(("text", "hard_output_token_limit", "tool_calls"))
+    assert capsys.readouterr().err == ""
+
+
+def test_contract_diagnostic_filters_transcript_bodies(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _emit_provider_contract_diagnostic(
+        "harness_request", {"messages": [{"content": "private prompt"}]}
+    )
+    _emit_provider_contract_diagnostic(
+        "gateway_event",
+        {"event": "error", "data": {"message": "private provider body"}},
+    )
+    _emit_provider_contract_diagnostic(
+        "gateway_event",
+        {
+            "event": "provider_contract_diagnostic",
+            "data": {
+                "http_status": 400,
+                "mentions_max_output_tokens": True,
+                "parameter_rejection": True,
+                "max_output_tokens_rejection": True,
+            },
+        },
+    )
+
+    captured = capsys.readouterr().err
+    assert captured == (
+        '{"data":{"http_status":400,"max_output_tokens_rejection":true,'
+        '"mentions_max_output_tokens":true,"parameter_rejection":true},'
+        '"debug":"provider_contract_diagnostic"}\n'
+    )
+    assert "private" not in captured
 
 
 class _LoginGateway:
@@ -140,10 +184,27 @@ def test_canary_command_pins_exact_prompt_seed_and_explicit_model(
     assert captured["provider"] == "openai-codex"
     assert captured["model"] == "gpt-synthetic"
     assert captured["effort"] is ReasoningEffort.FAST
+    assert captured["diagnose_provider_contract"] is False
     assert "prompt" not in captured
     assert "seed" not in captured
     assert "acknowledge_advisory_output_cap" not in captured
     assert "Stop on the first failure" in result.output
+
+    captured.clear()
+    diagnostic = runner.invoke(
+        app,
+        [
+            "dungeon",
+            "canary",
+            "--provider",
+            "openai-codex",
+            "--model",
+            "gpt-synthetic",
+            "--diagnose-provider-contract",
+        ],
+    )
+    assert diagnostic.exit_code == 0, diagnostic.output
+    assert captured["diagnose_provider_contract"] is True
 
 
 def test_provider_smoke_profile_is_short_lived_and_tool_free() -> None:

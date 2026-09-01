@@ -245,6 +245,9 @@ class PiGatewayClient:
                 ),
                 "time_limit_seconds": profile.time_budget_seconds,
                 "run_id": run_id or str(uuid4()),
+                **(
+                    {"provider_contract_diagnostics": True} if debug is not None else {}
+                ),
             },
             allow_nan=False,
             separators=(",", ":"),

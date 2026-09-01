@@ -137,6 +137,7 @@ def test_browser_prompt_faux_gateway_persists_draft(
         ) as client:
             await client.post("/login", data={"token": TOKEN})
             page = await client.get(f"/dungeons?campaign_id={campaign_id}")
+            assert "application-only output cap" in page.text
             csrf = re.search(r'name="csrf_token" value="([^"]+)"', page.text).group(1)  # type: ignore[union-attr]
             started = await client.post(
                 "/dungeons/prompts",

@@ -337,9 +337,8 @@ when the measured remaining budget cannot fit that input. Use transient `--debug
 only when sensitive bodies are explicitly needed for local diagnosis.
 
 The current live canary is a committed one-floor Tier A prompt with seed `714000001`,
-exposed only through `dm dungeon canary`; provider and model must be explicit. The private
-gateway now serializes the requested Codex `max_output_tokens` hard-limit field before
-provider dispatch, and the former advisory-cap override has been removed:
+exposed only through `dm dungeon canary`; provider and model must be explicit. Output-limit
+transport is provider-aware, and the former advisory publication override remains removed:
 
 ```bash
 uv run --frozen dm dungeon canary \
@@ -349,8 +348,13 @@ uv run --frozen dm dungeon canary \
 
 The canary retains the strict per-request output check, 12,000 measured-token cumulative
 publication ceiling, repair-input reservation, validation, secrecy, and atomic-publication
-gates. Stop after this one attempt on success or failure; post-response checks remain
-defense in depth and cannot recover provider tokens already consumed.
+gates. Stop after this one attempt on success or failure. Codex subscription requests omit the
+unsupported `max_output_tokens`, `max_tokens`, and `max_completion_tokens` fields and therefore
+do not pre-cap consumed subscription quota. Timeouts, cancellation, repair reservation, and
+strict measured per-response/cumulative checks still apply, and an over-cap or unknown-usage
+result cannot publish. The separate standard OpenAI API-key adapter serializes its documented
+`max_output_tokens` hard cap and advertises `hard_output_token_limit`; Codex does not. Provider-
+free injected-fetch tests pin both outbound contracts.
 
 The frozen provider-free V1 suite is synthetic and safe for CI:
 

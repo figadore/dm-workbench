@@ -1873,15 +1873,25 @@ mean plus lore denominator, latency/token means, first-pass-validity rate, and r
 opaque variant only. Synthetic arithmetic fixtures are not quality evidence; actual ratings
 remain pending.
 
-The pinned `@earendil-works/pi-ai` Codex adapter accepts `maxTokens` but does not project it
-into its Responses payload. The private gateway now uses that adapter's pre-dispatch payload
-boundary to overlay the exact requested `max_output_tokens` value after the adapter builds
-the request and before either SSE or WebSocket dispatch. A provider-free transport test uses
-synthetic OAuth, forced SSE, an injected fetch, and decompression of the actual outbound body
-to prove the hard field is present without retaining the prompt/body. The V1 request and
-package pin stay in place; post-response usage checks remain defense in depth rather than the
-provider-limit mechanism. The first live canary exercised this path but its initial stream
-was rejected before model output, so provider-side acceptance/enforcement remains unproven.
+The pinned `@earendil-works/pi-ai` Codex adapter accepts `maxTokens` but correctly omits a
+model-output field from its ChatGPT subscription request. The former private-gateway
+`max_output_tokens` overlay was rejected before output by the authorized replacement canary;
+an opt-in no-store diagnostic then confirmed that exact field was the rejected parameter.
+Provider-free review of official OpenAI Codex source at `bc39b0e`, open enhancement
+`openai/codex#36180`, pinned `pi-ai` 0.84.1, and registry-latest 0.84.4 found no supported
+`max_output_tokens`, `max_tokens`, or `max_completion_tokens` alternative. The gateway now
+omits all three fields for `openai-codex` and does not advertise its
+`hard_output_token_limit` capability. Synthetic OAuth/injected-fetch coverage captures and
+decompresses the actual outbound SSE body to prove that contract without retaining the prompt
+or body. OpenAI's separate public API-key Responses contract does support
+`max_output_tokens`; synthetic API-key/injected-fetch coverage proves the standard `openai`
+adapter serializes the exact requested value and advertises the hard-cap capability.
+
+The provider-aware alpha policy permits Codex subscription use without pretending it has a
+pre-consumption cost guarantee. Every task still has strict measured per-response and cumulative
+publication ceilings, repair reservation, timeout/cancellation, and body-free over-limit
+failure; missing usage remains unknown. An over-cap result cannot publish, but already consumed
+subscription quota cannot be recovered. There is no advisory publication bypass.
 
 The frozen canary is now wired provider-free through its complete application path. After
 one accepted structural child, Workbench derives exact trusted policies from that package,
@@ -1900,8 +1910,14 @@ that the gateway discarded provider HTTP status after `pi-ai` formed its final e
 provider-free repair now combines transient text patterns with response status to emit only
 allowlisted usage/rate, authentication/access, model/provider availability, request-contract,
 or generic categories. Workbench persists only that safe category on failed prompt attempts;
-provider text/body remains absent. The disposable PostgreSQL-backed tests still require the
-integration database, and a valid live artifact remains pending.
+provider text/body remains absent. The one authorized replacement call then stopped at the
+same initial structural boundary with `provider_request_rejected`, no artifact, and no staged
+task dispatch. A separately authorized diagnostic call at the same boundary emitted only a
+transient bounded fingerprint proving the provider error named `max_output_tokens` as a rejected
+parameter; it retained no provider text/body and did not place the fingerprint in ordinary logs
+or the attempt report. The rejected overlay is now removed under the provider-aware alpha policy,
+while every Workbench publication ceiling remains strict. The disposable PostgreSQL-backed tests
+still require the integration database, and a valid live artifact remains pending.
 
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
   Its model-visible proposal contains room identity/purpose, critical path, bounded
@@ -1958,12 +1974,14 @@ integration database, and a valid live artifact remains pending.
   clue logic, player agency, puzzle comprehensibility, exploration quality, prep usefulness,
   latency, token use, first-pass schema validity, and repair rate. Do not promote a larger
   model or deeper effort without measured quality improvement.
-- Keep the gateway's tested Codex `max_output_tokens` payload overlay in place so requested
-  output limits are expressed before provider dispatch. Then run the frozen staged Tier A
-  canary before Tier B/C. Tier A
-  must produce one accepted structural plan, valid topology/geometry, independently
-  accepted required enrichments, a preparation-ready guide, secrecy-clean assets, bounded
-  usage, and one atomic draft. There is no advisory output-cap publication exception.
+- Keep provider-aware output-limit transport contracts: Codex subscription omits unsupported
+  hard-cap fields and discloses that quota is not capped before consumption; a provider such
+  as standard OpenAI API advertises `hard_output_token_limit` only with provider-free payload
+  evidence. Every provider retains strict measured per-response/cumulative publication checks.
+  Then run the frozen staged Tier A canary before Tier B/C. Tier A must produce one accepted
+  structural plan, valid topology/geometry, independently accepted required enrichments, a
+  preparation-ready guide, secrecy-clean assets, bounded measured usage, and one atomic draft.
+  There is no advisory output-cap publication exception.
 - Defer Tier B vertical composition and Tier C dense graphs until the staged live Tier A
   path has produced a usable artifact and the bounded Tier A evaluation set demonstrates
   dependable generation. B/C test scalability; they are not prerequisites for proving

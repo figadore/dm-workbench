@@ -532,12 +532,14 @@ ratings. Provider responses/excerpts are forbidden. Provider-free matrix validat
 enforces exact case/variant coverage, stable assignment hashes, final-valid artifact joins,
 and correct lore applicability; its body-free blinded aggregate includes every rating mean
 plus the lore denominator, latency/token means, first-pass-validity rate, and repair rate by
-opaque variant only. The private gateway now compensates for the pinned Codex adapter's
-omitted hard-limit projection by overlaying the exact requested `max_output_tokens` value at
-its pre-dispatch payload boundary. A synthetic-OAuth, injected-fetch transport test captures
-and decompresses the actual outbound SSE body; the same transformed payload precedes either
-SSE or WebSocket dispatch. The frozen canary now composes structural publication, exact trusted
-policy construction, six independently resolved staged profiles, the existing bounded chain,
+opaque variant only. The private gateway now models provider-aware output-limit capability.
+Codex subscription advertises no `hard_output_token_limit`; synthetic OAuth/injected-fetch
+coverage captures and decompresses its outbound SSE body and proves it omits unsupported
+`max_output_tokens`, `max_tokens`, and `max_completion_tokens` fields. Standard OpenAI API-key
+transport advertises the capability only after a synthetic API-key/injected-fetch test proves
+it serializes the exact requested `max_output_tokens` value. The frozen canary now composes
+structural publication, exact trusted policy construction, six independently resolved staged
+profiles, the existing bounded chain,
 and the provider-free final gate. Faux application coverage proves complete success and
 stop-on-first-rejection behavior while the artifact remains a draft and attempt evidence stays
 body-free. Structural key/clue dependencies project only their accepted name and exact room as
@@ -545,8 +547,20 @@ an ordinary-presence discovery statement; removed structural guide prose is no l
 blocker, while richer gate interactions remain optional. The first live call stopped before
 content at its structural provider stream and was not retried. Provider-free error handling now
 reduces transient provider text plus response status to one allowlisted operational category
-and persists only that category, never provider text/body. A valid live artifact and human
-quality evidence remain pending.
+and persists only that category, never provider text/body. The authorized replacement call was
+then classified as `provider_request_rejected` at the same initial boundary with no artifact or
+staged task dispatch. A separately authorized diagnostic call reduced the transient error to an
+opt-in no-store fingerprint and proved that it named `max_output_tokens` as a rejected parameter;
+no HTTP status was available on that path. The fingerprint and provider body were absent from
+ordinary logs and durable attempt evidence. Pinned `pi-ai` 0.84.1, registry-latest 0.84.4,
+and official OpenAI Codex source at `bc39b0e` omit that unsupported field from stock Codex
+requests. The official request/config surfaces expose no alternate `max_tokens` or
+`max_completion_tokens` hard cap, and open enhancement `openai/codex#36180` documents the same
+gap. OpenAI's separate public API-key Responses contract supports `max_output_tokens`.
+The rejected Codex overlay is removed under the provider-aware alpha policy. Codex remains
+usable with timeout/cancellation and strict measured per-response/cumulative publication
+ceilings, while setup must disclose that consumed subscription quota is not pre-capped. A valid
+live artifact and human quality evidence remain pending.
 
 - Add independently bounded puzzle, exploration, other interaction, and narrative tasks
   over exact package IDs; merge accepted output deterministically and preserve the map on
@@ -556,10 +570,10 @@ quality evidence remain pending.
   causality, mechanic/objective unity, progression, intentional motif variation, and
   selected-lore consistency in addition to playability and preparation usefulness. Keep
   the archive packet only as a technical regression.
-- Preserve the tested Codex hard output-cap payload overlay, then run the frozen staged Tier
-  A canary after provider-free and faux gates pass. Requested output ceilings and the measured
-  cumulative ceiling are mandatory for the canary and ordinary rollout; there is no advisory
-  publication exception or acknowledgment bypass.
+- Use provider-aware transport contracts: omit unsupported hard-cap fields for Codex
+  subscription and advertise `hard_output_token_limit` only for provider-free-tested adapters.
+  Keep strict measured request and cumulative publication ceilings for every provider; there is
+  no advisory publication exception or acknowledgment bypass.
 - Defer Tier B/C until the staged live Tier A path produces a usable preparation-ready
   artifact and the bounded Tier A evaluation set is dependable.
 - Resume asset/print polish only after Tier A is dependable.

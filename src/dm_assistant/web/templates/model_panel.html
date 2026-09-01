@@ -11,7 +11,14 @@
         <p>Auth modes: {{ provider.auth_modes|join(", ") if provider.auth_modes else "none" }}</p>
         <ul>
           {% for model in provider.models %}
-          <li><code>{{ model.model_id }}</code> — {{ model.name }}</li>
+          <li>
+            <code>{{ model.model_id }}</code> — {{ model.name }}
+            {% if "hard_output_token_limit" in model.capabilities %}
+            <small>provider-enforced output cap</small>
+            {% else %}
+            <small>application-only output cap; provider quota is consumed before validation</small>
+            {% endif %}
+          </li>
           {% endfor %}
         </ul>
         <form method="post" action="/modeling/logins">

@@ -497,6 +497,7 @@ def dungeon_prompt(
                 f"at {selected_effort.value} effort.",
                 err=True,
             )
+            _emit_output_limit_policy(selected_model.capabilities)
             runtime.model_selections.save(
                 task_name="dungeon_generation_intent_v1",
                 provider_id=selected_provider.id,
@@ -591,6 +592,7 @@ def _run_dungeon_staged_canary(
     model: str,
     effort: ReasoningEffort,
     debug: bool,
+    diagnose_provider_contract: bool,
     created_by: str,
 ) -> None:
     """Run the complete frozen canary through shared application boundaries."""
@@ -623,12 +625,22 @@ def _run_dungeon_staged_canary(
                 f"at {selected_effort.value} effort.",
                 err=True,
             )
+            _emit_output_limit_policy(selected_model.capabilities)
             runtime.model_selections.save(
                 task_name="dungeon_generation_intent_v1",
                 provider_id=selected_provider.id,
                 model_id=selected_model.id,
                 effort=selected_effort,
                 selection_policy="dungeon-task-baseline-v1",
+            )
+            debug_callback = (
+                _emit_debug_event
+                if debug
+                else (
+                    _emit_provider_contract_diagnostic
+                    if diagnose_provider_contract
+                    else None
+                )
             )
             try:
                 outcome = canary.execute(
@@ -660,7 +672,7 @@ def _run_dungeon_staged_canary(
                         requested_effort=selected_effort,
                     ),
                     surface=DUNGEON_TIER_A_CANARY.canary_id,
-                    debug=_emit_debug_event if debug else None,
+                    debug=debug_callback,
                 )
             except ModelGatewayTransportError as error:
                 raise InvalidInputError(str(error)) from None
@@ -730,6 +742,13 @@ def dungeon_canary(
             help="Stream the model/harness exchange to stderr; it is not persisted.",
         ),
     ] = False,
+    diagnose_provider_contract: Annotated[
+        bool,
+        typer.Option(
+            "--diagnose-provider-contract",
+            help="Print only a transient body-free provider-contract fingerprint.",
+        ),
+    ] = False,
     created_by: Annotated[str, typer.Option("--created-by")] = "dm",
 ) -> None:
     """Run the frozen Tier A prompt through every staged authoring gate."""
@@ -744,6 +763,7 @@ def dungeon_canary(
         model=model,
         effort=effort,
         debug=debug,
+        diagnose_provider_contract=diagnose_provider_contract,
         created_by=created_by,
     )
 
@@ -1215,6 +1235,17 @@ def _render_login_event(
         typer.echo(event.message, err=True)
 
 
+def _emit_output_limit_policy(capabilities: tuple[str, ...]) -> None:
+    """Disclose when the selected provider cannot pre-cap consumed output quota."""
+
+    if "hard_output_token_limit" not in capabilities:
+        typer.echo(
+            "Output limit policy: application-only; provider quota may be consumed "
+            "before an over-limit result is rejected.",
+            err=True,
+        )
+
+
 def _emit_debug_event(kind: str, data: dict[str, object]) -> None:
     """Print an explicit, transient transcript without contaminating ordinary logs."""
     typer.echo(
@@ -1226,6 +1257,41 @@ def _emit_debug_event(kind: str, data: dict[str, object]) -> None:
             sort_keys=True,
         ),
         err=True,
+    )
+
+
+def _emit_provider_contract_diagnostic(kind: str, data: dict[str, object]) -> None:
+    """Print only the gateway's bounded contract fingerprint, never transcript bodies."""
+
+    if kind != "gateway_event" or data.get("event") != "provider_contract_diagnostic":
+        return
+    payload = data.get("data")
+    if not isinstance(payload, dict):
+        return
+    http_status = payload.get("http_status")
+    booleans = (
+        payload.get("mentions_max_output_tokens"),
+        payload.get("parameter_rejection"),
+        payload.get("max_output_tokens_rejection"),
+    )
+    if (
+        http_status is not None
+        and (
+            not isinstance(http_status, int)
+            or isinstance(http_status, bool)
+            or http_status < 100
+            or http_status > 599
+        )
+    ) or not all(isinstance(value, bool) for value in booleans):
+        return
+    _emit_debug_event(
+        "provider_contract_diagnostic",
+        {
+            "http_status": http_status,
+            "mentions_max_output_tokens": booleans[0],
+            "parameter_rejection": booleans[1],
+            "max_output_tokens_rejection": booleans[2],
+        },
     )
 
 

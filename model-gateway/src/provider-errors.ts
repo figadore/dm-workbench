@@ -13,6 +13,46 @@ export interface SafeProviderError {
   readonly message: string;
 }
 
+export interface ProviderContractDiagnostic {
+  readonly http_status: number | null;
+  readonly mentions_max_output_tokens: boolean;
+  readonly parameter_rejection: boolean;
+  readonly max_output_tokens_rejection: boolean;
+}
+
+/**
+ * Produce an opt-in, body-free fingerprint for one transient contract diagnosis.
+ *
+ * The provider text is reduced in memory to booleans over one server-owned field name.
+ * No provider text, arbitrary code, response body, prompt, or credential is returned.
+ */
+export function fingerprintProviderContractError(
+  value: unknown,
+  httpStatus?: number,
+): ProviderContractDiagnostic {
+  const errorMessage =
+    value !== null && typeof value === "object" && "errorMessage" in value
+      ? (value as { errorMessage?: unknown }).errorMessage
+      : undefined;
+  const text = typeof errorMessage === "string" ? errorMessage : "";
+  const mentionsMaxOutputTokens = /\bmax_output_tokens\b/i.test(text);
+  const parameterRejection =
+    /(?:unknown|unrecognized|unsupported|invalid)\s+(?:parameter|field)|(?:parameter|field)[^.]{0,80}(?:not supported|unsupported|invalid)/i.test(text);
+
+  return {
+    http_status:
+      httpStatus !== undefined
+      && Number.isSafeInteger(httpStatus)
+      && httpStatus >= 100
+      && httpStatus <= 599
+        ? httpStatus
+        : null,
+    mentions_max_output_tokens: mentionsMaxOutputTokens,
+    parameter_rejection: parameterRejection,
+    max_output_tokens_rejection: mentionsMaxOutputTokens && parameterRejection,
+  };
+}
+
 /**
  * Reduce transient provider failure detail to a stable body-free category.
  *

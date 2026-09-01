@@ -20,6 +20,8 @@ import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
 import type { GatewayStreamRequest } from "./contracts.js";
 import {
   classifyProviderError,
+  fingerprintProviderContractError,
+  type ProviderContractDiagnostic,
   type SafeProviderErrorCode,
 } from "./provider-errors.js";
 
@@ -29,6 +31,7 @@ export class GatewayRuntimeError extends Error {
   constructor(
     readonly code: SafeProviderErrorCode,
     message: string,
+    readonly contractDiagnostic?: ProviderContractDiagnostic,
   ) {
     super(message);
   }
@@ -144,6 +147,7 @@ class PiAiGatewayRuntime implements GatewayRuntime {
                   ? ["json_schema_constrained_sampling"]
                   : []
               ),
+              ...(provider.id === "openai" ? ["hard_output_token_limit"] : []),
               "tool_calls",
             ],
             contextWindow: model.contextWindow,
@@ -233,37 +237,24 @@ class PiAiGatewayRuntime implements GatewayRuntime {
         onResponse: (response) => {
           providerHttpStatus = response.status;
         },
-        ...(request.provider === "openai-codex"
-          ? {
-              onPayload: (payload: unknown) =>
-                withCodexOutputTokenLimit(payload, request.outputTokenLimit),
-            }
-          : {}),
       },
     );
     for await (const event of stream) {
       if (event.type === "error") {
         const safeError = classifyProviderError(event.error, providerHttpStatus);
         if (safeError.code !== "provider_error") {
-          throw new GatewayRuntimeError(safeError.code, safeError.message);
+          throw new GatewayRuntimeError(
+            safeError.code,
+            safeError.message,
+            request.providerContractDiagnostics
+              ? fingerprintProviderContractError(event.error, providerHttpStatus)
+              : undefined,
+          );
         }
       }
       yield event;
     }
   }
-}
-
-function withCodexOutputTokenLimit(
-  payload: unknown,
-  outputTokenLimit: number,
-): Record<string, unknown> {
-  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
-    throw new Error("Codex provider payload must be an object");
-  }
-  return {
-    ...(payload as Record<string, unknown>),
-    max_output_tokens: outputTokenLimit,
-  };
 }
 
 function toPiTool(tool: GatewayStreamRequest["tools"][number]): Tool {

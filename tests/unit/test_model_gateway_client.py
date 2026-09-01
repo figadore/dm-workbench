@@ -105,6 +105,9 @@ def test_private_gateway_client_sends_only_policy_bound_input_and_decodes_sse(
     captured: list[Request] = []
     response = FakeSseResponse(
         (
+            b"event: provider_contract_diagnostic\n",
+            b'data: {"http_status":400,"mentions_max_output_tokens":true,"parameter_rejection":true,"max_output_tokens_rejection":true}\n',
+            b"\n",
             b"event: text_delta\n",
             b'data: {"delta":"{\\"intent\\":\\"synthetic\\"}"}\n',
             b"\n",
@@ -162,8 +165,18 @@ def test_private_gateway_client_sends_only_policy_bound_input_and_decodes_sse(
         "gateway_event",
         "gateway_event",
         "gateway_event",
+        "gateway_event",
     ]
     assert events[1][1] == {
+        "event": "provider_contract_diagnostic",
+        "data": {
+            "http_status": 400,
+            "mentions_max_output_tokens": True,
+            "parameter_rejection": True,
+            "max_output_tokens_rejection": True,
+        },
+    }
+    assert events[2][1] == {
         "event": "text_delta",
         "data": {"delta": '{"intent":"synthetic"}'},
     }
@@ -181,6 +194,7 @@ def test_private_gateway_client_sends_only_policy_bound_input_and_decodes_sse(
     assert payload["provider"] == "faux"
     assert payload["time_limit_seconds"] == 30
     assert payload["output_token_limit"] == 512
+    assert payload["provider_contract_diagnostics"] is True
     assert payload["tools"] == [schema.model_dump(mode="json", exclude_none=True)]
     assert "constrained_sampling" not in payload["tools"][0]
 

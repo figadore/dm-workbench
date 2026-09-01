@@ -16,7 +16,10 @@ import {
 
 import { FileCredentialStore } from "../src/credentials.js";
 import { parseStreamRequest, type GatewayStreamRequest } from "../src/contracts.js";
-import { classifyProviderError } from "../src/provider-errors.js";
+import {
+  classifyProviderError,
+  fingerprintProviderContractError,
+} from "../src/provider-errors.js";
 import {
   createPiAiRuntime,
   GatewayRuntimeError,
@@ -61,6 +64,13 @@ test("health, catalog, and streams require the internal caller token", async (t)
   assert.match(catalogText, /github-copilot/);
   assert.match(catalogText, /openai-codex/);
   assert.doesNotMatch(catalogText, /access|refresh|credential/i);
+  const catalogDocument = JSON.parse(catalogText) as {
+    providers: { id: string; models: { capabilities: string[] }[] }[];
+  };
+  const apiKeyOpenAi = catalogDocument.providers.find((provider) => provider.id === "openai");
+  const subscriptionCodex = catalogDocument.providers.find((provider) => provider.id === "openai-codex");
+  assert.ok(apiKeyOpenAi?.models.every((model) => model.capabilities.includes("hard_output_token_limit")));
+  assert.ok(subscriptionCodex?.models.every((model) => !model.capabilities.includes("hard_output_token_limit")));
 
   const stream = await fetch(`${baseUrl}/v1/streams`, {
     method: "POST",
@@ -78,7 +88,7 @@ test("health, catalog, and streams require the internal caller token", async (t)
   assert.match(events, /event: done/);
 });
 
-test("the pinned Codex transport serializes the requested hard output limit", async () => {
+test("the pinned Codex transport omits unsupported output-limit fields", async () => {
   const directory = await mkdtemp(join(tmpdir(), "dm-gateway-"));
   const credentials = new FileCredentialStore(join(directory, "credentials.json"));
   await credentials.modify("openai-codex", async () => ({
@@ -112,6 +122,7 @@ test("the pinned Codex transport serializes the requested hard output limit", as
     provider: "openai-codex",
     model: "gpt-5.4",
     output_token_limit: 321,
+    provider_contract_diagnostics: true,
   }));
 
   await assert.rejects(
@@ -123,13 +134,64 @@ test("the pinned Codex transport serializes the requested hard output limit", as
     (error: unknown) => {
       assert.ok(error instanceof GatewayRuntimeError);
       assert.equal(error.code, "provider_request_rejected");
+      assert.deepEqual(error.contractDiagnostic, {
+        http_status: 400,
+        mentions_max_output_tokens: false,
+        parameter_rejection: false,
+        max_output_tokens_rejection: false,
+      });
       assert.doesNotMatch(error.message, /private rejection detail/);
       return true;
     },
   );
 
-  assert.equal(capturedPayload?.max_output_tokens, 321);
   assert.equal(capturedPayload?.model, "gpt-5.4");
+  assert.equal(capturedPayload?.max_output_tokens, undefined);
+  assert.equal(capturedPayload?.max_tokens, undefined);
+  assert.equal(capturedPayload?.max_completion_tokens, undefined);
+});
+
+test("the standard OpenAI API transport serializes its documented hard output limit", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "dm-gateway-"));
+  const credentials = new FileCredentialStore(join(directory, "credentials.json"));
+  await credentials.modify("openai", async () => ({
+    type: "api_key",
+    key: "synthetic-openai-api-key",
+  }));
+
+  let capturedPayload: Record<string, unknown> | undefined;
+  const providerFetch: typeof fetch = async (_input, init) => {
+    const body = init?.body;
+    assert.ok(typeof body === "string" || body instanceof Uint8Array);
+    capturedPayload = JSON.parse(Buffer.from(body).toString("utf8")) as Record<string, unknown>;
+    return new Response(JSON.stringify({ error: { message: "Unsupported parameter: synthetic_field; private detail" } }), {
+      status: 400,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  const runtime = createPiAiRuntime({ credentials, providerFetch });
+  const request = parseStreamRequest(fauxStreamRequest({
+    provider: "openai",
+    model: "gpt-5.4",
+    output_token_limit: 654,
+  }));
+
+  await assert.rejects(
+    async () => {
+      for await (const _event of runtime.stream(request, new AbortController().signal)) {
+        // The synthetic response is consumed only to exercise the transport boundary.
+      }
+    },
+    (error: unknown) => {
+      assert.ok(error instanceof GatewayRuntimeError);
+      assert.equal(error.code, "provider_request_rejected");
+      assert.doesNotMatch(error.message, /synthetic_field|private detail/);
+      return true;
+    },
+  );
+
+  assert.equal(capturedPayload?.model, "gpt-5.4");
+  assert.equal(capturedPayload?.max_output_tokens, 654);
 });
 
 test("normalized transcript roles preserve tool continuity without user-message flattening", () => {
@@ -153,9 +215,11 @@ test("normalized transcript roles preserve tool continuity without user-message 
   }));
 
   assert.deepEqual(request.messages.map((message) => message.role), ["user", "assistant", "tool_result"]);
+  assert.equal(request.providerContractDiagnostics, false);
   assert.equal(request.messages[1]?.role === "assistant" && request.messages[1].toolCalls[0]?.id, "call_synthetic");
   assert.equal(request.messages[2]?.role === "tool_result" && request.messages[2].toolCallId, "call_synthetic");
   assert.throws(() => parseStreamRequest(fauxStreamRequest({ messages: [{ role: "tool_result", content: "x" }] })));
+  assert.throws(() => parseStreamRequest(fauxStreamRequest({ provider_contract_diagnostics: "yes" })));
 });
 
 test("constrained JSON-schema sampling is forwarded as prefer and remains safe for faux fallback", async () => {
@@ -278,6 +342,30 @@ test("safe provider classification distinguishes operational failure categories"
   }
 });
 
+test("contract diagnostics reduce provider text to one bounded fingerprint", () => {
+  assert.deepEqual(
+    fingerprintProviderContractError(
+      { errorMessage: "Unsupported parameter max_output_tokens; private detail" },
+      400,
+    ),
+    {
+      http_status: 400,
+      mentions_max_output_tokens: true,
+      parameter_rejection: true,
+      max_output_tokens_rejection: true,
+    },
+  );
+  assert.deepEqual(
+    fingerprintProviderContractError({ errorMessage: "private opaque failure" }, 422),
+    {
+      http_status: 422,
+      mentions_max_output_tokens: false,
+      parameter_rejection: false,
+      max_output_tokens_rejection: false,
+    },
+  );
+});
+
 test("provider usage errors are classified without exposing provider text", async (t) => {
   const runtime: GatewayRuntime = {
     async listProviders() {
@@ -340,6 +428,44 @@ test("provider request errors are classified without exposing provider text", as
   const events = await stream.text();
   assert.match(events, /"code":"provider_request_rejected"/);
   assert.doesNotMatch(events, /max_output_tokens|private detail|Codex error/);
+});
+
+test("opt-in contract diagnostics travel only on the no-store SSE stream", async (t) => {
+  const runtime: GatewayRuntime = {
+    async listProviders() {
+      return [];
+    },
+    async login() {},
+    async logout() {},
+    async *stream(request: GatewayStreamRequest): AsyncIterable<AssistantMessageEvent> {
+      assert.equal(request.providerContractDiagnostics, true);
+      throw new GatewayRuntimeError(
+        "provider_request_rejected",
+        "model provider rejected the request contract",
+        {
+          http_status: 400,
+          mentions_max_output_tokens: true,
+          parameter_rejection: true,
+          max_output_tokens_rejection: true,
+        },
+      );
+    },
+  };
+  const server = createGatewayServer({ runtime, internalToken: INTERNAL_TOKEN });
+  const baseUrl = await listen(server);
+  t.after(() => close(server));
+
+  const stream = await fetch(`${baseUrl}/v1/streams`, {
+    method: "POST",
+    headers: { ...authorization(), "content-type": "application/json" },
+    body: JSON.stringify(fauxStreamRequest({ provider_contract_diagnostics: true })),
+  });
+  const events = await stream.text();
+  assert.match(events, /event: provider_contract_diagnostic/);
+  assert.match(events, /"http_status":400/);
+  assert.match(events, /"max_output_tokens_rejection":true/);
+  assert.match(events, /"code":"provider_request_rejected"/);
+  assert.doesNotMatch(events, /provider body|private detail/);
 });
 
 test("the gateway aborts a stalled stream at the caller's bounded time limit", async (t) => {

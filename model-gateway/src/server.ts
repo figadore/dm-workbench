@@ -279,6 +279,11 @@ function isNonNegativeInteger(value: unknown): value is number {
 function writeSafeError(response: ServerResponse, error: unknown, streamId: string): void {
   if (error instanceof GatewayRuntimeError) {
     logGatewayEvent("model gateway runtime error", { stream_id: streamId, code: error.code });
+    if (error.contractDiagnostic !== undefined) {
+      // Explicit transient diagnostics travel only on the caller's no-store SSE stream.
+      // They are never written to ordinary gateway logs or durable attempt reports.
+      writeEvent(response, "provider_contract_diagnostic", error.contractDiagnostic);
+    }
     writeEvent(response, "error", { code: error.code, message: error.message });
     return;
   }

@@ -34,6 +34,7 @@ export interface GatewayStreamRequest {
   readonly timeLimitSeconds: number;
   readonly runId: string;
   readonly sessionId?: string;
+  readonly providerContractDiagnostics: boolean;
 }
 
 export class GatewayRequestError extends Error {
@@ -66,6 +67,7 @@ export function parseStreamRequest(value: unknown): GatewayStreamRequest {
       "time_limit_seconds",
       "run_id",
       "session_id",
+      "provider_contract_diagnostics",
       "attachment_references",
     ]),
   );
@@ -154,6 +156,13 @@ export function parseStreamRequest(value: unknown): GatewayStreamRequest {
   if (effort !== "fast" && effort !== "standard" && effort !== "deep") {
     throw new GatewayRequestError("effort", "unsupported effort level");
   }
+  const providerContractDiagnostics =
+    object.provider_contract_diagnostics === undefined
+      ? false
+      : expectBoolean(
+          object.provider_contract_diagnostics,
+          "provider_contract_diagnostics must be a boolean",
+        );
 
   return {
     provider: expectIdentifier(object.provider, "provider"),
@@ -168,6 +177,7 @@ export function parseStreamRequest(value: unknown): GatewayStreamRequest {
     ...(object.session_id === undefined
       ? {}
       : { sessionId: expectIdentifier(object.session_id, "session_id") }),
+    providerContractDiagnostics,
   };
 }
 
@@ -222,6 +232,13 @@ function optionalString(value: unknown, field: string): string | undefined {
 
 function expectInteger(value: unknown, message: string): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value)) {
+    throw new GatewayRequestError("invalid_request", message);
+  }
+  return value;
+}
+
+function expectBoolean(value: unknown, message: string): boolean {
+  if (typeof value !== "boolean") {
     throw new GatewayRequestError("invalid_request", message);
   }
   return value;
