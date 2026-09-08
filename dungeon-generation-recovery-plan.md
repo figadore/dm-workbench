@@ -580,7 +580,15 @@ and body-free rejected structural duration/usage evidence. A subsequently author
 run accepted a valid five-room structural draft on its first submission but omitted the one required
 exploration slot. Frozen semantic preflight returned only
 `canary.structural_exploration_count_mismatch`, preserved the draft, and dispatched no enrichment
-call. The run was not retried. A preparation-ready live artifact and human quality evidence remain
+call. The run was not retried. Provider-free inspection found a general vocabulary gap between a
+requested exploration challenge and its structural `rooms[].encounter` slot. Guidance now requires a
+one-to-one `exploration` slot in the requested room or branch plus one local feature affordance, while
+leaving challenge prose to the later task. The next authorized standard-effort call stopped before
+content with body-free `model_unavailable`; it created no artifact or staged attempt and was not
+retried. A later authorized minimal smoke reproduced `model_unavailable` for exact
+`openai-codex/gpt-5.4`, while bounded standard-effort `gpt-5.4-mini` and `gpt-5.5` controls
+succeeded. The condition is therefore exact-model upstream routing or account entitlement, not a
+general Codex, OAuth, or standard-effort outage. A preparation-ready live artifact and human quality evidence remain
 pending.
 
 - Add independently bounded puzzle, exploration, other interaction, and narrative tasks

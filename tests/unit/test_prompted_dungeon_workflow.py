@@ -214,6 +214,13 @@ def test_prompt_explains_tier_a_plan_constraints() -> None:
     )
     assert "leave it null in every room without a requested encounter" in message
     assert "do not repeat an encounter kind" in message
+    assert (
+        "every requested exploration challenge to one rooms[].encounter value"
+        in message
+    )
+    assert "make that count exactly match the request" in message
+    assert "one room_contents[].feature" in message
+    assert "encounter value reserves that later task" in message
     assert "Do not design puzzle solutions" in message
     assert "exploration approaches or outcomes" in message
     assert "guide_content" not in message

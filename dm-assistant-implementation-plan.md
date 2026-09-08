@@ -1941,7 +1941,17 @@ The disposable PostgreSQL-backed tests still require the integration database. O
 authorized fast-effort run accepted and published a valid five-room structural draft on its first
 submission, but the draft omitted the one required exploration slot. Frozen semantic preflight
 returned only `canary.structural_exploration_count_mismatch`, preserved the draft, and dispatched no
-enrichment call. The run was not retried. A preparation-ready live artifact remains pending.
+enrichment call. The run was not retried. Provider-free inspection found a general vocabulary gap:
+the request named an exploration challenge while the structural field was `rooms[].encounter`, and
+the instruction did not state their one-to-one mapping. Guidance now maps every requested exploration
+challenge to exactly one `exploration` encounter slot in the requested room or branch, with one local
+feature affordance, while keeping challenge prose in its later task. The next authorized standard-
+effort call stopped before content with body-free `model_unavailable`; it created no artifact or task
+attempt and was not retried. A later authorized minimal smoke reproduced `model_unavailable` for
+`openai-codex/gpt-5.4`, while bounded `openai-codex/gpt-5.4-mini` and `gpt-5.5` controls succeeded
+at standard effort. This isolates the condition to exact-model upstream routing or account
+entitlement rather than the Codex backend, OAuth, or standard effort generally. A preparation-ready live artifact
+remains pending.
 
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
   Its model-visible proposal contains room identity/purpose, critical path, bounded

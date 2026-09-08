@@ -137,8 +137,14 @@ commits superseded them. This file preserves only compact milestone history:
   body-free rejected-request duration/usage evidence (`5842492`). The next authorized fast-effort
   run accepted a valid five-room structural draft on its first submission but omitted the required
   exploration slot; frozen semantic preflight preserved the draft, emitted one body-free mismatch
-  code, and made no enrichment call. Preparation-ready live and human quality evidence remain
-  pending.
+  code, and made no enrichment call. Provider-free inspection then identified a general vocabulary
+  gap between requested exploration challenges and structural encounter slots; guidance now maps
+  them one-to-one and requires the local feature affordance used by the later task. The next
+  authorized standard-effort call stopped before content with body-free `model_unavailable`, created
+  no artifact or staged attempt, and was not retried. One later authorized minimal smoke reproduced
+  the exact `openai-codex/gpt-5.4` failure, while bounded standard-effort `gpt-5.4-mini` and
+  `gpt-5.5` controls succeeded, isolating exact-model upstream routing or entitlement from general
+  backend/OAuth/effort availability. Preparation-ready live and human quality evidence remain pending.
 
 ### Deployment baseline
 
