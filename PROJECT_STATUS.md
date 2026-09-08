@@ -6,60 +6,50 @@
 
 ## Current State
 
-- **Updated:** 2026-09-01
-- **Branch/HEAD:** `fast-track-prompt-to-dungeon` at `983d5dc`, equal to
-  `origin/fast-track-prompt-to-dungeon`, with the post-canary P7-14f hardening below
-  uncommitted.
+- **Updated:** 2026-09-02
+- **Branch/HEAD:** `fast-track-prompt-to-dungeon` at `5842492`, one commit ahead of
+  `origin/fast-track-prompt-to-dungeon`, with only the canary documentation below uncommitted.
 - **Current task:** **P7-14f — Staged Tier A authoring and anti-overfitting evaluation.**
-- **Task state:** one newly authorized frozen canary stopped safely after its initial and one
-  repair both failed structural submission. Provider-free repair-context, content-slot guidance,
-  and body-free usage-retention hardening are implemented and green. The Tier A quality gate
-  remains red because no preparation-ready live artifact or human evidence exists.
+- **Task state:** one newly authorized frozen canary safely published a valid structural draft,
+  then stopped at frozen semantic preflight because the model omitted the required exploration
+  slot. No enrichment task ran. The Tier A quality gate remains red because no preparation-ready
+  live artifact or human evidence exists.
 - **Schema head:** `0008_workbench_defaults`; no migration changed or is pending.
 - **Retention gate:** **not crossed.** Active V1 contracts evolve in place; all canary artifacts
   and the alpha database remain disposable/non-retained.
 
 ## Authorized Canary Result
 
-Exactly one `openai-codex/gpt-5.4` standard-effort run used frozen seed `714000001`, without
-`--debug` or provider-contract diagnostics, and was not retried.
+Exactly one `openai-codex/gpt-5.4` run used frozen seed `714000001`, without `--debug`, provider-
+contract diagnostics, or retry. No `--effort` override was supplied, so the documented CLI default
+selected **fast** effort.
 
-- A host-side CLI invocation first failed local configuration validation before provider/model
-  resolution; it made no live request. The configured Workbench container then ran the canary.
-- The initial submission was schema-invalid at two `room_contents[].objective` paths. Its one
-  permitted repair passed schema validation but failed deterministic compilation with
-  `plan.duplicate_room_content` for `chime_hall` and
-  `plan.final_objective_content_required` because `chime_hall`, `gust_walk`, and
-  `seed_sanctum` all carried objective content.
-- Durable attempt `4279eb06-09da-44fb-b136-797bf2418b91` reports only those body-free codes,
-  paths, refs, and repair hints. The pre-hardening report did not retain the rejected requests'
-  measured usage/duration; the new code fixes future structural rejection reports but cannot
-  reconstruct this run's discarded totals.
-- No structural artifact/version, staged task attempt, enrichment provider call, final gate,
-  approval, or canonical write exists.
+- The Workbench image was rebuilt, the old container was explicitly removed, and the replacement
+  became healthy. Its running image ID exactly matched `localhost/dm-workbench:local` at
+  `c98293d8c8d9...` before the call.
+- The first structural submission succeeded without repair: 26,299 ms, 2,436 measured input tokens,
+  1,342 measured output tokens, one turn, and one retained structural lineage record.
+- Deterministic compilation/publication produced a valid five-room draft, valid topology and
+  geometry, artifact `e74cce7d-639c-4cb2-9177-9043db9ed687`, and version
+  `57693064-8c51-427e-b650-e459b85aeedc`.
+- The package had zero exploration slots rather than the frozen canary's required one. Semantic
+  preflight returned only `canary.structural_exploration_count_mismatch`, preserved the draft, and
+  stopped before dispatching any enrichment provider call.
+- Structural attempt `c1ea161c-02e2-475a-b598-625c1b70fd7b` and artifact generation run
+  `00494099-786a-4732-9981-873b9bc7b883` both completed successfully. There are no staged task
+  attempt IDs, chain result, or final-gate result.
+- The artifact remains `draft`; no approval, canonical write, provider retry, or second live call
+  occurred.
 
-This is useful structural-contract evidence, not valid Tier A quality evidence.
-
-## Uncommitted Provider-Free Hardening
-
-- Structural guidance now permits at most one nonempty `room_contents` record per room, omits
-  placeholder records, and requires non-objective values to be null or omitted rather than empty.
-- The one structural repair carries the complete original server-authored instruction in addition
-  to the original prompt/context, prior arguments, and bounded diagnostics.
-- Rejected structural submissions now retain duration and measured input/output usage in the
-  body-free attempt report, matching the existing puzzle rejection boundary.
-- Unit coverage proves original-instruction retention, the new general slot guidance, and
-  body-free measured usage for both schema and deterministic compile rejection paths.
-
-No provider retry, prompt/body fixture, canon write, approval, migration, queue, second store, or
-model-authored deterministic mechanic was added.
+This is structural-contract evidence, not valid Tier A quality evidence.
 
 ## Active Boundaries and Known Issues
 
-- The newest canary stopped at structural initial/repair rejection; earlier authorized runs stopped
-  at frozen semantic preflight and puzzle rejection. None is preparation-ready or human quality
-  evidence.
+- The newest run confirms that the structural contract can publish a clean five-room topology on its
+  first fast-effort submission, but explicit requested-slot adherence is still not dependable.
 - Another live call requires renewed explicit authorization. Do not make a debug or retry call.
+- Diagnose the omitted exploration slot provider-free before changing guidance; do not add a
+  fixture-specific rule from one result.
 - Blinded human evidence and the frozen multi-case matrix remain pending.
 - Tier B/C and output/print work remain deferred until Tier A is dependable.
 - Three unrelated Library/schema integration failures remain: metadata constraint diffs, embedding
@@ -70,40 +60,43 @@ model-authored deterministic mechanic was added.
 
 ## Files and Verification
 
-Current uncommitted production/test files:
+Current uncommitted files are documentation/handoff only:
 
-- `src/dm_assistant/orchestration/dungeons/prompting.py`
-- `tests/unit/test_prompted_dungeon_workflow.py`
-
-Current uncommitted documentation/handoff:
-
-- `dm-assistant-{implementation-plan,technical-architecture}.md`
+- `dm-assistant-implementation-plan.md`
+- `dm-assistant-technical-architecture.md`
 - `dungeon-generation-recovery-plan.md`
-- `PROJECT_{HISTORY,STATUS}.md`
+- `PROJECT_HISTORY.md`
+- `PROJECT_STATUS.md`
 
 Commands and results:
 
-- `uv run --frozen pytest -q tests/unit tests/evals` -> **235 passed**.
-- `uv run --frozen pytest -q packages/dungeon-engine/tests` -> **139 passed**.
-- `CONTAINER_ENGINE=podman ./scripts/test-integration.sh -q` over staged coordinator and
-  Dungeon Studio CLI integration -> **11 passed**.
-- Focused Ruff lint/format and strict mypy over the changed production module -> passed.
-- Workbench image rebuilt, container explicitly removed/recreated, health became healthy, and its
-  image ID matched `localhost/dm-workbench:local` (`66e0487747eb...`).
-- Authorized canary command -> structural initial/repair rejection, exit 1, no artifact or
-  enrichment call; **not retried**.
-- Body-free run inspection confirmed the four diagnostics above.
-- `git diff --check` -> passed before this handoff rewrite; rerun before commit.
+- `podman compose build workbench` -> passed; image `c98293d8c8d9...`.
+- `podman compose rm -sf workbench` -> unsupported by local `podman-compose`; no container change.
+  `podman compose ps -q workbench` was also unsupported. Explicit `podman rm -f` by container name
+  followed by `podman compose up -d workbench` succeeded.
+- Health/image verification -> healthy; running and tagged image IDs matched exactly.
+- `podman exec ... dm dungeon canary --provider openai-codex --model gpt-5.4` -> exit 1 after the
+  safe structural semantic-preflight stop above; **not retried**.
+- Body-free run inspection confirmed structural and artifact generation runs succeeded, topology and
+  geometry were valid, and no staged attempt existed.
+- A read-only metadata script first used a wrong runtime import, then strict `model_validate` rather
+  than the repository's JSON validation path; both failed without state mutation. The corrected
+  `model_validate_json` inspection reported the usage, duration, lineage, room, and zero-slot counts
+  above without printing provider bodies.
+- No tests were rerun because no production or test code changed during this canary-only task.
+- `git diff --check` -> passed after the handoff rewrite.
 
-Suggested commit subject: `P7-14f retain structural repair constraints and usage`
+Suggested commit subject: `P7-14f record frozen fast-effort canary`
 
 ## Single Next Recommended Task
 
-**Review and commit the provider-free structural repair hardening; do not run another canary.**
+**Diagnose the omitted exploration slot provider-free; do not run another canary.**
 
-**First concrete action:** inspect the uncommitted diff, rerun `git diff --check`, and commit it
-with the suggested P7-14f subject. Any later live run must receive new explicit authorization and
-must first rebuild/recreate the Workbench and verify the running/tag image IDs match.
+**First concrete action:** compare the complete server-authored structural instruction and frozen
+prompt with the accepted proposal retained in disposable version
+`57693064-8c51-427e-b650-e459b85aeedc`, then determine whether a general contradictory/ambiguous
+instruction exists. Add or change guidance only with a provider-free regression expressing a general
+requested-slot invariant, not this artifact's prose.
 
 Do not start P8, Tier B/C, print work, a migration, queue, approval, or canon writes.
 

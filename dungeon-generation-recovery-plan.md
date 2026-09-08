@@ -576,8 +576,12 @@ stopped at structural initial/repair rejection: schema-invalid objective values 
 one duplicate room-content record and three named objectives. It created no artifact or enrichment
 attempt and was not retried. Provider-free hardening now requires unique nonempty room-content
 records, null or omitted non-objective values, complete original-instruction retention during repair,
-and body-free rejected structural duration/usage evidence. A preparation-ready live artifact and
-human quality evidence remain pending.
+and body-free rejected structural duration/usage evidence. A subsequently authorized fast-effort
+run accepted a valid five-room structural draft on its first submission but omitted the one required
+exploration slot. Frozen semantic preflight returned only
+`canary.structural_exploration_count_mismatch`, preserved the draft, and dispatched no enrichment
+call. The run was not retried. A preparation-ready live artifact and human quality evidence remain
+pending.
 
 - Add independently bounded puzzle, exploration, other interaction, and narrative tasks
   over exact package IDs; merge accepted output deterministically and preserve the map on

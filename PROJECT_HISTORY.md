@@ -134,8 +134,11 @@ commits superseded them. This file preserves only compact milestone history:
   schema-invalid objective values and a repair with duplicate room content and three objective
   slots; no artifact or enrichment call resulted. Provider-free follow-up retained the original
   structural instruction during repair, clarified unique/nonempty room-content records, and added
-  body-free rejected-request duration/usage evidence. Preparation-ready live and human quality
-  evidence remain pending.
+  body-free rejected-request duration/usage evidence (`5842492`). The next authorized fast-effort
+  run accepted a valid five-room structural draft on its first submission but omitted the required
+  exploration slot; frozen semantic preflight preserved the draft, emitted one body-free mismatch
+  code, and made no enrichment call. Preparation-ready live and human quality evidence remain
+  pending.
 
 ### Deployment baseline
 

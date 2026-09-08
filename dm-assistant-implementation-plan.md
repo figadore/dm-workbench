@@ -1937,8 +1937,11 @@ slots. No enrichment call or artifact resulted, and the run was not retried. The
 follow-up now requires at most one nonempty room-content record per room, makes non-objective values
 null or omitted rather than empty, carries the complete original structural instruction into repair,
 and retains rejected structural request duration and measured usage in the body-free attempt report.
-The disposable PostgreSQL-backed tests still require the integration database, and a preparation-ready
-live artifact remains pending.
+The disposable PostgreSQL-backed tests still require the integration database. One subsequently
+authorized fast-effort run accepted and published a valid five-room structural draft on its first
+submission, but the draft omitted the one required exploration slot. Frozen semantic preflight
+returned only `canary.structural_exploration_count_mismatch`, preserved the draft, and dispatched no
+enrichment call. The run was not retried. A preparation-ready live artifact remains pending.
 
 - Keep one compact structural `submit_dungeon_plan` call plus at most one schema repair.
   Its model-visible proposal contains room identity/purpose, critical path, bounded
