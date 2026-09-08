@@ -5,62 +5,64 @@
 
 ## Current Task
 - **Task:** P7-14f — staged Tier A authoring and anti-overfitting evaluation.
-- **Current work:** the exploration-overage protocol and puzzle budget-attempt reporting are
-  implemented but uncommitted.
+- **Current work:** a provider-free fixed-case puzzle/exploration execution and exact-resumption
+  boundary is implemented and uncommitted.
 - **Product state:** staged orchestration and final validation remain implemented. The Tier A quality
   gate is red because no preparation-ready live artifact or completed blinded human matrix exists.
 - **Schema head:** `0008_workbench_defaults`; no migration is involved.
 - **Retention gate:** **not crossed**. Active V1 contracts and disposable alpha data evolve in place.
 
-## Provider-Free Puzzle Repair Assessment
-- Repair budgeting is deterministic: subtract initial measured input/output from the 6,000-token
-  workflow budget, estimate the complete repair request input, then cap repair output at the lesser
-  of 2,048 and the remaining amount.
-- The historical case-01 report's 790-token ceiling proves that initial measured usage plus estimated
-  repair input totaled 5,210 tokens. Their individual historical values cannot be recovered because
-  the old durable report omitted both the initial attempt and repair-reserve arithmetic.
-- Puzzle submission now wraps measured budget overages with `initial` or `repair` identity. Durable
-  body-free reports retain prior rejection diagnostics/usage, final measured usage, workflow and
-  request budgets, estimated repair input, and effective ceiling.
-- A synthetic regression recreates the exact arithmetic: 6,000 minus 3,066 initial measured tokens
-  minus 2,144 estimated repair-input tokens produces the 790-token ceiling; a 2,126-input/871-output
-  repair then fails closed and publishes nothing.
-- Initial overages are separately identified and cannot be reported as repairs. No 2,048/6,000
-  budget, prompt, schema, effort, or publication rule changed.
+## Completed Behavior
+- A pure fixed-case planner verifies the exact structural prompt hash and authorized synthetic facts,
+  requires one matched provider/model/effort assignment, and selects only the deterministic next
+  puzzle or exploration target from the current staged plan.
+- Puzzle policy is derived from the manifest setting/interaction style and exact puzzle room.
+  Exploration policy uses the manifest interaction style, exact encounter slot, and sorted local
+  feature affordances. Both retain the existing Luna-fast budgets/contracts.
+- A Workbench application wrapper computes case, parent specification, policy, built context,
+  resolved profile, variant assignment, and exploration-contract hashes before dispatching the
+  existing one-step coordinator.
+- Each wrapper generation run stores the complete trusted policy and resolved profile in a private
+  generation-context envelope. Ordinary run inspection exposes only body-free hashes and IDs.
+- Resumption accepts only a failed fixed-case wrapper whose input, context payload, task profile,
+  schema, and generator pins recompute exactly. Drift or a pre-boundary attempt fails before provider
+  dispatch; accepted content still publishes through the existing atomic DM-only task seam.
+- The composition root exposes the new application service when the model gateway is enabled.
+  Architecture, implementation, and recovery policy now describe this replay boundary.
 
-## Live Evidence State
-- The frozen canary remains the only qualifying exploration overage: Luna-fast produced 2,510 output
-  tokens over the 2,048 ceiling while staying within 6,000; no repair or artifact publication ran.
-- The repeat gate remains **1 of 2** materially distinct fixed cases. No Terra comparison or limit
-  change is justified.
-- Authorized fixed case 01 stopped safely at puzzle repair before exploration. Disposable artifact
-  `35ec4e9b-cbc5-416b-9ff7-3fade7865044` remains at version
-  `caa6952f-9460-4c99-b4b1-3b06229ec1ad`; no puzzle child, approval, or canonical write occurred.
+## Faux Evidence
+- PostgreSQL/faux coverage creates a case-01 structural parent, rejects an over-budget puzzle without
+  publishing, and persists its private replay payload plus body-free pins.
+- A changed manifest is rejected before the faux gateway is called. The unchanged manifest resumes
+  with the same input/context hashes, accepts the puzzle, publishes exactly one child, and leaves the
+  artifact a draft.
+- This boundary currently supports puzzle and exploration only. Feature, trap, objective, narrative,
+  complete fixed-case execution, and a user-facing command remain outside this slice.
 
-## Intentional Uncommitted Work
-- Existing exploration protocol: `src/dm_assistant/orchestration/dungeons/{__init__,evals,
-  exploration_prompting}.py` and `tests/evals/test_dungeon_evals.py`.
-- Puzzle assessment: `src/dm_assistant/orchestration/dungeons/{puzzle_prompting,
-  puzzle_application}.py` and `tests/unit/test_dungeon_puzzle_enrichment_contract.py`.
-- Policy/handoff: `dm-assistant-implementation-plan.md`, `dungeon-generation-recovery-plan.md`, and
-  this file. The changes are runnable; there is no partial migration or unsafe write path.
+## Live Evidence and Authorization
+- The frozen canary remains the only qualifying exploration overage; the repeat gate is **1 of 2**.
+- Case 01 puzzle/exploration succeeded in the prior bounded live check. Disposable artifact
+  `35ec4e9b-cbc5-416b-9ff7-3fade7865044` remains a draft at version
+  `e6902ff4-87e8-4966-8d83-25dd744ddc5d`, with feature interaction next.
+- Those attempts predate the new wrapper and cannot be claimed as exact-resumption evidence.
+- No live call, retry, debug capture, effort/budget change, or Terra comparison is authorized.
 
-## Verification and Known Issues
-- Root unit/eval suite: **241 passed**.
-- Focused puzzle contract: **7 passed**; focused Ruff check/format and strict mypy passed.
-- Puzzle integration collection: **2 skipped** without configured PostgreSQL.
-- `git diff --check` passed before this handoff update.
-- Repository-wide Ruff and mypy remain red on unrelated existing Library/scope/campaign-knowledge
-  findings; three unrelated Library/schema integration failures remain documented in history.
-- Root and dungeon-package pytest suites must run separately due duplicate test basenames.
-- No retry, further Luna call, debug capture, effort change, or Terra comparison is authorized.
+## Intentional Uncommitted Work and Verification
+- Runtime: `src/dm_assistant/runtime.py` and
+  `src/dm_assistant/orchestration/dungeons/{__init__,evals,eval_application}.py`.
+- Faux integration: `tests/integration/test_dungeon_staged_enrichment_coordinator.py`.
+- Policy/handoff: `dm-assistant-implementation-plan.md`,
+  `dm-assistant-technical-architecture.md`, `dungeon-generation-recovery-plan.md`, and this file.
+- Root unit/eval suite: **241 passed**. Staged coordinator PostgreSQL integration: **10 passed**.
+  Focused Ruff check/format and strict mypy passed. `git diff --check` passed before this update.
+- The work is runnable; there is no partial migration or unsafe write path. Existing unrelated
+  repository-wide Ruff/mypy and Library/schema findings remain documented in history.
 
 ## Single Next Recommended Task
-**Obtain explicit owner authorization before collecting another fixed-case Luna observation.**
+**Review and commit the P7-14f fixed-case execution/resumption boundary; do not make a live call.**
 
-First action: review the body-free puzzle assessment and choose an exact bounded scope—either resume
-case 01 from its unchanged structural parent or run another fixed case—then record explicit live-call
-authorization before provider contact. Keep Luna-fast and the existing task budgets/contracts pinned.
+First action: inspect the uncommitted runtime/test/policy diff, rerun focused checks and
+`git diff --check`, then commit with subject `P7-14f pin reproducible fixed-case task resumption`.
 
 ## References
 [`dm-assistant-implementation-plan.md`](dm-assistant-implementation-plan.md) P7-14f;

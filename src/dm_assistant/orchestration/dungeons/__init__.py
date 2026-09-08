@@ -136,6 +136,11 @@ from dm_assistant.orchestration.dungeons.contracts import (
     PromptedDungeonTrapLineage,
     RegenerateDungeonWorkflow,
 )
+from dm_assistant.orchestration.dungeons.eval_application import (
+    DungeonTierAFixedCaseApplicationService,
+    DungeonTierAFixedCaseTaskResult,
+    PromptDungeonTierAFixedCaseTaskWorkflow,
+)
 from dm_assistant.orchestration.dungeons.exploration_application import (
     DungeonExplorationPromptApplicationService,
     DungeonExplorationPromptAttemptResult,
@@ -302,6 +307,8 @@ __all__ = [
     "DungeonTierACanaryApplicationService",
     "DungeonTierACanaryProfiles",
     "DungeonTierACanaryRunResult",
+    "DungeonTierAFixedCaseApplicationService",
+    "DungeonTierAFixedCaseTaskResult",
     "DungeonExplorationAffordance",
     "DungeonExplorationAffordanceApproval",
     "DungeonExplorationApproach",
@@ -442,6 +449,7 @@ __all__ = [
     "PromptDungeonRoomNarrativeWorkflow",
     "PromptDungeonStagedEnrichmentChainWorkflow",
     "PromptDungeonStagedEnrichmentWorkflow",
+    "PromptDungeonTierAFixedCaseTaskWorkflow",
     "PromptDungeonTrapWorkflow",
     "PromptDungeonWorkflow",
     "PromptedDungeonExplorationLineage",

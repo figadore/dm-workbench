@@ -7,6 +7,7 @@ not test-suite behavior.
 
 from __future__ import annotations
 
+import json
 from hashlib import sha256
 from typing import Literal, Self
 from uuid import UUID
@@ -14,14 +15,29 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from dm_assistant.modules.modeling import ReasoningEffort, ResolvedModelRunProfile
-from dm_assistant.modules.preparation import canonical_json_sha256
+from dm_assistant.modules.preparation import (
+    DungeonGenerationContext,
+    canonical_json_sha256,
+)
 from dm_assistant.orchestration.dungeons.canary import DUNGEON_TIER_A_CANARY
 from dm_assistant.orchestration.dungeons.contracts import (
+    DungeonExplorationAffordanceApproval,
+    DungeonExplorationContextSelection,
     DungeonGenerationProposal,
+    DungeonPuzzleClueApproval,
+    DungeonPuzzleContextSelection,
     DungeonStudioSpecification,
 )
 from dm_assistant.orchestration.dungeons.exploration_prompting import (
     dungeon_exploration_task_contract_sha256,
+)
+from dm_assistant.orchestration.dungeons.staged_enrichment import (
+    plan_dungeon_staged_enrichment,
+)
+from dm_assistant.orchestration.dungeons.staged_enrichment_coordinator import (
+    DungeonStagedEnrichmentDispatch,
+    DungeonStagedExplorationPolicy,
+    DungeonStagedPuzzlePolicy,
 )
 from dm_dungeon import (
     DungeonPlanCompileResult,
@@ -34,6 +50,7 @@ from dm_dungeon import (
     validate_geometry,
     validate_topology,
 )
+from dm_dungeon.contracts import RoomMechanicMarkerKind
 from dm_dungeon.layout import ORTHOGONAL_LAYOUT_GENERATOR_VERSION
 
 
@@ -204,6 +221,37 @@ class DungeonExplorationOverageProtocol(_EvalModel):
             raise ValueError("exploration overage case definitions must be distinct")
         if len({case.task_contract_sha256 for case in all_cases}) != 1:
             raise ValueError("exploration overage protocol requires one task contract")
+        return self
+
+
+class DungeonTierAFixedCaseDispatchPlan(_EvalModel):
+    """Deterministic fixed-case task dispatch plus body-free replay pins."""
+
+    execution_version: Literal["dungeon-tier-a-fixed-case-execution-v1"]
+    case_id: str = Field(pattern=r"^tier_a_case_[0-9]{2}$")
+    case_definition_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    parent_specification_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    variant_assignment_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    exploration_task_contract_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    task_kind: Literal["puzzle", "exploration"]
+    trusted_policy_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    resolved_profile_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    dispatch: DungeonStagedEnrichmentDispatch
+
+    @model_validator(mode="after")
+    def verify_dispatch_pins(self) -> Self:
+        if self.dispatch.policy.kind != self.task_kind:
+            raise ValueError("fixed-case task kind does not match its dispatch")
+        policy_hash = canonical_json_sha256(
+            self.dispatch.policy.model_dump(mode="json")
+        )
+        if policy_hash != self.trusted_policy_sha256:
+            raise ValueError("fixed-case trusted policy hash is stale")
+        profile_hash = canonical_json_sha256(
+            self.dispatch.profile.model_dump(mode="json")
+        )
+        if profile_hash != self.resolved_profile_sha256:
+            raise ValueError("fixed-case resolved profile hash is stale")
         return self
 
 
@@ -470,6 +518,164 @@ def build_dungeon_exploration_overage_protocol(
             for case in manifest.cases
         ),
     )
+
+
+def build_dungeon_tier_a_fixed_case_dispatch(
+    manifest: DungeonTierAEvalManifest,
+    case_id: str,
+    specification: DungeonStudioSpecification,
+    *,
+    puzzle_profile: ResolvedModelRunProfile,
+    exploration_profile: ResolvedModelRunProfile,
+) -> DungeonTierAFixedCaseDispatchPlan:
+    """Derive one exact puzzle/exploration dispatch from a frozen eval case."""
+
+    cases = {case.case_id: case for case in manifest.cases}
+    case = cases.get(case_id)
+    if case is None:
+        raise ValueError(f"unknown Tier A fixed case: {case_id}")
+    _require_fixed_case_structural_context(case, specification)
+    _require_matching_fixed_case_profiles(puzzle_profile, exploration_profile)
+
+    staged = plan_dungeon_staged_enrichment(specification)
+    if staged.status != "ready" or staged.next_task is None:
+        raise ValueError("Tier A fixed-case parent has no dispatchable task")
+    task = staged.next_task
+    policy: DungeonStagedPuzzlePolicy | DungeonStagedExplorationPolicy
+    if task.kind == "puzzle":
+        room_id = task.room_ids[0]
+        policy = DungeonStagedPuzzlePolicy(
+            selection=DungeonPuzzleContextSelection(
+                room_id=room_id,
+                clue_locations=(
+                    DungeonPuzzleClueApproval(
+                        location_id=room_id,
+                        purpose=(
+                            "Use player-observable details in the exact puzzle room "
+                            "as the local clue anchor."
+                        ),
+                    ),
+                ),
+                tone=(case.setting, case.interaction_style),
+                constraints=(
+                    "Keep clues understandable through player-observable evidence "
+                    "without requiring one prescribed manipulation.",
+                    "Do not author numeric difficulties.",
+                ),
+            )
+        )
+        profile = puzzle_profile
+    elif task.kind == "exploration":
+        room_id = task.room_ids[0]
+        encounter_slot_id = task.target_ids[0]
+        guide = specification.dm_guide
+        if guide is None:
+            raise ValueError("Tier A fixed-case parent has no exact DM guide")
+        guide_features = {item.marker_id: item for item in guide.features}
+        feature_ids = tuple(
+            sorted(
+                marker.id
+                for marker in specification.package.room_mechanic_markers
+                if marker.room_id == room_id
+                and marker.kind is RoomMechanicMarkerKind.FEATURE
+                and marker.id in guide_features
+            )
+        )
+        if not feature_ids:
+            raise ValueError(
+                "Tier A fixed-case exploration task has no local feature affordance"
+            )
+        policy = DungeonStagedExplorationPolicy(
+            encounter_slot_id=encounter_slot_id,
+            selection=DungeonExplorationContextSelection(
+                room_id=room_id,
+                affordances=tuple(
+                    DungeonExplorationAffordanceApproval(
+                        affordance_id=feature_id,
+                        use=(
+                            f"Use {guide_features[feature_id].name} as the exact "
+                            "room-local environmental affordance."
+                        ),
+                    )
+                    for feature_id in feature_ids[:6]
+                ),
+                pacing_role="rising_tension",
+                stakes=(
+                    "A setback reinforces the fixed setting without permanently "
+                    "closing the route."
+                ),
+                constraints=(
+                    f"Honor this fixed interaction style: {case.interaction_style}",
+                    "Support multiple reasonable approaches and meaningful recovery.",
+                    "Do not author numeric difficulties.",
+                ),
+            ),
+        )
+        profile = exploration_profile
+    else:
+        raise ValueError(
+            "Tier A fixed-case execution currently supports only puzzle and "
+            "exploration tasks"
+        )
+
+    protocol = build_dungeon_exploration_overage_protocol(manifest, exploration_profile)
+    case_pin = next(item for item in protocol.cases if item.case_id == case_id)
+    dispatch = DungeonStagedEnrichmentDispatch(policy=policy, profile=profile)
+    return DungeonTierAFixedCaseDispatchPlan(
+        execution_version="dungeon-tier-a-fixed-case-execution-v1",
+        case_id=case_id,
+        case_definition_sha256=case_pin.case_definition_sha256,
+        parent_specification_sha256=canonical_json_sha256(
+            specification.model_dump(mode="json")
+        ),
+        variant_assignment_sha256=protocol.variant_assignment_sha256,
+        exploration_task_contract_sha256=case_pin.task_contract_sha256,
+        task_kind=policy.kind,
+        trusted_policy_sha256=canonical_json_sha256(policy.model_dump(mode="json")),
+        resolved_profile_sha256=canonical_json_sha256(profile.model_dump(mode="json")),
+        dispatch=dispatch,
+    )
+
+
+def _require_fixed_case_structural_context(
+    case: DungeonTierAEvalCase,
+    specification: DungeonStudioSpecification,
+) -> None:
+    pin = specification.structural_context
+    if pin is None:
+        raise ValueError("Tier A fixed-case parent has no structural context pin")
+    payload = pin.envelope.get("payload")
+    if not isinstance(payload, dict):
+        raise ValueError("Tier A fixed-case structural context payload is invalid")
+    context = DungeonGenerationContext.model_validate_json(
+        json.dumps(payload, separators=(",", ":"), sort_keys=True)
+    )
+    expected_prompt_hash = canonical_json_sha256({"prompt": case.prompt})
+    if context.prompt_input_sha256 != expected_prompt_hash:
+        raise ValueError("Tier A fixed-case structural prompt hash mismatch")
+    summaries = tuple(sorted(fact.summary for fact in context.selected_facts))
+    if summaries != tuple(sorted(case.authorized_facts)):
+        raise ValueError("Tier A fixed-case authorized facts mismatch")
+
+
+def _require_matching_fixed_case_profiles(
+    puzzle: ResolvedModelRunProfile,
+    exploration: ResolvedModelRunProfile,
+) -> None:
+    puzzle_assignment = (
+        puzzle.provider_id,
+        puzzle.model_id,
+        puzzle.runtime_adapter,
+        puzzle.requested_effort,
+    )
+    exploration_assignment = (
+        exploration.provider_id,
+        exploration.model_id,
+        exploration.runtime_adapter,
+        exploration.requested_effort,
+    )
+    if puzzle_assignment != exploration_assignment:
+        raise ValueError("Tier A fixed-case task profile assignment drift")
 
 
 def assess_dungeon_exploration_overage_evidence(

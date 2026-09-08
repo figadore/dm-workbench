@@ -145,6 +145,10 @@ approval or canonical writes.
   count only measured output-ceiling failures above 2,048 and within the 6,000 cumulative budget
   that attempted no repair and published no artifact. Two distinct curated cases meet only the repeat
   gate, not the provider-specificity, quality-improvement, or explicit-authorization requirements.
+- Derive fixed-case task policies deterministically from the frozen manifest and exact current parent.
+  Persist the complete trusted policy/profile in a private eval-run context envelope while exposing
+  only hashes through ordinary run inspection. Resume only a failed eval wrapper whose case, parent,
+  policy, context, profile, contract, assignment, schema, and generator pins all still match.
 
 ### Provider rules
 

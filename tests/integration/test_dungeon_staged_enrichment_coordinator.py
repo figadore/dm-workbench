@@ -52,12 +52,14 @@ from dm_assistant.orchestration.dungeons import (
     DungeonStudioService,
     DungeonStudioSpecification,
     DungeonTierACanaryApplicationService,
+    DungeonTierAFixedCaseApplicationService,
     DungeonTrapContextSelection,
     DungeonTrapPromptApplicationService,
     DungeonTrapPromptService,
     DungeonWorkflowResult,
     PromptDungeonStagedEnrichmentChainWorkflow,
     PromptDungeonStagedEnrichmentWorkflow,
+    PromptDungeonTierAFixedCaseTaskWorkflow,
     PromptDungeonWorkflow,
     resolve_dungeon_exploration_prompt_profile,
     resolve_dungeon_feature_interaction_prompt_profile,
@@ -69,6 +71,7 @@ from dm_assistant.orchestration.dungeons import (
     resolve_dungeon_trap_prompt_profile,
     validate_final_staged_dungeon,
 )
+from dm_assistant.orchestration.dungeons.evals import DungeonTierAEvalManifest
 from dm_assistant.orchestration.modeling import GatewayCompletion, GatewayToolSchema
 
 pytestmark = pytest.mark.integration
@@ -569,6 +572,7 @@ def _structural_parent(
     *,
     campaign_id: uuid.UUID,
     studio: DungeonStudioService,
+    prompt: str = "Build the synthetic Cobalt Orrery and recover its star seed.",
 ) -> tuple[DungeonWorkflowResult, FakeGatewayClient]:
     gateway = FakeGatewayClient(
         (
@@ -588,7 +592,7 @@ def _structural_parent(
     result = DungeonPromptService(studio, gateway).create(
         PromptDungeonWorkflow(
             campaign_id=campaign_id,
-            prompt="Build the synthetic Cobalt Orrery and recover its star seed.",
+            prompt=prompt,
             seed=714000101,
             created_by="synthetic-dm",
             scope=resolve_task_scope(
@@ -1971,3 +1975,186 @@ def test_repeated_coordinator_stops_after_third_task_rejection(
     )
     assert trap_gateway.messages == []
     assert preparation.get_artifact(campaign_id, artifact_id).lifecycle.value == "draft"
+
+
+def test_fixed_case_failed_task_resumes_only_with_exact_persisted_pins(
+    db_engine: Engine,
+    tmp_path: Path,
+) -> None:
+    manifest = DungeonTierAEvalManifest.model_validate_json(
+        (
+            Path(__file__).parents[1]
+            / "evals"
+            / "golden"
+            / "dungeon_tier_a_manifest.json"
+        ).read_text(encoding="utf-8")
+    )
+    case = manifest.cases[0]
+    campaign_id = _campaign(db_engine)
+    studio, preparation = _studio(db_engine, tmp_path)
+    structural, _ = _structural_parent(
+        campaign_id=campaign_id,
+        studio=studio,
+        prompt=case.prompt,
+    )
+    artifact_id = structural.artifact_id
+    parent_version_id = structural.artifact_version_id
+    assert isinstance(artifact_id, uuid.UUID)
+    assert isinstance(parent_version_id, uuid.UUID)
+    parent = preparation.get_version(campaign_id, parent_version_id)
+    specification = DungeonStudioSpecification.model_validate_json(
+        json.dumps(parent.specification)
+    )
+    puzzle_room_id = next(
+        room.id for room in specification.package.rooms if room.role.value == "puzzle"
+    )
+    profiles = resolve_dungeon_tier_a_canary_profiles(
+        provider_id="faux",
+        model_id="faux_deterministic_v1",
+        capabilities=("text", "thinking", "tool_calls"),
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+        requested_effort=_profile().requested_effort,
+    )
+    command = PromptDungeonTierAFixedCaseTaskWorkflow(
+        campaign_id=campaign_id,
+        artifact_id=artifact_id,
+        parent_version_id=parent_version_id,
+        case_id=case.case_id,
+        created_by="synthetic-dm",
+    )
+
+    rejected_gateway = FakeGatewayClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_puzzle",
+                        call_id="over-budget-puzzle",
+                        arguments=cast(
+                            dict[str, JsonValue],
+                            _puzzle_output(
+                                package_id=specification.package.id,
+                                room_id=puzzle_room_id,
+                                clue_location_id=puzzle_room_id,
+                            ),
+                        ),
+                    ),
+                ),
+                input_tokens=200,
+                output_tokens=2_049,
+            ),
+        )
+    )
+    rejected = DungeonTierAFixedCaseApplicationService(
+        preparation,
+        studio,
+        DungeonStagedEnrichmentCoordinator(
+            preparation,
+            puzzle=DungeonPuzzlePromptApplicationService(
+                preparation, DungeonPuzzlePromptService(studio, rejected_gateway)
+            ),
+        ),
+    ).execute(command, manifest, profiles)
+
+    assert not rejected.success
+    assert len(rejected_gateway.messages) == 1
+    rejected_run = preparation.get_generation_run(
+        campaign_id, rejected.evaluation_run_id
+    )
+    assert rejected_run.status.value == "failed"
+    assert rejected_run.context_envelope_kind == "dungeon_tier_a_eval_task"
+    assert rejected_run.context_payload_version == "1.0.0"
+    assert rejected_run.context_payload_sha256 is not None
+    assert rejected_run.input_scope["case_id"] == case.case_id
+    assert rejected_run.input_scope["task_kind"] == "puzzle"
+    assert rejected_run.input_scope["trusted_policy_sha256"] == (
+        rejected.plan.trusted_policy_sha256
+    )
+    assert rejected_run.input_scope["context_sha256"]
+    assert rejected_run.validation_report["task_attempt_run_id"]
+    assert preparation.get_artifact(campaign_id, artifact_id).current_version_id == (
+        parent_version_id
+    )
+
+    drifted_case = case.model_copy(
+        update={"setting": f"{case.setting} A deliberately drifted detail."}
+    )
+    drifted_manifest = manifest.model_copy(
+        update={"cases": (drifted_case, *manifest.cases[1:])}
+    )
+    no_call_gateway = FakeGatewayClient(())
+    with pytest.raises(ConflictError, match="resume input pins changed"):
+        DungeonTierAFixedCaseApplicationService(
+            preparation,
+            studio,
+            DungeonStagedEnrichmentCoordinator(
+                preparation,
+                puzzle=DungeonPuzzlePromptApplicationService(
+                    preparation, DungeonPuzzlePromptService(studio, no_call_gateway)
+                ),
+            ),
+        ).execute(
+            command.model_copy(
+                update={"resume_from_evaluation_run_id": rejected.evaluation_run_id}
+            ),
+            drifted_manifest,
+            profiles,
+        )
+    assert no_call_gateway.messages == []
+
+    accepted_gateway = FakeGatewayClient(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_puzzle",
+                        call_id="accepted-resume-puzzle",
+                        arguments=cast(
+                            dict[str, JsonValue],
+                            _puzzle_output(
+                                package_id=specification.package.id,
+                                room_id=puzzle_room_id,
+                                clue_location_id=puzzle_room_id,
+                            ),
+                        ),
+                    ),
+                ),
+                input_tokens=200,
+                output_tokens=350,
+            ),
+        )
+    )
+    resumed = DungeonTierAFixedCaseApplicationService(
+        preparation,
+        studio,
+        DungeonStagedEnrichmentCoordinator(
+            preparation,
+            puzzle=DungeonPuzzlePromptApplicationService(
+                preparation, DungeonPuzzlePromptService(studio, accepted_gateway)
+            ),
+        ),
+    ).execute(
+        command.model_copy(
+            update={"resume_from_evaluation_run_id": rejected.evaluation_run_id}
+        ),
+        manifest,
+        profiles,
+    )
+
+    assert resumed.success
+    assert len(accepted_gateway.messages) == 1
+    resumed_run = preparation.get_generation_run(campaign_id, resumed.evaluation_run_id)
+    assert resumed_run.status.value == "succeeded"
+    assert resumed_run.input_scope == rejected_run.input_scope
+    assert resumed_run.context_payload_sha256 == rejected_run.context_payload_sha256
+    assert resumed_run.validation_report["task_kind"] == "puzzle"
+    assert resumed.step.attempt is not None
+    assert resumed.step.attempt.result is not None
+    child_id = resumed.step.attempt.result.artifact_version_id
+    assert child_id is not None
+    assert (
+        preparation.get_artifact(campaign_id, artifact_id).current_version_id
+        == child_id
+    )
+    assert len(preparation.list_versions(campaign_id, artifact_id)) == 2

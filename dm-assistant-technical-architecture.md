@@ -779,6 +779,13 @@ exact target in deterministic order. A matching one-step coordinator invokes onl
 bounded chain repeats it and advances only accepted children. Planning/coordination performs no
 approval or canonical operation.
 
+Fixed Tier A evaluation tasks add a Workbench-owned wrapper around that same one-step seam. It derives
+trusted puzzle/exploration policies from the frozen case manifest and exact current parent, stores the
+complete policy and resolved profile in a private generation-context envelope, and exposes only
+body-free hashes in normal run inspection. A resume is eligible only from a failed wrapper and only
+when case, parent specification, policy, built context, model/profile, task contract, assignment,
+schema, and generator pins recompute exactly; drift fails before provider dispatch.
+
 ### Guide and approval gate
 
 Guide assembly assigns entry-first presentation numbers independent of stable IDs. Each room has
