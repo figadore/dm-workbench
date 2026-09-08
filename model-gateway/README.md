@@ -22,7 +22,7 @@ node dist/src/index.js
 
 The process refuses public bind addresses. Every endpoint, including `/health`,
 requires the private Python caller's `Authorization: Bearer` internal token.
-The browser must reach it through a future authenticated Python route and never
+The browser reaches provider operations only through authenticated Workbench routes and never
 receives a provider token.
 
 When the Workbench enables the gateway, set the same value as

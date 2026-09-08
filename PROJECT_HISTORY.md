@@ -1,182 +1,96 @@
 # Project History
 
-> This is an archival, consolidated record. It is intentionally not a coding
-> resume point; use [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for current work.
-> Historical statements below describe their recorded milestone only. Current
-> working-tree state, task priority, and verification are authoritative only in
-> `PROJECT_STATUS.md`.
+> Durable milestone summary only. Use [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for current work and
+> Git for exact diffs, commits, old handoffs, verification logs, and run-by-run investigations.
 
-## Reconciliation Notes
+## Foundations and Platform
 
-The former status file mixed live handoff data with sequential WIP notes. That
-made old next-task, working-tree, and test statements appear current after later
-commits superseded them. This file preserves only compact milestone history:
+- **P0-01–P0-04:** established the Python 3.12/FastAPI/Typer project, typed configuration,
+  default-deny authentication, structured secret-safe logging, PostgreSQL/pgvector, Alembic,
+  readiness diagnostics, and contributor quality gates.
+- **P10-04:** added pinned non-root Workbench and model-gateway images, private Compose networking,
+  migration-aware startup, managed source/asset/credential volumes, source import, and native/full
+  stack workflows.
+- The public baseline uses `AGPL-3.0-only`, synthetic fixtures, and no bundled campaign, rules,
+  bestiary, sheet, credential, or provider-response data.
 
-- Current task priority, working-tree state, and verification live exclusively in
-  `PROJECT_STATUS.md`; no statement below is a resume instruction.
-- Old recommendations for P7-10b, P7-12, P3-01, rebuilds, or live retries are
-  superseded. P7-14b later removed the disposable V2/V3/V4 generation paths and
-  restored one active alpha V1 path.
-- P3-01 remains unnecessary for standalone preparation generation; it is required
-  only before promotion into campaign canon.
-- Historical provider IDs, response bodies, detailed review chronology, and
-  environment-specific logs are omitted. Git retains the original handoffs when
-  archaeology is necessary.
+## Library, Retrieval, and Campaign Knowledge
 
-## Delivered Milestones
+- **P1-01–P1-02:** delivered immutable source documents, path history, exact revisions/chunks,
+  candidate/active corpus snapshots, and safe idempotent filesystem discovery/reconciliation.
+- **P2-01–P2-05:** delivered separate embedding profiles and resumable derivations, filtered vector
+  retrieval with lexical fallback, deterministic fusion/context selection, and source-body-free
+  retrieval audit/evaluation.
+- **P5-01:** added campaign entities, aliases, mentions, and merge-safe persistence.
+- P3 canonical revisions remain unnecessary for standalone preparation generation but are required
+  before generated facts, imports, or session outcomes can become campaign canon.
 
-### Foundations, sources, retrieval, and gateway
+## Model Gateway and Prompting
 
-- **P0-01–P0-04:** Python/FastAPI/Typer foundation, typed configuration,
-  default-deny auth, structured logging, PostgreSQL/pgvector, Alembic,
-  readiness, diagnostics, and contributor gates.
-- **P1-01–P1-02:** Immutable source documents/revisions/chunks/snapshots and
-  safe managed-source discovery/reconciliation.
-- **P2-01–P2-05:** Separate embedding runtime, pinned derivations/runs, filtered
-  vector retrieval with lexical fallback, deterministic fusion/context, and
-  source-body-free retrieval audit/evaluation.
-- **P4-02:** Private Node `pi-ai` gateway with allowlisted providers, credential
-  isolation, internal-token HTTP/SSE, display-safe login coordination,
-  normalized streams, and cancellation.
-- **P4-03:** Bounded task-scope contracts with standalone-dungeon grounding
-  rejection.
-- **P5-01:** Campaign-knowledge entity/alias/mention persistence (`eea08a4`).
+- **P4-02:** delivered the private Node `pi-ai` gateway with allowlisted providers, isolated
+  credentials, internal bearer authentication, normalized HTTP/SSE contracts, login coordination,
+  usage reporting, and cancellation.
+- **P4-03:** delivered bounded task-scope contracts and rejection of implicit campaign grounding for
+  standalone dungeon generation.
+- **P7-10a/P7-10a.1:** added gateway-backed CLI prompting, campaign/default resolution, OAuth
+  coordination, pinned provider/model/effort/seed/title lineage, and safe transport failures.
+- **P7-10b/P7-11:** unified CLI/API/web Dungeon Studio services, durable web prompt status and
+  cancellation, browser/provider-free integration, compare/regenerate/export, and preparation
+  approval without granting the model approval or canonical authority.
 
-### Dungeon Studio and preparation lifecycle
+## Dungeon Kernel and Preparation Lifecycle
 
-- **P7-01–P7-08:** Immutable preparation artifacts/versions/runs/assets and the
-  independently packaged deterministic dungeon topology, layout, validation,
-  SVG/PNG/PDF, and Roll20 exports.
-- **P7-10a / P7-10a.1:** Gateway-backed CLI prompting, model/default resolution,
-  campaign bootstrap/switching, private OAuth coordination, bounded transport
-  failures, and Compose/runtime hardening.
-- **P7-10b / P7-11:** Shared CLI/API/web Dungeon Studio workflows, durable web
-  prompt status/cancellation, provider-free browser integration coverage,
-  artifact comparison/regeneration, exports, preparation approval, and
-  DM-only notes/callouts.
-- **P7-12a:** V2 ownership and compatibility boundary documented: Workbench owns
-  provider/attempt/persistence; pure `dm_dungeon` owns strict design contracts,
-  compilation, diagnostics, and deterministic kernel work.
-- **P7-12b:** Atomic complete-package publication with staged assets, immutable
-  version creation, current-version update, and terminal run state in one
-  transaction.
-- **P7-12c:** Shared model-run budgets/deadlines, cancellation, native transcript
-  roles, safe tool diagnostics, and measured-usage handling.
-- **P7-12d:** Strict compact `DungeonDesignSpecV2` and pure deterministic V2
-  compiler. Models cannot provide canonical IDs, exact dimensions/capacities,
-  seed, visibility, or lifecycle fields.
-- **P7-12e:** One-submit structured V2 proposal flow with bounded abstention and
-  at most one fresh repair.
-- **P7-12f:** Shared `DungeonPromptApplicationService` for CLI and web; durable
-  `dungeon_prompt_v2` attempts begin before provider contact and link safely to
-  the separate generated-artifact run/version. Ordinary logs are body-free and
-  run inspection exposes safe metadata only.
-- **P7-14a:** Adopted the proof-carrying constructive Tier A recovery architecture,
-  added topology-math guidance and active-path safety/property regressions, and
-  deleted the known-bad output baseline (`25c031e`).
-- **P7-14b:** Collapsed model orchestration, proposal/compiler/mechanics/package,
-  layout dispatch, rendering, and exports to one suffix-free alpha V1; deleted
-  disposable V2/V3/V4 paths/readers/tests and restored green focused gates
-  (`1bad985`, `dd54b4e`).
-- **P7-14c:** Replaced arbitrary edge authoring with the bounded `DungeonPlan`,
-  deterministic series/parallel-with-spurs graph construction, stable semantic IDs,
-  and an independently recomputed topology/reachability/gate/demand/embedding
-  certificate (`cc02441`).
-- **P7-14d:** Replaced active random room placement/routing with a certificate-driven
-  Tier A baseline: side-specific ports, reserved noncrossing channels, demand-expanded
-  rooms, exact precomputed bounds, corridor-realized door openings, and 4–8 room
-  branch/loop/secret property coverage. Seeds now pin a zero-draw proven baseline for
-  future optional compaction rather than supply correctness retries.
-- **P7-14e:** Characterized the one-call structural/guide workflow through shared
-  CLI, browser, faux-provider, review-packet, renderer, and secrecy gates. Repeated
-  human review made the fixed synthetic guide runnable but exposed fixture-specific
-  overfitting and the need to separate creative responsibilities. The direct-root
-  `submit_dungeon_plan` contract, measured token enforcement, bounded repair input
-  reservation, durable body-free diagnostics, and frozen Tier A canary policy were
-  established. Codex ordinary live use remained paused because the pinned transport
-  did not send a hard output limit.
-- **P7-14f staged enrichment and provider-free final gate:** Removed prose-heavy guide
-  content from the structural proposal and retained truthful readiness blockers
-  (`ae6d406`). Added independently bounded exact-ID puzzle, exploration, feature, trap,
-  objective, and homogeneous room-narrative contexts, dispatch, deterministic projection,
-  accepted lineage, and atomic DM-only child publication through `9a3d87f`. A pure planner
-  and one-step coordinator skip accepted work and fail closed on inconsistent state. One
-  creative-continuity pin reaches every staged task; accepted lineage retains its version/
-  hash and exact selected fact/source IDs. The pure final gate recomputes continuity,
-  sources, dependencies, required content, slot/lineage coverage, typed cross-task
-  references, and player secrecy with body-free diagnostics. A separate strict report
-  contract covers all six cohesion dimensions without edit, approval, blocker-clearing, or
-  canonical operations. Prompted approval and staged review packets now enforce the gate;
-  exact-hash-bound DM disposition covers all six dimensions, targeted-regeneration decisions
-  block approval, and packets retain only body-free deterministic hash/check evidence.
-  Resumed one-step coverage proves exact-policy dispatch and pre-provider mismatch rejection
-  for every staged kind. A bounded chain now repeats only the one-step primitive with trusted
-  policy/profile pairs, advances only accepted current children, and stops fail-closed on
-  rejection or its explicit limit without approval/canonical operations. The subsequent
-  anti-overfitting foundation froze three materially different original synthetic Tier A
-  cases, three opaque variant IDs, strict body-free run measurements, and strict blinded
-  human-rating contracts (`ca9ce7d`). The next provider-free slice added fail-closed exact
-  evidence-matrix joins, assignment/artifact hash coherence, grounding-aware lore rules, and
-  body-free rating/latency/usage/validity/repair aggregates by opaque variant (`814679d`).
-  The following transport investigation proved that Codex subscription rejects the attempted
-  `max_output_tokens` overlay and exposes no supported hard-cap alternative. The provider-aware
-  policy now omits unsupported fields for Codex, advertises `hard_output_token_limit` only for
-  provider-free-tested transports, and retains strict measured publication ceilings without an
-  advisory bypass (`e13510e`). One later authorized frozen canary published a valid structural
-  draft but stopped after puzzle initial/repair schema rejection. Provider-free hardening now
-  retains rejected puzzle usage/duration as body-free attempt totals and distinguishes duplicate
-  clue-location from assembled-guide-length validator failures (`894fe26`). A subsequent authorized
-  run used its one repair after `plan.duplicate_room_content`, produced another valid structural
-  draft, then overpopulated all five rooms with exploration slots; deterministic dispatch found
-  missing room-local affordances and made no enrichment call.
-  The provider-free follow-up adds explicit minimal-slot guidance plus a body-free frozen-canary
-  semantic preflight (`983d5dc`). The next authorized run stopped before publication after
-  schema-invalid objective values and a repair with duplicate room content and three objective
-  slots; no artifact or enrichment call resulted. Provider-free follow-up retained the original
-  structural instruction during repair, clarified unique/nonempty room-content records, and added
-  body-free rejected-request duration/usage evidence (`5842492`). The next authorized fast-effort
-  run accepted a valid five-room structural draft on its first submission but omitted the required
-  exploration slot; frozen semantic preflight preserved the draft, emitted one body-free mismatch
-  code, and made no enrichment call. Provider-free inspection then identified a general vocabulary
-  gap between requested exploration challenges and structural encounter slots; guidance now maps
-  them one-to-one and requires the local feature affordance used by the later task. The next
-  authorized standard-effort call stopped before content with body-free `model_unavailable`, created
-  no artifact or staged attempt, and was not retried. One later authorized minimal smoke reproduced
-  the exact `openai-codex/gpt-5.4` failure, while bounded standard-effort `gpt-5.4-mini` and
-  `gpt-5.5` controls succeeded, isolating exact-model upstream routing or entitlement from general
-  backend/OAuth/effort availability. Preparation-ready live and human quality evidence remain pending.
+- **P7-01–P7-08:** delivered immutable preparation artifacts/versions/runs/assets and the independent
+  pure `dm_dungeon` topology, layout, geometry validation, SVG/PNG/PDF, and Roll20 kernel.
+- **P7-12b–P7-12f:** hardened atomic package publication, staged assets, cumulative model budgets,
+  normalized transcript roles, stable safe errors, durable prompt attempts, shared CLI/web
+  orchestration, and body-free observability.
+- Output review identified geometry, annotation, guide, asset-catalog, and sparse-print defects.
+  P7-13a–P7-13d corrected the baseline geometry/renderer/guide contracts; later catalog and print
+  work was paused by the alpha reset.
 
-### Deployment baseline
+## P7-14 Alpha Reset
 
-- **P10-04:** Pinned non-root Workbench/gateway images, private Compose topology,
-  migration-aware startup/readiness, isolated storage/credential volumes,
-  managed source import, and native/full-stack workflow documentation.
+- **P7-14a:** adopted a proof-carrying constructive Tier A architecture, added topology mathematics
+  and active-path safety/property regressions, and removed the known-bad output baseline.
+- **P7-14b:** collapsed disposable V1/V2/V3/V4 generation paths to one active suffix-free V1 and
+  deleted obsolete readers, dispatch, tests, and fixtures.
+- **P7-14c:** replaced arbitrary model-authored edges with `DungeonPlan`, deterministic graph
+  construction, stable semantic IDs, and an independently recomputed topology/gate/demand/
+  embedding certificate.
+- **P7-14d:** replaced random place-and-route correctness with certificate-driven rooms, side ports,
+  reserved channels, exact bounds, and provider-free 4–8 room branch/loop/secret properties.
+- **P7-14e:** established one structural `submit_dungeon_plan` call, one bounded schema repair,
+  measured token enforcement, concise keyed guide assembly, renderer/secrecy review packets, and a
+  frozen Tier A canary. Repeated single-fixture review demonstrated contract expressiveness but not
+  general content quality.
+- **P7-14f:** removed guide prose from the structural proposal and added independently bounded,
+  exact-ID puzzle, exploration, feature, trap, objective, and room-narrative tasks. Each task has its
+  own strict context/profile/budget/repair and atomically publishes only an accepted DM-only child;
+  failures preserve the prior map and readiness blockers.
+- A pure planner, exact-policy one-step coordinator, bounded chain, shared creative-continuity pin,
+  final source/dependency/lineage/secrecy gate, non-authoritative cohesion report, and hash-bound DM
+  disposition now cover the complete staged workflow without approval or canonical operations.
+- The anti-overfitting foundation contains three materially different synthetic Tier A cases, opaque
+  variants, body-free run evidence, blinded ratings, and fail-closed matrix aggregation. Synthetic
+  arithmetic validates the evaluator but is not human quality evidence.
+- Provider-contract work proved that Codex subscription does not support a pre-consumption output
+  token field, while the standard OpenAI API-key adapter does. All providers retain strict measured
+  publication ceilings; Codex cannot claim a hard-output-cap capability.
+- Successive disposable canaries exposed general schema/repair/slot-mapping gaps that were repaired
+  provider-free. The latest guidance maps requested exploration challenges one-to-one to structural
+  exploration slots with local affordances.
+- Exact Codex `gpt-5.4` later returned normalized `model_unavailable`, while bounded `gpt-5.4-mini`
+  and `gpt-5.5` controls succeeded. This isolated an exact-model availability/entitlement condition;
+  it did not provide Tier A quality evidence.
 
-## Historical Verification Summary
+## Persistent Decisions
 
-Milestone-specific focused Python, Node, formatting, type-checking, migration,
-and disposable PostgreSQL/Compose checks were recorded as passing when their
-respective tasks completed. Some older broad gates also recorded unrelated
-Library/schema failures or local `.env` fixture conflicts. Those records are
-not evidence about the current task; use and rerun the gates named in
-`PROJECT_STATUS.md`.
-
-## Persistent Design Decisions
-
-- Models propose; they never commit canon or approve preparation artifacts.
-- Canonical writes require a validated change set and one atomic campaign
-  revision. Preparation approval/use never makes planned events canonical.
-- `dm_dungeon` remains pure and owns deterministic IDs, geometry, pathfinding,
-  validation, rendering, and exports.
-- Source authorization/visibility filtering precedes retrieval and model context
-  construction; source revisions and cited spans are immutable.
-- Player-facing exports fail closed for unreleased information.
-- Synthetic fixtures only: no campaign text, copyrighted rules/bestiary content,
-  sheets, credentials, or provider responses.
-
-## Historical Public Baseline
-
-The public baseline uses the GitHub author identity and `AGPL-3.0-only`.
-Historical public snapshots cover the final architecture/roadmap, initial
-Python scaffold, and aggregate implementation through P1-02. Earlier local
-planning history is outside public `main`.
+- Models propose; humans approve preparation and commit canon.
+- Canonical writes require a validated change set and one atomic revision; preparation use never
+  implies an event occurred.
+- `dm_dungeon` remains pure and owns deterministic mechanics and exports.
+- Source authorization precedes retrieval/context construction; revisions and cited spans are
+  immutable.
+- Player-facing output fails closed, and tests/fixtures contain synthetic authorized material only.
+- Until the retention gate is explicitly crossed, disposable active V1 contracts evolve in place.

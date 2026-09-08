@@ -1,90 +1,136 @@
 # DM Assistant Harness
 
-A self-hosted, AI-assisted dungeon/encounter generator, campaign memory, and context compiler for a human Dungeon Master running D&D 5e/2024-era campaigns.
+A self-hosted, AI-assisted dungeon and encounter generator, campaign memory, and context compiler for
+a human Dungeon Master running D&D 5e/2024-era campaigns.
 
-The project is in early implementation. The Python 3.12 Workbench, provider-independent Dungeon Studio, deterministic dungeon/export kernel, PostgreSQL preparation lifecycle, and immutable allowlisted Library source registry are in place.
+The project is in alpha. The Python Workbench, private model gateway, provider-independent Dungeon
+Studio, deterministic dungeon/export kernel, PostgreSQL preparation lifecycle, immutable Library
+sources, and hybrid retrieval foundation are implemented. See [`PROJECT_STATUS.md`](PROJECT_STATUS.md)
+for the exact current task.
 
-## Start Here
+## Documentation
 
-For a first-time architecture review:
+For product or architecture review:
 
-1. [`dm-assistant-project-goals.md`](dm-assistant-project-goals.md) — product goals and boundaries.
-2. [`dm-assistant-technical-architecture.md`](dm-assistant-technical-architecture.md) — architecture, data semantics, and accepted decisions.
-3. [`dm-assistant-implementation-plan.md`](dm-assistant-implementation-plan.md) — phased tasks and acceptance gates.
+1. [`dm-assistant-project-goals.md`](dm-assistant-project-goals.md) — desired product and scope.
+2. [`dm-assistant-technical-architecture.md`](dm-assistant-technical-architecture.md) — current
+   boundaries, data semantics, and invariants.
+3. [`dm-assistant-implementation-plan.md`](dm-assistant-implementation-plan.md) — completed index and
+   unfinished tasks.
 
-For an implementation session or return after a break, conserve context:
+For an implementation session:
 
-1. Run `git status`.
-2. Read [`PROJECT_STATUS.md`](PROJECT_STATUS.md) — the live handoff and next exact task.
-3. Read [`AGENTS.md`](AGENTS.md).
-4. Read only the current task/phase and relevant architecture sections, not every planning document again.
+1. Run `git status --short --branch`.
+2. Read [`PROJECT_STATUS.md`](PROJECT_STATUS.md) and [`AGENTS.md`](AGENTS.md).
+3. Read only the active task and linked architecture sections.
 
-## Architectural Summary
+Historical detail is in Git; [`PROJECT_HISTORY.md`](PROJECT_HISTORY.md) is only a milestone summary.
 
-- One Python/FastAPI DM Workbench modular monolith plus a narrow private Node model-gateway process.
-- One independently packaged pure `dm_dungeon` kernel loaded in the Python process; it has no database, UI, retrieval, or model-runtime dependency.
-- The gateway uses pinned `@earendil-works/pi-ai` for provider OAuth/API-key auth, model catalogs, streaming, tool-call transport, and reasoning controls.
-- A first-party thin web UI is the normal conversational/review interface; the Typer CLI remains the automation, administration, and recovery interface.
-- One PostgreSQL database with pgvector; embeddings use a separate Python-side runtime because `pi-ai` does not provide embeddings.
-- Immutable, versioned campaign/rules source documents.
-- Hybrid lexical and semantic retrieval.
-- Perspective-aware, provenance-aware campaign state.
-- Seeded dungeon generation: Workbench/model-authored intent compiled by the deterministic `dm_dungeon` topology, geometry, validation, rendering, and export package.
-- Practical grids rendered through deterministic SVG, exported as DM/clean PNG, low-ink stitchable one-inch-scale PDF, and Roll20-compatible images/metadata.
-- Party/playstyle-aware combat and noncombat encounters with complete creature statistics. Encounter orchestration starts in the Workbench; only a proven deterministic `encounter-mechanics` seam may be extracted later.
-- Models create proposals/preparation drafts; only the DM approves artifacts or commits canon.
-- PostgreSQL stores canonical revision history, artifact lineage, and readable change summaries.
-- Generation runs share a small scope/provenance envelope but use separate strict payloads such as `DungeonGenerationContext` and `EncounterGenerationContext`; there is no universal all-purpose generation payload.
-- The web shell is organized into Library, Chronicle, Dungeon/Encounter Studios, Session Desk, Assistant, and Settings while retaining separate preparation-approval and canonical-commit workflows.
-- DM-only interface initially, including supplied character sheets and important story items.
+## Architecture at a Glance
 
-## Isolated Development
+- One Python 3.12 FastAPI/Typer Workbench organized as a modular monolith.
+- One independently testable pure `dm_dungeon` package loaded in that Python process.
+- One private Node gateway using pinned `@earendil-works/pi-ai` for provider credentials, catalog,
+  streaming, tool transport, and usage—not campaign state.
+- One PostgreSQL 16 database with pgvector; embedding adapters are separate from chat providers.
+- Immutable source revisions and versioned lexical/semantic retrieval projections.
+- Perspective-, temporal-, and provenance-aware canonical campaign state.
+- Versioned preparation artifacts with seeded deterministic dungeon topology, geometry, validation,
+  rendering, and exports.
+- Models propose; only the DM approves preparation or commits canon.
+- Player-facing output fails closed for secret or unclassified data.
 
-Project dependencies are installed only in a container-managed project virtual environment. The full-stack Make workflow creates the ignored `.env` automatically and generates distinct persistent database, API, session-signing, and Workbench-to-gateway secrets with `openssl` (or Python's `secrets` fallback). No provider credential is generated or stored there; provider OAuth remains in the dedicated gateway volume.
+## Quick Start: Full Stack
 
-### Two supported workflows
-
-Use native processes for the rapid edit/test loop. Compose supplies only
-PostgreSQL in that mode, so Python and Node changes are immediately visible:
-
-```bash
-make dev-db
-make dev-api
-# In another terminal, after exporting the shared gateway token:
-make dev-gateway
-```
-
-`make dev-api` enables Uvicorn reload. Unit tests and most focused tests do not
-need Compose. `make test-integration` starts an isolated pgvector PostgreSQL on
-an automatically assigned loopback port, runs the integration suite, and removes
-the container even on failure. It does not use or modify the persistent development
-database. Pass a focused pytest path with, for example,
-`make test-integration PYTEST_ARGS=tests/integration/test_dungeon_studio_web_prompt.py`.
-All repository tests ignore the developer-local `.env` and provide synthetic
-settings explicitly, so an enabled native gateway cannot change test behavior.
-`make check` runs the larger disposable containerized quality gate. The Makefile
-auto-selects Docker when `docker` is installed and otherwise uses Podman;
-`CONTAINER_ENGINE=...` remains an explicit override.
-
-Use the same repository to test the complete deployable topology locally and to install it on a Proxmox VM. On a Mac with Docker Desktop, first run is:
+Requirements: Docker Desktop or Podman, `make`, and OpenSSL (or Python for secret generation).
 
 ```bash
 make stack-up
 make stack-smoke
+make stack-token
 ```
 
-`make stack-up` runs an idempotent bootstrap before Compose. It creates `.env` with mode `0600`, generates only missing/placeholder local secrets, preserves them across restarts, builds the images, and starts PostgreSQL, the private model gateway, and Workbench. Use `make stack-token` when the browser/API login token is needed. Direct `docker compose up` remains a lower-level command and expects bootstrap to have run first (`make bootstrap`).
+`make stack-up` creates the ignored mode-`0600` `.env` when needed, generates distinct local
+database/API/session/internal-gateway secrets, builds images, migrates PostgreSQL, and starts the
+stack. It never generates provider credentials.
 
-Only the Workbench is published, on `127.0.0.1:8000`; the gateway has no host port and is reachable solely as `model-gateway:3000` on the private Compose network. Empty campaign/rules source volumes, database data, gateway credentials, and generated assets are all managed named volumes, so no host directories are required. The asset volume contains separate asset and scratch subdirectories so atomic no-overwrite hard-link publication never crosses a container mount boundary. The source volumes are mounted read-only in Workbench. The Workbench startup performs its Alembic upgrade before becoming ready; use one Workbench replica and take a database backup before deploying migrations.
+Open `http://127.0.0.1:8000/login` and use the token printed by `make stack-token`. Only the
+Workbench is host-published. The model gateway remains on the private Compose network and stores
+OAuth credentials in its dedicated volume.
 
-To copy an existing source tree into a managed volume deliberately, use an explicit import target. Imports reject symlinks and atomically replace that source volume's current tree:
+```bash
+make stack-down       # retain volumes
+# Add the engine's volume-removal option only when intentionally deleting local data.
+```
+
+## Quick Start: Native Development
+
+Use native Python and Node processes for fast reloads while Compose supplies PostgreSQL:
+
+```bash
+make dev-db
+make dev-api
+# In another terminal, with the shared internal gateway token exported:
+make dev-gateway
+```
+
+The Python environment is repository-local and managed by `uv`:
+
+```bash
+uv sync --all-packages --all-groups --frozen
+uv run --frozen alembic upgrade head
+uv run --frozen dm doctor
+uv run --frozen dm --help
+```
+
+For macOS with Podman, configure `.env` with a host PostgreSQL URL using `127.0.0.1`, plus real
+absolute `DM_SOURCE_ROOTS`, `DM_ASSET_ROOT`, and `DM_SCRATCH_ROOT` paths. A host-loopback gateway URL
+works only for native Workbench execution; Compose uses `http://model-gateway:3000` internally.
+
+## Verification
+
+Focused unit tests do not require Compose. Integration tests create and remove an isolated
+PostgreSQL database:
+
+```bash
+uv run --frozen pytest -q tests/unit tests/evals
+uv run --frozen pytest -q packages/dungeon-engine/tests
+make test-integration
+```
+
+Run the complete disposable containerized gate with:
+
+```bash
+make check
+# or explicitly
+CONTAINER_ENGINE=podman ./scripts/check-container.sh
+```
+
+Root and dungeon-package pytest suites run separately because they contain duplicate test basenames.
+
+Health endpoints:
+
+```bash
+curl http://127.0.0.1:8000/health/live
+curl http://127.0.0.1:8000/health/ready
+curl -H 'Authorization: Bearer <DM_API_TOKEN>' http://127.0.0.1:8000/openapi.json
+```
+
+Only exact liveness/readiness and login routes bypass normal authentication as documented in the
+architecture.
+
+## Sources and Library
+
+Compose uses separate managed campaign and rules source volumes, mounted read-only into Workbench.
+Import a source tree deliberately; imports reject symlinks and atomically replace the managed tree:
 
 ```bash
 make import-campaign-sources SOURCE="$HOME/Documents/my-campaign"
 make import-rules-sources SOURCE="$HOME/Documents/my-authorized-rules"
 ```
 
-Copying files does not silently make them canonical or indexed. Create immutable Library revisions explicitly, for example:
+Copying files does not make them canonical or indexed. Create immutable Library revisions through
+the application boundary:
 
 ```bash
 docker compose exec workbench dm library ingest notes/session-01.md --root root-0
@@ -92,402 +138,100 @@ docker compose exec workbench dm library ingest rules/hiding.md \
   --root root-1 --corpus global_rules --ruleset 5e2024
 ```
 
-Campaign Library ingestion uses the active campaign when `--campaign` is omitted. Re-importing a source volume never rewrites existing immutable revisions; a subsequent Library ingestion records/reconciles new source state through the normal service boundary.
+Re-importing or editing source never rewrites an existing revision or cited span.
 
-The default Compose limits reserve a modest two vCPU and 2.25 GB RAM ceiling
-across PostgreSQL, Workbench, and gateway. Override the documented
-`DM_*_CPU_LIMIT` and `DM_*_MEMORY_LIMIT` values in `.env` only after measuring
-the selected embedding/runtime workload on the Proxmox host.
+## Model Gateway
 
-### macOS native workflow
+The gateway is optional for deterministic Dungeon Studio work. Provider credentials never belong in
+root `.env`; they are created by gateway-owned login and remain in its credential store.
 
-To run the Python Workbench and the loopback-only model gateway on one Mac, use
-native `uv`/Node processes and Podman only for PostgreSQL:
-
-```bash
-brew install uv node podman
-podman machine init
-podman machine start
-```
-
-Set `DM_DATABASE_URL` in `.env` to the host-published PostgreSQL address
-(`127.0.0.1`, not the Compose service hostname), and set
-`DM_SOURCE_ROOTS`, `DM_ASSET_ROOT`, and `DM_SCRATCH_ROOT` to real absolute
-macOS paths. Then start PostgreSQL, install the pinned Python dependencies,
-migrate, and launch the private-only API:
-
-```bash
-podman compose up -d postgres
-uv sync --all-packages --all-groups --frozen
-uv run --frozen alembic upgrade head
-uv run --frozen dm doctor
-uv run --frozen uvicorn dm_assistant.api.app:create_app \
-  --factory --host 127.0.0.1 --port 8000
-```
-
-The containerized API command below remains useful when model support is
-disabled. A gateway at host `127.0.0.1` is not reachable from that container;
-run the gateway in the same private network instead, or use the native workflow
-above.
-
-For the full Compose stack, do not use a host-loopback gateway URL. Compose injects `http://model-gateway:3000` into the Workbench and keeps the gateway unpublished. `make stack-down` stops the stack without deleting persistent volumes. `make stack-up` normally auto-selects Docker Desktop; use `CONTAINER_ENGINE=docker make stack-up` only to override detection explicitly.
-
-Start the pinned PostgreSQL 16/pgvector service, migrate, and run the API on the private Compose network:
-
-```bash
-cp .env.example .env
-podman compose up -d postgres
-podman run --rm -it \
-  --network dm-assistant_default \
-  -p 127.0.0.1:8000:8000 \
-  -e UV_LINK_MODE=copy \
-  -v "$PWD:/workspace" \
-  -v dm-assistant-dev-venv:/workspace/.venv \
-  -w /workspace \
-  ghcr.io/astral-sh/uv:0.9.5-python3.12-bookworm-slim \
-  sh -lc 'uv sync --all-packages --all-groups --frozen && \
-    uv run --frozen alembic upgrade head && \
-    uv run --frozen dm doctor && \
-    exec uv run --frozen uvicorn dm_assistant.api.app:create_app \
-      --factory --host 0.0.0.0 --port 8000'
-```
-
-Liveness has no database dependency; readiness verifies PostgreSQL 16, pgvector 0.8.1, and exact Alembic head. Every other path—including docs/schema—is authenticated:
-
-```bash
-curl http://127.0.0.1:8000/health/live
-curl http://127.0.0.1:8000/health/ready
-curl -H 'Authorization: Bearer <DM_API_TOKEN>' \
-  http://127.0.0.1:8000/openapi.json
-```
-
-Run the complete frozen gate—including a disposable safety-named test database, migration round trip, `dm doctor`, all tests, lint, formatting, mypy, and diff checks—with one command. It removes its database volume/network even on failure:
-
-```bash
-./scripts/check-container.sh
-# Docker alternative:
-CONTAINER_ENGINE=docker ./scripts/check-container.sh
-```
-
-Stop the development database with `podman compose down`; add `-v` only when intentionally deleting local development data.
-
-## Private Model Gateway
-
-For full Compose, `make bootstrap` generates `DM_MODEL_GATEWAY_INTERNAL_TOKEN` once and stores it in the ignored mode-`0600` `.env`. Compose injects the same bearer secret into Workbench (caller) and the private gateway (verifier); it is defense-in-depth authentication for Python-to-gateway HTTP, not an OpenAI credential. OpenAI OAuth access/refresh credentials are created only by provider login and remain in the separate gateway credential volume. The bootstrap also generates distinct PostgreSQL, browser/API, and session-signing secrets because those protect different boundaries; users do not need to choose or synchronize any of them manually.
-
-The model gateway is a separate Node 22.19+ private process. The commented gateway values in `.env.example` describe advanced native/model-disabled operation; Compose explicitly enables its private gateway and consumes the generated internal token. Leave `DM_MODEL_GATEWAY_POLICY=disabled` in a native setup to use the fully model-independent Studio. To enable the native backend model client without Compose, set the following in the ignored root `.env`, using one shared token:
-
-```dotenv
-DM_MODEL_GATEWAY_POLICY=optional
-DM_MODEL_GATEWAY_URL=http://127.0.0.1:3000
-DM_MODEL_GATEWAY_INTERNAL_TOKEN=<32+-character-random-token>
-```
-
-Start the gateway with the same token; provider credentials remain only in its
-dedicated credential file:
-
-```bash
-cd model-gateway
-npm ci
-export DM_MODEL_GATEWAY_INTERNAL_TOKEN='<same token as .env>'
-export MODEL_GATEWAY_CREDENTIAL_PATH="$HOME/.local/share/dm-model-gateway/credentials.json"
-npm run build
-npm start
-```
-
-Verify the private boundary without a provider credential:
-
-```bash
-curl -H "Authorization: Bearer $DM_MODEL_GATEWAY_INTERNAL_TOKEN" \
-  http://127.0.0.1:3000/health
-```
-
-P7-10a exposes the headless private-gateway path. With the native workflow,
-run these commands directly; with the full Compose stack, prefix each command
-with `podman compose exec workbench` (or `docker compose exec workbench`). First
-inspect the allowlisted providers and models:
+Inspect providers and complete an explicit login when needed:
 
 ```bash
 uv run --frozen dm model providers
-```
-
-The faux provider is intended for scripted automated contracts; its default
-response is not a complete dungeon design. GitHub Copilot and OpenAI Codex are
-available as subscription OAuth providers. On first model-required use, the CLI
-asks once when multiple unauthenticated subscription providers are available;
-the successful selection is saved per task. Provider credentials remain in the
-gateway credential volume. A provider can also be selected explicitly:
-
-```bash
 uv run --frozen dm model login github-copilot
 # or
 uv run --frozen dm model login openai-codex
 uv run --frozen dm model login-status <login-id>
-# Only when a returned non-secret prompt event requests a response:
-uv run --frozen dm model login-respond <login-id> <prompt-id>
-uv run --frozen dm model providers
 ```
 
-Ordinarily the prompt command handles these defaults itself: it creates an
-empty `My Campaign` ownership workspace when none exists, uses the active
-campaign, reuses a saved task-specific provider/model/effort selection, starts
-and polls OAuth when login is required, generates and pins a seed, and persists
-the validated model-authored brief title. The normal command is therefore:
+The normal prompted flow resolves the active campaign owner, saved task profile, provider/model/
+effort, title, and seed, then stores all resolved values in artifact lineage:
 
 ```bash
-uv run --frozen dm dungeon prompt \
-  "A flooded archive beneath a lighthouse"
+uv run --frozen dm dungeon prompt "A flooded archive beneath a lighthouse"
 ```
 
-Add `--debug` to stream the complete request, normalized gateway events, model
-submissions, and deterministic harness tool results as JSON Lines on stderr in
-real time. This explicit terminal-only transcript is not logged or persisted;
-treat it as sensitive because it includes the model context and response.
+`--debug` emits a transient sensitive JSONL transcript to stderr; it is never routine logging and
+must be used only for explicitly authorized local diagnosis. Live provider calls, canaries, and
+retries are manual and opt-in. Always consult `PROJECT_STATUS.md` before making one.
 
-The first OAuth flow prints device-code instructions and resumes the original
-prompt after login completes. Provider/model/effort, campaign, seed, and title
-flags remain inspectable reproducibility overrides. Campaign roots can be
-created and switched without copying UUIDs into every command:
-
-### Alpha dungeon V1 evaluation
-
-The alpha accepts one compact structural `submit_dungeon_plan` proposal only. Proposal
-fields (`proposal_version` and `plan`) are the tool arguments directly; there is no
-additional `proposal` wrapper or model-visible guide-content payload. Models supply a
-bounded `DungeonPlan`: 4–8 relative rooms, one critical path, up to two branches, one
-loop, one gate, and typed content slots with conservative demand. Deterministic code
-constructs all edges and IDs and emits an independently recomputed
-`TopologyCertificate` covering connectivity, cycle/branch/gate/secret witnesses,
-room/port demand, and embedding bands. Detailed puzzle, exploration, interaction, and
-narrative work belongs to separate post-geometry tasks over exact IDs. The puzzle seam
-constructs one narrow context from accepted package geometry and explicit clue/objective/
-dependency approvals, then runs an independently pinned puzzle tool with its own effort,
-prompt/schema, 6,000-token cumulative/2,048-output budget, and one budget-reserved repair.
-Accepted faux-provider content is projected into the matching room guide and atomically
-published as a DM-only child version without changing package/map bytes or clearing
-unrelated blockers; task failure leaves the parent unchanged. Exploration has a separate
-exact-ID contract: trusted code exposes only one exploration-role room's local geometry,
-exact slot, approved room-local feature affordances, pacing role, stakes, and constraints.
-Its independently pinned tool call has its own effort/profile, prompt/schema, 6,000-token
-cumulative/2,048-output budget, and one budget-reserved repair. Validation rejects foreign
-IDs; accepted content and lineage are retained in a DM-only atomic child whose projection
-adds observable cues, multiple approaches/consequences, and escalation/recovery while
-preserving package/map hashes, accepted puzzle content/lineage, and unrelated blockers.
-Failure leaves the puzzle parent current with body-free diagnostics. Feature interactions
-have a separate exact-ID contract and independently bounded faux-provider task. Trusted
-code joins one exact package feature marker to its current guide entry and local room
-geometry, rejects foreign IDs and cross-task mutation, and projects only observable setup,
-multiple affordances/consequences, and optional reset/retry guidance. Accepted content and
-lineage publish in one DM-only child while package/map bytes, prior enrichments, and
-unrelated blockers remain unchanged. Trap interactions now have their own exact-ID
-contract and independently bounded faux-provider task over one room-trap marker, its
-current guide entry, local geometry, and deterministic detection/disable difficulties.
-Trap output supplies an observable warning, trigger/effect, detection and disable
-counterplay, consequences, and optional reset/recovery without numeric difficulty
-authorship. Accepted content and lineage publish atomically in a DM-only child while
-package/map bytes, prior enrichments, the other traps, and unrelated blockers remain
-unchanged; rejection leaves the parent current with body-free diagnostics. Objective
-content now follows the same independent boundary: trusted code joins one exact objective
-to its local geometry and a bounded selection of accepted mechanic summaries, while a
-separate 6,000-token cumulative/2,048-output faux-provider task proposes only an observable
-goal, adjudication, two to four resolutions, and setback/aftermath. It inherits the exact
-structural creative-continuity hash while exposing only the objective room intent,
-explicitly selected authorized facts/sources, and bounded accepted-mechanic summaries.
-Foreign objective or mechanic IDs are rejected; accepted content and continuity lineage
-publish in one DM-only child while package/map bytes and all accepted puzzle/exploration/
-feature/trap content remain unchanged. Room narratives now use a separate exact-room
-faux-provider task with the same 6,000-token cumulative/2,048-output and one-repair policy.
-Its strict context inherits that same continuity version/hash while exposing only selected
-room intents, explicitly approved authorized facts and exact sources, and player-observable
-accepted-mechanic summaries. It returns only concise read-aloud plus observable framing for
-every selected room, pins continuity in lineage and compact run metadata, and publishes one
-atomic DM-only child while preserving package/map bytes, all prior enrichments, unselected
-rooms, and unrelated readiness blockers. Stale continuity or unauthorized facts fail before
-dispatch; rejection or publication failure leaves the objective parent current. Every
-accepted enrichment lineage also retains its continuity version/hash plus selected fact and
-exact source IDs. A provider-free final gate can therefore recompute continuity/source
-inheritance, package and guide dependencies, complete slot/content/lineage coverage, typed
-cross-task references, and player-map secrecy without reading provider bodies. Its bounded
-diagnostics contain only codes and exact IDs. The separate six-dimension cohesion-report
-contract is non-authoritative and permits only findings, evidence IDs, and targeted existing-
-seam recommendations—never content edits, approval, blocker clearing, or canon writes.
-Prompted approval now reruns the final gate and requires an exact-hash-bound DM disposition
-for all six dimensions and every finding; targeted-regeneration decisions block the
-lifecycle transition. The staged review-packet writer records only the final result hash and
-seven body-free check summaries alongside the report and explicit disposition. Manually
-authored provider-independent artifacts keep their readiness-based approval path.
-Accepted content remains available to the DM in the artifact,
-while routine attempt reports contain only compact operational metadata and diagnostics;
-raw transport capture requires explicit local debug. Missing enrichment still truthfully
-blocks preparation readiness. Geometry, visibility, validation, rendering,
-persistence, and approval remain server-owned. Run inspection remains body-free:
+The alpha structural tool accepts a compact `DungeonPlan`; deterministic code constructs graph edges,
+IDs, topology certificate, exact geometry, maps, and readiness state. Puzzle, exploration, feature,
+trap, objective, and narrative enrichment run as separate bounded exact-ID tasks. A failed enrichment
+preserves the valid draft and leaves explicit blockers. Ordinary run inspection is body-free:
 
 ```bash
 uv run --frozen dm dungeon run inspect <attempt-run-id>
 ```
 
-When both the initial structured submission and its one repair are rejected, the CLI
-prints the durable attempt UUID and the inspection command. The attempt report records
-each attempt's safe stage plus bounded server-authored diagnostic codes, JSON paths, and
-repair hints. It never stores the prompt, submitted proposal, provider response, or
-reasoning. Measured output or total request usage above the pinned token ceiling also
-fails before publication and stores only safe counts/limit kind. Before the one repair,
-the Workbench estimates its complete canonical message and tool-schema input and skips it
-when the measured remaining budget cannot fit that input. Use transient `--debug` capture
-only when sensitive bodies are explicitly needed for local diagnosis.
+Gateway-specific local operation and checks are documented in
+[`model-gateway/README.md`](model-gateway/README.md).
 
-The current live canary is a committed one-floor Tier A prompt with seed `714000001`,
-exposed only through `dm dungeon canary`; provider and model must be explicit. Output-limit
-transport is provider-aware, and the former advisory publication override remains removed:
+## Provider-Independent Dungeon Studio
 
-```bash
-uv run --frozen dm dungeon canary \
-  --provider openai-codex \
-  --model <contract-tested-model-id>
-```
-
-The canary retains the strict per-request output check, 12,000 measured-token cumulative
-publication ceiling, repair-input reservation, validation, secrecy, and atomic-publication
-gates. Stop after this one attempt on success or failure. For a Compose deployment, rebuild and
-explicitly recreate the Workbench container first, then verify that its image ID matches the newly
-built tag; some Podman Compose versions can build a new tag without replacing an already-running
-container. A successful health check alone does not prove that the running container uses the new
-image. Codex subscription requests omit the
-unsupported `max_output_tokens`, `max_tokens`, and `max_completion_tokens` fields and therefore
-do not pre-cap consumed subscription quota. Timeouts, cancellation, repair reservation, and
-strict measured per-response/cumulative checks still apply, and an over-cap or unknown-usage
-result cannot publish. The separate standard OpenAI API-key adapter serializes its documented
-`max_output_tokens` hard cap and advertises `hard_output_token_limit`; Codex does not. Provider-
-free injected-fetch tests pin both outbound contracts.
-
-The frozen provider-free V1 suite is synthetic and safe for CI:
-
-```bash
-uv run --frozen pytest -q tests/evals/test_dungeon_evals.py
-```
-
-Generate the fixed synthetic human DM quality-review packet without PostgreSQL or a
-model provider:
-
-```bash
-make dungeon-review-packet
-open generated/dungeon-guide-review/dm-map.png
-open generated/dungeon-guide-review/dm-guide.md
-open generated/dungeon-guide-review/review-worksheet.md
-```
-
-The ignored packet contains DM/player maps, the exact keyed guide, its typed runnable
-content input, automated rubric, reproducibility manifest, and a blank human worksheet.
-The concise Markdown guide uses entry-first sequential presentation numbers while
-preserving exact map callouts. It gives every room read-aloud material and groups only
-actionable door state, checks, clues, triggers, consequences, challenges, features,
-puzzles, and objectives in that room; ordinary map-visible connectivity and separate
-sensory/purpose repetition are omitted. Each runnable gate dependency, scene pressure,
-puzzle, feature, and objective includes a situation, adjudication guidance, and bounded
-player choice/outcome pairs. Read-aloud is limited to what players can observe; hidden
-mechanics stay in DM adjudication. Runnable interactions use concrete physical setups,
-triggers, effects, recovery, and repeated-failure outcomes, and cross-room alarms state
-both their shared state and whether anything responds.
-The DM map includes visible
-corridor boundaries, collision-tested mechanics badges, and a compact symbol key.
-Player output defaults to geometry only: no room/door/feature keys, objective, start, or
-encounter markers; visible ordinary doors use a heavy slab line rather than blending
-into the light grid, and explicitly player-safe physical features retain only their
-unlabelled shape. The single entrance is projected on the DM map as a distinct start flag; other
-technical pathfinding anchors stay in package
-lineage and optional VTT metadata rather than appearing as unexplained map glyphs.
-Generation fails when the
-output directory already exists so a completed worksheet is not overwritten; use
-`REVIEW_OUTPUT=generated/<another-name>` for another review. Completing the worksheet
-records quality evidence only—it does not approve preparation or write campaign canon.
-
-This packet is a development quality gate, not a campaign-content feature or final
-product format. It holds one synthetic prompt and seed constant so a DM can judge the
-whole prompt-to-draft result—map readability, player secrecy, progression, clues, and
-whether the guide is runnable without improvising missing material. The worksheet turns
-subjective table-readiness feedback into concrete corrections; automated regressions then
-preserve the objective parts of those corrections. A passing packet demonstrates that it
-is worth moving on to harder topology stress cases and eventually live-model canaries. It
-does not prove every future dungeon is good, and it is not intended to become a library
-of authored adventures.
-
-Live small-model runs remain paused until the provider-free and faux Tier A
-gates pass. The alpha retains no compatibility readers for disposable prior
-generation contracts.
+The same preparation workflow works with the gateway disabled:
 
 ```bash
 uv run --frozen dm campaign create "Main Campaign"
 uv run --frozen dm campaign use "Main Campaign"
-uv run --frozen dm campaign list
-```
-
-The standalone prompt selects no campaign revision, corpus, rules profile, or
-retrieval context yet; automatic bounded active-campaign grounding is a later
-explicit architecture update.
-
-Live OAuth/model checks are manual and opt-in. Verify the selected account and
-subscription permit the intended endpoint and workload. Automated checks use
-only synthetic responses:
-
-```bash
-uv run pytest -q tests/unit/test_model_gateway_client.py \
-  tests/unit/test_prompted_dungeon_workflow.py
-npm --prefix model-gateway run check
-npm --prefix model-gateway test
-```
-
-## Provider-Independent Dungeon Studio
-
-After migration, the first prompt/list operation creates an empty `My Campaign` ownership root when needed; create or switch named roots with `dm campaign create` / `dm campaign use`. Then log in at `http://127.0.0.1:8000/login` with `DM_API_TOKEN`. The signed browser session contains no API token; all browser writes require CSRF. Dungeon Studio can ingest a versioned `LayoutRequest` JSON, generate and validate exact geometry, inspect run/input/version lineage, compare/regenerate with locks, preview DM/player maps, create PDF/Roll20 exports, download assets, and explicitly approve preparation for play without a model gateway.
-
-The same provider-independent application workflow is available through authenticated `/api/dungeons` routes and CLI commands. Prompted approval through the JSON API additionally accepts the strict cohesion report and DM disposition evidence; the report itself cannot approve preparation:
-
-```bash
-uv run --frozen dm dungeon generate /data/campaign/layout-request.json \
-  --campaign <campaign-uuid> --title "Sunken Archive"
-uv run --frozen dm dungeon inspect <artifact-uuid> --campaign <campaign-uuid>
-uv run --frozen dm dungeon compare <left-version> <right-version> \
-  --campaign <campaign-uuid>
+uv run --frozen dm dungeon generate layout-request.json --title "Sunken Archive"
+uv run --frozen dm dungeon inspect <artifact-uuid>
+uv run --frozen dm dungeon compare <left-version> <right-version>
 uv run --frozen dm dungeon regenerate <artifact-uuid> <parent-version> \
-  --campaign <campaign-uuid> --seed 888888 --lock room_entrance \
-  --summary "Regenerate unlocked geometry."
-uv run --frozen dm dungeon export <version-uuid> --campaign <campaign-uuid>
+  --seed 888888 --lock room_entrance --summary "Regenerate unlocked geometry."
+uv run --frozen dm dungeon export <version-uuid>
 uv run --frozen dm dungeon approve <artifact-uuid> <version-uuid> \
-  --campaign <campaign-uuid> --reason "Reviewed for play."
+  --reason "Reviewed for play."
 ```
 
-`approved_for_play` is preparation state only. It does not make planned encounters, discoveries, deaths, treasure, or any other event canonical.
+Authenticated `/api/dungeons` routes and the browser call the same application services. Dungeon
+Studio supports version inspection, comparison, deterministic regeneration with locks, DM/player
+previews, asset downloads, and explicit preparation approval.
 
-## Immutable Library Foundation
+`approved_for_play` is preparation state only. It does not establish that any planned event occurred.
 
-Alembic revision `0003_library_sources` defines campaign/global-rules source scopes, stable logical documents and safe relative path history, exact immutable UTF-8 revisions with verified SHA-256 identity, typed authority/document/ruleset/visibility metadata, exact-span chunks with PostgreSQL full-text vectors, terminal ingestion-run pins, and candidate/active corpus snapshots. Database guards reject cross-scope membership, broader child visibility, source/chunk mutation, and membership changes after activation.
+The pure package can also run independently:
 
-The internal P1-02 Library service now ingests bounded strict-UTF-8 files through named allowlisted roots, rejects traversal/symlinks/non-files, reuses unchanged revisions, appends novel edits, retains identity across exact moves, records explicit duplicates, returns review-required ambiguity without mutation, and retires missing files only through an explicit reconciliation call. Public CLI/API ingestion remains deferred to P1-06; no Markdown parser, chunks, search, embeddings, model calls, or canonical writes are involved yet.
+```bash
+uv run dm-dungeon validate packages/dungeon-engine/tests/fixtures/sunken_archive.v1.json
+uv run dm-dungeon schema
+```
 
-## Current Next Step
+See [`packages/dungeon-engine/README.md`](packages/dungeon-engine/README.md) for package commands and
+[`packages/dungeon-engine/src/dm_dungeon/validation/TOPOLOGY_MATH.md`](packages/dungeon-engine/src/dm_dungeon/validation/TOPOLOGY_MATH.md)
+for the graph/progression proof boundary.
 
-Continue **P7-14f** with provider-free resumed one-step coordinator coverage for feature,
-trap, objective, and room-narrative targets. The final deterministic gate is now enforced at
-prompted approval and staged review-packet boundaries, and prompted lifecycle transition
-requires exact-hash-bound DM disposition of all six non-authoritative cohesion dimensions.
-Do not add repeated/full-chain dispatch, live calls, Tier B/C, a migration, model-authored
-geometry/mechanics, or canonical writes before every existing staged seam can resume through
-the same exact-policy coordinator boundary. See
-[`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) and
-[`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact resumable action.
+## Synthetic Dungeon Review
+
+Generate the fixed provider-free quality packet with:
+
+```bash
+make dungeon-review-packet
+```
+
+The ignored packet contains synthetic DM/player maps, keyed guide, manifest, automated rubric, and a
+blank human worksheet. It is a renderer, secrecy, and contract regression—not a campaign artifact or
+proof that live generation quality generalizes. Completing the worksheet records evidence only; it
+cannot approve preparation or write canon.
 
 ## License and Third-Party Marks
 
 Copyright (C) 2026 Reese Wilson.
 
-Except where otherwise noted, original code and documentation in this repository
-are licensed under the [GNU Affero General Public License version 3.0
-only](LICENSE). Third-party dependencies and referenced platforms remain subject
-to their own licenses and terms.
+Original code and documentation are licensed under the GNU Affero General Public License version 3.0
+only; see [`LICENSE`](LICENSE). Third-party dependencies and named platforms retain their own terms.
 
-This repository does not include proprietary game-rule text, published
-adventures, artwork, maps, or character data. Users are responsible for having
-the rights to any content they import.
-
-Dungeons & Dragons, D&D, and Roll20 are trademarks of their respective owners.
-Their descriptive use does not imply affiliation, sponsorship, or endorsement.
+This repository contains no proprietary game-rule text, published adventures, artwork, real character
+data, or provider credentials/responses. Dungeons & Dragons, D&D, and Roll20 are trademarks of their
+respective owners; descriptive use implies no affiliation.
