@@ -24,15 +24,13 @@ from dm_assistant.orchestration.dungeons.evals import (
     assess_dungeon_exploration_overage_evidence,
     build_dungeon_exploration_overage_protocol,
     evaluate_dungeon_intent_cases,
+    load_dungeon_tier_a_eval_manifest,
     render_dungeon_intent_eval_report,
     summarize_dungeon_intent_evals,
     validate_dungeon_tier_a_evidence_matrix,
 )
 
 _GOLDEN_PATH = Path(__file__).parent / "golden" / "dungeon_intent.json"
-_TIER_A_MANIFEST_PATH = (
-    Path(__file__).parent / "golden" / "dungeon_tier_a_manifest.json"
-)
 
 
 def _cases() -> tuple[DungeonIntentEvalCase, ...]:
@@ -78,9 +76,7 @@ def test_synthetic_suite_covers_compact_success_repair_and_abstention() -> None:
 
 
 def test_tier_a_manifest_has_distinct_blinded_multi_case_coverage() -> None:
-    manifest = DungeonTierAEvalManifest.model_validate_json(
-        _TIER_A_MANIFEST_PATH.read_text(encoding="utf-8")
-    )
+    manifest = load_dungeon_tier_a_eval_manifest()
 
     assert tuple(case.case_id for case in manifest.cases) == (
         "tier_a_case_01",
@@ -102,7 +98,7 @@ def test_tier_a_manifest_has_distinct_blinded_multi_case_coverage() -> None:
         "synthetic_grounded",
     }
 
-    duplicate_style = json.loads(_TIER_A_MANIFEST_PATH.read_text(encoding="utf-8"))
+    duplicate_style = manifest.model_dump(mode="json")
     duplicate_style["cases"][1]["interaction_style"] = duplicate_style["cases"][0][
         "interaction_style"
     ]
@@ -111,9 +107,7 @@ def test_tier_a_manifest_has_distinct_blinded_multi_case_coverage() -> None:
 
 
 def _exploration_overage_protocol() -> DungeonExplorationOverageProtocol:
-    manifest = DungeonTierAEvalManifest.model_validate_json(
-        _TIER_A_MANIFEST_PATH.read_text(encoding="utf-8")
-    )
+    manifest = load_dungeon_tier_a_eval_manifest()
     profile = resolve_dungeon_exploration_prompt_profile(
         provider_id="openai-codex",
         model_id="gpt-5.6-luna",
@@ -294,9 +288,7 @@ def _tier_a_evidence() -> tuple[
     tuple[DungeonTierARunMeasurement, ...],
     tuple[DungeonTierAHumanReview, ...],
 ]:
-    manifest = DungeonTierAEvalManifest.model_validate_json(
-        _TIER_A_MANIFEST_PATH.read_text(encoding="utf-8")
-    )
+    manifest = load_dungeon_tier_a_eval_manifest()
     measurements: list[DungeonTierARunMeasurement] = []
     reviews: list[DungeonTierAHumanReview] = []
     for variant_number, variant in enumerate(manifest.variants, start=1):

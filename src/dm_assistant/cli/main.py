@@ -66,8 +66,10 @@ from dm_assistant.orchestration.dungeons import (
     DUNGEON_TIER_A_CANARY,
     CreateDungeonWorkflow,
     ExportDungeonWorkflow,
+    PromptDungeonTierAFixedCaseTaskWorkflow,
     PromptDungeonWorkflow,
     RegenerateDungeonWorkflow,
+    load_dungeon_tier_a_eval_manifest,
     resolve_dungeon_prompt_profile,
     resolve_dungeon_tier_a_canary_profiles,
 )
@@ -769,6 +771,164 @@ def dungeon_canary(
         effort=effort,
         debug=debug,
         diagnose_provider_contract=diagnose_provider_contract,
+        created_by=created_by,
+    )
+
+
+def _run_dungeon_fixed_case_task(
+    *,
+    case_id: str,
+    artifact_id: UUID,
+    parent_version_id: UUID,
+    campaign_id: UUID | None,
+    provider: str,
+    model: str,
+    effort: ReasoningEffort,
+    resume_from_evaluation_run_id: UUID | None,
+    created_by: str,
+) -> None:
+    """Execute exactly one reproducibly pinned fixed-case enrichment task."""
+
+    with _render_domain_errors():
+        with workbench_runtime() as runtime:
+            gateway = _require_model_gateway(runtime.model_gateway)
+            fixed_case = runtime.dungeon_fixed_case_application
+            if fixed_case is None:
+                raise InvalidInputError("The model gateway is not enabled.")
+            resolved_campaign_id = (
+                campaign_id
+                if campaign_id is not None
+                else runtime.campaigns.ensure_active_campaign().id
+            )
+            selected_provider, selected_model, selected_effort = (
+                _resolve_dungeon_model_selection(
+                    gateway=gateway,
+                    saved=runtime.model_selections.get("dungeon_generation_intent_v1"),
+                    provider_override=provider,
+                    model_override=model,
+                    effort_override=effort,
+                    allow_faux=(
+                        runtime.settings.environment is RuntimeEnvironment.TEST
+                    ),
+                )
+            )
+            typer.echo(
+                f"Using {selected_model.name} via {selected_provider.name} "
+                f"at {selected_effort.value} effort.",
+                err=True,
+            )
+            _emit_output_limit_policy(selected_model.capabilities)
+            runtime.model_selections.save(
+                task_name="dungeon_generation_intent_v1",
+                provider_id=selected_provider.id,
+                model_id=selected_model.id,
+                effort=selected_effort,
+                selection_policy="dungeon-task-baseline-v1",
+            )
+            profiles = resolve_dungeon_tier_a_canary_profiles(
+                provider_id=selected_provider.id,
+                model_id=selected_model.id,
+                capabilities=selected_model.capabilities,
+                context_window_tokens=selected_model.context_window,
+                output_token_limit=selected_model.max_output_tokens,
+                requested_effort=selected_effort,
+            )
+            try:
+                outcome = fixed_case.execute(
+                    PromptDungeonTierAFixedCaseTaskWorkflow(
+                        campaign_id=resolved_campaign_id,
+                        artifact_id=artifact_id,
+                        parent_version_id=parent_version_id,
+                        case_id=case_id,
+                        created_by=created_by,
+                        resume_from_evaluation_run_id=(resume_from_evaluation_run_id),
+                    ),
+                    load_dungeon_tier_a_eval_manifest(),
+                    profiles,
+                )
+            except ModelGatewayTransportError as error:
+                raise InvalidInputError(str(error)) from None
+            except AssetCorruptionError as error:
+                raise _prompt_execution_error(error) from None
+            except AssetStorageError as error:
+                raise _prompt_execution_error(error) from None
+            except ValueError as error:
+                raise _prompt_execution_error(error) from None
+
+            attempt = outcome.step.attempt
+            attempt_result = attempt.result if attempt is not None else None
+            next_task = outcome.step.plan_after.next_task
+            _emit_document(
+                {
+                    "success": outcome.success,
+                    "evaluation_run_id": str(outcome.evaluation_run_id),
+                    "task_kind": outcome.plan.task_kind,
+                    "task_attempt_run_id": (
+                        str(attempt.attempt_run_id) if attempt is not None else None
+                    ),
+                    "task_public_code": outcome.step.public_code,
+                    "artifact_id": str(artifact_id),
+                    "parent_version_id": str(parent_version_id),
+                    "artifact_version_id": (
+                        str(attempt_result.artifact_version_id)
+                        if outcome.success and attempt_result is not None
+                        else None
+                    ),
+                    "plan_after": {
+                        "status": outcome.step.plan_after.status,
+                        "next_task_kind": (
+                            next_task.kind if next_task is not None else None
+                        ),
+                    },
+                    "resolved": {
+                        "campaign_id": str(resolved_campaign_id),
+                        "case_id": case_id,
+                        "provider": selected_provider.id,
+                        "model": selected_model.id,
+                        "effort": selected_effort.value,
+                    },
+                }
+            )
+            if not outcome.success:
+                raise typer.Exit(code=1)
+
+
+@dungeon_app.command("fixed-case")
+def dungeon_fixed_case(
+    case_id: Annotated[str, typer.Argument(help="Frozen Tier A case ID.")],
+    artifact_id: Annotated[
+        UUID, typer.Argument(help="Existing dungeon artifact UUID.")
+    ],
+    parent_version_id: Annotated[
+        UUID, typer.Argument(help="Current exact parent-version UUID.")
+    ],
+    provider: Annotated[str, typer.Option("--provider")],
+    model: Annotated[str, typer.Option("--model")],
+    campaign_id: Annotated[UUID | None, typer.Option("--campaign")] = None,
+    effort: Annotated[ReasoningEffort, typer.Option("--effort")] = ReasoningEffort.FAST,
+    resume_from_evaluation_run_id: Annotated[
+        UUID | None,
+        typer.Option(
+            "--resume-run",
+            help="Failed fixed-case wrapper UUID whose complete pins must match.",
+        ),
+    ] = None,
+    created_by: Annotated[str, typer.Option("--created-by")] = "dm",
+) -> None:
+    """Run exactly the next frozen-case enrichment task and stop."""
+
+    typer.echo(
+        f"Fixed case {case_id}; execute one exact staged task and stop.", err=True
+    )
+    _run_dungeon_fixed_case_task(
+        case_id=case_id,
+        artifact_id=artifact_id,
+        parent_version_id=parent_version_id,
+        campaign_id=campaign_id,
+        provider=provider,
+        model=model,
+        effort=effort,
+        resume_from_evaluation_run_id=resume_from_evaluation_run_id,
         created_by=created_by,
     )
 

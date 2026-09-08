@@ -152,6 +152,7 @@ def test_help_lists_foundation_commands() -> None:
     assert dungeon_help.exit_code == 0
     assert "prompt" in dungeon_help.output
     assert "canary" in dungeon_help.output
+    assert "fixed-case" in dungeon_help.output
 
     model_help = runner.invoke(app, ["model", "--help"])
     assert model_help.exit_code == 0
@@ -205,6 +206,43 @@ def test_canary_command_pins_exact_prompt_seed_and_explicit_model(
     )
     assert diagnostic.exit_code == 0, diagnostic.output
     assert captured["diagnose_provider_contract"] is True
+
+
+def test_fixed_case_command_requires_exact_parent_and_runs_one_task(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def capture(**kwargs: object) -> None:
+        captured.update(kwargs)
+
+    monkeypatch.setattr("dm_assistant.cli.main._run_dungeon_fixed_case_task", capture)
+    result = runner.invoke(
+        app,
+        [
+            "dungeon",
+            "fixed-case",
+            "tier_a_case_01",
+            "35ec4e9b-cbc5-416b-9ff7-3fade7865044",
+            "e6902ff4-87e8-4966-8d83-25dd744ddc5d",
+            "--provider",
+            "openai-codex",
+            "--model",
+            "gpt-5.6-luna",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["case_id"] == "tier_a_case_01"
+    assert str(captured["artifact_id"]) == "35ec4e9b-cbc5-416b-9ff7-3fade7865044"
+    assert str(captured["parent_version_id"]) == (
+        "e6902ff4-87e8-4966-8d83-25dd744ddc5d"
+    )
+    assert captured["provider"] == "openai-codex"
+    assert captured["model"] == "gpt-5.6-luna"
+    assert captured["effort"] is ReasoningEffort.FAST
+    assert captured["resume_from_evaluation_run_id"] is None
+    assert "execute one exact staged task" in result.output
 
 
 def test_provider_smoke_profile_is_short_lived_and_tool_free() -> None:

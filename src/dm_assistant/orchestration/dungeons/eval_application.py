@@ -24,7 +24,11 @@ from dm_assistant.orchestration.dungeons.canary_application import (
 from dm_assistant.orchestration.dungeons.contracts import (
     DungeonStudioSpecification,
     PromptDungeonExplorationWorkflow,
+    PromptDungeonFeatureInteractionWorkflow,
+    PromptDungeonObjectiveWorkflow,
     PromptDungeonPuzzleWorkflow,
+    PromptDungeonRoomNarrativeWorkflow,
+    PromptDungeonTrapWorkflow,
     WorkflowModel,
 )
 from dm_assistant.orchestration.dungeons.evals import (
@@ -37,7 +41,11 @@ from dm_assistant.orchestration.dungeons.staged_enrichment_coordinator import (
     DungeonStagedEnrichmentCoordinator,
     DungeonStagedEnrichmentStepResult,
     DungeonStagedExplorationPolicy,
+    DungeonStagedFeatureInteractionPolicy,
+    DungeonStagedObjectivePolicy,
     DungeonStagedPuzzlePolicy,
+    DungeonStagedRoomNarrativePolicy,
+    DungeonStagedTrapPolicy,
     PromptDungeonStagedEnrichmentWorkflow,
 )
 
@@ -67,7 +75,14 @@ class DungeonTierAFixedCaseExecutionPayload(WorkflowModel):
     parent_specification_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     variant_assignment_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     exploration_task_contract_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    task_kind: Literal["puzzle", "exploration"]
+    task_kind: Literal[
+        "puzzle",
+        "exploration",
+        "feature_interaction",
+        "trap",
+        "objective",
+        "room_narrative",
+    ]
     trusted_policy: dict[str, JsonValue]
     trusted_policy_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     resolved_profile: dict[str, JsonValue]
@@ -140,6 +155,10 @@ class DungeonTierAFixedCaseApplicationService:
             specification,
             puzzle_profile=profiles.puzzle,
             exploration_profile=profiles.exploration,
+            feature_interaction_profile=profiles.feature_interaction,
+            trap_profile=profiles.trap,
+            objective_profile=profiles.objective,
+            room_narrative_profile=profiles.room_narrative,
         )
         context_hash = self._context_hash(command, plan)
         payload = self._execution_payload(command, plan, context_hash)
@@ -264,6 +283,50 @@ class DungeonTierAFixedCaseApplicationService:
                 )
             )
             return canonical_json_sha256(exploration_context.model_dump(mode="json"))
+        if isinstance(policy, DungeonStagedFeatureInteractionPolicy):
+            feature_context = self._studio.build_feature_interaction_context(
+                PromptDungeonFeatureInteractionWorkflow(
+                    campaign_id=command.campaign_id,
+                    artifact_id=command.artifact_id,
+                    parent_version_id=command.parent_version_id,
+                    selection=policy.selection,
+                    created_by=command.created_by,
+                )
+            )
+            return canonical_json_sha256(feature_context.model_dump(mode="json"))
+        if isinstance(policy, DungeonStagedTrapPolicy):
+            trap_context = self._studio.build_trap_context(
+                PromptDungeonTrapWorkflow(
+                    campaign_id=command.campaign_id,
+                    artifact_id=command.artifact_id,
+                    parent_version_id=command.parent_version_id,
+                    selection=policy.selection,
+                    created_by=command.created_by,
+                )
+            )
+            return canonical_json_sha256(trap_context.model_dump(mode="json"))
+        if isinstance(policy, DungeonStagedObjectivePolicy):
+            objective_context = self._studio.build_objective_context(
+                PromptDungeonObjectiveWorkflow(
+                    campaign_id=command.campaign_id,
+                    artifact_id=command.artifact_id,
+                    parent_version_id=command.parent_version_id,
+                    selection=policy.selection,
+                    created_by=command.created_by,
+                )
+            )
+            return canonical_json_sha256(objective_context.model_dump(mode="json"))
+        if isinstance(policy, DungeonStagedRoomNarrativePolicy):
+            narrative_context = self._studio.build_room_narrative_context(
+                PromptDungeonRoomNarrativeWorkflow(
+                    campaign_id=command.campaign_id,
+                    artifact_id=command.artifact_id,
+                    parent_version_id=command.parent_version_id,
+                    selection=policy.selection,
+                    created_by=command.created_by,
+                )
+            )
+            return canonical_json_sha256(narrative_context.model_dump(mode="json"))
         raise ConflictError("Unsupported fixed-case task policy.")
 
     @staticmethod

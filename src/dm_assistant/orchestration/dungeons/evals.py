@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from hashlib import sha256
+from pathlib import Path
 from typing import Literal, Self
 from uuid import UUID
 
@@ -23,21 +24,31 @@ from dm_assistant.orchestration.dungeons.canary import DUNGEON_TIER_A_CANARY
 from dm_assistant.orchestration.dungeons.contracts import (
     DungeonExplorationAffordanceApproval,
     DungeonExplorationContextSelection,
+    DungeonFeatureInteractionContextSelection,
     DungeonGenerationProposal,
+    DungeonObjectiveContextSelection,
     DungeonPuzzleClueApproval,
     DungeonPuzzleContextSelection,
+    DungeonRoomNarrativeContextSelection,
     DungeonStudioSpecification,
+    DungeonTrapContextSelection,
 )
 from dm_assistant.orchestration.dungeons.exploration_prompting import (
     dungeon_exploration_task_contract_sha256,
 )
 from dm_assistant.orchestration.dungeons.staged_enrichment import (
+    DungeonStagedEnrichmentTaskKind,
     plan_dungeon_staged_enrichment,
 )
 from dm_assistant.orchestration.dungeons.staged_enrichment_coordinator import (
     DungeonStagedEnrichmentDispatch,
+    DungeonStagedEnrichmentPolicy,
     DungeonStagedExplorationPolicy,
+    DungeonStagedFeatureInteractionPolicy,
+    DungeonStagedObjectivePolicy,
     DungeonStagedPuzzlePolicy,
+    DungeonStagedRoomNarrativePolicy,
+    DungeonStagedTrapPolicy,
 )
 from dm_dungeon import (
     DungeonPlanCompileResult,
@@ -60,6 +71,10 @@ class _EvalModel(BaseModel):
 
 DUNGEON_INTENT_EVAL_POLICY = "dungeon-intent-eval"
 """Explicit non-default policy name for isolated model comparison evidence."""
+
+_DUNGEON_TIER_A_EVAL_MANIFEST_PATH = Path(__file__).with_name(
+    "tier_a_eval_manifest.json"
+)
 
 
 class DungeonIntentEvalCase(_EvalModel):
@@ -184,6 +199,14 @@ class DungeonTierAEvalManifest(_EvalModel):
         return self
 
 
+def load_dungeon_tier_a_eval_manifest() -> DungeonTierAEvalManifest:
+    """Load the packaged frozen manifest shared by operators and evaluators."""
+
+    return DungeonTierAEvalManifest.model_validate_json(
+        _DUNGEON_TIER_A_EVAL_MANIFEST_PATH.read_text(encoding="utf-8")
+    )
+
+
 class DungeonExplorationOverageCasePin(_EvalModel):
     """Body-free binding between one fixed Tier A case and one task contract."""
 
@@ -233,7 +256,7 @@ class DungeonTierAFixedCaseDispatchPlan(_EvalModel):
     parent_specification_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     variant_assignment_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     exploration_task_contract_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    task_kind: Literal["puzzle", "exploration"]
+    task_kind: DungeonStagedEnrichmentTaskKind
     trusted_policy_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     resolved_profile_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     dispatch: DungeonStagedEnrichmentDispatch
@@ -527,26 +550,47 @@ def build_dungeon_tier_a_fixed_case_dispatch(
     *,
     puzzle_profile: ResolvedModelRunProfile,
     exploration_profile: ResolvedModelRunProfile,
+    feature_interaction_profile: ResolvedModelRunProfile,
+    trap_profile: ResolvedModelRunProfile,
+    objective_profile: ResolvedModelRunProfile,
+    room_narrative_profile: ResolvedModelRunProfile,
 ) -> DungeonTierAFixedCaseDispatchPlan:
-    """Derive one exact puzzle/exploration dispatch from a frozen eval case."""
+    """Derive the exact next staged dispatch from one frozen eval case."""
 
     cases = {case.case_id: case for case in manifest.cases}
     case = cases.get(case_id)
     if case is None:
         raise ValueError(f"unknown Tier A fixed case: {case_id}")
     _require_fixed_case_structural_context(case, specification)
-    _require_matching_fixed_case_profiles(puzzle_profile, exploration_profile)
+    profiles = (
+        puzzle_profile,
+        exploration_profile,
+        feature_interaction_profile,
+        trap_profile,
+        objective_profile,
+        room_narrative_profile,
+    )
+    _require_matching_fixed_case_profiles(profiles)
 
     staged = plan_dungeon_staged_enrichment(specification)
     if staged.status != "ready" or staged.next_task is None:
         raise ValueError("Tier A fixed-case parent has no dispatchable task")
     task = staged.next_task
-    policy: DungeonStagedPuzzlePolicy | DungeonStagedExplorationPolicy
+    guide = specification.dm_guide
+    if guide is None:
+        raise ValueError("Tier A fixed-case parent has no exact DM guide")
+    continuity = specification.creative_continuity
+    if continuity is None:
+        raise ValueError("Tier A fixed-case parent has no creative continuity")
+    continuity_fact_ids = tuple(fact.fact_id for fact in continuity.selected_facts)
+
+    policy: DungeonStagedEnrichmentPolicy
     if task.kind == "puzzle":
         room_id = task.room_ids[0]
         policy = DungeonStagedPuzzlePolicy(
             selection=DungeonPuzzleContextSelection(
                 room_id=room_id,
+                continuity_fact_ids=continuity_fact_ids,
                 clue_locations=(
                     DungeonPuzzleClueApproval(
                         location_id=room_id,
@@ -567,10 +611,6 @@ def build_dungeon_tier_a_fixed_case_dispatch(
         profile = puzzle_profile
     elif task.kind == "exploration":
         room_id = task.room_ids[0]
-        encounter_slot_id = task.target_ids[0]
-        guide = specification.dm_guide
-        if guide is None:
-            raise ValueError("Tier A fixed-case parent has no exact DM guide")
         guide_features = {item.marker_id: item for item in guide.features}
         feature_ids = tuple(
             sorted(
@@ -586,9 +626,10 @@ def build_dungeon_tier_a_fixed_case_dispatch(
                 "Tier A fixed-case exploration task has no local feature affordance"
             )
         policy = DungeonStagedExplorationPolicy(
-            encounter_slot_id=encounter_slot_id,
+            encounter_slot_id=task.target_ids[0],
             selection=DungeonExplorationContextSelection(
                 room_id=room_id,
+                continuity_fact_ids=continuity_fact_ids,
                 affordances=tuple(
                     DungeonExplorationAffordanceApproval(
                         affordance_id=feature_id,
@@ -612,11 +653,82 @@ def build_dungeon_tier_a_fixed_case_dispatch(
             ),
         )
         profile = exploration_profile
-    else:
-        raise ValueError(
-            "Tier A fixed-case execution currently supports only puzzle and "
-            "exploration tasks"
+    elif task.kind == "feature_interaction":
+        room_id = task.room_ids[0]
+        feature_id = task.target_ids[0]
+        features = {item.marker_id: item for item in guide.features}
+        feature = features.get(feature_id)
+        if feature is None:
+            raise ValueError("Tier A fixed-case feature is missing from the guide")
+        policy = DungeonStagedFeatureInteractionPolicy(
+            selection=DungeonFeatureInteractionContextSelection(
+                room_id=room_id,
+                feature_id=feature_id,
+                continuity_fact_ids=continuity_fact_ids,
+                interaction_goal=(
+                    f"Make {feature.name} a meaningful room-local expression of "
+                    f"{case.interaction_style}."
+                ),
+                stakes=(
+                    "A poor choice changes the scene without invalidating dungeon "
+                    "progression."
+                ),
+                constraints=(
+                    f"Honor the fixed setting: {case.setting}",
+                    "Do not author numeric difficulties.",
+                ),
+            )
         )
+        profile = feature_interaction_profile
+    elif task.kind == "trap":
+        policy = DungeonStagedTrapPolicy(
+            selection=DungeonTrapContextSelection(
+                room_id=task.room_ids[0],
+                trap_id=task.target_ids[0],
+                continuity_fact_ids=continuity_fact_ids,
+                stakes=(
+                    "The trap creates a setting-specific setback without sealing the "
+                    "critical path."
+                ),
+                constraints=(
+                    f"Honor the fixed setting: {case.setting}",
+                    "Do not author numeric difficulties.",
+                ),
+            )
+        )
+        profile = trap_profile
+    elif task.kind == "objective":
+        mechanic_ids = _accepted_fixed_case_mechanic_ids(specification)
+        policy = DungeonStagedObjectivePolicy(
+            selection=DungeonObjectiveContextSelection(
+                room_id=task.room_ids[0],
+                objective_id=task.target_ids[0],
+                continuity_fact_ids=continuity_fact_ids,
+                mechanic_ids=mechanic_ids,
+                stakes=(
+                    "Resolve the named objective with a consequential choice grounded "
+                    "in the accepted dungeon mechanics."
+                ),
+                constraints=(
+                    f"Honor the fixed setting: {case.setting}",
+                    "Preserve the named objective and accepted mechanics.",
+                ),
+            )
+        )
+        profile = objective_profile
+    else:
+        policy = DungeonStagedRoomNarrativePolicy(
+            selection=DungeonRoomNarrativeContextSelection(
+                room_ids=task.room_ids,
+                continuity_fact_ids=continuity_fact_ids,
+                tone=(case.setting, case.interaction_style),
+                constraints=(
+                    "Use only player-observable information.",
+                    "Keep every room concise and distinct while preserving continuity.",
+                ),
+            )
+        )
+        profile = room_narrative_profile
 
     protocol = build_dungeon_exploration_overage_protocol(manifest, exploration_profile)
     case_pin = next(item for item in protocol.cases if item.case_id == case_id)
@@ -635,6 +747,30 @@ def build_dungeon_tier_a_fixed_case_dispatch(
         resolved_profile_sha256=canonical_json_sha256(profile.model_dump(mode="json")),
         dispatch=dispatch,
     )
+
+
+def _accepted_fixed_case_mechanic_ids(
+    specification: DungeonStudioSpecification,
+) -> tuple[str, ...]:
+    mechanic_ids = tuple(
+        sorted(item.output.room_id for item in specification.puzzle_model_lineage)
+        + sorted(
+            item.output.encounter_slot_id
+            for item in specification.exploration_model_lineage
+        )
+        + sorted(
+            item.output.feature_id
+            for item in specification.feature_interaction_model_lineage
+        )
+        + sorted(item.output.trap_id for item in specification.trap_model_lineage)
+    )
+    if not mechanic_ids:
+        raise ValueError("Tier A fixed-case objective has no accepted mechanics")
+    if len(mechanic_ids) > 8:
+        raise ValueError("Tier A fixed-case objective exceeds its mechanic bound")
+    if len(mechanic_ids) != len(set(mechanic_ids)):
+        raise ValueError("Tier A fixed-case accepted mechanic IDs are not unique")
+    return mechanic_ids
 
 
 def _require_fixed_case_structural_context(
@@ -659,22 +795,18 @@ def _require_fixed_case_structural_context(
 
 
 def _require_matching_fixed_case_profiles(
-    puzzle: ResolvedModelRunProfile,
-    exploration: ResolvedModelRunProfile,
+    profiles: tuple[ResolvedModelRunProfile, ...],
 ) -> None:
-    puzzle_assignment = (
-        puzzle.provider_id,
-        puzzle.model_id,
-        puzzle.runtime_adapter,
-        puzzle.requested_effort,
-    )
-    exploration_assignment = (
-        exploration.provider_id,
-        exploration.model_id,
-        exploration.runtime_adapter,
-        exploration.requested_effort,
-    )
-    if puzzle_assignment != exploration_assignment:
+    assignments = {
+        (
+            profile.provider_id,
+            profile.model_id,
+            profile.runtime_adapter,
+            profile.requested_effort,
+        )
+        for profile in profiles
+    }
+    if len(assignments) != 1:
         raise ValueError("Tier A fixed-case task profile assignment drift")
 
 

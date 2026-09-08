@@ -71,7 +71,9 @@ from dm_assistant.orchestration.dungeons import (
     resolve_dungeon_trap_prompt_profile,
     validate_final_staged_dungeon,
 )
-from dm_assistant.orchestration.dungeons.evals import DungeonTierAEvalManifest
+from dm_assistant.orchestration.dungeons.evals import (
+    load_dungeon_tier_a_eval_manifest,
+)
 from dm_assistant.orchestration.modeling import GatewayCompletion, GatewayToolSchema
 
 pytestmark = pytest.mark.integration
@@ -1977,18 +1979,11 @@ def test_repeated_coordinator_stops_after_third_task_rejection(
     assert preparation.get_artifact(campaign_id, artifact_id).lifecycle.value == "draft"
 
 
-def test_fixed_case_failed_task_resumes_only_with_exact_persisted_pins(
+def test_fixed_case_resumes_exact_failure_then_completes_every_staged_task(
     db_engine: Engine,
     tmp_path: Path,
 ) -> None:
-    manifest = DungeonTierAEvalManifest.model_validate_json(
-        (
-            Path(__file__).parents[1]
-            / "evals"
-            / "golden"
-            / "dungeon_tier_a_manifest.json"
-        ).read_text(encoding="utf-8")
-    )
+    manifest = load_dungeon_tier_a_eval_manifest()
     case = manifest.cases[0]
     campaign_id = _campaign(db_engine)
     studio, preparation = _studio(db_engine, tmp_path)
@@ -2005,6 +2000,7 @@ def test_fixed_case_failed_task_resumes_only_with_exact_persisted_pins(
     specification = DungeonStudioSpecification.model_validate_json(
         json.dumps(parent.specification)
     )
+    original_package = specification.package.model_dump_json()
     puzzle_room_id = next(
         room.id for room in specification.package.rooms if room.role.value == "puzzle"
     )
@@ -2158,3 +2154,79 @@ def test_fixed_case_failed_task_resumes_only_with_exact_persisted_pins(
         == child_id
     )
     assert len(preparation.list_versions(campaign_id, artifact_id)) == 2
+
+    remaining_gateway = _DynamicCanaryGateway()
+    remaining = DungeonTierAFixedCaseApplicationService(
+        preparation,
+        studio,
+        DungeonStagedEnrichmentCoordinator(
+            preparation,
+            puzzle=DungeonPuzzlePromptApplicationService(
+                preparation, DungeonPuzzlePromptService(studio, remaining_gateway)
+            ),
+            exploration=DungeonExplorationPromptApplicationService(
+                preparation,
+                DungeonExplorationPromptService(studio, remaining_gateway),
+            ),
+            feature_interaction=DungeonFeatureInteractionPromptApplicationService(
+                preparation,
+                DungeonFeatureInteractionPromptService(studio, remaining_gateway),
+            ),
+            trap=DungeonTrapPromptApplicationService(
+                preparation, DungeonTrapPromptService(studio, remaining_gateway)
+            ),
+            objective=DungeonObjectivePromptApplicationService(
+                preparation, DungeonObjectivePromptService(studio, remaining_gateway)
+            ),
+            room_narrative=DungeonRoomNarrativePromptApplicationService(
+                preparation,
+                DungeonRoomNarrativePromptService(studio, remaining_gateway),
+            ),
+        ),
+    )
+    current_version_id = child_id
+    expected_kinds = (
+        "exploration",
+        "feature_interaction",
+        "trap",
+        "objective",
+        "room_narrative",
+    )
+    last_step = None
+    for expected_kind in expected_kinds:
+        completed = remaining.execute(
+            command.model_copy(update={"parent_version_id": current_version_id}),
+            manifest,
+            profiles,
+        )
+        assert completed.success
+        assert completed.plan.task_kind == expected_kind
+        assert completed.step.attempt is not None
+        assert completed.step.attempt.result is not None
+        next_version_id = completed.step.attempt.result.artifact_version_id
+        assert next_version_id is not None
+        current_version_id = next_version_id
+        completed_run = preparation.get_generation_run(
+            campaign_id, completed.evaluation_run_id
+        )
+        assert completed_run.status.value == "succeeded"
+        assert completed_run.input_scope["task_kind"] == expected_kind
+        assert completed_run.context_payload_sha256 is not None
+        last_step = completed.step
+
+    assert last_step is not None
+    assert last_step.plan_after.status == "complete"
+    final = DungeonStudioSpecification.model_validate_json(
+        json.dumps(
+            preparation.get_version(campaign_id, current_version_id).specification
+        )
+    )
+    assert final.package.model_dump_json() == original_package
+    assert validate_final_staged_dungeon(final).valid
+    assert remaining_gateway.allowed_tools == [
+        ("submit_dungeon_exploration",),
+        ("submit_dungeon_feature_interaction",),
+        ("submit_dungeon_trap",),
+        ("submit_dungeon_objective",),
+        ("submit_dungeon_room_narrative",),
+    ]

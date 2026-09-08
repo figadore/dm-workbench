@@ -141,6 +141,10 @@ from dm_assistant.orchestration.dungeons.eval_application import (
     DungeonTierAFixedCaseTaskResult,
     PromptDungeonTierAFixedCaseTaskWorkflow,
 )
+from dm_assistant.orchestration.dungeons.evals import (
+    DungeonTierAEvalManifest,
+    load_dungeon_tier_a_eval_manifest,
+)
 from dm_assistant.orchestration.dungeons.exploration_application import (
     DungeonExplorationPromptApplicationService,
     DungeonExplorationPromptAttemptResult,
@@ -309,6 +313,7 @@ __all__ = [
     "DungeonTierACanaryRunResult",
     "DungeonTierAFixedCaseApplicationService",
     "DungeonTierAFixedCaseTaskResult",
+    "DungeonTierAEvalManifest",
     "DungeonExplorationAffordance",
     "DungeonExplorationAffordanceApproval",
     "DungeonExplorationApproach",
@@ -464,6 +469,7 @@ __all__ = [
     "build_dungeon_tier_a_canary_dispatches",
     "derive_dungeon_creative_continuity",
     "dungeon_exploration_task_contract_sha256",
+    "load_dungeon_tier_a_eval_manifest",
     "plan_dungeon_staged_enrichment",
     "resolve_dungeon_tier_a_canary_profiles",
     "resolve_dungeon_exploration_prompt_profile",

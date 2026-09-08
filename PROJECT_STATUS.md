@@ -5,64 +5,50 @@
 
 ## Current Task
 - **Task:** P7-14f — staged Tier A authoring and anti-overfitting evaluation.
-- **Current work:** a provider-free fixed-case puzzle/exploration execution and exact-resumption
-  boundary is implemented and uncommitted.
-- **Product state:** staged orchestration and final validation remain implemented. The Tier A quality
-  gate is red because no preparation-ready live artifact or completed blinded human matrix exists.
+- **Current work:** complete fixed-case staged execution and its one-task operator command are
+  implemented; an authorized Luna canary completed case 01.
+- **Product state:** one staged live artifact is preparation-ready. The Tier A quality gate remains
+  red because cases 02/03 and the blinded human evidence matrix are incomplete.
 - **Schema head:** `0008_workbench_defaults`; no migration is involved.
 - **Retention gate:** **not crossed**. Active V1 contracts and disposable alpha data evolve in place.
 
 ## Completed Behavior
-- A pure fixed-case planner verifies the exact structural prompt hash and authorized synthetic facts,
-  requires one matched provider/model/effort assignment, and selects only the deterministic next
-  puzzle or exploration target from the current staged plan.
-- Puzzle policy is derived from the manifest setting/interaction style and exact puzzle room.
-  Exploration policy uses the manifest interaction style, exact encounter slot, and sorted local
-  feature affordances. Both retain the existing Luna-fast budgets/contracts.
-- A Workbench application wrapper computes case, parent specification, policy, built context,
-  resolved profile, variant assignment, and exploration-contract hashes before dispatching the
-  existing one-step coordinator.
-- Each wrapper generation run stores the complete trusted policy and resolved profile in a private
-  generation-context envelope. Ordinary run inspection exposes only body-free hashes and IDs.
-- Resumption accepts only a failed fixed-case wrapper whose input, context payload, task profile,
-  schema, and generator pins recompute exactly. Drift or a pre-boundary attempt fails before provider
-  dispatch; accepted content still publishes through the existing atomic DM-only task seam.
-- The composition root exposes the new application service when the model gateway is enabled.
-  Architecture, implementation, and recovery policy now describe this replay boundary.
+- The packaged frozen manifest is shared by runtime operators and evaluator tests rather than loaded
+  from a test-only path.
+- The fixed-case planner now derives trusted policies for puzzle, exploration, feature interaction,
+  trap, objective, and room narrative from the exact current parent and manifest case.
+- Grounded cases select only the exact authorized continuity fact IDs. Objective context receives the
+  bounded accepted mechanic set; narrative receives exactly the planner-selected room set.
+- All six task profiles must retain one provider/model/adapter/effort assignment. Every task still
+  stores its complete policy/profile privately with body-free replay pins.
+- `dm dungeon fixed-case` requires case, artifact, current parent, provider, model, and effort; it
+  executes exactly one next task, supports exact failed-run resumption, and never approves or writes
+  canon.
 
-## Faux Evidence
-- PostgreSQL/faux coverage creates a case-01 structural parent, rejects an over-budget puzzle without
-  publishing, and persists its private replay payload plus body-free pins.
-- A changed manifest is rejected before the faux gateway is called. The unchanged manifest resumes
-  with the same input/context hashes, accepts the puzzle, publishes exactly one child, and leaves the
-  artifact a draft.
-- This boundary currently supports puzzle and exploration only. Feature, trap, objective, narrative,
-  complete fixed-case execution, and a user-facing command remain outside this slice.
+## Live Evidence
+- Explicit canary authorization was used for four new Luna-fast calls over case 01: feature, trap,
+  objective, and room narrative. All succeeded on the first submission with measured usage and no
+  repair.
+- Artifact `35ec4e9b-cbc5-416b-9ff7-3fade7865044` is complete and preparation-ready at version
+  `76a48d8a-1f9c-41c3-9533-890fd21419cd`; it remains a draft.
+- Final deterministic validation passed all seven checks with zero diagnostics, including exact
+  continuity/source lineage, required content, cross-task references, and player secrecy.
+- The earlier case-01 puzzle/exploration remain accepted but predate the exact wrapper. The frozen
+  exploration overage remains the only qualifying overage, so its repeat gate is **1 of 2**.
+- No retry, debug capture, budget/effort change, Terra comparison, approval, or canonical write ran.
 
-## Live Evidence and Authorization
-- The frozen canary remains the only qualifying exploration overage; the repeat gate is **1 of 2**.
-- Case 01 puzzle/exploration succeeded in the prior bounded live check. Disposable artifact
-  `35ec4e9b-cbc5-416b-9ff7-3fade7865044` remains a draft at version
-  `e6902ff4-87e8-4966-8d83-25dd744ddc5d`, with feature interaction next.
-- Those attempts predate the new wrapper and cannot be claimed as exact-resumption evidence.
-- No live call, retry, debug capture, effort/budget change, or Terra comparison is authorized.
-
-## Intentional Uncommitted Work and Verification
-- Runtime: `src/dm_assistant/runtime.py` and
-  `src/dm_assistant/orchestration/dungeons/{__init__,evals,eval_application}.py`.
-- Faux integration: `tests/integration/test_dungeon_staged_enrichment_coordinator.py`.
-- Policy/handoff: `dm-assistant-implementation-plan.md`,
-  `dm-assistant-technical-architecture.md`, `dungeon-generation-recovery-plan.md`, and this file.
-- Root unit/eval suite: **241 passed**. Staged coordinator PostgreSQL integration: **10 passed**.
-  Focused Ruff check/format and strict mypy passed. `git diff --check` passed before this update.
-- The work is runnable; there is no partial migration or unsafe write path. Existing unrelated
-  repository-wide Ruff/mypy and Library/schema findings remain documented in history.
+## Verification
+- Root unit/eval suite: **242 passed**. Staged coordinator PostgreSQL integration: **10 passed**.
+- Focused Ruff, strict mypy, wheel package-data check, and `git diff --check` passed.
+- The work is runnable; there is no partial migration, unsafe write path, or intentional uncommitted
+  runtime work.
 
 ## Single Next Recommended Task
-**Review and commit the P7-14f fixed-case execution/resumption boundary; do not make a live call.**
+**Add reproducible fixed-case structural startup and whole-artifact evidence output for cases 02/03.**
 
-First action: inspect the uncommitted runtime/test/policy diff, rerun focused checks and
-`git diff --check`, then commit with subject `P7-14f pin reproducible fixed-case task resumption`.
+First action: define and provider-free test a Workbench-owned structural wrapper that loads one
+manifest case, constructs only its authorized synthetic grounding, pins the opaque assignment, and
+emits body-free measurement/reviewer inputs before making another live call.
 
 ## References
 [`dm-assistant-implementation-plan.md`](dm-assistant-implementation-plan.md) P7-14f;

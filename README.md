@@ -175,6 +175,17 @@ preserves the valid draft and leaves explicit blockers. Ordinary run inspection 
 uv run --frozen dm dungeon run inspect <attempt-run-id>
 ```
 
+Frozen Tier A evaluation artifacts advance through one reproducibly pinned task at a time. The exact
+current parent is mandatory, and `--resume-run` accepts only an unchanged failed wrapper:
+
+```bash
+uv run --frozen dm dungeon fixed-case tier_a_case_01 \
+  <artifact-uuid> <current-version-uuid> \
+  --provider openai-codex --model gpt-5.6-luna --effort fast
+```
+
+This command never approves preparation or writes campaign canon.
+
 Gateway-specific local operation and checks are documented in
 [`model-gateway/README.md`](model-gateway/README.md).
 
