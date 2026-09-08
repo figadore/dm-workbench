@@ -40,6 +40,7 @@ from dm_assistant.orchestration.dungeons.contracts import (
     DungeonWorkflowResult,
     PromptDungeonWorkflow,
 )
+from dm_assistant.orchestration.dungeons.model_selection import default_dungeon_model
 from dm_assistant.orchestration.dungeons.prompting import (
     DungeonPromptService,
     resolve_dungeon_prompt_profile,
@@ -394,7 +395,7 @@ class DungeonPromptWorkbenchService:
                         item.id != "faux"
                         or self._settings.environment is RuntimeEnvironment.TEST
                     )
-                    and any(_compatible(model) for model in item.models)
+                    and default_dungeon_model(item.models, item.id) is not None
                 ),
                 None,
             )
@@ -414,7 +415,7 @@ class DungeonPromptWorkbenchService:
             (item for item in provider.models if item.id == requested_model_id), None
         )
         if model is None:
-            model = next((item for item in provider.models if _compatible(item)), None)
+            model = default_dungeon_model(provider.models, provider.id)
         if model is None:
             raise InvalidInputError("No compatible tool-capable model is available.")
         resolved_effort = effort or (

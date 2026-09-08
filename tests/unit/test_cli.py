@@ -273,7 +273,10 @@ def test_container_login_automatically_selects_device_code(
     assert responses == [("login-1", "prompt-1", "device_code")]
 
 
-def test_github_default_uses_pinned_task_baseline_not_largest_model() -> None:
+@pytest.mark.parametrize("provider_id", ["github-copilot", "openai-codex"])
+def test_dungeon_default_uses_luna_baseline_not_largest_model(
+    provider_id: str,
+) -> None:
     models = (
         GatewayCatalogModel(
             id="kimi-k3",
@@ -282,6 +285,14 @@ def test_github_default_uses_pinned_task_baseline_not_largest_model() -> None:
             capabilities=("text", "thinking", "tool_calls"),
             contextWindow=1_048_576,
             maxOutputTokens=131_072,
+        ),
+        GatewayCatalogModel(
+            id="gpt-5.6-luna",
+            name="GPT-5.6 Luna",
+            input=("text",),
+            capabilities=("text", "thinking", "tool_calls"),
+            contextWindow=272_000,
+            maxOutputTokens=128_000,
         ),
         GatewayCatalogModel(
             id="gpt-4.1",
@@ -293,10 +304,10 @@ def test_github_default_uses_pinned_task_baseline_not_largest_model() -> None:
         ),
     )
 
-    selected = _default_model(models, "github-copilot")
+    selected = _default_model(models, provider_id)
 
     assert selected is not None
-    assert selected.id == "gpt-4.1"
+    assert selected.id == "gpt-5.6-luna"
 
 
 def test_github_login_uses_github_com_without_reprompting(

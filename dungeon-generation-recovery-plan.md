@@ -178,6 +178,15 @@ clue logic, agency, puzzle comprehensibility, exploration quality, and preparati
 least one staged live artifact must be preparation-ready. Synthetic evaluator arithmetic is not
 quality evidence.
 
+Use GPT-5.6 Luna as the default dungeon-authoring baseline. Change code after a Luna failure only
+when the fix expresses a provider-independent contract, validation, or usability requirement. A
+matched GPT-5.6 Terra comparison becomes eligible when the same Luna failure mode appears in at least
+two materially different fixed synthetic cases and the existing general contract already expresses
+the requirement, so another change would be model-specific, weaken the contract, or add
+fixture-shaped complexity. Keep prompt, effort, budgets, and case assignment matched; do not add an
+automatic fallback or promote Terra without measured quality improvement. Every live comparison
+still requires explicit authorization.
+
 ## 10. Stress Ladder
 
 - **Tier A:** dependable one-floor 4–8 room dungeon; 100% provider-free structural validity, zero

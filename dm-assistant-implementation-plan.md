@@ -138,6 +138,8 @@ approval or canonical writes.
 - Matrix validation requires exactly one valid run/review for every case/variant and matching hashes
   before aggregation.
 - Do not promote a larger model or deeper effort without measured quality improvement.
+- Use Luna as the default baseline and follow the recovery plan's matched, repeatable-failure gate
+  before comparing Terra; never tune the contract around an isolated model-specific miss.
 
 ### Provider rules
 

@@ -71,6 +71,10 @@ from dm_assistant.orchestration.dungeons import (
     resolve_dungeon_prompt_profile,
     resolve_dungeon_tier_a_canary_profiles,
 )
+from dm_assistant.orchestration.dungeons.model_selection import (
+    DUNGEON_DEFAULT_MODEL_ID,
+    default_dungeon_model,
+)
 from dm_assistant.orchestration.modeling import ModelRunAbstained
 from dm_assistant.paths import resolve_allowlisted_file
 from dm_assistant.runtime import workbench_runtime
@@ -362,7 +366,7 @@ def model_smoke(
         str, typer.Argument(help="Short non-sensitive provider probe.")
     ] = "Reply with OK.",
     provider: Annotated[str, typer.Option("--provider")] = "openai-codex",
-    model: Annotated[str, typer.Option("--model")] = "gpt-5.4",
+    model: Annotated[str, typer.Option("--model")] = DUNGEON_DEFAULT_MODEL_ID,
     effort: Annotated[
         ReasoningEffort, typer.Option("--effort")
     ] = ReasoningEffort.STANDARD,
@@ -1142,22 +1146,8 @@ def _default_model(
     models: tuple[GatewayCatalogModel, ...],
     provider_id: str,
 ) -> GatewayCatalogModel | None:
-    compatible = tuple(
-        model for model in models if {"text", "tool_calls"}.issubset(model.capabilities)
-    )
-    if not compatible:
-        return None
-    # Pinned task baselines avoid choosing a model merely because it advertises
-    # the largest context/output limits. Revisit through the P7 eval gate.
-    preferred_ids = {
-        "github-copilot": ("gpt-4.1", "gpt-5-mini"),
-        "openai-codex": ("gpt-5.4-mini", "gpt-5.4"),
-    }.get(provider_id, ())
-    by_id = {model.id: model for model in compatible}
-    for preferred_id in preferred_ids:
-        if preferred_id in by_id:
-            return by_id[preferred_id]
-    return sorted(compatible, key=lambda item: item.id)[0]
+    """Retain the CLI seam while sharing dungeon defaults with the web workflow."""
+    return default_dungeon_model(models, provider_id)
 
 
 def _complete_provider_login(
