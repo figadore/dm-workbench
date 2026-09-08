@@ -103,7 +103,8 @@ bounded room narrative work. Each task:
 - publishes accepted DM-only content as one atomic child while preserving package/map bytes, prior
   enrichments, and unrelated blockers;
 - leaves the parent current and stores only body-free diagnostics/measurements on rejection or
-  publication failure.
+  publication failure; budget-overage evidence identifies the initial or repair submission and
+  retains prior measured usage plus the effective repair-reserve arithmetic.
 
 A pure planner orders exact puzzle, exploration, feature, trap, objective, then narrative targets. A
 one-step coordinator requires a matching trusted policy and invokes one existing task seam. A bounded
@@ -140,6 +141,10 @@ approval or canonical writes.
 - Do not promote a larger model or deeper effort without measured quality improvement.
 - Use Luna as the default baseline and follow the recovery plan's matched, repeatable-failure gate
   before comparing Terra; never tune the contract around an isolated model-specific miss.
+- Bind exploration-overage evidence to fixed case, variant-assignment, and exact task-contract hashes;
+  count only measured output-ceiling failures above 2,048 and within the 6,000 cumulative budget
+  that attempted no repair and published no artifact. Two distinct curated cases meet only the repeat
+  gate, not the provider-specificity, quality-improvement, or explicit-authorization requirements.
 
 ### Provider rules
 

@@ -7,7 +7,7 @@ import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Literal, Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, JsonValue
 
@@ -55,6 +55,19 @@ _CUMULATIVE_TOKEN_BUDGET = 6_000
 _MAX_REPAIR_ARGUMENT_CHARACTERS = 12_000
 _INPUT_TOKEN_ESTIMATE_BYTES_PER_TOKEN = 4
 _INPUT_TOKEN_ESTIMATE_OVERHEAD = 512
+_EXPLORATION_INSTRUCTION = (
+    "Use submit_dungeon_exploration exactly once. Design only the requested "
+    "exploration challenge from the supplied exact context. Preserve the package, "
+    "room, encounter-slot, and approved affordance IDs. Propose observable cues, "
+    "multiple reasonable approaches and consequences, escalation, and recovery. "
+    "Do not invent topology, geometry, numeric difficulty, puzzle content, approval, "
+    "or canonical state."
+)
+_EXPLORATION_TOOL_DESCRIPTION = (
+    "Submit one exploration challenge for the exact package, room, encounter slot, "
+    "and approved affordances in the supplied context. Do not change topology, "
+    "geometry, visibility, or arithmetic."
+)
 
 
 class PromptedExplorationPublisher(Protocol):
@@ -208,15 +221,7 @@ class DungeonExplorationSubmissionService:
     ) -> DungeonExplorationSubmissionResult:
         _validate_profile(profile)
         runner = StructuredSubmissionRunner(self._gateway_client, debug=self._debug)
-        tool = StructuredSubmissionTool(
-            name=_SUBMIT_DUNGEON_EXPLORATION_TOOL,
-            description=(
-                "Submit one exploration challenge for the exact package, room, encounter "
-                "slot, and approved affordances in the supplied context. Do not change "
-                "topology, geometry, visibility, or arithmetic."
-            ),
-            input_schema=DungeonExplorationEnrichmentOutput,
-        )
+        tool = _exploration_submission_tool()
         deadline = time.monotonic() + profile.time_budget_seconds
         initial_input = _initial_model_input(context)
         initial = self._run_once(
@@ -420,6 +425,37 @@ class DungeonExplorationPromptService:
         )
 
 
+def dungeon_exploration_task_contract_sha256(
+    profile: ResolvedModelRunProfile,
+) -> str:
+    """Hash the body-free instruction, schema, tool, and task-profile contract."""
+
+    _validate_profile(profile)
+    document = {
+        "prompt_version": profile.prompt_version,
+        "instruction_version": profile.instruction_version,
+        "instruction": _EXPLORATION_INSTRUCTION,
+        "output_schema_name": profile.output_schema_name,
+        "output_schema_version": profile.output_schema_version,
+        "tool": _exploration_submission_tool().gateway_schema().model_dump(mode="json"),
+        "requested_effort": profile.requested_effort.value,
+        "turn_budget": profile.turn_budget,
+        "tool_budget": profile.tool_budget,
+        "time_budget_seconds": profile.time_budget_seconds,
+        "token_budget": profile.token_budget,
+        "override_notes": profile.override_notes,
+    }
+    return canonical_json_sha256(cast(dict[str, JsonValue], document))
+
+
+def _exploration_submission_tool() -> StructuredSubmissionTool:
+    return StructuredSubmissionTool(
+        name=_SUBMIT_DUNGEON_EXPLORATION_TOOL,
+        description=_EXPLORATION_TOOL_DESCRIPTION,
+        input_schema=DungeonExplorationEnrichmentOutput,
+    )
+
+
 def _initial_model_input(context: DungeonExplorationEnrichmentInput) -> ModelRunInput:
     return ModelRunInput(
         messages=(
@@ -428,15 +464,7 @@ def _initial_model_input(context: DungeonExplorationEnrichmentInput) -> ModelRun
                 content=_canonical_message(
                     {
                         "task": _EXPLORATION_SCHEMA_NAME,
-                        "instruction": (
-                            "Use submit_dungeon_exploration exactly once. Design only the "
-                            "requested exploration challenge from the supplied exact context. "
-                            "Preserve the package, room, encounter-slot, and approved "
-                            "affordance IDs. Propose observable cues, multiple reasonable "
-                            "approaches and consequences, escalation, and recovery. Do not "
-                            "invent topology, geometry, numeric difficulty, puzzle content, "
-                            "approval, or canonical state."
-                        ),
+                        "instruction": _EXPLORATION_INSTRUCTION,
                         "context": context.model_dump(mode="json"),
                     }
                 ),

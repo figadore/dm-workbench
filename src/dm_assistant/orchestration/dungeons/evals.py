@@ -9,12 +9,19 @@ from __future__ import annotations
 
 from hashlib import sha256
 from typing import Literal, Self
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from dm_assistant.modules.modeling import ReasoningEffort, ResolvedModelRunProfile
+from dm_assistant.modules.preparation import canonical_json_sha256
+from dm_assistant.orchestration.dungeons.canary import DUNGEON_TIER_A_CANARY
 from dm_assistant.orchestration.dungeons.contracts import (
     DungeonGenerationProposal,
     DungeonStudioSpecification,
+)
+from dm_assistant.orchestration.dungeons.exploration_prompting import (
+    dungeon_exploration_task_contract_sha256,
 )
 from dm_dungeon import (
     DungeonPlanCompileResult,
@@ -160,6 +167,108 @@ class DungeonTierAEvalManifest(_EvalModel):
         return self
 
 
+class DungeonExplorationOverageCasePin(_EvalModel):
+    """Body-free binding between one fixed Tier A case and one task contract."""
+
+    case_id: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9_-]+$")
+    case_definition_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    task_contract_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class DungeonExplorationOverageProtocol(_EvalModel):
+    """Provider-free pins and repeat threshold for exploration-output overages."""
+
+    protocol_version: Literal["dungeon-exploration-overage-protocol-v1"]
+    prompt_version: str
+    instruction_version: str
+    output_schema_name: Literal["dungeon_exploration_enrichment"]
+    output_schema_version: Literal["1.0.0"]
+    requested_effort: ReasoningEffort
+    output_token_limit: Literal[2048]
+    cumulative_token_budget: Literal[6000]
+    repair_limit: Literal[1]
+    repeated_failure_case_threshold: Literal[2]
+    variant_assignment_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    reference_case: DungeonExplorationOverageCasePin
+    cases: tuple[DungeonExplorationOverageCasePin, ...] = Field(
+        min_length=3, max_length=8
+    )
+
+    @model_validator(mode="after")
+    def require_one_contract_and_distinct_cases(self) -> Self:
+        all_cases = (self.reference_case, *self.cases)
+        case_ids = [case.case_id for case in all_cases]
+        if len(case_ids) != len(set(case_ids)):
+            raise ValueError("exploration overage protocol case IDs must be unique")
+        if len({case.case_definition_sha256 for case in all_cases}) != len(all_cases):
+            raise ValueError("exploration overage case definitions must be distinct")
+        if len({case.task_contract_sha256 for case in all_cases}) != 1:
+            raise ValueError("exploration overage protocol requires one task contract")
+        return self
+
+
+class DungeonExplorationOverageObservation(_EvalModel):
+    """One qualifying body-free output-ceiling failure from a fixed eval case."""
+
+    evidence_version: Literal["dungeon-exploration-overage-evidence-v1"]
+    attempt_run_id: UUID
+    case_id: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9_-]+$")
+    case_definition_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    variant_assignment_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    task_contract_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    public_code: Literal["dungeon_exploration_prompt_token_budget_exhausted"]
+    stage: Literal["model_submission"]
+    limit_kind: Literal["output"]
+    output_token_limit: Literal[2048]
+    cumulative_token_budget: Literal[6000]
+    usage_measured: Literal[True]
+    input_tokens: int = Field(ge=0)
+    output_tokens: int = Field(ge=0)
+    repair_attempted: Literal[False]
+    artifact_published: Literal[False]
+
+    @model_validator(mode="after")
+    def require_unconfounded_output_overage(self) -> Self:
+        if self.output_tokens <= self.output_token_limit:
+            raise ValueError(
+                "exploration overage output tokens must be greater than 2,048"
+            )
+        if self.input_tokens + self.output_tokens > self.cumulative_token_budget:
+            raise ValueError(
+                "exploration overage must remain within the 6,000-token cumulative budget"
+            )
+        return self
+
+
+class DungeonExplorationOverageAssessment(_EvalModel):
+    """Body-free result; meeting the repeat gate does not authorize a live call."""
+
+    assessment_version: Literal["dungeon-exploration-overage-assessment-v1"]
+    protocol_version: Literal["dungeon-exploration-overage-protocol-v1"]
+    task_contract_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    variant_assignment_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    qualifying_case_ids: tuple[str, ...]
+    materially_distinct_case_count: int = Field(ge=0)
+    repeated_failure_case_threshold: Literal[2]
+    matched_comparison_repeat_gate_met: bool
+
+    @model_validator(mode="after")
+    def require_count_and_gate_to_match_cases(self) -> Self:
+        if self.qualifying_case_ids != tuple(sorted(set(self.qualifying_case_ids))):
+            raise ValueError(
+                "qualifying exploration overage cases must be unique and sorted"
+            )
+        if self.materially_distinct_case_count != len(self.qualifying_case_ids):
+            raise ValueError("exploration overage case count must match case IDs")
+        if (self.variant_assignment_hash is None) == bool(self.qualifying_case_ids):
+            raise ValueError("exploration overage assignment hash must match evidence")
+        if self.matched_comparison_repeat_gate_met != (
+            self.materially_distinct_case_count >= self.repeated_failure_case_threshold
+        ):
+            raise ValueError("exploration overage repeat gate must match case count")
+        return self
+
+
 class DungeonTierARunMeasurement(_EvalModel):
     """Body-free operational evidence for one case/variant execution."""
 
@@ -301,6 +410,125 @@ class DungeonTierABlindedAggregate(_EvalModel):
         if variant_ids != sorted(variant_ids):
             raise ValueError("blinded aggregate variants must be sorted by opaque ID")
         return self
+
+
+def build_dungeon_exploration_overage_protocol(
+    manifest: DungeonTierAEvalManifest,
+    profile: ResolvedModelRunProfile,
+) -> DungeonExplorationOverageProtocol:
+    """Bind every fixed Tier A case to the exact exploration task contract."""
+
+    output_limit = profile.override_notes.get("output_token_limit")
+    repair_limit = profile.override_notes.get("repair_limit")
+    if output_limit != 2_048:
+        raise ValueError("exploration overage protocol requires a 2,048-token limit")
+    if profile.token_budget != 6_000:
+        raise ValueError("exploration overage protocol requires a 6,000-token budget")
+    if repair_limit != 1:
+        raise ValueError("exploration overage protocol requires one repair")
+    contract_hash = dungeon_exploration_task_contract_sha256(profile)
+    assignment_hash = canonical_json_sha256(
+        {
+            "provider_id": profile.provider_id,
+            "model_id": profile.model_id,
+            "runtime_adapter": profile.runtime_adapter,
+            "requested_effort": profile.requested_effort.value,
+            "task_contract_sha256": contract_hash,
+        }
+    )
+    return DungeonExplorationOverageProtocol(
+        protocol_version="dungeon-exploration-overage-protocol-v1",
+        prompt_version=profile.prompt_version,
+        instruction_version=profile.instruction_version,
+        output_schema_name="dungeon_exploration_enrichment",
+        output_schema_version="1.0.0",
+        requested_effort=profile.requested_effort,
+        output_token_limit=2_048,
+        cumulative_token_budget=6_000,
+        repair_limit=1,
+        repeated_failure_case_threshold=2,
+        variant_assignment_sha256=assignment_hash,
+        reference_case=DungeonExplorationOverageCasePin(
+            case_id=DUNGEON_TIER_A_CANARY.canary_id,
+            case_definition_sha256=canonical_json_sha256(
+                {
+                    "canary_id": DUNGEON_TIER_A_CANARY.canary_id,
+                    "prompt": DUNGEON_TIER_A_CANARY.prompt,
+                    "seed": DUNGEON_TIER_A_CANARY.seed,
+                }
+            ),
+            task_contract_sha256=contract_hash,
+        ),
+        cases=tuple(
+            DungeonExplorationOverageCasePin(
+                case_id=case.case_id,
+                case_definition_sha256=canonical_json_sha256(
+                    case.model_dump(mode="json")
+                ),
+                task_contract_sha256=contract_hash,
+            )
+            for case in manifest.cases
+        ),
+    )
+
+
+def assess_dungeon_exploration_overage_evidence(
+    protocol: DungeonExplorationOverageProtocol,
+    observations: tuple[DungeonExplorationOverageObservation, ...],
+) -> DungeonExplorationOverageAssessment:
+    """Recognize the same isolated output overage across fixed distinct cases."""
+
+    pins = {case.case_id: case for case in (protocol.reference_case, *protocol.cases)}
+    seen_case_ids: set[str] = set()
+    seen_attempt_ids: set[UUID] = set()
+    assignment_hashes: set[str] = set()
+    expected_contract = protocol.cases[0].task_contract_sha256
+    for observation in observations:
+        pin = pins.get(observation.case_id)
+        if pin is None:
+            raise ValueError(
+                f"unexpected exploration overage case: {observation.case_id}"
+            )
+        if observation.case_id in seen_case_ids:
+            raise ValueError(
+                f"duplicate exploration overage evidence: {observation.case_id}"
+            )
+        if observation.attempt_run_id in seen_attempt_ids:
+            raise ValueError(
+                f"duplicate exploration overage attempt: {observation.attempt_run_id}"
+            )
+        seen_case_ids.add(observation.case_id)
+        seen_attempt_ids.add(observation.attempt_run_id)
+        if observation.case_definition_sha256 != pin.case_definition_sha256:
+            raise ValueError(
+                f"exploration overage case hash mismatch: {observation.case_id}"
+            )
+        if observation.task_contract_sha256 != expected_contract:
+            raise ValueError(
+                f"exploration overage contract hash mismatch: {observation.case_id}"
+            )
+        if observation.output_token_limit != protocol.output_token_limit:
+            raise ValueError("exploration overage output-token limit drift")
+        if observation.cumulative_token_budget != protocol.cumulative_token_budget:
+            raise ValueError("exploration overage cumulative-token budget drift")
+        if observation.variant_assignment_hash != protocol.variant_assignment_sha256:
+            raise ValueError("exploration overage variant assignment drift")
+        assignment_hashes.add(observation.variant_assignment_hash)
+
+    case_ids = tuple(sorted(seen_case_ids))
+    repeat_gate_met = len(case_ids) >= protocol.repeated_failure_case_threshold
+    return DungeonExplorationOverageAssessment(
+        assessment_version="dungeon-exploration-overage-assessment-v1",
+        protocol_version=protocol.protocol_version,
+        task_contract_sha256=expected_contract,
+        variant_assignment_hash=(
+            next(iter(assignment_hashes)) if assignment_hashes else None
+        ),
+        qualifying_case_ids=case_ids,
+        materially_distinct_case_count=len(case_ids),
+        repeated_failure_case_threshold=protocol.repeated_failure_case_threshold,
+        matched_comparison_repeat_gate_met=repeat_gate_met,
+    )
 
 
 def validate_dungeon_tier_a_evidence_matrix(

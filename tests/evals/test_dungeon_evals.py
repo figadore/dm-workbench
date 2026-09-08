@@ -2,18 +2,27 @@
 
 import json
 from pathlib import Path
+from uuid import NAMESPACE_URL, uuid5
 
 import pytest
 from pydantic import ValidationError
 
+from dm_assistant.modules.modeling import ReasoningEffort
+from dm_assistant.orchestration.dungeons import (
+    resolve_dungeon_exploration_prompt_profile,
+)
 from dm_assistant.orchestration.dungeons.evals import (
     DUNGEON_INTENT_EVAL_POLICY,
+    DungeonExplorationOverageObservation,
+    DungeonExplorationOverageProtocol,
     DungeonIntentEvalCase,
     DungeonTierAEvalManifest,
     DungeonTierAHumanReview,
     DungeonTierARunMeasurement,
     DungeonTierAScore,
     aggregate_dungeon_tier_a_evidence,
+    assess_dungeon_exploration_overage_evidence,
+    build_dungeon_exploration_overage_protocol,
     evaluate_dungeon_intent_cases,
     render_dungeon_intent_eval_report,
     summarize_dungeon_intent_evals,
@@ -99,6 +108,136 @@ def test_tier_a_manifest_has_distinct_blinded_multi_case_coverage() -> None:
     ]
     with pytest.raises(ValidationError, match="interaction styles must be distinct"):
         DungeonTierAEvalManifest.model_validate(duplicate_style)
+
+
+def _exploration_overage_protocol() -> DungeonExplorationOverageProtocol:
+    manifest = DungeonTierAEvalManifest.model_validate_json(
+        _TIER_A_MANIFEST_PATH.read_text(encoding="utf-8")
+    )
+    profile = resolve_dungeon_exploration_prompt_profile(
+        provider_id="openai-codex",
+        model_id="gpt-5.6-luna",
+        capabilities=("text", "thinking", "tool_calls"),
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+        requested_effort=ReasoningEffort.FAST,
+    )
+    return build_dungeon_exploration_overage_protocol(manifest, profile)
+
+
+def _exploration_overage_observation(
+    protocol: DungeonExplorationOverageProtocol,
+    case_id: str,
+    *,
+    assignment_hash: str | None = None,
+) -> DungeonExplorationOverageObservation:
+    cases = {case.case_id: case for case in (protocol.reference_case, *protocol.cases)}
+    case = cases[case_id]
+    return DungeonExplorationOverageObservation(
+        evidence_version="dungeon-exploration-overage-evidence-v1",
+        attempt_run_id=uuid5(NAMESPACE_URL, f"exploration-overage:{case.case_id}"),
+        case_id=case.case_id,
+        case_definition_sha256=case.case_definition_sha256,
+        variant_assignment_hash=(assignment_hash or protocol.variant_assignment_sha256),
+        task_contract_sha256=case.task_contract_sha256,
+        public_code="dungeon_exploration_prompt_token_budget_exhausted",
+        stage="model_submission",
+        limit_kind="output",
+        output_token_limit=protocol.output_token_limit,
+        cumulative_token_budget=protocol.cumulative_token_budget,
+        usage_measured=True,
+        input_tokens=1_152,
+        output_tokens=2_510,
+        repair_attempted=False,
+        artifact_published=False,
+    )
+
+
+def test_exploration_overage_protocol_pins_one_contract_across_three_cases() -> None:
+    protocol = _exploration_overage_protocol()
+
+    assert protocol.reference_case.case_id == "tier-a-live-canary-v1"
+    assert tuple(case.case_id for case in protocol.cases) == (
+        "tier_a_case_01",
+        "tier_a_case_02",
+        "tier_a_case_03",
+    )
+    assert len({case.case_definition_sha256 for case in protocol.cases}) == 3
+    assert (
+        len(
+            {
+                case.task_contract_sha256
+                for case in (protocol.reference_case, *protocol.cases)
+            }
+        )
+        == 1
+    )
+    assert protocol.prompt_version == "exploration-prompt-1"
+    assert protocol.instruction_version == "exploration-instructions-1"
+    assert protocol.output_schema_name == "dungeon_exploration_enrichment"
+    assert protocol.output_schema_version == "1.0.0"
+    assert protocol.requested_effort is ReasoningEffort.FAST
+    assert protocol.output_token_limit == 2_048
+    assert protocol.cumulative_token_budget == 6_000
+    assert protocol.repair_limit == 1
+    assert protocol.repeated_failure_case_threshold == 2
+
+    body_free = protocol.model_dump_json()
+    assert '"prompt":' not in body_free
+    assert '"instruction":' not in body_free
+    assert '"setting":' not in body_free
+    assert '"authorized_facts":' not in body_free
+
+
+def test_exploration_overage_repeat_gate_requires_two_fixed_distinct_cases() -> None:
+    protocol = _exploration_overage_protocol()
+    canary = _exploration_overage_observation(protocol, protocol.reference_case.case_id)
+    second_case = _exploration_overage_observation(protocol, protocol.cases[0].case_id)
+
+    empty = assess_dungeon_exploration_overage_evidence(protocol, ())
+    one_case = assess_dungeon_exploration_overage_evidence(protocol, (canary,))
+    repeated = assess_dungeon_exploration_overage_evidence(
+        protocol, (second_case, canary)
+    )
+
+    assert empty.materially_distinct_case_count == 0
+    assert empty.matched_comparison_repeat_gate_met is False
+    assert one_case.qualifying_case_ids == ("tier-a-live-canary-v1",)
+    assert one_case.matched_comparison_repeat_gate_met is False
+    assert repeated.qualifying_case_ids == (
+        "tier-a-live-canary-v1",
+        "tier_a_case_01",
+    )
+    assert repeated.materially_distinct_case_count == 2
+    assert repeated.matched_comparison_repeat_gate_met is True
+    assert repeated.variant_assignment_hash == protocol.variant_assignment_sha256
+
+
+def test_exploration_overage_evidence_fails_closed_on_drift_or_confounding() -> None:
+    protocol = _exploration_overage_protocol()
+    first = _exploration_overage_observation(protocol, protocol.reference_case.case_id)
+    drifted_assignment = _exploration_overage_observation(
+        protocol, protocol.cases[0].case_id, assignment_hash="b" * 64
+    )
+
+    with pytest.raises(ValueError, match="variant assignment drift"):
+        assess_dungeon_exploration_overage_evidence(
+            protocol, (first, drifted_assignment)
+        )
+    with pytest.raises(ValueError, match="duplicate exploration overage evidence"):
+        assess_dungeon_exploration_overage_evidence(protocol, (first, first))
+    with pytest.raises(ValidationError, match="must be greater than 2,048"):
+        DungeonExplorationOverageObservation.model_validate(
+            {**first.model_dump(), "output_tokens": 2_048}
+        )
+    with pytest.raises(ValidationError, match="6,000-token cumulative budget"):
+        DungeonExplorationOverageObservation.model_validate(
+            {**first.model_dump(), "input_tokens": 4_000}
+        )
+    with pytest.raises(ValidationError, match="provider_response"):
+        DungeonExplorationOverageObservation.model_validate(
+            {**first.model_dump(), "provider_response": "must not be retained"}
+        )
 
 
 def test_tier_a_evidence_requires_body_free_quality_and_run_fields() -> None:

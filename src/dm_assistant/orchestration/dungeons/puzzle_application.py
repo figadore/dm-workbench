@@ -27,6 +27,7 @@ from dm_assistant.orchestration.dungeons.contracts import (
 from dm_assistant.orchestration.dungeons.puzzle_prompting import (
     DungeonPuzzlePromptService,
     DungeonPuzzleRejectedAfterRepair,
+    DungeonPuzzleSubmissionBudgetExceeded,
 )
 from dm_assistant.orchestration.modeling import (
     ModelRunAbstained,
@@ -197,6 +198,24 @@ def _failure_report(error: Exception) -> tuple[str, dict[str, JsonValue]]:
             "code": code,
             "repair_attempted": True,
             "submission_attempts": [item.report() for item in error.failures],
+        }
+    if isinstance(error, DungeonPuzzleSubmissionBudgetExceeded):
+        code = "dungeon_puzzle_prompt_token_budget_exhausted"
+        return code, {
+            "stage": "model_submission",
+            "code": code,
+            "submission_attempt": error.attempt,
+            "repair_attempted": error.attempt == "repair",
+            "usage": {
+                "limit_kind": error.limit_kind,
+                "token_limit": error.token_limit,
+                "input_tokens": error.input_tokens,
+                "output_tokens": error.output_tokens,
+            },
+            "submission_attempts": [
+                *(item.report() for item in error.prior_failures),
+                error.report(),
+            ],
         }
     if isinstance(error, StructuredSubmissionBudgetExceeded):
         code = "dungeon_puzzle_prompt_token_budget_exhausted"

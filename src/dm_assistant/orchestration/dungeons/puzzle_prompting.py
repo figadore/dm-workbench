@@ -43,6 +43,7 @@ from dm_assistant.orchestration.dungeons.service import (
 from dm_assistant.orchestration.modeling import (
     GatewayClient,
     ModelRunAbstained,
+    StructuredSubmissionBudgetExceeded,
     StructuredSubmissionRejected,
     StructuredSubmissionRunner,
     StructuredSubmissionTool,
@@ -141,6 +142,66 @@ class DungeonPuzzleRejectedAfterRepair(Exception):
     ) -> None:
         super().__init__("puzzle enrichment was rejected after its one repair request")
         self.failures = failures
+
+
+class DungeonPuzzleSubmissionBudgetExceeded(StructuredSubmissionBudgetExceeded):
+    """Body-free puzzle attempt identity and budget arithmetic for one overage."""
+
+    def __init__(
+        self,
+        *,
+        error: StructuredSubmissionBudgetExceeded,
+        attempt: Literal["initial", "repair"],
+        workflow_profile: ResolvedModelRunProfile,
+        request_profile: ResolvedModelRunProfile,
+        prior_failures: tuple[DungeonPuzzleSubmissionFailure, ...],
+    ) -> None:
+        super().__init__(
+            limit_kind=error.limit_kind,
+            token_limit=error.token_limit,
+            input_tokens=error.input_tokens,
+            output_tokens=error.output_tokens,
+        )
+        estimated_input = request_profile.override_notes.get("estimated_input_tokens")
+        workflow_output_limit = workflow_profile.override_notes.get(
+            "output_token_limit"
+        )
+        self.attempt = attempt
+        self.prior_failures = prior_failures
+        self.workflow_token_budget = workflow_profile.token_budget
+        self.workflow_output_token_limit = (
+            workflow_output_limit
+            if isinstance(workflow_output_limit, int) and workflow_output_limit > 0
+            else None
+        )
+        self.request_token_budget = request_profile.token_budget
+        self.estimated_input_tokens = (
+            estimated_input
+            if isinstance(estimated_input, int) and estimated_input > 0
+            else None
+        )
+
+    def report(self) -> dict[str, JsonValue]:
+        """Return one bounded, body-free budget-failure attempt report."""
+        return {
+            "attempt": self.attempt,
+            "stage": "model_submission",
+            "outcome": "token_budget_exhausted",
+            "diagnostics": [],
+            "usage": {
+                "measured": True,
+                "input_tokens": self.input_tokens,
+                "output_tokens": self.output_tokens,
+            },
+            "budget": {
+                "limit_kind": self.limit_kind,
+                "token_limit": self.token_limit,
+                "workflow_token_budget": self.workflow_token_budget,
+                "workflow_output_token_limit": self.workflow_output_token_limit,
+                "request_token_budget": self.request_token_budget,
+                "estimated_input_tokens": self.estimated_input_tokens,
+            },
+        }
 
 
 def resolve_dungeon_puzzle_prompt_profile(
@@ -246,15 +307,24 @@ class DungeonPuzzleSubmissionService:
         )
         deadline = time.monotonic() + profile.time_budget_seconds
         initial_input = _initial_model_input(context)
-        initial = self._run_once(
-            runner=runner,
-            tool=tool,
-            profile=profile,
-            run_input=initial_input,
-            context=context,
-            deadline=deadline,
-            attempt="initial",
-        )
+        try:
+            initial = self._run_once(
+                runner=runner,
+                tool=tool,
+                profile=profile,
+                run_input=initial_input,
+                context=context,
+                deadline=deadline,
+                attempt="initial",
+            )
+        except StructuredSubmissionBudgetExceeded as error:
+            raise DungeonPuzzleSubmissionBudgetExceeded(
+                error=error,
+                attempt="initial",
+                workflow_profile=profile,
+                request_profile=profile,
+                prior_failures=(),
+            ) from error
         if initial.accepted is not None:
             output, validation, record = initial.accepted
             return DungeonPuzzleSubmissionResult(
@@ -276,15 +346,24 @@ class DungeonPuzzleSubmissionService:
             repair_input=repair_input,
             tool=tool,
         )
-        repair = self._run_once(
-            runner=runner,
-            tool=tool,
-            profile=repair_profile,
-            run_input=repair_input,
-            context=context,
-            deadline=deadline,
-            attempt="repair",
-        )
+        try:
+            repair = self._run_once(
+                runner=runner,
+                tool=tool,
+                profile=repair_profile,
+                run_input=repair_input,
+                context=context,
+                deadline=deadline,
+                attempt="repair",
+            )
+        except StructuredSubmissionBudgetExceeded as error:
+            raise DungeonPuzzleSubmissionBudgetExceeded(
+                error=error,
+                attempt="repair",
+                workflow_profile=profile,
+                request_profile=repair_profile,
+                prior_failures=(initial.failure,),
+            ) from error
         if repair.accepted is None:
             assert repair.failure is not None
             raise DungeonPuzzleRejectedAfterRepair(

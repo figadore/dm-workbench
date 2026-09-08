@@ -145,6 +145,7 @@ from dm_assistant.orchestration.dungeons.exploration_prompting import (
     DungeonExplorationRejectedAfterRepair,
     DungeonExplorationSubmissionResult,
     DungeonExplorationSubmissionService,
+    dungeon_exploration_task_contract_sha256,
     resolve_dungeon_exploration_prompt_profile,
 )
 from dm_assistant.orchestration.dungeons.feature_interaction_application import (
@@ -197,6 +198,7 @@ from dm_assistant.orchestration.dungeons.puzzle_application import (
 from dm_assistant.orchestration.dungeons.puzzle_prompting import (
     DungeonPuzzlePromptService,
     DungeonPuzzleRejectedAfterRepair,
+    DungeonPuzzleSubmissionBudgetExceeded,
     DungeonPuzzleSubmissionResult,
     DungeonPuzzleSubmissionService,
     resolve_dungeon_puzzle_prompt_profile,
@@ -380,6 +382,7 @@ __all__ = [
     "DungeonPuzzlePromptService",
     "DungeonPuzzleRejectedAfterRepair",
     "DungeonPuzzleRoomContext",
+    "DungeonPuzzleSubmissionBudgetExceeded",
     "DungeonPuzzleSubmissionResult",
     "DungeonPuzzleSubmissionService",
     "DungeonRoomNarrativeAcceptedMechanic",
@@ -452,6 +455,7 @@ __all__ = [
     "build_dungeon_enrichment_continuity_context",
     "build_dungeon_tier_a_canary_dispatches",
     "derive_dungeon_creative_continuity",
+    "dungeon_exploration_task_contract_sha256",
     "plan_dungeon_staged_enrichment",
     "resolve_dungeon_tier_a_canary_profiles",
     "resolve_dungeon_exploration_prompt_profile",

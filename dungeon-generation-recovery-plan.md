@@ -92,8 +92,12 @@ warnings, or at most eight stable diagnostics. It never returns provider bodies 
 
 Each structural or enrichment task has its own profile, effort, instruction/schema pins, monotonic
 deadline, output and cumulative token ceilings, and at most one budget-reserved repair. A repair starts
-only when its complete estimated input leaves output room inside measured remaining budget. Unknown or
-over-limit usage fails closed before publication.
+only when its complete estimated input leaves output room inside measured remaining budget. Its
+effective output ceiling is the lesser of the task ceiling and the workflow budget remaining after
+initial measured usage and estimated complete repair input. Body-free overage reports identify the
+initial or repair submission and retain prior measured usage, request budget, estimated repair input,
+and effective ceiling so that arithmetic is inspectable without provider bodies. Unknown or over-limit
+usage fails closed before publication.
 
 Codex subscription does not currently expose a supported pre-consumption output-token field, so the
 gateway omits `max_output_tokens`, `max_tokens`, and `max_completion_tokens` and does not advertise
@@ -186,6 +190,21 @@ the requirement, so another change would be model-specific, weaken the contract,
 fixture-shaped complexity. Keep prompt, effort, budgets, and case assignment matched; do not add an
 automatic fallback or promote Terra without measured quality improvement. Every live comparison
 still requires explicit authorization.
+
+The provider-free exploration-overage protocol binds the frozen canary and all three materially
+different Tier A eval cases to one hash of the exact exploration instruction, tool/schema, fast-effort
+profile, 2,048-output ceiling, 6,000-token cumulative budget, and one-repair policy. The schema has
+the same bounded shape for every case—2–6 observable cues, 2–4 approaches, escalation, and
+recovery—and no case adds output fields or cardinality, so one 2,510-token result does not establish a
+provider-independent contract defect or justify raising the ceiling.
+
+A second result counts as the same failure only when body-free evidence matches the fixed case hash,
+Luna variant-assignment hash, and task-contract hash; reports the exact exploration output-budget
+code at model submission with measured output above 2,048 while total measured usage remains within
+6,000; and confirms no repair or artifact publication. Two distinct curated case IDs meet only the
+repeat gate for considering a matched comparison; the provider-specificity judgment, measured quality
+requirement, and explicit live authorization remain separate. The current canary supplies one such
+observation, so the repeat gate remains at one of two.
 
 ## 10. Stress Ladder
 

@@ -26,12 +26,14 @@ from dm_assistant.orchestration.dungeons import (
     DungeonPuzzleEnrichmentOutput,
     DungeonPuzzleObjectiveApproval,
     DungeonPuzzleRejectedAfterRepair,
+    DungeonPuzzleSubmissionBudgetExceeded,
     DungeonPuzzleSubmissionService,
     resolve_dungeon_puzzle_prompt_profile,
 )
 from dm_assistant.orchestration.dungeons.continuity import (
     derive_dungeon_creative_continuity,
 )
+from dm_assistant.orchestration.dungeons.puzzle_application import _failure_report
 from dm_assistant.orchestration.dungeons.service import (
     build_dungeon_dm_guide,
     build_dungeon_preparation_readiness,
@@ -490,6 +492,7 @@ class _FakePuzzleGateway:
     def __init__(self, completions: tuple[GatewayCompletion, ...]) -> None:
         self._completions = list(completions)
         self.messages: list[tuple[PromptMessage, ...]] = []
+        self.profiles: list[ResolvedModelRunProfile] = []
 
     def complete(
         self,
@@ -499,7 +502,8 @@ class _FakePuzzleGateway:
         allowed_tools: tuple[str, ...],
         tool_schemas: tuple[GatewayToolSchema, ...],
     ) -> GatewayCompletion:
-        del profile, allowed_tools, tool_schemas
+        del allowed_tools, tool_schemas
+        self.profiles.append(profile)
         self.messages.append(messages)
         if not self._completions:
             raise AssertionError("unexpected extra puzzle completion")
@@ -596,6 +600,147 @@ def test_rejected_puzzle_records_safe_usage_and_distinct_model_invariants() -> N
     assert "arguments" not in body_free_report
     assert "run_input" not in body_free_report
     assert "output_payload" not in body_free_report
+
+
+def test_puzzle_repair_overage_retains_attempt_usage_and_budget_arithmetic() -> None:
+    invalid = deepcopy(_wind_shrine_output())
+    clue_path = invalid["clue_path"]
+    assert isinstance(clue_path, list)
+    clue_path[1]["location_id"] = clue_path[0]["location_id"]
+    clue_path[1]["observation"] = "REJECTED"
+    repair_body = deepcopy(_wind_shrine_output())
+    repair_body["name"] = "REPAIR_PROVIDER_BODY"
+    gateway = _FakePuzzleGateway(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_puzzle",
+                        call_id="initial-schema-rejection",
+                        arguments=invalid,
+                    ),
+                ),
+                input_tokens=1_500,
+                output_tokens=1_566,
+            ),
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_puzzle",
+                        call_id="repair-output-overage",
+                        arguments=repair_body,
+                    ),
+                ),
+                input_tokens=2_126,
+                output_tokens=871,
+            ),
+        )
+    )
+    profile = resolve_dungeon_puzzle_prompt_profile(
+        provider_id="faux",
+        model_id="faux_deterministic_v1",
+        capabilities=("text", "tool_calls"),
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+    )
+
+    with pytest.raises(DungeonPuzzleSubmissionBudgetExceeded) as captured:
+        DungeonPuzzleSubmissionService(gateway).submit(
+            profile=profile,
+            context=DungeonPuzzleEnrichmentInput.model_validate(_wind_shrine_input()),
+        )
+
+    error = captured.value
+    assert error.attempt == "repair"
+    assert error.limit_kind == "output"
+    assert error.token_limit == 790
+    assert error.workflow_token_budget == 6_000
+    assert error.workflow_output_token_limit == 2_048
+    assert error.request_token_budget == 2_934
+    assert error.estimated_input_tokens == 2_144
+    assert (
+        error.request_token_budget - error.estimated_input_tokens == error.token_limit
+    )
+    assert gateway.profiles[1].override_notes["output_token_limit"] == 790
+
+    code, report = _failure_report(error)
+    assert code == "dungeon_puzzle_prompt_token_budget_exhausted"
+    assert report["stage"] == "model_submission"
+    assert report["submission_attempt"] == "repair"
+    assert report["repair_attempted"] is True
+    attempts = report["submission_attempts"]
+    assert isinstance(attempts, list)
+    assert [item["attempt"] for item in attempts] == ["initial", "repair"]
+    assert attempts[0]["usage"] == {
+        "measured": True,
+        "input_tokens": 1_500,
+        "output_tokens": 1_566,
+    }
+    assert attempts[1]["usage"] == {
+        "measured": True,
+        "input_tokens": 2_126,
+        "output_tokens": 871,
+    }
+    assert attempts[1]["budget"] == {
+        "limit_kind": "output",
+        "token_limit": 790,
+        "workflow_token_budget": 6_000,
+        "workflow_output_token_limit": 2_048,
+        "request_token_budget": 2_934,
+        "estimated_input_tokens": 2_144,
+    }
+    report_text = json.dumps(report)
+    assert "REJECTED" not in report_text
+    assert "REPAIR_PROVIDER_BODY" not in report_text
+    assert "arguments" not in report_text
+
+
+def test_initial_puzzle_overage_is_not_reported_as_a_repair_failure() -> None:
+    gateway = _FakePuzzleGateway(
+        (
+            GatewayCompletion(
+                tool_calls=(
+                    ToolCall(
+                        tool_name="submit_dungeon_puzzle",
+                        call_id="initial-output-overage",
+                        arguments=_wind_shrine_output(),
+                    ),
+                ),
+                input_tokens=100,
+                output_tokens=2_049,
+            ),
+        )
+    )
+
+    with pytest.raises(DungeonPuzzleSubmissionBudgetExceeded) as captured:
+        DungeonPuzzleSubmissionService(gateway).submit(
+            profile=resolve_dungeon_puzzle_prompt_profile(
+                provider_id="faux",
+                model_id="faux_deterministic_v1",
+                capabilities=("text", "tool_calls"),
+                context_window_tokens=16_384,
+                output_token_limit=4_096,
+            ),
+            context=DungeonPuzzleEnrichmentInput.model_validate(_wind_shrine_input()),
+        )
+
+    error = captured.value
+    code, report = _failure_report(error)
+    assert code == "dungeon_puzzle_prompt_token_budget_exhausted"
+    assert error.attempt == "initial"
+    assert error.prior_failures == ()
+    assert error.estimated_input_tokens is None
+    assert report["submission_attempt"] == "initial"
+    assert report["repair_attempted"] is False
+    attempts = report["submission_attempts"]
+    assert isinstance(attempts, list) and len(attempts) == 1
+    assert attempts[0]["attempt"] == "initial"
+    assert attempts[0]["usage"] == {
+        "measured": True,
+        "input_tokens": 100,
+        "output_tokens": 2_049,
+    }
+    assert len(gateway.messages) == 1
 
 
 def test_puzzle_enrichment_rejects_cross_task_mutation_and_unknown_ids() -> None:
