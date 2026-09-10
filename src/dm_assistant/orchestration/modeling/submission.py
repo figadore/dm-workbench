@@ -29,6 +29,9 @@ from dm_assistant.orchestration.modeling.service import (
 
 SubmissionModel = TypeVar("SubmissionModel", bound=BaseModel)
 
+_INPUT_TOKEN_ESTIMATE_BYTES_PER_TOKEN = 4
+_INPUT_TOKEN_ESTIMATE_OVERHEAD = 512
+
 _CUSTOM_SCHEMA_DIAGNOSTICS: dict[str, tuple[str, str, str]] = {
     "puzzle_clue_location_duplicate": (
         "submission.puzzle_clue_location_duplicate",
@@ -95,6 +98,107 @@ class StructuredSubmissionRejected(ModelRunAbstained):
         super().__init__(message)
         self.record = record
         self.diagnostics = diagnostics
+
+
+class StructuredSubmissionRepairBudgetExhausted(ModelRunAbstained):
+    """Body-free initial measurement and exact unavailable-repair arithmetic."""
+
+    def __init__(
+        self,
+        *,
+        profile: ResolvedModelRunProfile,
+        record: ModelRunRecord,
+        estimated_input_tokens: int,
+    ) -> None:
+        super().__init__(
+            "no budget remains for deterministic diagnostic repair",
+            code="repair_budget_exhausted",
+        )
+        if not record.usage_measured:
+            raise ValueError("repair-budget evidence requires measured initial usage")
+        assert record.usage_input_tokens is not None
+        assert record.usage_output_tokens is not None
+        configured_output = profile.override_notes.get("output_token_limit")
+        self.workflow_token_budget = profile.token_budget
+        self.workflow_time_budget_seconds = profile.time_budget_seconds
+        self.initial_input_tokens = record.usage_input_tokens
+        self.initial_output_tokens = record.usage_output_tokens
+        self.initial_duration_ms = record.duration_ms
+        self.charged_initial_seconds = (record.duration_ms + 999) // 1000
+        self.request_token_budget = (
+            profile.token_budget
+            - record.usage_input_tokens
+            - record.usage_output_tokens
+        )
+        self.request_time_budget_seconds = (
+            profile.time_budget_seconds - self.charged_initial_seconds
+        )
+        self.estimated_input_tokens = estimated_input_tokens
+        self.output_tokens_available = (
+            self.request_token_budget - estimated_input_tokens
+        )
+        self.configured_output_token_limit = (
+            configured_output
+            if isinstance(configured_output, int) and configured_output > 0
+            else None
+        )
+        self.effective_output_token_limit = max(
+            0,
+            min(
+                self.configured_output_token_limit,
+                self.output_tokens_available,
+            )
+            if self.configured_output_token_limit is not None
+            else self.output_tokens_available,
+        )
+
+    def report(self) -> dict[str, JsonValue]:
+        """Return safe evidence proving why no repair request was dispatched."""
+        blockers: list[JsonValue] = []
+        if self.output_tokens_available < 1:
+            blockers.append("output_token_reserve")
+        if self.request_time_budget_seconds < 1:
+            blockers.append("time_reserve")
+        return {
+            "abstention_code": self.code,
+            "submission_attempt": "initial",
+            "repair_attempted": False,
+            "submission_attempts": [
+                {
+                    "attempt": "initial",
+                    "duration_ms": self.initial_duration_ms,
+                    "usage": {
+                        "measured": True,
+                        "input_tokens": self.initial_input_tokens,
+                        "output_tokens": self.initial_output_tokens,
+                    },
+                }
+            ],
+            "repair_reserve": {
+                "blockers": blockers,
+                "token_arithmetic": {
+                    "workflow_token_budget": self.workflow_token_budget,
+                    "initial_input_tokens": self.initial_input_tokens,
+                    "initial_output_tokens": self.initial_output_tokens,
+                    "initial_total_tokens": (
+                        self.initial_input_tokens + self.initial_output_tokens
+                    ),
+                    "request_token_budget": self.request_token_budget,
+                    "estimated_input_tokens": self.estimated_input_tokens,
+                    "output_tokens_available": self.output_tokens_available,
+                    "configured_output_token_limit": (
+                        self.configured_output_token_limit
+                    ),
+                    "effective_output_token_limit": (self.effective_output_token_limit),
+                },
+                "time_arithmetic": {
+                    "workflow_time_budget_seconds": (self.workflow_time_budget_seconds),
+                    "initial_duration_ms": self.initial_duration_ms,
+                    "charged_initial_seconds": self.charged_initial_seconds,
+                    "request_time_budget_seconds": (self.request_time_budget_seconds),
+                },
+            },
+        }
 
 
 class StructuredSubmissionRunner:
@@ -261,6 +365,71 @@ def _enforce_measured_usage(
             output_tokens=completion.output_tokens,
             duration_ms=duration_ms,
         )
+
+
+def reserve_structured_submission_repair(
+    profile: ResolvedModelRunProfile,
+    record: ModelRunRecord,
+    *,
+    repair_input: ModelRunInput,
+    tool: StructuredSubmissionTool,
+) -> ResolvedModelRunProfile:
+    """Reserve one complete repair request and expose exact denial arithmetic."""
+    if not record.usage_measured:
+        raise ModelRunAbstained(
+            "model usage was unavailable; repair budget is unknown",
+            code="repair_usage_unavailable",
+        )
+    assert record.usage_input_tokens is not None
+    assert record.usage_output_tokens is not None
+    remaining_tokens = (
+        profile.token_budget - record.usage_input_tokens - record.usage_output_tokens
+    )
+    remaining_seconds = profile.time_budget_seconds - (
+        (record.duration_ms + 999) // 1000
+    )
+    estimated_input_tokens = _estimated_input_tokens(repair_input, tool)
+    remaining_output_tokens = remaining_tokens - estimated_input_tokens
+    if remaining_output_tokens < 1 or remaining_seconds < 1:
+        raise StructuredSubmissionRepairBudgetExhausted(
+            profile=profile,
+            record=record,
+            estimated_input_tokens=estimated_input_tokens,
+        )
+    configured_output = profile.override_notes.get("output_token_limit")
+    output_limit = (
+        min(configured_output, remaining_output_tokens)
+        if isinstance(configured_output, int) and configured_output > 0
+        else remaining_output_tokens
+    )
+    return profile.model_copy(
+        update={
+            "token_budget": remaining_tokens,
+            "time_budget_seconds": remaining_seconds,
+            "override_notes": {
+                **profile.override_notes,
+                "output_token_limit": output_limit,
+                "estimated_input_tokens": estimated_input_tokens,
+            },
+        }
+    )
+
+
+def _estimated_input_tokens(
+    run_input: ModelRunInput, tool: StructuredSubmissionTool
+) -> int:
+    request_document = {
+        "messages": [message.model_dump(mode="json") for message in run_input.messages],
+        "tool": tool.gateway_schema().model_dump(mode="json"),
+    }
+    byte_size = len(
+        json.dumps(request_document, separators=(",", ":"), sort_keys=True).encode(
+            "utf-8"
+        )
+    )
+    return (
+        byte_size + _INPUT_TOKEN_ESTIMATE_BYTES_PER_TOKEN - 1
+    ) // _INPUT_TOKEN_ESTIMATE_BYTES_PER_TOKEN + _INPUT_TOKEN_ESTIMATE_OVERHEAD
 
 
 def _schema_diagnostic(detail: Mapping[str, object]) -> dict[str, JsonValue]:

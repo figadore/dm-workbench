@@ -31,6 +31,7 @@ from dm_assistant.orchestration.dungeons.feature_interaction_prompting import (
 from dm_assistant.orchestration.modeling import (
     ModelRunAbstained,
     StructuredSubmissionBudgetExceeded,
+    StructuredSubmissionRepairBudgetExhausted,
 )
 
 logger = get_logger(__name__)
@@ -215,6 +216,13 @@ def _failure_report(error: Exception) -> tuple[str, dict[str, JsonValue]]:
                 "input_tokens": error.input_tokens,
                 "output_tokens": error.output_tokens,
             },
+        }
+    if isinstance(error, StructuredSubmissionRepairBudgetExhausted):
+        code = "dungeon_feature_interaction_prompt_repair_budget_exhausted"
+        return code, {
+            "stage": "model_submission",
+            "code": code,
+            **error.report(),
         }
     code = "dungeon_feature_interaction_prompt_failed"
     stage = "model_submission" if isinstance(error, ModelRunAbstained) else "projection"

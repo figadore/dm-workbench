@@ -13,8 +13,10 @@ from dm_assistant.orchestration.modeling.service import (
 from dm_assistant.orchestration.modeling.submission import (
     StructuredSubmissionBudgetExceeded,
     StructuredSubmissionRejected,
+    StructuredSubmissionRepairBudgetExhausted,
     StructuredSubmissionRunner,
     StructuredSubmissionTool,
+    reserve_structured_submission_repair,
 )
 
 __all__ = [
@@ -27,7 +29,9 @@ __all__ = [
     "ServerTool",
     "StructuredSubmissionBudgetExceeded",
     "StructuredSubmissionRejected",
+    "StructuredSubmissionRepairBudgetExhausted",
     "StructuredSubmissionRunner",
     "StructuredSubmissionTool",
     "build_dungeon_intent_tool_result",
+    "reserve_structured_submission_repair",
 ]

@@ -31,6 +31,7 @@ from dm_assistant.orchestration.modeling import (
     ModelRunAbstained,
     ModelTransportError,
     StructuredSubmissionBudgetExceeded,
+    StructuredSubmissionRepairBudgetExhausted,
 )
 
 logger = get_logger(__name__)
@@ -42,6 +43,8 @@ def _failure_code(error: Exception) -> str:
         return "dungeon_prompt_rejected_after_repair"
     if isinstance(error, StructuredSubmissionBudgetExceeded):
         return "dungeon_prompt_token_budget_exhausted"
+    if isinstance(error, StructuredSubmissionRepairBudgetExhausted):
+        return "dungeon_prompt_repair_budget_exhausted"
     if isinstance(error, ModelRunAbstained) and (
         error.code == "repair_usage_unavailable"
     ):
@@ -72,6 +75,12 @@ def _failure_report(
                 "input_tokens": error.input_tokens,
                 "output_tokens": error.output_tokens,
             },
+        }
+    elif isinstance(error, StructuredSubmissionRepairBudgetExhausted):
+        report = {
+            "stage": "model_submission",
+            "code": code,
+            **error.report(),
         }
     elif isinstance(error, ModelTransportError):
         report = {

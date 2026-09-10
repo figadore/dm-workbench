@@ -50,6 +50,7 @@ from dm_assistant.orchestration.modeling import (
     StructuredSubmissionRejected,
     StructuredSubmissionRunner,
     StructuredSubmissionTool,
+    reserve_structured_submission_repair,
 )
 from dm_dungeon import (
     DUNGEON_PLAN_COMPILER_VERSION,
@@ -71,8 +72,6 @@ _SUBMIT_DUNGEON_PLAN_TOOL = "submit_dungeon_plan"
 _MAX_REPAIR_ARGUMENT_CHARACTERS = 12_000
 _OUTPUT_TOKEN_LIMIT = 4_096
 _CUMULATIVE_TOKEN_BUDGET = 12_000
-_INPUT_TOKEN_ESTIMATE_BYTES_PER_TOKEN = 4
-_INPUT_TOKEN_ESTIMATE_OVERHEAD = 512
 _PLAN_GUIDANCE = (
     "Plan rules: one floor and 4–8 rooms; exactly one entrance and one objective; "
     "critical_path starts at the entrance and ends at the objective. Put every other "
@@ -878,57 +877,9 @@ def _remaining_submission_profile(
     tool: StructuredSubmissionTool,
 ) -> ResolvedModelRunProfile:
     """Reserve one fresh repair request from the original cumulative budget."""
-    if not record.usage_measured:
-        raise ModelRunAbstained(
-            "model usage was unavailable; repair budget is unknown",
-            code="repair_usage_unavailable",
-        )
-    assert record.usage_input_tokens is not None
-    assert record.usage_output_tokens is not None
-    remaining_tokens = (
-        profile.token_budget - record.usage_input_tokens - record.usage_output_tokens
+    return reserve_structured_submission_repair(
+        profile, record, repair_input=repair_input, tool=tool
     )
-    remaining_seconds = profile.time_budget_seconds - (
-        (record.duration_ms + 999) // 1000
-    )
-    estimated_input_tokens = _estimated_submission_input_tokens(repair_input, tool)
-    remaining_output_tokens = remaining_tokens - estimated_input_tokens
-    if remaining_output_tokens < 1 or remaining_seconds < 1:
-        raise ModelRunAbstained(
-            "no budget remains for deterministic diagnostic repair",
-            code="repair_budget_exhausted",
-        )
-    configured_output = profile.override_notes.get("output_token_limit")
-    output_limit = (
-        min(configured_output, remaining_output_tokens)
-        if isinstance(configured_output, int) and configured_output > 0
-        else remaining_output_tokens
-    )
-    return profile.model_copy(
-        update={
-            "token_budget": remaining_tokens,
-            "time_budget_seconds": remaining_seconds,
-            "override_notes": {
-                **profile.override_notes,
-                "output_token_limit": output_limit,
-                "estimated_input_tokens": estimated_input_tokens,
-            },
-        }
-    )
-
-
-def _estimated_submission_input_tokens(
-    run_input: ModelRunInput, tool: StructuredSubmissionTool
-) -> int:
-    """Estimate repair input from the complete canonical message and tool schema."""
-    request_document = {
-        "messages": [message.model_dump(mode="json") for message in run_input.messages],
-        "tool": tool.gateway_schema().model_dump(mode="json"),
-    }
-    byte_size = len(_canonical_message(request_document).encode("utf-8"))
-    return (
-        byte_size + _INPUT_TOKEN_ESTIMATE_BYTES_PER_TOKEN - 1
-    ) // _INPUT_TOKEN_ESTIMATE_BYTES_PER_TOKEN + _INPUT_TOKEN_ESTIMATE_OVERHEAD
 
 
 def _validate_profile(profile: ResolvedModelRunProfile) -> None:

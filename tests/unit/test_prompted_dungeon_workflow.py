@@ -52,6 +52,7 @@ from dm_assistant.orchestration.modeling import (
     ModelRunAbstained,
     ModelTransportError,
     StructuredSubmissionBudgetExceeded,
+    StructuredSubmissionRepairBudgetExhausted,
 )
 from dm_dungeon import (
     DungeonPlan,
@@ -732,8 +733,52 @@ def test_repair_does_not_start_when_estimated_input_cannot_fit() -> None:
             seed=1842,
         )
 
-    assert caught.value.code == "repair_budget_exhausted"
+    error = caught.value
+    assert isinstance(error, StructuredSubmissionRepairBudgetExhausted)
+    assert error.code == "repair_budget_exhausted"
     assert len(gateway.messages) == 1
+
+    assert _failure_code(error) == "dungeon_prompt_repair_budget_exhausted"
+    report = _failure_report(error, _failure_code(error))
+    assert report["abstention_code"] == "repair_budget_exhausted"
+    assert report["repair_attempted"] is False
+    attempts = report["submission_attempts"]
+    assert isinstance(attempts, list)
+    assert attempts == [
+        {
+            "attempt": "initial",
+            "duration_ms": error.initial_duration_ms,
+            "usage": {
+                "measured": True,
+                "input_tokens": 7_900,
+                "output_tokens": 3_700,
+            },
+        }
+    ]
+    reserve = report["repair_reserve"]
+    assert isinstance(reserve, dict)
+    token_arithmetic = reserve["token_arithmetic"]
+    assert isinstance(token_arithmetic, dict)
+    assert token_arithmetic["workflow_token_budget"] == 12_000
+    assert token_arithmetic["initial_total_tokens"] == 11_600
+    assert token_arithmetic["request_token_budget"] == 400
+    assert token_arithmetic["output_tokens_available"] == (
+        400 - token_arithmetic["estimated_input_tokens"]
+    )
+    assert token_arithmetic["effective_output_token_limit"] == 0
+    assert reserve["blockers"] == ["output_token_reserve"]
+    time_arithmetic = reserve["time_arithmetic"]
+    assert isinstance(time_arithmetic, dict)
+    assert (
+        time_arithmetic["charged_initial_seconds"]
+        == (error.initial_duration_ms + 999) // 1000
+    )
+    assert time_arithmetic["request_time_budget_seconds"] == (
+        300 - time_arithmetic["charged_initial_seconds"]
+    )
+    report_text = json.dumps(report)
+    assert "schema error" not in report_text
+    assert "unexpected" not in report_text
 
 
 def test_dm_guide_retains_tier_a_gate_content_and_creative_details() -> None:
