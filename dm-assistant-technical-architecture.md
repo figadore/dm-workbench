@@ -2,10 +2,17 @@
 
 ## 1. System Shape
 
-The product is a self-hosted DM Workbench for campaign memory, cited rules/campaign questions,
-dungeon and encounter preparation, and reviewed session updates.
+The product is a self-hosted DM Workbench. Its first viable product is a standalone, runnable small
+dungeon one-shot in a pleasant authoring/review workspace. Selected campaign grounding, then campaign
+memory and reviewed session updates, extend that same experience.
 
-Initial deployment contains only:
+This document is the normative target architecture, not a claim that every feature exists. Delivery
+phases and task gates live in `dm-assistant-implementation-plan.md`; only `PROJECT_STATUS.md` records
+the live task and implementation gaps. The whole-adventure authoring and contextual UI design below
+supersedes the mandatory P7-14f six-family enrichment chain; replacement is incremental, not a mandate
+to rewrite working storage, transport, or geometry.
+
+Deployment contains only:
 
 ```text
 browser / Typer CLI
@@ -45,8 +52,10 @@ The core principle is:
    rules filters run before retrieval or context construction.
 6. **Perspective:** reality, knowledge, unawareness, belief, suspicion, claims, and public record stay
    distinguishable.
-7. **Explicit uncertainty:** missing, disputed, weakly sourced, or temporally incomparable information
-   produces unknown/conflict rather than invention.
+7. **Explicit uncertainty:** missing, disputed, weakly sourced, or temporally incomparable campaign
+   information produces unknown/conflict rather than asserted fact. Explicitly authorized creative
+   invention belongs to labelled preparation; an unspecified DM puzzle answer is missing content,
+   not epistemic caution.
 8. **Deterministic mechanics:** models express typed creative intent; code owns IDs, graph
    construction, geometry, pathfinding, rules arithmetic, validation, rendering, and exports.
 9. **Reproducible generation:** every artifact pins scope, sources, context hash, seed, contracts,
@@ -56,7 +65,8 @@ The core principle is:
 11. **Task-specific context:** workflows share a small scope/provenance envelope, not one universal
     optional-field payload.
 12. **Fail-closed publication:** player output omits secret/unclassified content before rendering;
-    unsafe or incomplete preparation cannot be approved.
+    unsafe or incomplete preparation cannot be approved. Model-created draft content is not human
+    acceptance, and accepting a revision proposal is not approval for play.
 13. **Explainable commits:** every campaign revision has a readable summary and complete accepted-item
     and evidence history.
 14. **Synthetic repository data:** no real campaign text, copyrighted rules/bestiary content, sheets,
@@ -64,8 +74,8 @@ The core principle is:
 
 ## 3. Alpha Retention and Versioning
 
-The retention gate is a product/data commitment, not a code milestone. Until both this architecture
-and `PROJECT_STATUS.md` declare it crossed:
+**Retention gate: not crossed.** The gate is a product/data commitment, not a code milestone. Until
+both this architecture and `PROJECT_STATUS.md` declare it crossed:
 
 - active V1 schemas, prompts, compiler/generator/renderer/exporter pins, fixtures, and review packets
   evolve in place;
@@ -87,7 +97,8 @@ The user sees one application with distinct workflows:
 - **Chronicle:** canonical revisions, entities, events, temporal/perspective state, provenance.
 - **Profiles:** character, item, creature, party, and playstyle snapshots.
 - **Preparation:** generic artifact versions, generation runs, assets, and lifecycle.
-- **Dungeon Studio:** dungeon context, prompting, kernel invocation, review, export, approval.
+- **Dungeon Studio:** cohesive adventure authoring, kernel invocation, map/guide workspace, scoped
+  conversations, manual/proposed revisions, export, and separate preparation approval.
 - **Encounter Studio:** encounter composition plus deterministic arithmetic/completeness/map fit.
 - **Session Desk:** notes, extraction, grouped review, and canonical change-set submission.
 - **Assistant:** cited campaign/rules questions and other bounded model tasks.
@@ -113,6 +124,12 @@ private model gateway       deterministic mechanics
 ```
 
 A context compiler is read-only. It is not a new authority or an engine-facing repository.
+
+Dungeon authoring stays a Workbench feature, not a separate deployed tool/service or a new AI package.
+A CLI/file adapter may run standalone authoring through the same services; a disposable phase-1
+prototype must be consolidated or removed when integrated. `dm_dungeon` remains independently usable
+for pure map work and never acquires model orchestration. Standalone means no campaign lore is
+required, not duplicated provider credentials, storage, or application logic.
 
 ## 5. Deployment, Configuration, and Security
 
@@ -150,10 +167,21 @@ persist them in an ignored mode-`0600` file. It never generates provider credent
 Default-deny middleware protects every route except the exact health and login allowlist. Bearer-token
 comparison is constant-time and failures are generic.
 
-Browser login creates a short-lived signed session containing only principal, expiry, and random CSRF
-token; it never stores the API token. Browser writes require constant-time CSRF matching. Cookies are
-HttpOnly and SameSite-strict, and Secure in production. Templates escape values and responses use a
-restrictive CSP/nosniff policy. Bearer authentication remains available for CLI/API automation.
+Browser authentication must not require routine API-token pasting. P7-16b replaces that bootstrap-era
+experience with single-owner enrollment and normal login using maintained password-hashing/session
+components. Record the concrete design and threat model before implementation: first-run enrollment
+is restricted to an explicitly bootstrapped owner, setup capability is short-lived/single-use, and
+credentials/setup capabilities never travel in URLs, logs, or browser local storage. Do not add an
+identity microservice or disable auth for convenience. Recovery/re-enrollment requires explicit
+operator authority, not an unprotected reset endpoint.
+
+Browser sessions carry only principal, expiry, CSRF and necessary revocation/session identity, never
+API/provider credentials. Use short-lived sessions, logout/revocation, generic errors, login rate
+limits, and secure credential verification. Browser writes require constant-time CSRF matching.
+Cookies are HttpOnly and SameSite-strict, and Secure under production HTTPS. Document trusted-proxy,
+TLS, local-development, enrollment and recovery behavior; remote use must not silently inherit local
+exceptions. Templates escape values and responses use restrictive CSP/nosniff. Bearer authentication
+remains available for CLI/API automation, independently of owner browser credentials.
 
 ### Health and logging
 
@@ -203,7 +231,9 @@ to role/ownership links.
 
 The browser resolves assets through an authorized artifact-version link, never a global blob UUID.
 Purpose-oriented catalog entries carry floor, audience, format, label, and safe filename. Trusted
-SVG/PNG/text/JSON/PDF may open under format-specific security policy; ZIP is download-only.
+SVG/PNG/text/JSON/PDF may open under format-specific security policy; ZIP is download-only. Normal
+review is an inline map/guide workspace, not an asset directory; JSON, manifests, UUIDs, raw roles and
+hashes belong under advanced inspection. Filenames describe dungeon/version/floor/audience/purpose.
 
 ## 7. Immutable Sources and Retrieval
 
@@ -374,9 +404,20 @@ successfully published. Routine attempt inspection contains IDs, pins, timing, h
 stages, and bounded diagnostics—not prompts, source text, provider responses, or reasoning.
 
 Accepted creative content belongs in the authorized artifact where it can be reviewed and rendered.
-Transient full debug capture is explicit, local, sensitive, and not ordinary persistence.
+User-facing component conversations and proposed patches are private domain records (§15), not
+operational logs. Persist their useful answer text and provenance under an explicit retention policy,
+not raw provider transport envelopes or reasoning. Transient full debug capture is explicit, local,
+sensitive, and not ordinary persistence.
+
+Pins reproduce accepted inputs and deterministic compilation/rendering, not identical future model
+outputs. Evaluation samples the ordinary workflow through a small adapter; reproducibility does not
+require a wrapper-version chain or a database artifact for every creative subtask.
 
 ### Agent framework policy
+
+A user-facing multi-turn conversation is not automatically an autonomous agent loop. Each Ask or
+Propose Change turn uses existing bounded task services with server-resolved scope. No tool gains
+accept/approve/commit authority merely because the UI is conversational.
 
 Do not add `@earendil-works/pi-agent-core` for bounded ask, extraction, dungeon, or encounter flows.
 Reconsider only if measured open-ended multi-turn steering/tool behavior exceeds simple Python-owned
@@ -425,11 +466,25 @@ packets unless explicitly requested. DM secrets appear only for an authorized DM
 relevant. Generated factual claims cite supplied packet IDs; post-checks verify citation presence and
 authorization, while semantic support remains an eval concern.
 
-Standalone dungeon generation uses its campaign only as a preparation owner and contains no campaign
-revision, corpus, rules profile, retrieval, or citations unless the DM explicitly enables grounding.
-Fixed synthetic evaluation grounding is a separate `synthetic_eval` mode: its facts cite only the
-packaged manifest case hash and cannot claim campaign revision, corpus, or rules pins. Missing lore
-remains unknown.
+Standalone dungeon generation uses its campaign only as a preparation owner. It reads no campaign
+lore/revision/corpus implicitly. A separately selected rules/creature input and party assumptions may
+support mechanics without enabling campaign-lore grounding. Standalone, selected campaign grounding,
+and `synthetic_eval` are explicit modes with strict payloads rather than ambiguous optional scope.
+Synthetic evaluation facts cite packaged fixtures and never masquerade as canonical campaign sources.
+
+Selected campaign grounding distinguishes established facts, attributed claims, unknowns, required
+preparation placements, and creative permissions. Inputs cite immutable evidence or an explicit DM
+annotation/instruction; instructions are not evidence of canonical reality. For example, “the captive
+must be alive here” is a preparation constraint; “the relic is reportedly here” is not proof of its
+presence. Resolving an unknown creatively requires explicit permission and produces preparation-only
+content. Conflicting established facts and requirements are surfaced before dispatch. The first
+adapter accepts DM-selected evidence; filtered retrieval later suggests sources for inspection and
+selection. Full temporal/perspective canon is not a dependency for this bounded adapter.
+
+For a 4–8-room adventure, whole-artifact context is appropriate. Component conversations distinguish
+read context (possibly the whole authorized adventure) from write scope (only selected targets/fields).
+The server pins artifact/base version, selection, authorized sources, permissions, and context hash;
+the client or model cannot expand them by supplying IDs. Context changes require visible confirmation.
 
 ## 10. Core Campaign Data Model
 
@@ -676,6 +731,24 @@ Versions and role links are immutable. A child of approved/used preparation retu
 is terminal. Every lifecycle change records actor, reason, and exact version. No table has an implicit
 canonical-write relationship.
 
+An ordinary generation attempt holds outline, validated map, content candidate, diagnostics, and
+checkpoint pins until complete draft publication. Do not require an artifact child for each feature
+or model call. A failed/cancelled authoring attempt preserves any prior artifact and may retain a
+validated map/checkpoint privately; it is not a preparation-ready current version. Checkpoints resume
+only after scope/input/schema/generator pins are revalidated; incompatible state requires an explicit
+restart. Routine diagnostics remain body-free. Accepted checkpoint content is private domain work,
+not permission to persist raw provider transcripts.
+
+Publish user-meaningful versions: initial complete draft, saved manual revision, accepted proposed
+revision, or explicit layout regeneration. Changes use typed patches with expected base version/hash,
+server-owned write scope, author origin, dependency validation, idempotency, and atomic publication.
+Unrelated content/manual edits are protected by default. Rejected or stale proposals cannot advance
+current state. Restore/undo creates a child; it never rewrites history. A model can persist a proposed
+patch but only the human acceptance service applies that patch as a revised draft. Approval for play
+and canonical commit remain separate operations. Incomplete manual authoring may be saved with visible
+readiness blockers; integrity/security validation still applies and approval remains unavailable.
+Initial automatic generation aims to publish a complete draft rather than label a partial attempt done.
+
 Complete package publication is all-or-nothing:
 
 1. compile, generate, validate, and render every required byte;
@@ -693,158 +766,169 @@ referencing the artifact. Marking an artifact used never infers outcomes.
 
 ## 13. Dungeon Generation
 
-### Boundary and representations
+### Product boundary and representations
 
-The active alpha uses four distinct V1 representations:
+The first viable dungeon is a standalone one-shot: one floor, roughly 5–7 rooms within the supported
+4–8-room class, one explicit party/rules assumption, a session-length target, a hook, opposition,
+meaningful route choice, and a concrete ending. Puzzles are appropriate content, not mandatory filler.
+The map and guide must let the DM run it without inventing missing core evidence or mechanics.
 
-1. **`DungeonPlan`:** compact human/model creative progression and content-slot intent using local
-   refs.
-2. **`TopologyCertificate`:** compiler-owned exact graph, supported grammar, IDs, mechanics/demand,
-   reachability/loop/gate/secret witnesses, port assignments, and embedding bands.
-3. **`LayoutRequest`:** certificate plus server seed, optional maximum bounds, and explicit locks.
-4. **`DungeonPackage`:** exact renderer-neutral floors, rooms, openings, connections, mechanics,
-   features/zones/markers, encounter demand, anchors, and audience layers.
+Retain the pure package's four alpha V1 representations:
 
-Local refs are noncanonical relation handles. The compiler derives semantic IDs from the V1 compiler
-pin and local semantic identity, independent of seed, prose, and array order. Established IDs enter
-only explicit later edit/regeneration workflows. Deterministic package code never calls `uuid4()`.
+1. **`DungeonPlan`:** bounded creative outline using local refs; evolve it to carry geometry-relevant
+   adventure needs rather than a mandatory queue of enrichment slots.
+2. **`TopologyCertificate`:** code-owned graph, IDs, demand, progression/secret witnesses and embedding
+   constraints for the supported constructor.
+3. **`LayoutRequest`:** certified intent plus server seed, optional bounds, and explicit locks.
+4. **`DungeonPackage`:** exact renderer-neutral rooms, connections, openings, geometry, mechanics,
+   terrain/markers, anchors, and audience layers.
 
-Geometry-affecting mechanics and reserved demand belong in the package. Prose-heavy DM guidance stays
-in the Workbench specification and references exact package IDs.
+Whole-adventure prose/content and authoring orchestration belong in the Workbench. Pure plan fields
+exist only when consumed by construction/validation; do not import Workbench story/context models
+into `dm_dungeon`. Evolve the Workbench specification for coherent adventure content and typed links
+rather than a universal optional-field object. Structure what code consumes, not every sentence.
 
-### Structural generation
+Local refs are noncanonical handles. Code derives stable IDs from semantic identity/compiler policy,
+independent of seed, prose, and array order. Established IDs enter revision workflows explicitly;
+deterministic package code never calls `uuid4()`. Display numbering is separate and shared by map,
+guide, and inspector. Geometry-affecting demand belongs in the package, not invisible prose.
 
-Alpha V1 exposes one structural tool:
+### Whole-adventure authoring
 
 ```text
-submit_dungeon_plan(proposal_version, plan, ...)
+brief + explicit rules/party assumptions + optional selected campaign context
+    -> bounded whole-adventure outline
+    -> deterministic map construction and validation
+    -> bounded whole-adventure content submission over the resolved map
+    -> structural/mechanical/source checks + editorial review
+    -> optional bounded correction
+    -> atomic complete draft publication
 ```
 
-Fields are direct root arguments; there is no redundant proposal wrapper or guide-content payload.
-The model declares title/premise/themes, room identities/purposes, critical path, bounded branches/
-loop, secrets, gate/dependency, objective, and requested content slots. Every non-null encounter
-reserves a later task; unrequested slots stay null.
+Target two ordinary creative calls, not a mandatory six-task sequence. Phase 1 can isolate content
+quality with one existing map before integrating the outline pass. Reuse shared bounded runners;
+measure actual input/output requirements before selecting production ceilings. Corrections, including
+schema repairs, count against one explicit cumulative attempt policy; no hidden retry loops. A
+model-based editorial pass is optional, separately authorized/budgeted, and never proves readiness.
 
-The tool validates the proposal, compiles/certifies topology, and performs constructive preflight. It
-returns only accepted hash/count/certificate/warnings or bounded code/path/ref/repair diagnostics. It
-neither persists nor approves. One schema-invalid proposal may receive one fresh bounded repair with
-the original authorized task and prior arguments. Deterministic failures do not request a new model
-graph.
+The outline designs premise/history, objective/opposition, room purposes, clue relationships,
+progression, and spatial affordances together. It requests bounded terrain/room needs without exact
+coordinates, graph edges, numeric policy, visibility, lifecycle, or canonical authority. The existing
+structural submission/compiler boundary can evolve in place. Deterministic failures are engine
+errors, not invitations for repeated random model graphs.
 
-The Workbench owns context, provider calls, attempts, persistence, and approval. `dm_dungeon` owns the
-plan contract, ID policy, graph/certificate, layout, validation, rendering, and exports. A model cannot
-select campaign scope, seed, IDs, exact sizes/coordinates, visibility, lifecycle, renderer syntax,
-files, SQL, approval, or canon.
+The content pass sees the whole small adventure, resolved map and references, selected sources, and
+supported mechanical policies. It authors the actual hook/ending, keyed rooms, inhabitants/reactions,
+clues/answers, obstacles/consequences, and meaningful rewards or resolutions. Different content types
+may have distinct typed records without becoming independent calls or child artifact versions.
 
-### Topology and constructive layout
+If content requires unsupported terrain or contradicts the outline/map, reject or surface the
+mismatch. Do not silently describe absent geometry. A correction may fit the existing map; structural
+revision must be explicit and rerun construction/validation within the authorized attempt budget.
+Model suggestions of severity, timer, resource cost, or composition use bounded intent; code owns
+numeric resolution under pinned supported policy. Unsupported mechanics stay flagged, not invented
+as official rules. Full character import or general encounter balancing is not required for MVP.
 
-Tier A is a one-floor 4–8 room series/parallel-with-spurs class:
+### Layout quality and the proof boundary
 
-- a critical-path backbone guarantees entrance-to-objective connection;
-- up to two ordered branches attach to existing rooms;
-- at most one supported bypass adds a loop;
-- at most one gate has a dependency reachable before it;
-- at most one secret route obeys explicit DM/player reachability policy.
+The existing Tier A constructor supports a critical-path backbone, up to two ordered branches, at most
+one bypass/loop, one gate with a reachable dependency, and one secret route. Reuse it while proving
+content quality. Independent validators check topology, fixed-point gate reachability, capacities,
+ports/channels, geometry, paths, and secrecy. Accepted plans must stay within the constructor's stated
+supported grammar. Mathematical details live in the package's `TOPOLOGY_MATH.md`.
 
-Validators recompute connected components, cycle rank, branch/loop witnesses, gate fixed-point order,
-secret/public reachability, degree, room/interior demand, side ports, channels, and embedding claims.
+Proof of connectivity is not proof of a convincing place. Measure occupied coverage, room spacing,
+corridor detours, and guide/terrain agreement. Prefer compactness improvements and bounded, authored
+layout families before arbitrary geometry. If replacing the constructor with templates/assembly is
+justified, update this boundary and package proofs/properties before switching; do not require the
+old embedding certificate to dictate a new algorithm, nor discard independent validation.
 
-Layout assigns backbone columns, branch/loop bands, side-specific openings, and reserved noncrossing
-channels; expands rooms for boundary and usable-interior demand; and calculates exact bounds before
-emitting cells. An optional maximum must contain the proven bounds. Seeded compaction/mirroring may
-vary a valid baseline but cannot provide correctness; failure falls back to construction.
+Direct doors require shared-wall geometry. Other links use explicit corridors/openings with valid
+wall approaches. A small supported terrain vocabulary (crossings, pools, barriers, cover, fixtures)
+gets deterministic dimensions, collision/clearance checks, and real rendered shapes. General
+furnishing placement, multi-floor graphs, unrestricted packing, and freeform drawing are deferred.
 
-Direct doors are shared-wall openings only when the embedding assigns compatible sides. Other links
-use explicit corridors/openings because not every planar graph is a rectangle-contact graph.
-Independent grid/path/capacity/secrecy validation catches implementation bugs and never triggers
-random retries. Mathematical details live beside the validator in `TOPOLOGY_MATH.md`.
+Static geometry, designed play states, and actual session state are different. Alarms, flooding,
+opened gates, damaged bridges, or lost evidence may have concrete DM procedures and consequences.
+Their existence does not require dynamic simulation, automatic map mutation, or canonical writes.
+Avoid accidental softlocks without requiring every setback to leave the adventure unchanged.
 
-### Staged enrichment
+### Guide, completeness, and approval
 
-After exact IDs and geometry, separate strict tasks author puzzle, exploration, feature, trap,
-objective, and bounded room narrative content. Each task has its own payload, profile/effort,
-instruction/schema, budget/repair, diagnostics, and lineage.
+Assemble an adventure overview (hook, assumptions, stakes, background, progression, ending) followed
+by concise room keys. Supply concrete puzzle inscriptions/objects/evidence, a definite answer,
+observable feedback, hints/alternatives, and failure/retry behavior where applicable. Place clues in
+their keyed rooms, not only in a remote solution paragraph. Mystery for players must have a DM answer.
 
-Trusted builders provide only exact local IDs/geometry, accepted relevant intent, authorized facts and
-sources, and bounded summaries of prior accepted mechanics. Outputs may alter only their selected
-guide entry. Models do not author numeric DCs or structural state. Accepted output creates one DM-only
-child version and preserves package/map bytes and prior work; rejection keeps the parent and body-free
-diagnostics.
+Keep read-aloud distinct from DM secrets; group actionable room content without repeating the same
+feature as separate exploration/puzzle/objective prose. Internal policy text such as “make this a
+meaningful room-local expression” or “do not invalidate progression” is never final guide content.
+No JSON, opaque IDs, or duplicate solution paragraphs are normal reading requirements.
 
-A dungeon-specific creative-continuity projection carries premise/themes, room purposes, progression/
-objective, selected history/environment/factions/hooks, tone, motif constraints, and source refs. It
-is canonical-hashed and pinned to every task. Narrow payloads select from it; they do not copy the full
-guide or corpus. Stale or unauthorized projection state fails before dispatch.
+Validation has separate outcomes:
 
-A pure planner compares package slots, guide state, blockers, and accepted lineage and chooses one
-exact target in deterministic order. A matching one-step coordinator invokes only that task seam; a
-bounded chain repeats it and advances only accepted children. Planning/coordination performs no
-approval or canonical operation.
+- **Hard integrity/security:** unauthorized scope, secrets, malformed references, invalid geometry,
+  stale bases, unsupported mechanical claims, or corrupt publication cannot be bypassed by a model.
+- **Required authored completeness:** actual clue/answer/obstacle/opposition/ending material must be
+  supplied when required by the brief. Missing essentials block readiness; nonempty fields do not
+  prove semantic completeness. Human review can identify gaps that deterministic checks cannot.
+- **Editorial quality:** coherence, variety, agency, clarity, attractiveness and prep usefulness need
+  human judgment; optional model critique provides suggestions, not certification.
 
-Fixed Tier A evaluation uses a Workbench-owned structural wrapper plus wrappers around the same
-one-step enrichment seam. Structural startup loads the packaged case seed, builds only standalone or
-manifest-cited synthetic grounding, pins the opaque variant assignment, and validates requested room,
-loop, secret-route, gate, puzzle, exploration-affordance, and objective witnesses. Later wrappers
-derive the exact next puzzle, exploration, feature, trap, objective, or room-narrative policy from
-the current parent. Puzzle clue policy selects the exact puzzle room plus bounded adjacent room
-anchors so multiple distinct observable clues remain representable.
+Approval records the human and exact reviewed specification/version after integrity/readiness
+validation. Do not require a provider-written cohesion report, hash-bound rubric for every dimension,
+or a successful evaluation-wrapper chain in the ordinary approval workflow. A known missing essential
+is resolved by supplying it or explicitly revising the brief, not silently checking “approved.”
 
-Every wrapper stores its complete context or policy and resolved profile in a private generation-
-context envelope while normal inspection remains body-free. Each command executes one task and
-stops. Resume requires an unchanged failed wrapper with matching case, variant, parent, context or
-policy, profile, contract, assignment, schema, and generator pins; drift fails before dispatch. A
-whole-artifact evidence builder accepts only an exact contiguous wrapper/version chain ending at the
-current preparation-ready artifact and final gate. It emits cumulative measured latency/tokens,
-first-pass validity, repairs, artifact/final-validation hashes, and a separately blinded reviewer
-input. A historical structural wrapper rejected only by a superseded deterministic semantic check
-may be transparently marked reclassified, but the artifact must pass the current complete gate.
+### Manual and proposed revision
 
-### Guide and approval gate
+Manual and AI-assisted changes share typed patch/validation/publication services (§12). Text-only
+patches preserve geometry and unrelated content. Reference/mechanic changes validate dependencies;
+structural edits explicitly rebuild affected outputs. Protect manual edits by default and identify
+human versus generated origin without forcing prose into a field-level campaign ontology.
 
-Guide assembly assigns entry-first presentation numbers independent of stable IDs. Each room has
-concise player-observable read-aloud/framing and locally grouped actionable doors, checks, clues,
-pressure, triggers, consequences, features, puzzles, and objectives. Ordinary map-visible
-connectivity and repetitive sensory/purpose summaries are omitted. Missing required content remains a
-readiness blocker.
+A selected component controls write scope, not necessarily all read context. Ask is read-only;
+Propose Change returns a previewable patch against an exact base. Changed clues in other rooms,
+layout, source constraints, or protected prose require a visible impact/scope expansion and human
+authorization. Stale proposals must be rejected or explicitly rebased and re-reviewed. No model tool
+accepts its own patch, approves preparation, or commits canon. Focused puzzle/room revision calls are
+introduced here only as justified by preserving valuable work, not as mandatory initial enrichment.
 
-Before prompted preparation approval, a pure gate recomputes continuity/source inheritance,
-package/guide dependencies, exact slot/lineage coverage, typed cross-task references, readiness, and
-player secrecy. It has no persistence/provider/approval/canonical operation.
+### Rendering, workspace maps, and exports
 
-A read-only cohesion report covers theme, history/environment causality, mechanic/objective unity,
-progression, motif variation, and grounded-lore consistency. It can name evidence and recommend one
-targeted existing seam but cannot edit or approve. A DM disposition binds exact report/specification
-hashes and every finding; requested regeneration blocks approval. Provider-independent manually
-created artifacts retain their ordinary readiness-based approval path.
+SVG is the semantic vector layer; PNG uses the same audience-filtered geometry. Filtering occurs
+before XML/raster construction, never by CSS hiding. Style is code-owned: restrained wall/floor/terrain
+appearance, grid control, clear labels, accessible contrast and a grayscale/low-ink treatment. Do not
+use illustration to invent geometry or add a live image-model dependency for MVP.
 
-### Rendering and exports
+DM maps use short consistent room/feature callouts and a legible symbol grammar for doors, secrets,
+traps, puzzles, clues, objectives and terrain. Collision-aware labels and bounded leader lines retain
+readability under zoom and export. Browser hit targets resolve stable IDs server-side. Selection and
+conversation overlays are presentation-only, DM-only, and absent from player export bytes.
 
-The package is renderer-neutral. SVG is the deterministic semantic vector layer; PNG is produced from
-the same filtered geometry. Audience filtering occurs before XML or raster construction—CSS hiding is
-not security.
+Player assets contain only explicitly published geometry and physical features. Omit keys/callouts,
+objectives, start/encounter markers, secret doors/areas, trap/lock state, hidden DCs, solutions, private
+conversations and proposal history. Filtered components leave no element, metadata, or full-package
+hash fingerprint. DM/player preview switches do not turn private inspector data into a player asset.
 
-DM maps use stable short callouts and a code-owned grayscale-safe grammar for rooms, start, ordinary/
-secret/locked/trapped doors, traps/hazards, puzzles, clues/keys/treasure, features, objectives, and
-transitions. Collision-aware placement measures complete symbol/text bounds and uses leader lines only
-when needed. Opaque IDs and generic path anchors are not normal labels.
+Purpose-based assets include inline/downloadable DM guide, DM/player maps, and optional Roll20 bundles
+with grid/gridless PNG, dimensions/hashes, five-foot scale, origin, and filtered wall/door metadata.
+No direct upload or dynamic-lighting promise. Human visual checks inspect actual rendered outputs.
 
-Player maps default to published geometry only. They omit keys/callouts, objectives, start/encounter
-markers, secret doors/areas, traps, lock state, hidden DCs, and solutions. Player-safe physical
-features may retain unlabelled shape. Filtered components leave no element, metadata, or full-package
-hash fingerprint.
-
-Roll20 bundles contain fixed safe names, grid/gridless PNG, dimensions/hashes, five-foot scale,
-origin, visible walls/doors, and optional audience-filtered anchor metadata. They do not promise API
-upload or dynamic-lighting import.
-
-New print generation remains disabled until the output-refresh gate. The intended print architecture
-separates bounded fit-to-paper reference maps from selected-region tactical tiles at exactly 72 points
-per five-foot cell. Tactical preflight must bound pages and occupied coverage; pages require low-ink
-grammar, overview/page IDs, crop/registration marks, overlap/alignment, safe margins, actual-size
-instructions, and a one-inch calibration mark. Tests inspect both metadata and rendered nonblank
-content.
+New print generation stays disabled until P7-20. Reference maps fit bounded pages and are visibly
+not miniature-scale. Tactical tiles cover selected regions at 72 points per five-foot cell with
+page/coverage limits, crop/registration marks, overlap/alignment, safe margins, actual-size guidance,
+and a one-inch calibration mark. Validate metadata and rendered nonblank pages before enabling it.
 
 ## 14. Encounter Generation
+
+For the one-shot MVP, use an explicit party-size/level/rules assumption and a small selected authorized
+creature/profile set with deterministic supported difficulty and hazard policies. Standalone may use
+these inputs without campaign grounding. Do not claim balance from invented fixture creatures or leave
+essential opposition unspecified while waiting for full P8. Reuse a narrow mechanical evaluator in the
+Workbench; the broader profiles/scaling workflows below are subsequent capabilities, not prerequisites
+for coherent dungeon authoring. A single whole-adventure content submission can contain combat and
+noncombat records without a second mandatory population pipeline.
 
 Creature profiles are complete edition-tagged source projections:
 
@@ -894,9 +978,53 @@ Human APIs separately support review, preparation approval, and `commit_change_s
 protects retries. TypeBox/tool schemas sent through the gateway are generated from or contract-tested
 against authoritative Python JSON schemas.
 
-The first-party web shell is thin server-rendered HTML with limited HTMX/vanilla JavaScript and SSE.
-It supports login, prompts/images, provider/profile selection, streaming/cancellation/reconnect,
-review, map preview, and assets. A large SPA is deferred.
+### Review workspace and visual delivery
+
+Use the existing server-rendered shell with focused HTMX/JavaScript/SSE unless measured interaction
+needs justify a richer client. Thin handlers are a dependency boundary, not an instruction to deliver
+unstyled forms. Phase 2 supplies normal owner sign-in (§5), a small visual system (typography, spacing,
+contrast, reusable components), coherent navigation, readable status/errors, and a responsive
+map-and-guide workspace. Model/provider setup is secondary Settings UI. JSON and artifact storage
+internals are advanced details, not the product surface. Do not misrepresent faux/unfinished features
+as operational tools.
+
+The workspace consists of a dungeon overview, map, room/component navigator, keyed guide and inspector.
+Shared stable selection links map and text. Manual room prose editing has explicit save/cancel,
+unsaved-change warnings, validation feedback, version history/restore and stale-tab conflict handling.
+No raw JSON editing or automatic campaign write is required. Phase 3 supplies map styling, terrain,
+zoom/pan and fine component hit targets; screenshot/render inspection and human review complement
+browser interaction tests. Keyboard operation, visible focus, sufficient contrast, and narrow/wide
+layouts are acceptance criteria. A large SPA, freeform geometry editor and illustration pipeline are
+not prerequisites; any client-framework decision needs a scoped rationale rather than a rewrite for
+its own sake.
+
+### Component conversations and proposed changes
+
+Phase 4 adds an inspector conversation for the whole dungeon or a selected room, puzzle, or obstacle.
+The visible context header shows artifact/version, selected component, source summary, permitted read
+context and proposed write scope. Context is constructed and authorized by the server, never trusted
+from client-supplied text or IDs. Selecting another target or advancing the artifact makes context
+changes explicit; an old discussion does not silently inherit a new base.
+
+- **Ask / Explain:** read-only bounded answers grounded in the selected artifact, with inferred or
+  suggested additions labelled. No mutation tool. Explaining an absent puzzle answer must surface the
+  gap, not silently turn a newly invented answer into authored content.
+- **Propose Change:** a strict patch proposal against an exact base version/hash. Show before/after,
+  dependencies, protected manual edits, and structural/source impacts. Wider scope requires human
+  authorization. Acceptance/edit/rejection is a human API action; acceptance creates one validated
+  draft version. Preparation approval and canonical commit remain distinct.
+
+A conversation/turn belongs to the authorized preparation owner and pins artifact version, target IDs,
+mode, context/source refs and origin/run. Store user messages and useful assistant answers privately;
+store proposed patch, base and disposition separately from an applied artifact. Never store provider
+reasoning/authentication/transport bodies as chat history. These records are not canonical facts and
+are excluded from player assets, ordinary operational logs and generic retrieval by default.
+
+Before adding persistence, declare access, export/deletion, backup, size limits and retention rules.
+Deleting conversation text must not corrupt an accepted version's necessary patch/source provenance;
+preserve the minimal authoritative lineage under the retained-artifact policy. Resume/reconnect and
+cancellation preserve base/scope and cannot apply a partial proposal. Use existing durable run and
+session boundaries; conversational UI does not require an agent framework or a queue.
 
 ## 16. Session-End Extraction
 
@@ -942,13 +1070,30 @@ Deterministic validation covers, where applicable:
 
 Structural/security errors block commit or preparation approval. Semantic concerns may be DM-
 overridable warnings with recorded rationale. Authorization failures are never overridable through a
-model proposal.
+model proposal. Known missing required play material is a readiness blocker, not an aesthetic warning.
+Deterministic completeness checks establish required structure, not semantic solvability; human review
+must identify absent or circular evidence and unusable consequences that pass shape validation.
 
-Frozen evals should cover structured state, perspective, temporal/retcon behavior, aliases, source
-authority, hybrid retrieval, citations/abstention, model/task profiles, strict context contracts,
-package isolation, extraction/review, dungeon topology/geometry/rendering/secrecy, creature and
-encounter completeness, idempotency, backup/restore, and cost/latency. Leakage has zero tolerance;
-other thresholds are set from measured baselines.
+Evaluate enabled workflows at distinct levels:
+
+- Unit/property and integration tests prove references, geometry, secrecy, atomic persistence, scope,
+  source integrity, conflict handling, cancellation and replay/checkpoint boundaries.
+- Browser interaction tests exercise ordinary sign-in, generation, selection, editing, proposed
+  changes, exports and error recovery. Inspect screenshots and actual SVG/PNG, not only metadata.
+- Human packet review/tabletop walkthroughs measure missing essentials, coherence/variety, agency,
+  puzzle comprehension, map/content agreement, appearance, and actual DM review/editing minutes.
+  Record “would I run it?” and unresolved work. AI critique is not blinded human review or play evidence.
+- A small evaluation adapter samples the ordinary service on at least three materially different
+  synthetic briefs. Pin inputs/profile/versions and report usage, latency, failures and corrections;
+  compare matched conditions where possible and label confounds. Do not require provider matrices,
+  model-brand-specific gates, or exact wrapper chains in production approval.
+
+The target one-shot requires roughly ten minutes' review without inventing central play material;
+measure this with the DM rather than declaring it from tests. The first release is scoped to standalone
+authoring/review/maps plus security/restore. Campaign grounding/memory, broader encounter profiles and
+print each earn later gates; they do not postpone standalone usability. Extend frozen perspective,
+retcon, retrieval/citation, extraction and operations cases as those capabilities are enabled. Leakage
+has zero tolerance; other thresholds come from measured baselines.
 
 ## 18. Explicit Deferrals
 

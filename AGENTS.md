@@ -31,8 +31,9 @@ belong to the current task, and what the next agent should do with them.
   universal optional-field generation context.
 - Authorization and source filters run before retrieval and model context construction. Existing
   source revisions and cited spans are immutable.
-- Missing or ambiguous information remains unknown. Keep plans, claims, beliefs, rules, and
-  canonical reality distinguishable.
+- Missing or ambiguous campaign information remains unknown. Explicitly authorized invention is
+  preparation-only; do not use uncertainty to excuse missing puzzle answers or play procedures.
+  Keep plans, claims, beliefs, rules, and canonical reality distinguishable.
 - Player/clean exports fail closed for secrets. Print exports must preserve exact scale and validated
   tiling/calibration when enabled.
 - Do not add an agent framework, queue, database, domain service, or symmetric encounter package
@@ -52,6 +53,19 @@ after that point, document reader, migration, replay, and rollback policy.
 
 ## Task Discipline
 
+- Follow the unified named phases: standalone one-shot, usable review workspace, meaningful maps,
+  contextual revision, selected campaign grounding, then broader memory. Superseded recovery/output
+  documents are pointers, not extra gates to finish.
+- Optimize for a runnable adventure and reduced DM editing time, not merely valid schemas. Do not
+  expand per-feature generation/evaluation infrastructure when cohesive authoring can do the job.
+- Treat early visual design, normal browser login, inline review, and manual editing as product work,
+  not release-end polish. Report the feature Reese can see/test at each task boundary.
+- Component conversations separate read context from write scope. Ask cannot mutate; proposed edits
+  require human acceptance and stale-base checks. Accepting a draft edit is not approval or canon.
+- Preserve useful deterministic/security tests while deleting superseded alpha paths. Do not add a
+  parallel implementation or a framework simply to rearrange the existing complexity.
+- Human review/editing-time/visual/playtest evidence must come from a human; AI critique and synthetic
+  tests must never be reported as that evidence.
 - Use the implementation-plan task ID in work and commit subjects when applicable.
 - Keep one task small and independently testable; do not opportunistically begin the next phase.
 - Add or update tests with behavior.

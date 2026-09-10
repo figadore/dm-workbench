@@ -3,60 +3,49 @@
 > Completed milestones are summarized in [`PROJECT_HISTORY.md`](PROJECT_HISTORY.md).
 
 ## Current Task
-- **Task:** P7-14f — staged Tier A authoring and anti-overfitting evaluation.
-- **State:** all three `variant_01` fixed cases now have complete selected wrapper/version chains,
-  preparation-ready artifacts, and passing seven-check deterministic evidence. Blinded human review
-  remains outstanding.
-- **Schema head:** `0008_workbench_defaults`; no migration is involved.
-- **Retention gate:** **not crossed**. Active V1 contracts and disposable alpha data evolve in place.
+- **Task:** product/architecture realignment and P7-15 handoff — documentation complete.
+- **State:** unified standalone-one-shot roadmap adopted; implementation has not begun.
+- **Schema head:** `0008_workbench_defaults`; no migration or application behavior changed.
+- **Retention gate:** **not crossed**. Active V1 contracts and disposable alpha data evolve in place;
+  declare retention/migration/replay/rollback policy before intentionally retained real-user use.
 
-## Completed Behavior
-- Shared structured-submission repair planning/reporting covers structural generation and all six
-  enrichment seams with strict measured ceilings, one reserved repair, and body-free diagnostics.
-- Fixed-case execution pins case, assignment, parent, context/policy, profile, contract, schema, and
-  generator state; each command publishes at most one atomic child and never approves or writes canon.
-- Whole-artifact evidence accepts only contiguous preparation-ready chains and recomputes continuity,
-  sources, dependencies, required content, lineage, cross-task references, and secrecy.
-- Review-packet CLI loading now deserializes persisted strict specifications through JSON rather than
-  passing PostgreSQL dictionaries directly to strict Pydantic validation.
-- Three local ignored blinded packets contain only reviewer input, final guide, DM/player maps,
-  manifest, and worksheet; provider identity, assignments, measurements, and bodies remain omitted.
+## Agreed Direction
+- First prove a complete one-shot, then deliver a usable browser workspace, meaningful attractive
+  maps, contextual assistant revision, selected campaign grounding, and broader memory.
+- Replace mandatory six-family initial authoring with whole-adventure outline/content passes and
+  bounded correction. Reuse transport, storage, pure kernel, validation, and shared services.
+- Publish meaningful draft versions rather than one child per feature. Ask is read-only; manual and
+  human-accepted proposed edits share validation, stale-base protection, and atomic draft publication.
+- Normal browser sign-in, visual design, inline review, direct prose edits and usable exports arrive
+  in P7-16; map presentation in P7-17; scoped LLM conversations/proposals in P7-18.
+- Old P7-14f wrapper-matrix and P7-13 output gates no longer block this roadmap. Do not expand them.
 
-## Contract Assessment
-- The historical case-01 `repair_budget_exhausted` report remains irreconstructible, but its exact
-  Luna resume succeeded first-pass under the unchanged puzzle contract.
-- Case-01 exploration accepted one bounded repair below its ceilings; later enrichments were
-  first-pass valid. No budget, schema, prompt, effort, model, or provider change is indicated.
-- No Terra comparison, preparation approval, campaign revision, or canonical write occurred.
-
-## Live Evidence
-- Case 01 artifact `444a4cd5-e3bd-4e0b-bc48-eebc701dc44a`, final version
-  `59373963-dc26-4b94-8e0e-fe3e52ae88a5`: all seven checks passed; 19,362 input, 6,688 output,
-  142,953 ms, two repairs. Final artifact hash begins `e42d937a`.
-- Case 02 artifact `b6569a3e-8a75-4fd6-a2a5-bc30a9cb29e3`, final version
-  `8af0c7b8-f280-45fe-8e6a-06c879962006`: all seven checks passed; 17,658 input, 5,658 output,
-  117,046 ms, one repair; structural wrapper reclassified.
-- Case 03 artifact `cc4a8ed0-cfb2-4d86-8411-e21192c66f25`, final version
-  `3a5f5434-a8d9-4b50-b7c6-49fb9806dda2`: all seven checks passed; 16,992 input, 6,369 output,
-  130,149 ms, two repairs.
-- Review packets are under `generated/tier-a-case-0{1,2,3}-variant-01-review/`.
+## Implementation Baseline and Evidence
+- Existing staged generation, token login, basic asset UI, and faux Ask surfaces remain as implemented.
+  Cohesive authoring, normal owner login, the new editor and contextual conversations are not delivered.
+- Three staged fixed-case packets are locally available at
+  `generated/tier-a-case-0{1,2,3}-variant-01-review/`; their deterministic gates passed.
+- Inspection found absent concrete puzzle evidence/answers, repeated policy prose, and sparse maps.
+  Blinded human ratings, measured DM editing time, and a tabletop walkthrough remain outstanding.
+- No provider call, preparation approval, canonical write, or partial migration occurred in this work.
 
 ## Intentional Uncommitted Work
-- `src/dm_assistant/cli/main.py`, `tests/unit/test_cli.py`, and this handoff comprise the complete
-  provider-free review-packet loading fix.
-- The three `generated/` review directories are ignored local evaluation outputs, not commit inputs.
+- Documentation-only realignment: `AGENTS.md`, `README.md`, `dm-assistant-project-goals.md`,
+  `dm-assistant-implementation-plan.md`, `dm-assistant-technical-architecture.md`,
+  `dungeon-generation-recovery-plan.md`, `dungeon-output-refresh-plan.md`, `PROJECT_HISTORY.md`,
+  and this handoff. Keep these together; the old focused plans are superseded navigation stubs.
+- Ignored generated packets remain local baseline evidence, not commit inputs.
+- Application remains runnable as the existing alpha. No unsafe/partial write path was introduced.
 
-## Verification
-- Root unit/eval suite: **262 passed**; focused CLI suite: **27 passed**.
-- PostgreSQL integration baseline remains puzzle **2 passed**, staged coordinator **12 passed**.
-- Changed-path Ruff/format, strict mypy, `git diff --check`, stack readiness, and all three final
-  evidence gates passed. No partial migration or unsafe write path exists.
+## Verification and Blockers
+- Provider-free Workbench unit/eval suite: **262 passed**; dungeon package: **139 passed**.
+- Documentation links/phase references and `git diff --check` checked; no runtime code changed.
+- Live comparison needs explicit authorization. Human usefulness/visual/playtest gates cannot be
+  claimed from AI assessment or deterministic tests. These are evidence gates, not software failures.
 
 ## Single Next Recommended Task
-**Complete the blinded human review tranche.**
-First action: independently review each packet's guide and maps and fill its `review-worksheet.md`
-with 1–5 ratings for every listed dimension, using N/A only for lore consistency when the packet says
-it is not required. Do not inspect provider assignments or run measurements while rating.
-
-## References
-Implementation plan P7-14f; technical architecture §§8, 12–13, 17; recovery plan R5.
+**P7-15a — Define “Ready to Run”.**
+First action: read that task and architecture §§8, 9, 12, 13, 17, then inspect the three local guides/maps
+and write a compact missing-work checklist plus a synthetic target one-shot excerpt with actual clue
+contents, a definite answer, obstacle procedure/consequence, and ending. Present the scope/format to
+Reese for confirmation; do not start production refactoring or live calls before the relevant gates.

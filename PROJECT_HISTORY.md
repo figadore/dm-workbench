@@ -84,6 +84,23 @@
   and `gpt-5.5` controls succeeded. This isolated an exact-model availability/entitlement condition;
   it did not provide Tier A quality evidence.
 
+## Standalone One-Shot Product Realignment
+
+- Adopted a unified dungeon-first roadmap: prove a runnable standalone one-shot, integrate cohesive
+  authoring and an early usable review workspace, improve maps, add scoped assistant revision, then
+  selected campaign grounding and broader memory. Superseded recovery/output plans are pointers.
+- Inspection of three technically passing packets found missing concrete puzzle evidence/answers,
+  repetitive policy-like guide text, and sparse schematic maps. This was a product/code assessment,
+  not a completed blinded human review or playtest; the packets do not establish play readiness.
+- The target replaces mandatory six-family enrichment/per-feature publication with whole-adventure
+  outline and content passes, bounded correction, attempt checkpoints, and meaningful draft versions.
+  Existing transport, storage, pure geometry, security, and reusable tests remain valuable foundations.
+- Browser usability is an early product gate: normal owner sign-in, inline map/guide review, manual
+  editing and purpose-based exports precede campaign integration. Contextual Ask is read-only;
+  proposed revisions require visible scope, human acceptance and stale-base protection.
+- Documentation realignment does not implement the new authoring pipeline, authentication, editor,
+  or conversations. Alpha retention remains uncrossed; real retained use triggers the existing gate.
+
 ## Persistent Decisions
 
 - Models propose; humans approve preparation and commit canon.

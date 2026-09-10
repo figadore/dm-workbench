@@ -2,191 +2,155 @@
 
 ## Purpose
 
-Build a self-hosted assistant that helps a human Dungeon Master prepare and run a coherent,
-persistent D&D 5e/2024-era campaign with less bookkeeping. The first major preparation capability is
-playable dungeon and encounter generation; campaign memory, retrieval, and session review make that
-preparation trustworthy over time.
+Build a self-hosted workbench that helps a human Dungeon Master prepare and run a coherent campaign
+with less authoring and bookkeeping. Dungeons are the first product, not a diversion: much of this
+DM's play happens in them. Campaign memory should subsequently make those adventures fit an ongoing
+story without confusing preparation with what actually happened.
 
-This is not an autonomous DM. The human controls canon, adjudication, pacing, improvisation, tone,
-and what reaches players. Future live assistance should grow from reliable state and explicit
-permissions rather than replacing them.
+**The first viable product is a complete, attractive, independently runnable small dungeon one-shot
+from a prompt—not merely a valid map with populated content slots.**
 
-## Problem
+The human controls canon, adjudication, pacing, improvisation, and what reaches players. This is not
+an autonomous DM or a combat simulator.
 
-Long campaigns contain more information than a human or one model context can safely hold:
+## Delivery Outcomes
 
-- changing NPC, faction, location, item, and quest state;
-- truth, beliefs, rumors, lies, public claims, and secrets;
-- uncertain, relative, concurrent, and retroactively established chronology;
-- plans and adventure material that may never occur;
-- narrative details that matter without deserving database fields;
-- multiple rules editions, house rules, character sheets, and creature sources;
-- dungeons that must be connected, navigable, reproducible, printable, and secrecy-safe;
-- encounters that must fit party, place, pacing, and play style.
+The ordered phases and task IDs live in
+[`dm-assistant-implementation-plan.md`](dm-assistant-implementation-plan.md). Only
+[`PROJECT_STATUS.md`](PROJECT_STATUS.md) selects the live task.
 
-A giant prompt containing all campaign notes is noisy and unsafe. The harness should instead preserve
-lossless sources, maintain reviewed structured state, retrieve only authorized relevant evidence, and
-compile creative intent into deterministic preparation artifacts.
+1. **A One-Shot Worth Running:** prove complete adventure authoring against actual DM preparation work.
+2. **Prompt to Play:** integrate cohesive authoring into a pleasant, secure browser workspace, with
+   readable output, direct text editing, and meaningful draft versions.
+3. **Maps Worth Exploring:** make layout, terrain, and visual presentation support the adventure.
+4. **Revise with Your Assistant:** discuss or revise a room, puzzle, obstacle, or whole dungeon in
+   visibly scoped conversations; preview and accept changes without losing unrelated work.
+5. **Bring Your Campaign:** supply selected facts, claims, and requirements, then retrieve relevant
+   campaign evidence into the same generation and revision workflows.
+6. **Remember What Happened:** connect notes, questions, unresolved threads, and reviewed session
+   outcomes to persistent campaign memory.
+
+Usability is not a final coat of paint. Browser review begins in phase 2, map aesthetics and tactical
+legibility in phase 3, and contextual interaction in phase 4. Campaign integration must not delay
+those experiences. Elaborate illustration and unrestricted map editing are not first-release gates.
+
+## The Standalone One-Shot
+
+Start with one floor, approximately 5–7 rooms within the existing 4–8-room supported class, one
+explicit party-size/level/rules assumption, and a chosen session-length target. It contains:
+
+- a usable hook, clear objective, history explaining the location, and a concrete ending;
+- coherent but varied rooms, opposition or environmental pressure, and a meaningful route choice;
+- puzzles where appropriate, with actual clues, inscriptions/objects, answers, feedback, hints,
+  alternate approaches, and failure consequences—not instructions to invent them;
+- obstacles with visible affordances, actionable procedures, and concrete stakes;
+- inhabitants with motivations, tactics or reactions, and non-kill resolutions where appropriate;
+- readable keyed room guidance, a matching map, and secrecy-clean player exports;
+- explicit supported mechanics and source assumptions, without invented official rules or unsupported
+  balance claims.
+
+Combat can use a small authorized creature/profile selection and deterministic encounter policies;
+a comprehensive encounter engine or character-sheet importer is not a prerequisite. Synthetic test
+creatures prove software behavior, not official game balance. Missing required play material blocks
+readiness; deliberate mystery for players is not an excuse for an unspecified DM answer.
+
+The target is review in roughly ten minutes without writing missing central clues, opposition,
+mechanics, or endings. Measure actual review/editing minutes and a tabletop walkthrough; this is a
+product target to prove, not an existing guarantee. A capable DM's improvisation is welcome, but must
+not conceal unfinished generation.
+
+## A Workspace, Not a File Dump
+
+The normal browser journey is: sign in, describe the adventure, inspect progress, open a map-and-guide
+workspace, revise, approve for play, and export a useful packet.
+
+- Routine sign-in does not require locating and pasting an API token. Automation credentials and
+  browser authentication remain separate; convenience does not mean disabling authentication.
+- Clear typography, spacing, navigation, restrained color, visible status, and readable error states
+  belong in the first integrated workspace. Plain server-rendered HTML can still be well designed.
+- Map and room selection stay synchronized. A component inspector makes the selected dungeon version,
+  room/puzzle/obstacle, and editing scope obvious.
+- Manual edits have explicit save/cancel and before/after review where consequential. No JSON editing
+  is required for ordinary authoring. Storage roles, UUIDs, manifests, and diagnostics belong under
+  advanced details, not in the primary interface.
+- Maps have an intentional visual language and useful terrain, not merely decorative art. DM/player
+  modes are unmistakable; a DM inspector is never packaged into a player export.
+- Downloads have recognizable names and purpose: DM guide, player map, DM map, VTT bundle. Exact-scale
+  print remains disabled until its separate calibration/tiling gate passes.
+
+## Contextual Conversation and Editing
+
+Selecting a component can open a conversation with two explicit intentions:
+
+- **Ask / Explain:** clarify how the puzzle works, discuss alternatives, ask what a creature wants,
+  or identify a contradiction. Answers do not mutate the artifact or silently become authored facts.
+- **Propose a Change:** request a scoped revision, see the affected content and dependencies, then
+  accept, edit, or reject it. Accepting a draft change is not preparation approval or canonical commit.
+
+The whole small adventure may be relevant context even when only one room is editable. The interface
+must distinguish **what the assistant can read** from **what it may propose changing**. Existing manual
+edits are protected by default. Changes that need new geometry, clues elsewhere, or altered campaign
+facts require a visible scope-expansion proposal, never silent spillover.
+
+Conversations are bound to artifact version and selected components. Stale proposals cannot overwrite
+new edits. Useful conversations may be saved privately as user-facing work, separate from body-free
+operational logs and never included in player assets by default.
+
+## Campaign Grounding Without a Second Generator
+
+Standalone generation needs no campaign lore; an internal preparation owner does not imply grounding.
+Later, an explicit context packet supplies selected facts and creative permissions:
+
+- **Established fact:** the villain holds a named captive.
+- **Required placement:** place that captive in this dungeon, alive.
+- **Reported claim:** an informant says the relic is here.
+- **Unknown:** whether that report is true.
+- **Creative permission:** invent local guards and rooms, but do not change established motivations.
+
+A requirement is a DM instruction about preparation, not evidence of a canonical fact. A report is
+not truth. The DM may explicitly authorize inventing a preparation-only answer to an unknown; it
+remains labelled proposed preparation. Retrieval suggests relevant authorized sources; it cannot
+silently expand scope or promote claims into reality.
+
+Start with DM-selected facts and source references, then add retrieval. The complete temporal and
+perspective model is a later memory capability, not a prerequisite for this bounded integration.
 
 ## Product Principles
 
-### The DM remains authoritative
+- **Human authority:** models propose; humans accept draft edits, approve preparation, and separately
+  commit canonical changes. Canonical writes use one validated atomic campaign revision.
+- **Preparation is not canon:** approved/used adventures do not establish deaths, discoveries, item
+  ownership, rescues, or other events. Session review records actual outcomes.
+- **Prose first:** preserve immutable narrative sources. Structure only what validation, references,
+  mechanics, rendering, or actual queries consume; do not formalize every sentence.
+- **Cohesive authorship:** design a small adventure together. Typed content categories do not imply
+  independent model calls. Targeted calls earn their complexity when revising useful accepted work.
+- **Deterministic execution:** code owns IDs, exact graph/geometry, arithmetic, validation, rendering,
+  exports, and supported mechanical policy. Models supply typed intent and proposed prose.
+- **Appropriate checks:** secrets, authorization, invalid references, and corrupt geometry are hard
+  failures. Authored completeness and semantic quality need distinct checks and human judgment;
+  filled fields do not prove a puzzle works.
+- **Small boundaries:** one Workbench, one PostgreSQL database, one pure dungeon package, one narrow
+  private model gateway. A standalone CLI/file adapter calls shared services; no second authoring
+  implementation or dungeon microservice is required.
+- **Honest evidence:** track failure rate, usage/latency, missing essentials, DM editing time, and
+  willingness to run the result. Do not substitute a passing schema or model's self-rating for play.
 
-Models may propose facts, relationships, events, chronology, entities, summaries, consequences,
-dungeons, and encounters. They never silently update canonical campaign state or approve preparation.
-Every canonical change is reviewed and committed atomically by the DM.
+## Campaign Memory After the One-Shot
 
-### Preparation is not canon
+Preserve original notes and immutable evidence; answer relevant campaign/rules questions with sources
+or uncertainty; prepare session briefs and unresolved-thread reminders; propose grouped session
+updates for review. Add precise entity, perspective, temporal, and historical queries as those
+workflows require them. Keep beliefs, rumors, plans, rules, and canonical events distinguishable.
 
-A generated dungeon, creature, puzzle, or encounter is a versioned preparation artifact. Approval
-means ready for play, not that its planned inhabitants, discoveries, deaths, or treasure occurred.
-Session review records what actually happened.
+## Scope Limits and Success
 
-### Prose first, structure where useful
+Defer player accounts, autonomous canon, live transcript ingestion, initiative/resource tracking,
+arbitrary/multi-floor geometry, regional maps, illustration-first rendering, direct VTT automation,
+and speculative frameworks/services until measured need. User-supplied/authorized material only;
+repository fixtures remain synthetic and credential-free.
 
-The system keeps immutable Markdown or other source revisions as narrative memory. Structured
-knowledge supports precise questions about identity, state, time, perspective, and provenance, but
-nuance may remain searchable prose. Formalization must reduce work, not create forms the DM must
-maintain manually.
-
-### Models express intent; code enforces mechanics
-
-Models choose themes, purposes, room roles, progression, encounter goals, tactics, and bounded
-creative content through typed contracts. Deterministic code owns IDs, topology, exact geometry,
-pathfinding, rules arithmetic, validation, rendering, exports, and reproducibility. Unknown or invalid
-input produces explicit diagnostics rather than invented mechanics.
-
-### Answers remain scoped and explainable
-
-Campaign, revision, timeline/cursor, audience, source authority, corpus snapshot, and rules profile
-are explicit or inspectable defaults. Authorization filters run before retrieval. Answers cite
-immutable evidence and say unknown, disputed, or not precisely ordered when support is inadequate.
-
-### Truth and perspective stay distinct
-
-The system must represent reality separately from knowledge, belief, suspicion, claims, and public
-record. What players know may differ from what characters know. Missing knowledge is not proof of
-unawareness unless the campaign deliberately tracks completeness for that secret.
-
-### Boundaries remain small
-
-Use one Workbench, one PostgreSQL database, one pure in-process dungeon package, and one narrow
-private model-transport gateway. Add services, frameworks, stores, or generalized context objects only
-when measured needs justify them.
-
-## Core Workflows
-
-### Before a session
-
-The DM can ingest campaign notes, prior sessions, locations, factions, character sheets, important
-items, authorized rules/creature sources, and dungeon briefs. The Workbench should:
-
-- retrieve relevant lore and rules with exact provenance;
-- generate a constrained, reproducible dungeon with valid progression and practical grids;
-- create linked room guidance and party-aware combat or noncombat encounters;
-- provide DM and player-safe maps, VTT assets, and guarded print output;
-- compare or regenerate a selected component without discarding accepted work;
-- keep every artifact a draft until explicit preparation approval.
-
-Representative questions include:
-
-- Who knows that Aldric murdered the king?
-- Why does Mira distrust Rowan?
-- Where was the seal last seen, and what does it do?
-- What are the 2024 hiding rules, and does the campaign override them?
-- Generate a small crypt with a loop, secret route, gated objective, and encounters for this party.
-
-### During a session
-
-The initial product supports fast occasional assistance rather than running the game:
-
-- rules lookup;
-- NPC motivation, history, and knowledge;
-- character abilities and important-item mechanics;
-- continuity and unresolved-thread checks;
-- prepared maps, room details, creature statistics, puzzle solutions, and scaling options;
-- grounded incidental names or descriptions.
-
-Answers should be concise, fast, and trustworthy. Live combat resources, initiative, and token state
-are not initial requirements.
-
-### After a session
-
-The DM supplies notes or a summary. The harness proposes evidence-linked events, entities, state and
-relationship changes, knowledge/reveals, quest progress, chronology, retcons, and prepared-artifact
-outcomes. The DM accepts, edits, or rejects grouped changes before one atomic canonical commit. The
-original source remains available regardless of what becomes structured.
-
-## Required Capabilities
-
-### Campaign memory
-
-- Immutable documents, revisions, chunks, and corpus snapshots.
-- Lexical retrieval plus versioned semantic projections with lexical fallback.
-- Entities, aliases, events, propositions, perspectives, temporal relations, and evidence.
-- Historical queries against old canonical revisions and explicit story cursors.
-- Readable revision summaries and detailed audit history.
-
-### Dungeons and maps
-
-- Practical orthogonal square-grid floors with five-foot cells.
-- Typed room/progression/gate/secret/feature/encounter intent.
-- Constructed connectivity and independently validated topology, geometry, and secrecy.
-- Stable IDs, seeds, versions, lineage, and targeted regeneration.
-- Renderer-neutral packages producing DM/player SVG and PNG plus Roll20-compatible metadata.
-- Exact-scale low-ink print only when bounded preflight, calibration, and stitching checks pass.
-
-### Encounters and profiles
-
-- Complete supplied character, item, and authorized creature profiles with source/version lineage.
-- Combat, social, exploration, puzzle, trap, hazard, and mixed encounter packages.
-- Deterministic edition-aware difficulty, stat completeness, room fit, and puzzle/trap checks.
-- Separate `DungeonGenerationContext` and `EncounterGenerationContext` payloads inside a small common
-  provenance envelope.
-
-### Interaction and runtime
-
-- One DM-only Workbench with a thin web UI and shared CLI services.
-- A private Node gateway for provider authentication/catalog/transport; credentials never reach the
-  browser or campaign data.
-- Task-specific model/profile selection, bounded calls, cancellation, usage reporting, and durable
-  safe run state.
-- Provider-independent deterministic workflows when model or embedding services are unavailable.
-
-## Initial Scope Limits
-
-Included initially:
-
-- one exposed DM principal and campaign-oriented ownership;
-- PostgreSQL/pgvector, immutable source and revision history;
-- practical dungeon/encounter preparation;
-- campaign/rules questions and reviewed session-close extraction;
-- user-supplied or authorized source material only.
-
-Explicitly deferred until evidence justifies them:
-
-- player accounts and direct player-facing agents;
-- autonomous canonical writes or autonomous campaign operation;
-- live transcript ingestion and combat/resource tracking;
-- custom-calendar arithmetic and alternate-timeline merging;
-- regional/world maps and illustration-first tactical geometry;
-- direct Roll20 upload/dynamic lighting;
-- automatic rewriting of human-authored sources;
-- local chat-model infrastructure, domain microservices, another database, queue, graph/vector store,
-  broad agent framework, or speculative encounter-engine package.
-
-## Success
-
-A successful first release lets the DM repeatedly:
-
-1. ingest ordinary campaign, rules, profile, and creature material;
-2. generate and review a valid, coherent, reproducible dungeon and linked encounters;
-3. obtain secrecy-clean practical map/export assets;
-4. ask scoped questions and receive concise cited answers or explicit uncertainty;
-5. record a session and review what actually changed;
-6. commit one explainable canonical revision;
-7. continue for months without plans becoming facts, beliefs becoming truth, sources becoming
-   untraceable, or generated mechanics becoming irreproducible.
-
-If that foundation remains dependable, richer live scene context, NPC assistance, player-safe views,
-transcript support, and more autonomous experiments can be layered on without replacing it.
+The first success is a one-shot the DM wants to run, presented in a workspace they want to use. The
+next is attaching campaign hooks without breaking that experience. Long-term success is repeating
+this for months while sources remain traceable, secrets stay private, and prepared possibilities
+never silently turn into campaign history.
