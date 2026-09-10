@@ -66,6 +66,7 @@ from dm_assistant.orchestration.dungeons import (
     DUNGEON_TIER_A_CANARY,
     BuildDungeonTierAFixedCaseEvidenceWorkflow,
     CreateDungeonWorkflow,
+    DungeonStudioSpecification,
     ExportDungeonWorkflow,
     PromptDungeonTierAFixedCaseStructuralWorkflow,
     PromptDungeonTierAFixedCaseTaskWorkflow,
@@ -78,6 +79,9 @@ from dm_assistant.orchestration.dungeons import (
 from dm_assistant.orchestration.dungeons.model_selection import (
     DUNGEON_DEFAULT_MODEL_ID,
     default_dungeon_model,
+)
+from dm_assistant.orchestration.dungeons.review import (
+    write_dungeon_tier_a_blinded_review_packet,
 )
 from dm_assistant.orchestration.modeling import ModelRunAbstained
 from dm_assistant.paths import resolve_allowlisted_file
@@ -898,6 +902,7 @@ def _build_dungeon_fixed_case_evidence(
     artifact_version_id: UUID,
     evaluation_run_ids: tuple[UUID, ...],
     campaign_id: UUID | None,
+    review_packet_dir: Path | None,
 ) -> None:
     """Build body-free measurement and blinded reviewer input from exact wrappers."""
 
@@ -919,7 +924,24 @@ def _build_dungeon_fixed_case_evidence(
                 ),
                 load_dungeon_tier_a_eval_manifest(),
             )
-            _emit_document(evidence.model_dump(mode="json"))
+            document = evidence.model_dump(mode="json")
+            if review_packet_dir is not None:
+                version = runtime.preparation.get_version(
+                    resolved_campaign_id, artifact_version_id
+                )
+                specification = DungeonStudioSpecification.model_validate(
+                    version.specification
+                )
+                files = write_dungeon_tier_a_blinded_review_packet(
+                    specification,
+                    evidence.reviewer_input,
+                    review_packet_dir,
+                )
+                document["review_packet"] = {
+                    "directory": str(review_packet_dir.resolve()),
+                    "files": [item.name for item in files],
+                }
+            _emit_document(document)
 
 
 def _run_dungeon_fixed_case_task(
@@ -1007,9 +1029,16 @@ def _run_dungeon_fixed_case_task(
             attempt = outcome.step.attempt
             attempt_result = attempt.result if attempt is not None else None
             next_task = outcome.step.plan_after.next_task
+            evaluation_report = runtime.preparation.get_generation_run(
+                resolved_campaign_id, outcome.evaluation_run_id
+            ).validation_report
+            abstention_code = evaluation_report.get("abstention_code")
             _emit_document(
                 {
                     "success": outcome.success,
+                    "abstention_code": (
+                        abstention_code if isinstance(abstention_code, str) else None
+                    ),
                     "evaluation_run_id": str(outcome.evaluation_run_id),
                     "task_kind": outcome.plan.task_kind,
                     "task_attempt_run_id": (
@@ -1094,8 +1123,15 @@ def dungeon_fixed_case_evidence(
         ),
     ],
     campaign_id: Annotated[UUID | None, typer.Option("--campaign")] = None,
+    review_packet_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--review-packet",
+            help="Write a blinded final-artifact packet to this new directory.",
+        ),
+    ] = None,
 ) -> None:
-    """Emit body-free whole-artifact measurement and blinded review input."""
+    """Emit body-free evidence and optionally write its blinded review packet."""
 
     _build_dungeon_fixed_case_evidence(
         case_id=case_id,
@@ -1104,6 +1140,7 @@ def dungeon_fixed_case_evidence(
         artifact_version_id=artifact_version_id,
         evaluation_run_ids=tuple(evaluation_run_ids),
         campaign_id=campaign_id,
+        review_packet_dir=review_packet_dir,
     )
 
 

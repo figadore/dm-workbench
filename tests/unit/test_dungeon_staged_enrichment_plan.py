@@ -1,5 +1,6 @@
 """Provider-free staged dungeon enrichment planning coverage."""
 
+import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -42,6 +43,7 @@ from dm_assistant.orchestration.dungeons import (
     DungeonRoomNarrativeEnrichmentOutput,
     DungeonRoomNarrativeRoomOutput,
     DungeonStudioSpecification,
+    DungeonTierAReviewerInput,
     DungeonTrapEnrichmentOutput,
     PromptedDungeonExplorationLineage,
     PromptedDungeonFeatureInteractionLineage,
@@ -60,6 +62,7 @@ from dm_assistant.orchestration.dungeons.final_validation import (
     DungeonCohesionDimension,
 )
 from dm_assistant.orchestration.dungeons.review import (
+    write_dungeon_tier_a_blinded_review_packet,
     write_staged_dungeon_review_packet,
 )
 from dm_assistant.orchestration.dungeons.service import (
@@ -1221,6 +1224,134 @@ def test_staged_review_packet_records_body_free_gate_summary_and_dm_disposition(
     manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["packet_kind"] == "staged_final_review"
     assert manifest["targeted_regeneration_required"] is False
+
+
+def _tier_a_reviewer_input(
+    specification: DungeonStudioSpecification,
+    *,
+    artifact_hash: str | None = None,
+) -> DungeonTierAReviewerInput:
+    return DungeonTierAReviewerInput(
+        rubric_version="dungeon-tier-a-human-rubric-v1",
+        review_id="review_tier_a_case_01_variant_01",
+        case_id="tier_a_case_01",
+        variant_id="variant_01",
+        artifact_hash=(
+            artifact_hash
+            if artifact_hash is not None
+            else canonical_json_sha256(specification.model_dump(mode="json"))
+        ),
+        lore_consistency_required=False,
+        rating_dimensions=(
+            "thematic_reinforcement",
+            "history_environment_causality",
+            "mechanic_objective_unity",
+            "progression",
+            "intentional_motif_variation",
+            "lore_consistency",
+            "clue_logic",
+            "player_agency",
+            "puzzle_comprehensibility",
+            "exploration_quality",
+            "dm_prep_usefulness",
+        ),
+    )
+
+
+def test_tier_a_blinded_review_packet_contains_only_bound_final_material(
+    tmp_path: Path,
+) -> None:
+    specification = _fully_enriched_specification("blinded")
+    artifact_hash = canonical_json_sha256(specification.model_dump(mode="json"))
+    reviewer_input = _tier_a_reviewer_input(specification)
+    output_dir = tmp_path / "blinded-review"
+
+    files = write_dungeon_tier_a_blinded_review_packet(
+        specification,
+        reviewer_input,
+        output_dir,
+    )
+
+    assert {item.name for item in files} == {
+        "dm-guide.md",
+        "dm-map.png",
+        "manifest.json",
+        "player-map.png",
+        "review-worksheet.md",
+        "reviewer-input.json",
+    }
+    manifest = json.loads((output_dir / "manifest.json").read_text())
+    assert manifest == {
+        "artifact_hash": artifact_hash,
+        "files": manifest["files"],
+        "packet_kind": "tier_a_blinded_human_review",
+        "packet_version": "dungeon-tier-a-blinded-review-packet-v1",
+        "review_id": reviewer_input.review_id,
+    }
+    for name, metadata in manifest["files"].items():
+        data = (output_dir / name).read_bytes()
+        assert metadata == {
+            "bytes": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+        }
+    for name in ("dm-map.png", "player-map.png"):
+        assert (output_dir / name).read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+    worksheet = (output_dir / "review-worksheet.md").read_text()
+    assert worksheet.count("- Rating (1–5):") == 10
+    assert "Lore Consistency" in worksheet
+    assert "not applicable (standalone case; leave null)" in worksheet
+    metadata_text = "\n".join(
+        (output_dir / name).read_text()
+        for name in ("manifest.json", "reviewer-input.json", "review-worksheet.md")
+    )
+    for forbidden in (
+        "variant_assignment",
+        "provider_id",
+        "model_id",
+        "input_tokens",
+        "model_lineage",
+        "specification_sha256",
+    ):
+        assert forbidden not in metadata_text
+
+
+def test_tier_a_blinded_review_packet_rejects_mismatched_artifact_hash(
+    tmp_path: Path,
+) -> None:
+    specification = _fully_enriched_specification("blinded_mismatch")
+    reviewer_input = _tier_a_reviewer_input(specification, artifact_hash="a" * 64)
+    output_dir = tmp_path / "mismatched-review"
+
+    with pytest.raises(ConflictError, match="does not match the final artifact"):
+        write_dungeon_tier_a_blinded_review_packet(
+            specification,
+            reviewer_input,
+            output_dir,
+        )
+
+    assert not output_dir.exists()
+
+
+def test_tier_a_blinded_review_packet_rejects_failed_final_gate(
+    tmp_path: Path,
+) -> None:
+    specification = _fully_enriched_specification("blinded_blocked")
+    stale_puzzle = specification.puzzle_model_lineage[0].model_copy(
+        update={"source_ids": ("unauthorized_source",)}
+    )
+    broken = specification.model_copy(update={"puzzle_model_lineage": (stale_puzzle,)})
+    reviewer_input = _tier_a_reviewer_input(broken)
+    output_dir = tmp_path / "blocked-blinded-review"
+
+    with pytest.raises(ConflictError, match="final deterministic review-packet gate"):
+        write_dungeon_tier_a_blinded_review_packet(
+            broken,
+            reviewer_input,
+            output_dir,
+        )
+
+    assert not output_dir.exists()
 
 
 def test_staged_review_packet_fails_before_writing_when_final_gate_fails(

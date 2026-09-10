@@ -114,8 +114,30 @@ class ServerTool:
         )
 
 
+_SAFE_MODEL_ABSTENTION_CODES = frozenset(
+    {
+        "model_run_abstained",
+        "model_run_cancelled",
+        "submission_time_budget_exhausted",
+        "submission_timed_out",
+        "structured_call_count_invalid",
+        "unauthorized_submission_tool",
+        "repair_context_exceeded",
+        "repair_usage_unavailable",
+        "repair_budget_exhausted",
+        "proposal_not_accepted",
+    }
+)
+
+
 class ModelRunAbstained(RuntimeError):
-    """Raised when the task profile requires abstention instead of an answer."""
+    """Fail-closed model stop with an allowlisted body-free diagnostic code."""
+
+    def __init__(self, message: str, *, code: str = "model_run_abstained") -> None:
+        super().__init__(message)
+        self.code = (
+            code if code in _SAFE_MODEL_ABSTENTION_CODES else "model_run_abstained"
+        )
 
 
 class ModelTaskRunner:

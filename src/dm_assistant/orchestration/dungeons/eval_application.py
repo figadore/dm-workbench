@@ -801,6 +801,13 @@ class DungeonTierAFixedCaseApplicationService:
                 else None
             ),
         }
+        if attempt is not None and not success:
+            task_run = self._preparation.get_generation_run(
+                command.campaign_id, attempt.attempt_run_id
+            )
+            abstention_code = task_run.validation_report.get("abstention_code")
+            if isinstance(abstention_code, str):
+                report["abstention_code"] = abstention_code
         self._finish(
             command.campaign_id,
             evaluation_run_id,

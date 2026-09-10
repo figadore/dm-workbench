@@ -169,7 +169,8 @@ retries are manual and opt-in. Always consult `PROJECT_STATUS.md` before making 
 The alpha structural tool accepts a compact `DungeonPlan`; deterministic code constructs graph edges,
 IDs, topology certificate, exact geometry, maps, and readiness state. Puzzle, exploration, feature,
 trap, objective, and narrative enrichment run as separate bounded exact-ID tasks. A failed enrichment
-preserves the valid draft and leaves explicit blockers. Ordinary run inspection is body-free:
+preserves the valid draft and leaves explicit blockers. Ordinary run inspection is body-free. Fail-closed model stops expose only an allowlisted
+`abstention_code`, never provider text:
 
 ```bash
 uv run --frozen dm dungeon run inspect <attempt-run-id>
@@ -189,6 +190,8 @@ uv run --frozen dm dungeon fixed-case tier_a_case_02 variant_01 \
 
 After the staged plan is complete, pass the ordered structural-then-task wrapper IDs to
 `dm dungeon fixed-case-evidence` for a body-free measurement and separately blinded reviewer input.
+Add `--review-packet <new-directory>` to atomically write only that input, the final DM guide, and
+DM/player PNG maps for human review; assignment, provider, lineage, and run measurements are omitted.
 These commands never approve preparation or write campaign canon.
 
 Gateway-specific local operation and checks are documented in

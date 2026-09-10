@@ -218,7 +218,10 @@ def _failure_report(error: Exception) -> tuple[str, dict[str, JsonValue]]:
         }
     code = "dungeon_objective_prompt_failed"
     stage = "model_submission" if isinstance(error, ModelRunAbstained) else "projection"
-    return code, {"stage": stage, "code": code}
+    report: dict[str, JsonValue] = {"stage": stage, "code": code}
+    if isinstance(error, ModelRunAbstained):
+        report["abstention_code"] = error.code
+    return code, report
 
 
 def _diagnostic_codes(error: Exception) -> list[str]:

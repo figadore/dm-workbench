@@ -1,5 +1,7 @@
 """CLI smoke tests."""
 
+from pathlib import Path
+
 import pytest
 from typer.testing import CliRunner
 
@@ -292,6 +294,8 @@ def test_fixed_case_start_and_evidence_commands_pin_opaque_variant(
             "11111111-1111-1111-1111-111111111111",
             "--run",
             "22222222-2222-2222-2222-222222222222",
+            "--review-packet",
+            "generated/blinded-case-02",
         ],
     )
     assert result.exit_code == 0, result.output
@@ -303,6 +307,7 @@ def test_fixed_case_start_and_evidence_commands_pin_opaque_variant(
         "11111111-1111-1111-1111-111111111111",
         "22222222-2222-2222-2222-222222222222",
     )
+    assert evidence["review_packet_dir"] == Path("generated/blinded-case-02")
 
 
 def test_provider_smoke_profile_is_short_lived_and_tool_free() -> None:

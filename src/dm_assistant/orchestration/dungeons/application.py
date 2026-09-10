@@ -35,8 +35,6 @@ from dm_assistant.orchestration.modeling import (
 
 logger = get_logger(__name__)
 
-_REPAIR_USAGE_UNAVAILABLE = "model usage was unavailable; repair budget is unknown"
-
 
 def _failure_code(error: Exception) -> str:
     """Classify known safe prompt failures without exposing model/provider text."""
@@ -44,7 +42,9 @@ def _failure_code(error: Exception) -> str:
         return "dungeon_prompt_rejected_after_repair"
     if isinstance(error, StructuredSubmissionBudgetExceeded):
         return "dungeon_prompt_token_budget_exhausted"
-    if isinstance(error, ModelRunAbstained) and str(error) == _REPAIR_USAGE_UNAVAILABLE:
+    if isinstance(error, ModelRunAbstained) and (
+        error.code == "repair_usage_unavailable"
+    ):
         return "dungeon_prompt_repair_usage_unavailable"
     return "dungeon_prompt_failed"
 
@@ -78,6 +78,12 @@ def _failure_report(
             "stage": "model_submission",
             "code": code,
             "transport_error_code": error.code,
+        }
+    elif isinstance(error, ModelRunAbstained):
+        report = {
+            "stage": "model_submission",
+            "code": code,
+            "abstention_code": error.code,
         }
     else:
         report = {"stage": "model_submission", "code": code}
@@ -157,9 +163,10 @@ class DungeonPromptApplicationService:
                     )
                 )
             except Exception as error:
-                cancelled = isinstance(error, ModelRunAbstained) and (
-                    "cancel" in str(error).lower()
-                )
+                cancelled = isinstance(error, ModelRunAbstained) and error.code in {
+                    "model_run_cancelled",
+                    "submission_timed_out",
+                }
                 code = "dungeon_prompt_cancelled" if cancelled else _failure_code(error)
                 failure_report = _failure_report(error, code)
                 logger.warning(

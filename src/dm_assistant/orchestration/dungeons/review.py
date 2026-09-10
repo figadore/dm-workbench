@@ -9,11 +9,13 @@ import tempfile
 from pathlib import Path
 
 from dm_assistant.errors import ConflictError
+from dm_assistant.modules.preparation import canonical_json_sha256
 from dm_assistant.orchestration.dungeons.contracts import (
     DungeonGuideContentPlan,
     DungeonStudioSpecification,
 )
 from dm_assistant.orchestration.dungeons.evals import (
+    DungeonTierAReviewerInput,
     evaluate_dungeon_guide_quality,
     render_dungeon_guide_quality_report,
 )
@@ -47,6 +49,7 @@ from dm_dungeon import (
 from dm_dungeon.layout import ORTHOGONAL_LAYOUT_GENERATOR_VERSION
 
 _REVIEW_PACKET_VERSION = "dungeon-guide-review-packet-v1"
+_TIER_A_BLINDED_REVIEW_PACKET_VERSION = "dungeon-tier-a-blinded-review-packet-v1"
 
 
 def write_dungeon_guide_review_packet(
@@ -334,6 +337,106 @@ def write_staged_dungeon_review_packet(
     return tuple(sorted(output_dir.iterdir()))
 
 
+def write_dungeon_tier_a_blinded_review_packet(
+    specification: DungeonStudioSpecification,
+    reviewer_input: DungeonTierAReviewerInput,
+    output_dir: Path,
+) -> tuple[Path, ...]:
+    """Write only blinded rubric bindings and final artifact material atomically.
+
+    This provider-free path recomputes the final gate and exact artifact hash. It
+    deliberately omits run measurements, variant assignments, provider identity,
+    lineage, source packets, and complete specification JSON.
+    """
+
+    output_dir = output_dir.resolve()
+    if output_dir.exists():
+        raise FileExistsError(f"review packet destination already exists: {output_dir}")
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+
+    final_validation = validate_final_staged_dungeon(specification)
+    if not final_validation.valid:
+        raise ConflictError(
+            "Tier A artifact failed the final deterministic review-packet gate."
+        )
+    guide = specification.dm_guide
+    if guide is None:
+        raise ConflictError("Tier A human review requires an exact final DM guide.")
+    artifact_hash = canonical_json_sha256(specification.model_dump(mode="json"))
+    if reviewer_input.artifact_hash != artifact_hash:
+        raise ConflictError("Tier A reviewer input does not match the final artifact.")
+
+    files: dict[str, bytes] = {
+        "reviewer-input.json": (reviewer_input.model_dump_json(indent=2) + "\n").encode(
+            "utf-8"
+        ),
+        "review-worksheet.md": _tier_a_review_worksheet(
+            guide.title, reviewer_input
+        ).encode("utf-8"),
+        "dm-guide.md": render_dungeon_dm_guide_text(guide).encode("utf-8"),
+        **_render_blinded_review_png_files(specification),
+    }
+    staging_dir = Path(
+        tempfile.mkdtemp(prefix=f".{output_dir.name}-", dir=output_dir.parent)
+    )
+    try:
+        for name, data in files.items():
+            (staging_dir / name).write_bytes(data)
+        manifest = {
+            "packet_version": _TIER_A_BLINDED_REVIEW_PACKET_VERSION,
+            "packet_kind": "tier_a_blinded_human_review",
+            "review_id": reviewer_input.review_id,
+            "artifact_hash": artifact_hash,
+            "files": {
+                name: {
+                    "bytes": len(data),
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                }
+                for name, data in sorted(files.items())
+            },
+        }
+        (staging_dir / "manifest.json").write_text(
+            json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        staging_dir.rename(output_dir)
+    except BaseException:
+        shutil.rmtree(staging_dir, ignore_errors=True)
+        raise
+    return tuple(sorted(output_dir.iterdir()))
+
+
+def _render_blinded_review_png_files(
+    specification: DungeonStudioSpecification,
+) -> dict[str, bytes]:
+    package = specification.package
+    if len(package.floors) != 1:
+        raise ValueError("the V1 Tier A review packet requires exactly one floor")
+    floor = package.floors[0]
+    files: dict[str, bytes] = {}
+    for audience in RenderAudience:
+        png = export_png(
+            package,
+            PngExportRequest(
+                schema_version="1.0.0",
+                package_id=package.id,
+                floor_id=floor.id,
+                audience=audience,
+                pixels_per_cell=70,
+                dpi=140,
+                include_grid=True,
+                show_labels=True,
+                show_markers=True,
+                theme=SvgThemeName.LOW_INK,
+                maximum_ink_coverage_basis_points=5000,
+            ),
+        )
+        if not png.result.success or png.data is None:
+            raise RuntimeError(f"{audience.value} review PNG rendering failed")
+        files[f"{audience.value}-map.png"] = png.data
+    return files
+
+
 def _render_review_map_files(
     specification: DungeonStudioSpecification,
 ) -> dict[str, bytes]:
@@ -415,6 +518,75 @@ def _render_cohesion_disposition(
                 "",
             )
         )
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _tier_a_review_worksheet(
+    title: str,
+    reviewer_input: DungeonTierAReviewerInput,
+) -> str:
+    descriptions = {
+        "thematic_reinforcement": (
+            "Do rooms, clues, pressures, and consequences reinforce the core themes?"
+        ),
+        "history_environment_causality": (
+            "Does the environment show understandable causes and consequences from its history?"
+        ),
+        "mechanic_objective_unity": (
+            "Do puzzles, exploration, features, traps, and choices support the objective?"
+        ),
+        "progression": (
+            "Does the entrance-to-objective arc develop clearly with purposeful optional paths?"
+        ),
+        "intentional_motif_variation": (
+            "Do recurring motifs vary meaningfully instead of feeling repetitive?"
+        ),
+        "lore_consistency": (
+            "Does the artifact use only the supplied lore and remain consistent with it?"
+        ),
+        "clue_logic": (
+            "Are dependencies and conclusions supported by observable, timely clues?"
+        ),
+        "player_agency": (
+            "Do players have consequential choices, multiple approaches, and recovery paths?"
+        ),
+        "puzzle_comprehensibility": (
+            "Can players understand the puzzle situation and reason toward solutions?"
+        ),
+        "exploration_quality": (
+            "Does exploration reward observation and support distinct practical approaches?"
+        ),
+        "dm_prep_usefulness": (
+            "Could a DM run the dungeon without inventing missing triggers or consequences?"
+        ),
+    }
+    lines = [
+        f"# Blinded Tier A quality review — {title}",
+        "",
+        "This worksheet records human quality evidence only. It does not approve",
+        "preparation for play or make any artifact detail campaign canon.",
+        "",
+        f"- Review ID: `{reviewer_input.review_id}`",
+        f"- Case ID: `{reviewer_input.case_id}`",
+        f"- Opaque variant ID: `{reviewer_input.variant_id}`",
+        f"- Artifact hash: `{reviewer_input.artifact_hash}`",
+        "",
+        "Open `dm-map.png`, `player-map.png`, and `dm-guide.md` together. Rate each",
+        "applicable dimension from 1 to 5: 1 unusable, 2 major revision needed,",
+        "3 usable, 4 strong, 5 excellent. Judge only the supplied final artifact.",
+        "",
+        "- Reviewer ID (`reviewer_...`):",
+        "",
+    ]
+    for dimension in reviewer_input.rating_dimensions:
+        label = dimension.replace("_", " ").title()
+        lines.extend((f"## {label}", "", descriptions[dimension], ""))
+        if dimension == "lore_consistency" and not (
+            reviewer_input.lore_consistency_required
+        ):
+            lines.extend(("- Rating: not applicable (standalone case; leave null)", ""))
+        else:
+            lines.extend(("- Rating (1–5):", ""))
     return "\n".join(lines).rstrip() + "\n"
 
 

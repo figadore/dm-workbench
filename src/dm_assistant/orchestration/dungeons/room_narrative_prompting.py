@@ -464,7 +464,8 @@ def _repair_model_input(
     prior_json = _canonical_message(prior_arguments)
     if len(prior_json) > _MAX_REPAIR_ARGUMENT_CHARACTERS:
         raise ModelRunAbstained(
-            "prior room narratives exceed the bounded repair context"
+            "prior room narratives exceed the bounded repair context",
+            code="repair_context_exceeded",
         )
     initial_document = json.loads(initial_input.messages[0].content)
     return ModelRunInput(
@@ -523,7 +524,10 @@ def _remaining_profile(
     tool: StructuredSubmissionTool,
 ) -> ResolvedModelRunProfile:
     if not record.usage_measured:
-        raise ModelRunAbstained("model usage was unavailable; repair budget is unknown")
+        raise ModelRunAbstained(
+            "model usage was unavailable; repair budget is unknown",
+            code="repair_usage_unavailable",
+        )
     assert record.usage_input_tokens is not None
     assert record.usage_output_tokens is not None
     remaining_tokens = (
@@ -535,7 +539,10 @@ def _remaining_profile(
     estimated_input_tokens = _estimated_input_tokens(repair_input, tool)
     remaining_output_tokens = remaining_tokens - estimated_input_tokens
     if remaining_output_tokens < 1 or remaining_seconds < 1:
-        raise ModelRunAbstained("no budget remains for deterministic diagnostic repair")
+        raise ModelRunAbstained(
+            "no budget remains for deterministic diagnostic repair",
+            code="repair_budget_exhausted",
+        )
     configured_output = profile.override_notes.get("output_token_limit")
     output_limit = (
         min(configured_output, remaining_output_tokens)

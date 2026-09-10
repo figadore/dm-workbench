@@ -95,7 +95,10 @@ class FakeGatewayClient:
 def test_prompt_attempt_classifies_missing_usage_repair_without_abstention() -> None:
     assert (
         _failure_code(
-            ModelRunAbstained("model usage was unavailable; repair budget is unknown")
+            ModelRunAbstained(
+                "model usage was unavailable; repair budget is unknown",
+                code="repair_usage_unavailable",
+            )
         )
         == "dungeon_prompt_repair_usage_unavailable"
     )
@@ -720,7 +723,7 @@ def test_repair_does_not_start_when_estimated_input_cannot_fit() -> None:
     with pytest.raises(
         ModelRunAbstained,
         match="no budget remains for deterministic diagnostic repair",
-    ):
+    ) as caught:
         DungeonSubmissionService(gateway).submit(
             profile=profile,
             run_input=ModelRunInput(
@@ -729,6 +732,7 @@ def test_repair_does_not_start_when_estimated_input_cannot_fit() -> None:
             seed=1842,
         )
 
+    assert caught.value.code == "repair_budget_exhausted"
     assert len(gateway.messages) == 1
 
 

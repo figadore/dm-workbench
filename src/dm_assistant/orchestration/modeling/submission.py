@@ -132,10 +132,13 @@ class StructuredSubmissionRunner:
             self._monotonic_clock() + profile.time_budget_seconds
         )
         if self._is_cancelled():
-            raise ModelRunAbstained("model run cancelled")
+            raise ModelRunAbstained("model run cancelled", code="model_run_cancelled")
         remaining_seconds = math.ceil(deadline - self._monotonic_clock())
         if remaining_seconds < 1:
-            raise ModelRunAbstained("time budget exhausted before submission")
+            raise ModelRunAbstained(
+                "time budget exhausted before submission",
+                code="submission_time_budget_exhausted",
+            )
         request_profile = profile.model_copy(
             update={"time_budget_seconds": remaining_seconds}
         )
@@ -161,14 +164,21 @@ class StructuredSubmissionRunner:
             )
         if self._is_cancelled() or self._monotonic_clock() >= deadline:
             raise ModelRunAbstained(
-                "model run cancelled or timed out during submission"
+                "model run cancelled or timed out during submission",
+                code="submission_timed_out",
             )
         _enforce_measured_usage(profile, completion, started_at=started_at)
         if len(completion.tool_calls) != 1:
-            raise ModelRunAbstained("model must submit exactly one structured call")
+            raise ModelRunAbstained(
+                "model must submit exactly one structured call",
+                code="structured_call_count_invalid",
+            )
         call = completion.tool_calls[0]
         if call.tool_name != tool.name:
-            raise ModelRunAbstained("model requested an unauthorized submission tool")
+            raise ModelRunAbstained(
+                "model requested an unauthorized submission tool",
+                code="unauthorized_submission_tool",
+            )
         try:
             # Tool arguments are JSON objects. This preserves strict scalar rules
             # while allowing JSON enum strings in the nested pure contracts.
