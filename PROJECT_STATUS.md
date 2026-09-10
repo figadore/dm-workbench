@@ -4,66 +4,59 @@
 
 ## Current Task
 - **Task:** P7-14f — staged Tier A authoring and anti-overfitting evaluation.
-- **State:** fixed-case execution/evidence and blinded packets are implemented. Provider-free repair
-  diagnostics now preserve the evidence that was missing from the case-01
-  `repair_budget_exhausted` stop. No subsequent live retry was authorized or run.
-- **Quality state:** case 02 and case 03 have complete selected chains; the fresh case-01 chain is
-  blocked at puzzle enrichment. The three-case `variant_01` blinded review tranche remains red.
+- **State:** all three `variant_01` fixed cases now have complete selected wrapper/version chains,
+  preparation-ready artifacts, and passing seven-check deterministic evidence. Blinded human review
+  remains outstanding.
 - **Schema head:** `0008_workbench_defaults`; no migration is involved.
 - **Retention gate:** **not crossed**. Active V1 contracts and disposable alpha data evolve in place.
 
 ## Completed Behavior
-- One shared structured-submission repair planner now owns the exact estimate and reserve calculation
-  used by structural generation and all six enrichment seams.
-- A repair that cannot be dispatched retains the initial call's measured tokens and duration without
-  retaining its body, arguments, or provider text.
-- Durable reports expose workflow and remaining request budgets, estimated complete repair input,
-  signed output availability, configured/effective output ceiling, rounded charged time, remaining
-  time, and whether token and/or time reserve blocked dispatch.
-- Structural and staged application reports use task-specific public codes while preserving the
-  allowlisted `repair_budget_exhausted` abstention code; no repair is reported as attempted.
-- Existing strict measured publication ceilings, one-repair limit, shared deadline, exact replay
-  pins, atomic child publication, and no-approval/no-canon boundaries are unchanged.
+- Shared structured-submission repair planning/reporting covers structural generation and all six
+  enrichment seams with strict measured ceilings, one reserved repair, and body-free diagnostics.
+- Fixed-case execution pins case, assignment, parent, context/policy, profile, contract, schema, and
+  generator state; each command publishes at most one atomic child and never approves or writes canon.
+- Whole-artifact evidence accepts only contiguous preparation-ready chains and recomputes continuity,
+  sources, dependencies, required content, lineage, cross-task references, and secrecy.
+- Review-packet CLI loading now deserializes persisted strict specifications through JSON rather than
+  passing PostgreSQL dictionaries directly to strict Pydantic validation.
+- Three local ignored blinded packets contain only reviewer input, final guide, DM/player maps,
+  manifest, and worksheet; provider identity, assignments, measurements, and bodies remain omitted.
 
 ## Contract Assessment
-- The historical case-01 task report retained only `repair_budget_exhausted`, so its initial usage and
-  rejected arguments cannot be reconstructed safely after the fact.
-- This remains one isolated Luna puzzle failure and does not meet the repeat/provider-specificity or
-  measured-quality gates for changing budgets, schema, prompt, effort, or model.
-- Keep the 2,048-output/6,000-cumulative puzzle contract unchanged. A newly authorized, instrumented
-  exact resume is needed before any further contract decision.
+- The historical case-01 `repair_budget_exhausted` report remains irreconstructible, but its exact
+  Luna resume succeeded first-pass under the unchanged puzzle contract.
+- Case-01 exploration accepted one bounded repair below its ceilings; later enrichments were
+  first-pass valid. No budget, schema, prompt, effort, model, or provider change is indicated.
+- No Terra comparison, preparation approval, campaign revision, or canonical write occurred.
 
 ## Live Evidence
+- Case 01 artifact `444a4cd5-e3bd-4e0b-bc48-eebc701dc44a`, final version
+  `59373963-dc26-4b94-8e0e-fe3e52ae88a5`: all seven checks passed; 19,362 input, 6,688 output,
+  142,953 ms, two repairs. Final artifact hash begins `e42d937a`.
 - Case 02 artifact `b6569a3e-8a75-4fd6-a2a5-bc30a9cb29e3`, final version
-  `8af0c7b8-f280-45fe-8e6a-06c879962006`, passed all seven checks: 17,658 input, 5,658 output,
+  `8af0c7b8-f280-45fe-8e6a-06c879962006`: all seven checks passed; 17,658 input, 5,658 output,
   117,046 ms, one repair; structural wrapper reclassified.
 - Case 03 artifact `cc4a8ed0-cfb2-4d86-8411-e21192c66f25`, final version
-  `3a5f5434-a8d9-4b50-b7c6-49fb9806dda2`, passed all seven checks: 16,992 input, 6,369 output,
+  `3a5f5434-a8d9-4b50-b7c6-49fb9806dda2`: all seven checks passed; 16,992 input, 6,369 output,
   130,149 ms, two repairs.
-- Fresh case-01 artifact `444a4cd5-e3bd-4e0b-bc48-eebc701dc44a`, current version
-  `c5910a93-47ea-4a97-892a-048c7a1f7ded`; failed wrapper
-  `8c9beb8e-3742-42fc-b968-8c0b0e6c7f1e`, task attempt
-  `c5ae16ce-80be-4298-bbfc-91cca11f6783`. No child was published.
-- No Terra comparison, approval, campaign revision, canonical write, or new live model call occurred.
+- Review packets are under `generated/tier-a-case-0{1,2,3}-variant-01-review/`.
 
 ## Intentional Uncommitted Work
-- Shared model-submission repair planning/reporting, all structural/staged prompt and application
-  adapters, focused tests, and this handoff comprise the current provider-free diagnostic tranche.
+- `src/dm_assistant/cli/main.py`, `tests/unit/test_cli.py`, and this handoff comprise the complete
+  provider-free review-packet loading fix.
+- The three `generated/` review directories are ignored local evaluation outputs, not commit inputs.
 
 ## Verification
-- Root unit/eval suite: **261 passed**.
-- PostgreSQL integration: puzzle **2 passed**; staged coordinator **12 passed**.
-- Changed-path Ruff/format, focused strict mypy, and `git diff --check` passed. Repository-wide mypy
-  currently reports 11 pre-existing Library/campaign-knowledge errors outside this task.
-- The work is runnable; there is no partial migration or unsafe write path.
+- Root unit/eval suite: **262 passed**; focused CLI suite: **27 passed**.
+- PostgreSQL integration baseline remains puzzle **2 passed**, staged coordinator **12 passed**.
+- Changed-path Ruff/format, strict mypy, `git diff --check`, stack readiness, and all three final
+  evidence gates passed. No partial migration or unsafe write path exists.
 
 ## Single Next Recommended Task
-**Run one explicitly authorized, instrumented exact case-01 puzzle resume.**
-First action: rebuild the local Workbench with these changes, then obtain explicit authorization for
-one Luna `variant_01` retry using failed wrapper `8c9beb8e-3742-42fc-b968-8c0b0e6c7f1e`; inspect the
-new body-free reserve report before deciding whether to retry again or alter any contract.
+**Complete the blinded human review tranche.**
+First action: independently review each packet's guide and maps and fill its `review-worksheet.md`
+with 1–5 ratings for every listed dimension, using N/A only for lore consistency when the packet says
+it is not required. Do not inspect provider assignments or run measurements while rating.
 
 ## References
-[`dm-assistant-implementation-plan.md`](dm-assistant-implementation-plan.md) P7-14f;
-[`dm-assistant-technical-architecture.md`](dm-assistant-technical-architecture.md) §§8, 12–13, 17;
-[`dungeon-generation-recovery-plan.md`](dungeon-generation-recovery-plan.md) R5.
+Implementation plan P7-14f; technical architecture §§8, 12–13, 17; recovery plan R5.

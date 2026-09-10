@@ -1,6 +1,10 @@
 """CLI smoke tests."""
 
+import json
+from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
+from uuid import UUID
 
 import pytest
 from typer.testing import CliRunner
@@ -14,6 +18,7 @@ from dm_assistant.adapters.model_gateway import (
     GatewayProvider,
 )
 from dm_assistant.cli.main import (
+    _build_dungeon_fixed_case_evidence,
     _default_login_provider,
     _default_model,
     _emit_debug_event,
@@ -308,6 +313,94 @@ def test_fixed_case_start_and_evidence_commands_pin_opaque_variant(
         "22222222-2222-2222-2222-222222222222",
     )
     assert evidence["review_packet_dir"] == Path("generated/blinded-case-02")
+
+
+def test_fixed_case_evidence_loads_persisted_specification_as_json(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    campaign_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+    artifact_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+    version_id = UUID("cccccccc-cccc-cccc-cccc-cccccccccccc")
+    persisted = {"purpose": "ruin", "room_ids": ["room-1"]}
+    reviewer_input = object()
+    evidence = SimpleNamespace(
+        reviewer_input=reviewer_input,
+        model_dump=lambda *, mode: {"case_id": "tier_a_case_01", "mode": mode},
+    )
+    runtime = SimpleNamespace(
+        dungeon_fixed_case_evidence=SimpleNamespace(
+            build=lambda command, manifest: evidence
+        ),
+        preparation=SimpleNamespace(
+            get_version=lambda selected_campaign_id, selected_version_id: (
+                SimpleNamespace(specification=persisted)
+            )
+        ),
+    )
+
+    @contextmanager
+    def fake_runtime():
+        yield runtime
+
+    captured: dict[str, object] = {}
+
+    class StrictSpecificationParser:
+        @staticmethod
+        def model_validate_json(value: str) -> object:
+            captured["serialized_specification"] = value
+            return "validated-specification"
+
+    def fake_packet_writer(
+        specification: object, selected_reviewer_input: object, output: Path
+    ) -> tuple[SimpleNamespace]:
+        captured["packet_arguments"] = (
+            specification,
+            selected_reviewer_input,
+            output,
+        )
+        return (SimpleNamespace(name="review.json"),)
+
+    monkeypatch.setattr("dm_assistant.cli.main.workbench_runtime", fake_runtime)
+    monkeypatch.setattr(
+        "dm_assistant.cli.main.DungeonStudioSpecification",
+        StrictSpecificationParser,
+    )
+    monkeypatch.setattr(
+        "dm_assistant.cli.main.write_dungeon_tier_a_blinded_review_packet",
+        fake_packet_writer,
+    )
+    monkeypatch.setattr(
+        "dm_assistant.cli.main.load_dungeon_tier_a_eval_manifest", lambda: object()
+    )
+    monkeypatch.setattr(
+        "dm_assistant.cli.main._emit_document",
+        lambda document: captured.update(emitted_document=document),
+    )
+
+    output = tmp_path / "review"
+    _build_dungeon_fixed_case_evidence(
+        case_id="tier_a_case_01",
+        variant_id="variant_01",
+        artifact_id=artifact_id,
+        artifact_version_id=version_id,
+        evaluation_run_ids=(
+            UUID("dddddddd-dddd-dddd-dddd-dddddddddddd"),
+            UUID("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"),
+        ),
+        campaign_id=campaign_id,
+        review_packet_dir=output,
+    )
+
+    assert json.loads(str(captured["serialized_specification"])) == persisted
+    assert captured["packet_arguments"] == (
+        "validated-specification",
+        reviewer_input,
+        output,
+    )
+    emitted = captured["emitted_document"]
+    assert isinstance(emitted, dict)
+    assert emitted["review_packet"]["files"] == ["review.json"]
 
 
 def test_provider_smoke_profile_is_short_lived_and_tool_free() -> None:

@@ -929,8 +929,10 @@ def _build_dungeon_fixed_case_evidence(
                 version = runtime.preparation.get_version(
                     resolved_campaign_id, artifact_version_id
                 )
-                specification = DungeonStudioSpecification.model_validate(
-                    version.specification
+                specification = DungeonStudioSpecification.model_validate_json(
+                    json.dumps(
+                        version.specification, separators=(",", ":"), sort_keys=True
+                    )
                 )
                 files = write_dungeon_tier_a_blinded_review_packet(
                     specification,
