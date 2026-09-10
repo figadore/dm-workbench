@@ -36,7 +36,10 @@ from dm_assistant.orchestration.dungeons.contracts import (
     PromptDungeonExplorationWorkflow,
     PromptedDungeonExplorationLineage,
 )
-from dm_assistant.orchestration.dungeons.prompting import _RunBoundGatewayClient
+from dm_assistant.orchestration.dungeons.prompting import (
+    _model_call_measurement,
+    _RunBoundGatewayClient,
+)
 from dm_assistant.orchestration.dungeons.service import (
     validate_dungeon_exploration_enrichment,
 )
@@ -410,7 +413,7 @@ class DungeonExplorationPromptService:
             ),
             output=accepted_output,
         )
-        return self._dungeon_studio.enrich_prompted_exploration(
+        result = self._dungeon_studio.enrich_prompted_exploration(
             CreatePromptedDungeonExplorationWorkflow(
                 campaign_id=command.campaign_id,
                 artifact_id=command.artifact_id,
@@ -422,6 +425,9 @@ class DungeonExplorationPromptService:
                 tool_runs=(_tool_run_pin(lineage),),
                 created_by=command.created_by,
             )
+        )
+        return result.model_copy(
+            update={"model_measurement": _model_call_measurement(submitted.model_runs)}
         )
 
 

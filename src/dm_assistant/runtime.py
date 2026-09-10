@@ -38,6 +38,8 @@ from dm_assistant.orchestration.dungeons import (
     DungeonStudioService,
     DungeonTierACanaryApplicationService,
     DungeonTierAFixedCaseApplicationService,
+    DungeonTierAFixedCaseEvidenceService,
+    DungeonTierAFixedCaseStructuralApplicationService,
     DungeonTrapPromptApplicationService,
     DungeonTrapPromptService,
 )
@@ -54,7 +56,11 @@ class WorkbenchRuntime:
     dungeon_prompts: DungeonPromptService | None
     dungeon_prompt_application: DungeonPromptApplicationService | None
     dungeon_canary_application: DungeonTierACanaryApplicationService | None
+    dungeon_fixed_case_structural_application: (
+        DungeonTierAFixedCaseStructuralApplicationService | None
+    )
     dungeon_fixed_case_application: DungeonTierAFixedCaseApplicationService | None
+    dungeon_fixed_case_evidence: DungeonTierAFixedCaseEvidenceService
     model_selections: ModelTaskSelectionStore
     library_catalog: LibraryDocumentCatalog
     library_ingestion: LibraryIngestionService
@@ -93,6 +99,7 @@ def workbench_runtime(settings: Settings | None = None) -> Iterator[WorkbenchRun
         else DungeonPromptApplicationService(preparation, dungeon_prompts)
     )
     dungeon_canary_application = None
+    dungeon_fixed_case_structural_application = None
     dungeon_fixed_case_application = None
     if model_gateway is not None and dungeon_prompt_application is not None:
         one_step = DungeonStagedEnrichmentCoordinator(
@@ -122,6 +129,12 @@ def workbench_runtime(settings: Settings | None = None) -> Iterator[WorkbenchRun
             dungeon_prompt_application,
             DungeonStagedEnrichmentChainCoordinator(one_step),
         )
+        dungeon_fixed_case_structural_application = (
+            DungeonTierAFixedCaseStructuralApplicationService(
+                preparation,
+                dungeon_prompt_application,
+            )
+        )
         dungeon_fixed_case_application = DungeonTierAFixedCaseApplicationService(
             preparation,
             dungeons,
@@ -138,7 +151,13 @@ def workbench_runtime(settings: Settings | None = None) -> Iterator[WorkbenchRun
             dungeon_prompts=dungeon_prompts,
             dungeon_prompt_application=dungeon_prompt_application,
             dungeon_canary_application=dungeon_canary_application,
+            dungeon_fixed_case_structural_application=(
+                dungeon_fixed_case_structural_application
+            ),
             dungeon_fixed_case_application=dungeon_fixed_case_application,
+            dungeon_fixed_case_evidence=DungeonTierAFixedCaseEvidenceService(
+                preparation
+            ),
             model_selections=ModelTaskSelectionStore(engine),
             library_catalog=LibraryDocumentCatalog(engine),
             library_ingestion=library_ingestion,

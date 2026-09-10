@@ -32,6 +32,7 @@ from dm_assistant.orchestration.dungeons.prompting import (
     _build_standalone_context,
     _initial_model_input,
     _lineage,
+    _model_call_measurement,
     _repair_model_input,
     resolve_dungeon_prompt_profile,
 )
@@ -392,6 +393,13 @@ def test_submits_one_compact_tool_call_without_a_second_completion() -> None:
     )
     assert repaired.repaired
     assert len(repaired.model_runs) == 2
+    measurement = _model_call_measurement(repaired.model_runs)
+    assert measurement.usage_measured
+    assert measurement.input_tokens == 20
+    assert measurement.output_tokens == 20
+    assert measurement.first_pass_schema_valid
+    assert not measurement.first_pass_semantic_valid
+    assert measurement.repair_count == 1
     repair_document = json.loads(repair_gateway.messages[1][0].content)
     assert (
         repair_document["diagnostics"][0]["code"] == "plan.gate_dependency_unreachable"

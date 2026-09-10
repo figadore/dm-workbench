@@ -223,6 +223,7 @@ def test_fixed_case_command_requires_exact_parent_and_runs_one_task(
             "dungeon",
             "fixed-case",
             "tier_a_case_01",
+            "variant_01",
             "35ec4e9b-cbc5-416b-9ff7-3fade7865044",
             "e6902ff4-87e8-4966-8d83-25dd744ddc5d",
             "--provider",
@@ -234,6 +235,7 @@ def test_fixed_case_command_requires_exact_parent_and_runs_one_task(
 
     assert result.exit_code == 0, result.output
     assert captured["case_id"] == "tier_a_case_01"
+    assert captured["variant_id"] == "variant_01"
     assert str(captured["artifact_id"]) == "35ec4e9b-cbc5-416b-9ff7-3fade7865044"
     assert str(captured["parent_version_id"]) == (
         "e6902ff4-87e8-4966-8d83-25dd744ddc5d"
@@ -243,6 +245,64 @@ def test_fixed_case_command_requires_exact_parent_and_runs_one_task(
     assert captured["effort"] is ReasoningEffort.FAST
     assert captured["resume_from_evaluation_run_id"] is None
     assert "execute one exact staged task" in result.output
+
+
+def test_fixed_case_start_and_evidence_commands_pin_opaque_variant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    started: dict[str, object] = {}
+    evidence: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        "dm_assistant.cli.main._run_dungeon_fixed_case_structure",
+        lambda **kwargs: started.update(kwargs),
+    )
+    start = runner.invoke(
+        app,
+        [
+            "dungeon",
+            "fixed-case-start",
+            "tier_a_case_02",
+            "variant_01",
+            "--provider",
+            "openai-codex",
+            "--model",
+            "gpt-5.6-luna",
+        ],
+    )
+    assert start.exit_code == 0, start.output
+    assert started["case_id"] == "tier_a_case_02"
+    assert started["variant_id"] == "variant_01"
+    assert started["effort"] is ReasoningEffort.FAST
+
+    monkeypatch.setattr(
+        "dm_assistant.cli.main._build_dungeon_fixed_case_evidence",
+        lambda **kwargs: evidence.update(kwargs),
+    )
+    result = runner.invoke(
+        app,
+        [
+            "dungeon",
+            "fixed-case-evidence",
+            "tier_a_case_02",
+            "variant_01",
+            "35ec4e9b-cbc5-416b-9ff7-3fade7865044",
+            "e6902ff4-87e8-4966-8d83-25dd744ddc5d",
+            "--run",
+            "11111111-1111-1111-1111-111111111111",
+            "--run",
+            "22222222-2222-2222-2222-222222222222",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert evidence["case_id"] == "tier_a_case_02"
+    assert evidence["variant_id"] == "variant_01"
+    run_ids = evidence["evaluation_run_ids"]
+    assert isinstance(run_ids, tuple)
+    assert tuple(str(item) for item in run_ids) == (
+        "11111111-1111-1111-1111-111111111111",
+        "22222222-2222-2222-2222-222222222222",
+    )
 
 
 def test_provider_smoke_profile_is_short_lived_and_tool_free() -> None:

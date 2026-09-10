@@ -2,12 +2,16 @@
 
 import json
 from pathlib import Path
-from uuid import NAMESPACE_URL, uuid5
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 import pytest
 from pydantic import ValidationError
 
 from dm_assistant.modules.modeling import ReasoningEffort
+from dm_assistant.modules.preparation import (
+    DungeonGenerationContext,
+    GenerationContextEnvelope,
+)
 from dm_assistant.orchestration.dungeons import (
     resolve_dungeon_exploration_prompt_profile,
 )
@@ -23,6 +27,7 @@ from dm_assistant.orchestration.dungeons.evals import (
     aggregate_dungeon_tier_a_evidence,
     assess_dungeon_exploration_overage_evidence,
     build_dungeon_exploration_overage_protocol,
+    build_dungeon_tier_a_fixed_case_context,
     evaluate_dungeon_intent_cases,
     load_dungeon_tier_a_eval_manifest,
     render_dungeon_intent_eval_report,
@@ -83,6 +88,12 @@ def test_tier_a_manifest_has_distinct_blinded_multi_case_coverage() -> None:
         "tier_a_case_02",
         "tier_a_case_03",
     )
+    assert tuple(case.seed for case in manifest.cases) == (
+        714_000_101,
+        714_000_102,
+        714_000_103,
+    )
+    assert tuple(case.room_count for case in manifest.cases) == (5, 6, 7)
     assert len({case.setting.casefold() for case in manifest.cases}) == 3
     assert len({case.interaction_style.casefold() for case in manifest.cases}) == 3
     assert tuple(variant.variant_id for variant in manifest.variants) == (
@@ -104,6 +115,47 @@ def test_tier_a_manifest_has_distinct_blinded_multi_case_coverage() -> None:
     ]
     with pytest.raises(ValidationError, match="interaction styles must be distinct"):
         DungeonTierAEvalManifest.model_validate(duplicate_style)
+
+
+def test_fixed_case_context_separates_standalone_and_synthetic_grounding() -> None:
+    manifest = load_dungeon_tier_a_eval_manifest()
+    owner_id = UUID("11111111-1111-1111-1111-111111111111")
+
+    standalone_pin = build_dungeon_tier_a_fixed_case_context(
+        manifest, "tier_a_case_01", preparation_owner_id=owner_id
+    )
+    standalone_envelope = GenerationContextEnvelope.model_validate_json(
+        json.dumps(standalone_pin.envelope)
+    )
+    standalone = DungeonGenerationContext.model_validate_json(
+        json.dumps(standalone_envelope.payload)
+    )
+    assert standalone.grounding_mode == "standalone"
+    assert standalone.selected_facts == ()
+    assert standalone_envelope.source_links == ()
+
+    grounded_pin = build_dungeon_tier_a_fixed_case_context(
+        manifest, "tier_a_case_02", preparation_owner_id=owner_id
+    )
+    grounded_envelope = GenerationContextEnvelope.model_validate_json(
+        json.dumps(grounded_pin.envelope)
+    )
+    grounded = DungeonGenerationContext.model_validate_json(
+        json.dumps(grounded_envelope.payload)
+    )
+    assert grounded.grounding_mode == "synthetic_eval"
+    assert tuple(fact.summary for fact in grounded.selected_facts) == (
+        manifest.cases[1].authorized_facts
+    )
+    assert tuple(fact.fact_id for fact in grounded.selected_facts) == (
+        "eval_fact_01",
+        "eval_fact_02",
+    )
+    assert len(grounded_envelope.source_links) == 1
+    assert grounded_envelope.campaign_revision_id is None
+    assert grounded_envelope.corpus_snapshot_id is None
+    assert grounded_envelope.rules_profile_id is None
+    assert grounded_pin.source_links == grounded_envelope.source_links
 
 
 def _exploration_overage_protocol() -> DungeonExplorationOverageProtocol:

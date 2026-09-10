@@ -37,6 +37,7 @@ from dm_assistant.orchestration.dungeons.contracts import (
     DUNGEON_GENERATION_PROPOSAL_SCHEMA_VERSION,
     CreatePromptedDungeonWorkflow,
     DungeonGenerationProposal,
+    DungeonModelCallMeasurement,
     DungeonWorkflowResult,
     PromptDungeonWorkflow,
     PromptedDungeonModelLineage,
@@ -460,6 +461,45 @@ class DungeonSubmissionService:
         )
 
 
+def _model_call_measurement(
+    records: tuple[ModelRunRecord, ...],
+) -> DungeonModelCallMeasurement:
+    """Summarize one initial submission and its optional repair without bodies."""
+
+    if len(records) not in {1, 2}:
+        raise ValueError("bounded model-call measurement requires one or two records")
+    first = records[0]
+    first_pass_schema_valid = first.status == "succeeded"
+    first_pass_semantic_valid = bool(
+        first_pass_schema_valid
+        and first.tool_invocations
+        and first.tool_invocations[0].result.payload.get("accepted") is True
+    )
+    usage_measured = all(
+        record.usage_measured
+        and record.usage_input_tokens is not None
+        and record.usage_output_tokens is not None
+        for record in records
+    )
+    return DungeonModelCallMeasurement(
+        duration_milliseconds=sum(record.duration_ms for record in records),
+        input_tokens=(
+            sum(cast(int, record.usage_input_tokens) for record in records)
+            if usage_measured
+            else None
+        ),
+        output_tokens=(
+            sum(cast(int, record.usage_output_tokens) for record in records)
+            if usage_measured
+            else None
+        ),
+        usage_measured=usage_measured,
+        first_pass_schema_valid=first_pass_schema_valid,
+        first_pass_semantic_valid=first_pass_semantic_valid,
+        repair_count=len(records) - 1,
+    )
+
+
 class DungeonPromptService:
     """Compile standalone model intent and preserve replayable generation lineage."""
 
@@ -479,7 +519,26 @@ class DungeonPromptService:
         debug: Callable[[str, dict[str, object]], None] | None = None,
     ) -> DungeonWorkflowResult:
         """Submit compact V1 intent then publish through the atomic Studio path."""
-        context = _build_standalone_context(command)
+        return self.create_with_context(
+            command,
+            profile,
+            context=_build_standalone_context(command),
+            stream_run_id=stream_run_id,
+            debug=debug,
+        )
+
+    def create_with_context(
+        self,
+        command: PromptDungeonWorkflow,
+        profile: ResolvedModelRunProfile,
+        *,
+        context: GenerationContextPin,
+        stream_run_id: str | None = None,
+        debug: Callable[[str, dict[str, object]], None] | None = None,
+    ) -> DungeonWorkflowResult:
+        """Submit with one Workbench-built context after exact scope validation."""
+
+        _require_matching_generation_context(command, context)
         gateway: GatewayClient = (
             _RunBoundGatewayClient(self._gateway_client, stream_run_id)
             if stream_run_id is not None
@@ -496,7 +555,7 @@ class DungeonPromptService:
         ):
             raise ModelRunAbstained("dungeon proposal was not accepted")
         lineage = tuple(_lineage(run) for run in submitted.model_runs)
-        return self._dungeon_studio.create_prompted(
+        result = self._dungeon_studio.create_prompted(
             CreatePromptedDungeonWorkflow(
                 campaign_id=command.campaign_id,
                 title=command.title or submitted.layout_request.brief.title,
@@ -508,6 +567,9 @@ class DungeonPromptService:
                 tool_runs=_tool_run_pins(lineage),
                 source_prompt=command.prompt,
             )
+        )
+        return result.model_copy(
+            update={"model_measurement": _model_call_measurement(submitted.model_runs)}
         )
 
 
@@ -576,6 +638,32 @@ def _build_standalone_context(
         envelope=envelope.model_dump(mode="json"),
         payload_sha256=envelope.payload_sha256,
     )
+
+
+def _require_matching_generation_context(
+    command: PromptDungeonWorkflow,
+    context: GenerationContextPin,
+) -> None:
+    if context.envelope_kind != _DUNGEON_CONTEXT_KIND:
+        raise ValueError("dungeon prompt context kind mismatch")
+    envelope = GenerationContextEnvelope.model_validate_json(
+        json.dumps(context.envelope, separators=(",", ":"), sort_keys=True)
+    )
+    payload = DungeonGenerationContext.model_validate_json(
+        json.dumps(envelope.payload, separators=(",", ":"), sort_keys=True)
+    )
+    if envelope.payload_version != payload.context_version:
+        raise ValueError("dungeon prompt context version mismatch")
+    if envelope.payload_sha256 != context.payload_sha256:
+        raise ValueError("dungeon prompt context payload mismatch")
+    if envelope.source_links != context.source_links:
+        raise ValueError("dungeon prompt context source links mismatch")
+    if envelope.visibility_policy != command.scope.visibility:
+        raise ValueError("dungeon prompt context visibility mismatch")
+    if payload.prompt_input_sha256 != canonical_json_sha256({"prompt": command.prompt}):
+        raise ValueError("dungeon prompt context prompt hash mismatch")
+    if payload.preparation_owner_id != str(command.campaign_id):
+        raise ValueError("dungeon prompt context preparation owner mismatch")
 
 
 def _initial_model_input(

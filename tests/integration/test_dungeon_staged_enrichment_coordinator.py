@@ -17,10 +17,11 @@ from dm_assistant.modules.modeling import (
     ResolvedModelRunProfile,
     ToolCall,
 )
-from dm_assistant.modules.preparation import PreparationService
+from dm_assistant.modules.preparation import GenerationContextPin, PreparationService
 from dm_assistant.modules.scope import TaskType, resolve_task_scope
 from dm_assistant.orchestration.dungeons import (
     DUNGEON_TIER_A_CANARY,
+    BuildDungeonTierAFixedCaseEvidenceWorkflow,
     DungeonExplorationAffordanceApproval,
     DungeonExplorationContextSelection,
     DungeonExplorationPromptApplicationService,
@@ -53,12 +54,15 @@ from dm_assistant.orchestration.dungeons import (
     DungeonStudioSpecification,
     DungeonTierACanaryApplicationService,
     DungeonTierAFixedCaseApplicationService,
+    DungeonTierAFixedCaseEvidenceService,
+    DungeonTierAFixedCaseStructuralApplicationService,
     DungeonTrapContextSelection,
     DungeonTrapPromptApplicationService,
     DungeonTrapPromptService,
     DungeonWorkflowResult,
     PromptDungeonStagedEnrichmentChainWorkflow,
     PromptDungeonStagedEnrichmentWorkflow,
+    PromptDungeonTierAFixedCaseStructuralWorkflow,
     PromptDungeonTierAFixedCaseTaskWorkflow,
     PromptDungeonWorkflow,
     resolve_dungeon_exploration_prompt_profile,
@@ -72,6 +76,7 @@ from dm_assistant.orchestration.dungeons import (
     validate_final_staged_dungeon,
 )
 from dm_assistant.orchestration.dungeons.evals import (
+    build_dungeon_tier_a_fixed_case_context,
     load_dungeon_tier_a_eval_manifest,
 )
 from dm_assistant.orchestration.modeling import GatewayCompletion, GatewayToolSchema
@@ -420,9 +425,11 @@ class _DynamicCanaryGateway:
         *,
         reject_feature: bool = False,
         overpopulate_exploration: bool = False,
+        structural_room_count: int = 5,
     ) -> None:
         self.reject_feature = reject_feature
         self.overpopulate_exploration = overpopulate_exploration
+        self.structural_room_count = structural_room_count
         self.messages: list[tuple[PromptMessage, ...]] = []
         self.profiles: list[ResolvedModelRunProfile] = []
         self.allowed_tools: list[tuple[str, ...]] = []
@@ -443,6 +450,33 @@ class _DynamicCanaryGateway:
         tool_name = allowed_tools[0]
         if tool_name == "submit_dungeon_plan":
             arguments = _canary_proposal()
+            if self.structural_room_count > 5:
+                plan = arguments["plan"]
+                assert isinstance(plan, dict)
+                rooms = plan["rooms"]
+                branches = plan["branches"]
+                loops = plan["loops"]
+                assert isinstance(rooms, list)
+                assert isinstance(branches, list)
+                assert isinstance(loops, list)
+                branch = branches[0]
+                loop = loops[0]
+                assert isinstance(branch, dict)
+                assert isinstance(loop, dict)
+                branch_rooms = branch["rooms"]
+                assert isinstance(branch_rooms, list)
+                for index in range(6, self.structural_room_count + 1):
+                    ref = f"branch_{index}"
+                    rooms.append(
+                        {
+                            "ref": ref,
+                            "name": f"Optional Chamber {index}",
+                            "role": "optional",
+                            "purpose": "Vary the optional branch progression.",
+                        }
+                    )
+                    branch_rooms.append(ref)
+                    loop["from_room"] = ref
             if self.overpopulate_exploration:
                 plan = arguments["plan"]
                 assert isinstance(plan, dict)
@@ -575,6 +609,8 @@ def _structural_parent(
     campaign_id: uuid.UUID,
     studio: DungeonStudioService,
     prompt: str = "Build the synthetic Cobalt Orrery and recover its star seed.",
+    proposal: dict[str, object] | None = None,
+    context: GenerationContextPin | None = None,
 ) -> tuple[DungeonWorkflowResult, FakeGatewayClient]:
     gateway = FakeGatewayClient(
         (
@@ -583,7 +619,7 @@ def _structural_parent(
                     ToolCall(
                         tool_name="submit_dungeon_plan",
                         call_id="structural-plan",
-                        arguments=cast(dict[str, JsonValue], _proposal()),
+                        arguments=cast(dict[str, JsonValue], proposal or _proposal()),
                     ),
                 ),
                 input_tokens=100,
@@ -591,25 +627,29 @@ def _structural_parent(
             ),
         )
     )
-    result = DungeonPromptService(studio, gateway).create(
-        PromptDungeonWorkflow(
-            campaign_id=campaign_id,
-            prompt=prompt,
-            seed=714000101,
-            created_by="synthetic-dm",
-            scope=resolve_task_scope(
-                dm_principal_id="dm",
-                campaign_owner_id="dm",
-                task_type=TaskType.STANDALONE_DUNGEON,
-            ),
+    command = PromptDungeonWorkflow(
+        campaign_id=campaign_id,
+        prompt=prompt,
+        seed=714000101,
+        created_by="synthetic-dm",
+        scope=resolve_task_scope(
+            dm_principal_id="dm",
+            campaign_owner_id="dm",
+            task_type=TaskType.STANDALONE_DUNGEON,
         ),
-        resolve_dungeon_prompt_profile(
-            provider_id="faux",
-            model_id="faux_deterministic_v1",
-            capabilities=("text", "tool_calls"),
-            context_window_tokens=16_384,
-            output_token_limit=4_096,
-        ),
+    )
+    profile = resolve_dungeon_prompt_profile(
+        provider_id="faux",
+        model_id="faux_deterministic_v1",
+        capabilities=("text", "tool_calls"),
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+    )
+    prompts = DungeonPromptService(studio, gateway)
+    result = (
+        prompts.create(command, profile)
+        if context is None
+        else prompts.create_with_context(command, profile, context=context)
     )
     assert result.artifact_id is not None
     assert result.artifact_version_id is not None
@@ -1762,6 +1802,8 @@ def test_frozen_canary_stops_on_first_rejected_task_with_body_free_attempt(
     report = preparation.get_generation_run(
         campaign_id, failed_attempt.attempt_run_id
     ).validation_report
+    duration_ms = report.pop("duration_ms")
+    assert isinstance(duration_ms, int) and duration_ms >= 0
     assert report == {
         "stage": "model_submission",
         "code": "dungeon_feature_interaction_prompt_token_budget_exhausted",
@@ -1991,6 +2033,12 @@ def test_fixed_case_resumes_exact_failure_then_completes_every_staged_task(
         campaign_id=campaign_id,
         studio=studio,
         prompt=case.prompt,
+        proposal=_canary_proposal(),
+        context=build_dungeon_tier_a_fixed_case_context(
+            manifest,
+            case.case_id,
+            preparation_owner_id=campaign_id,
+        ),
     )
     artifact_id = structural.artifact_id
     parent_version_id = structural.artifact_version_id
@@ -2017,6 +2065,7 @@ def test_fixed_case_resumes_exact_failure_then_completes_every_staged_task(
         artifact_id=artifact_id,
         parent_version_id=parent_version_id,
         case_id=case.case_id,
+        variant_id="variant_01",
         created_by="synthetic-dm",
     )
 
@@ -2064,6 +2113,8 @@ def test_fixed_case_resumes_exact_failure_then_completes_every_staged_task(
     assert rejected_run.context_payload_sha256 is not None
     assert rejected_run.input_scope["case_id"] == case.case_id
     assert rejected_run.input_scope["task_kind"] == "puzzle"
+    assert isinstance(rejected.plan.dispatch.policy, DungeonStagedPuzzlePolicy)
+    assert len(rejected.plan.dispatch.policy.selection.clue_locations) > 1
     assert rejected_run.input_scope["trusted_policy_sha256"] == (
         rejected.plan.trusted_policy_sha256
     )
@@ -2230,3 +2281,235 @@ def test_fixed_case_resumes_exact_failure_then_completes_every_staged_task(
         ("submit_dungeon_objective",),
         ("submit_dungeon_room_narrative",),
     ]
+
+
+def test_fixed_structure_resumes_only_when_manifest_and_assignment_pins_match(
+    db_engine: Engine,
+    tmp_path: Path,
+) -> None:
+    manifest = load_dungeon_tier_a_eval_manifest()
+    case = manifest.cases[0]
+    campaign_id = _campaign(db_engine)
+    studio, preparation = _studio(db_engine, tmp_path)
+    profiles = resolve_dungeon_tier_a_canary_profiles(
+        provider_id="faux",
+        model_id="faux_deterministic_v1",
+        capabilities=("text", "thinking", "tool_calls"),
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+        requested_effort=_profile().requested_effort,
+    )
+    structural_profile = resolve_dungeon_prompt_profile(
+        provider_id="faux",
+        model_id="faux_deterministic_v1",
+        capabilities=("text", "thinking", "tool_calls"),
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+        requested_effort=_profile().requested_effort,
+    )
+    command = PromptDungeonTierAFixedCaseStructuralWorkflow(
+        campaign_id=campaign_id,
+        case_id=case.case_id,
+        variant_id="variant_01",
+    )
+    rejected_gateway = _DynamicCanaryGateway(overpopulate_exploration=True)
+    rejected = DungeonTierAFixedCaseStructuralApplicationService(
+        preparation,
+        DungeonPromptApplicationService(
+            preparation, DungeonPromptService(studio, rejected_gateway)
+        ),
+    ).execute(command, manifest, structural_profile, profiles)
+    assert not rejected.success
+    assert rejected.validation_codes == (
+        "fixed_case.structural_exploration_count_mismatch",
+        "fixed_case.exploration_affordance_missing",
+    )
+    rejected_run = preparation.get_generation_run(
+        campaign_id, rejected.evaluation_run_id
+    )
+    assert rejected_run.status.value == "failed"
+
+    drifted_case = case.model_copy(update={"setting": f"{case.setting} Drifted."})
+    drifted_manifest = manifest.model_copy(
+        update={"cases": (drifted_case, *manifest.cases[1:])}
+    )
+    no_call_gateway = _DynamicCanaryGateway()
+    with pytest.raises(ConflictError, match="resume input pins changed"):
+        DungeonTierAFixedCaseStructuralApplicationService(
+            preparation,
+            DungeonPromptApplicationService(
+                preparation, DungeonPromptService(studio, no_call_gateway)
+            ),
+        ).execute(
+            command.model_copy(
+                update={"resume_from_evaluation_run_id": rejected.evaluation_run_id}
+            ),
+            drifted_manifest,
+            structural_profile,
+            profiles,
+        )
+    assert no_call_gateway.messages == []
+
+    accepted_gateway = _DynamicCanaryGateway()
+    resumed = DungeonTierAFixedCaseStructuralApplicationService(
+        preparation,
+        DungeonPromptApplicationService(
+            preparation, DungeonPromptService(studio, accepted_gateway)
+        ),
+    ).execute(
+        command.model_copy(
+            update={"resume_from_evaluation_run_id": rejected.evaluation_run_id}
+        ),
+        manifest,
+        structural_profile,
+        profiles,
+    )
+    assert resumed.success
+    resumed_run = preparation.get_generation_run(campaign_id, resumed.evaluation_run_id)
+    assert resumed_run.input_scope == rejected_run.input_scope
+    assert resumed_run.context_payload_sha256 == rejected_run.context_payload_sha256
+    assert len(accepted_gateway.messages) == 1
+
+
+def test_fixed_grounded_case_starts_completes_and_builds_blinded_evidence(
+    db_engine: Engine,
+    tmp_path: Path,
+) -> None:
+    manifest = load_dungeon_tier_a_eval_manifest()
+    case = manifest.cases[1]
+    campaign_id = _campaign(db_engine)
+    studio, preparation = _studio(db_engine, tmp_path)
+    gateway = _DynamicCanaryGateway(structural_room_count=case.room_count)
+    profiles = resolve_dungeon_tier_a_canary_profiles(
+        provider_id="faux",
+        model_id="faux_deterministic_v1",
+        capabilities=("text", "thinking", "tool_calls"),
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+        requested_effort=_profile().requested_effort,
+    )
+    structural_profile = resolve_dungeon_prompt_profile(
+        provider_id="faux",
+        model_id="faux_deterministic_v1",
+        capabilities=("text", "thinking", "tool_calls"),
+        context_window_tokens=16_384,
+        output_token_limit=4_096,
+        requested_effort=_profile().requested_effort,
+    )
+    structural = DungeonTierAFixedCaseStructuralApplicationService(
+        preparation,
+        DungeonPromptApplicationService(
+            preparation, DungeonPromptService(studio, gateway)
+        ),
+    ).execute(
+        PromptDungeonTierAFixedCaseStructuralWorkflow(
+            campaign_id=campaign_id,
+            case_id=case.case_id,
+            variant_id="variant_01",
+        ),
+        manifest,
+        structural_profile,
+        profiles,
+    )
+
+    assert structural.success
+    structural_result = structural.structural_attempt.result
+    assert structural_result is not None
+    artifact_id = structural_result.artifact_id
+    current_version_id = structural_result.artifact_version_id
+    assert artifact_id is not None
+    assert current_version_id is not None
+    structural_run = preparation.get_generation_run(
+        campaign_id, structural.evaluation_run_id
+    )
+    assert structural_run.input_scope["variant_id"] == "variant_01"
+    structural_measurement = structural_run.validation_report["model_measurement"]
+    assert isinstance(structural_measurement, dict)
+    assert structural_measurement["first_pass_schema_valid"] is True
+    assert structural_measurement["first_pass_semantic_valid"] is True
+    assert structural_measurement["input_tokens"] == 200
+    assert structural_measurement["output_tokens"] == 350
+    assert structural_measurement["repair_count"] == 0
+    assert structural_measurement["usage_measured"] is True
+
+    one_step = DungeonStagedEnrichmentCoordinator(
+        preparation,
+        puzzle=DungeonPuzzlePromptApplicationService(
+            preparation, DungeonPuzzlePromptService(studio, gateway)
+        ),
+        exploration=DungeonExplorationPromptApplicationService(
+            preparation, DungeonExplorationPromptService(studio, gateway)
+        ),
+        feature_interaction=DungeonFeatureInteractionPromptApplicationService(
+            preparation, DungeonFeatureInteractionPromptService(studio, gateway)
+        ),
+        trap=DungeonTrapPromptApplicationService(
+            preparation, DungeonTrapPromptService(studio, gateway)
+        ),
+        objective=DungeonObjectivePromptApplicationService(
+            preparation, DungeonObjectivePromptService(studio, gateway)
+        ),
+        room_narrative=DungeonRoomNarrativePromptApplicationService(
+            preparation, DungeonRoomNarrativePromptService(studio, gateway)
+        ),
+    )
+    tasks = DungeonTierAFixedCaseApplicationService(preparation, studio, one_step)
+    wrapper_run_ids = [structural.evaluation_run_id]
+    for _ in range(6):
+        completed = tasks.execute(
+            PromptDungeonTierAFixedCaseTaskWorkflow(
+                campaign_id=campaign_id,
+                artifact_id=artifact_id,
+                parent_version_id=current_version_id,
+                case_id=case.case_id,
+                variant_id="variant_01",
+                created_by="dm",
+            ),
+            manifest,
+            profiles,
+        )
+        assert completed.success
+        wrapper_run_ids.append(completed.evaluation_run_id)
+        assert completed.step.attempt is not None
+        assert completed.step.attempt.result is not None
+        next_version_id = completed.step.attempt.result.artifact_version_id
+        assert next_version_id is not None
+        current_version_id = next_version_id
+        if completed.step.plan_after.status == "complete":
+            break
+    else:
+        pytest.fail("fixed grounded case did not complete within six tasks")
+
+    final_version = preparation.get_version(campaign_id, current_version_id)
+    final = DungeonStudioSpecification.model_validate_json(
+        json.dumps(final_version.specification)
+    )
+    assert final.creative_continuity is not None
+    assert final.creative_continuity.campaign_lore_status == "selected"
+    assert (
+        tuple(fact.summary for fact in final.creative_continuity.selected_facts)
+        == case.authorized_facts
+    )
+    evidence = DungeonTierAFixedCaseEvidenceService(preparation).build(
+        BuildDungeonTierAFixedCaseEvidenceWorkflow(
+            campaign_id=campaign_id,
+            artifact_id=artifact_id,
+            artifact_version_id=current_version_id,
+            case_id=case.case_id,
+            variant_id="variant_01",
+            evaluation_run_ids=tuple(wrapper_run_ids),
+        ),
+        manifest,
+    )
+
+    assert evidence.measurement.final_valid
+    assert evidence.measurement.first_pass_valid
+    assert evidence.measurement.repair_count == 0
+    assert evidence.measurement.input_tokens == 1_400
+    assert evidence.measurement.output_tokens == 2_450
+    assert evidence.reviewer_input.lore_consistency_required
+    reviewer_json = evidence.reviewer_input.model_dump_json()
+    assert "variant_assignment" not in reviewer_json
+    assert "provider" not in reviewer_json
+    assert "model" not in reviewer_json
+    assert evidence.final_validation.valid

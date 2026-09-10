@@ -167,7 +167,9 @@ class DungeonGenerationContext(ContractModel):
         default=(), max_length=8
     )
     selected_facts: tuple[DungeonGenerationFact, ...] = Field(default=(), max_length=16)
-    grounding_mode: Literal["standalone", "selected_campaign"] = "standalone"
+    grounding_mode: Literal["standalone", "selected_campaign", "synthetic_eval"] = (
+        "standalone"
+    )
     preparation_owner_id: ShortText
     context_provenance: ShortText
 
@@ -178,6 +180,10 @@ class DungeonGenerationContext(ContractModel):
             raise ValueError("dungeon generation context requires unique fact IDs")
         if self.grounding_mode == "standalone" and self.selected_facts:
             raise ValueError("standalone dungeon context cannot contain campaign facts")
+        if self.grounding_mode == "synthetic_eval" and not self.selected_facts:
+            raise ValueError(
+                "synthetic eval context requires authorized synthetic facts"
+            )
         return self
 
 

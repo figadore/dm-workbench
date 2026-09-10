@@ -12,6 +12,7 @@ from pydantic import JsonValue
 from dm_assistant.modules.modeling import ResolvedModelRunProfile
 from dm_assistant.modules.preparation import (
     FinishGenerationRun,
+    GenerationContextPin,
     GenerationStatus,
     PreparationService,
     StartGenerationRun,
@@ -64,6 +65,7 @@ def _failure_report(
         report = {
             "stage": "model_submission",
             "code": code,
+            "duration_ms": error.duration_ms,
             "usage": {
                 "limit_kind": error.limit_kind,
                 "token_limit": error.token_limit,
@@ -135,13 +137,24 @@ class DungeonPromptApplicationService:
         *,
         surface: str,
         attempt_run_id: uuid.UUID | None = None,
+        trusted_context: GenerationContextPin | None = None,
         debug: Callable[[str, dict[str, object]], None] | None = None,
     ) -> DungeonPromptAttemptResult:
         attempt_id = attempt_run_id or self.begin_attempt(command, surface=surface)
         with bind_log_context(attempt_run_id=str(attempt_id)):
             try:
-                result = self._prompts.create(
-                    command, profile, stream_run_id=str(attempt_id), debug=debug
+                result = (
+                    self._prompts.create(
+                        command, profile, stream_run_id=str(attempt_id), debug=debug
+                    )
+                    if trusted_context is None
+                    else self._prompts.create_with_context(
+                        command,
+                        profile,
+                        context=trusted_context,
+                        stream_run_id=str(attempt_id),
+                        debug=debug,
+                    )
                 )
             except Exception as error:
                 cancelled = isinstance(error, ModelRunAbstained) and (
@@ -186,6 +199,11 @@ class DungeonPromptApplicationService:
                 "artifact_version_id": str(result.artifact_version_id)
                 if result.artifact_version_id
                 else None,
+                "model_measurement": (
+                    result.model_measurement.model_dump(mode="json")
+                    if result.model_measurement is not None
+                    else None
+                ),
             }
             self._finish(
                 command.campaign_id,

@@ -36,7 +36,10 @@ from dm_assistant.orchestration.dungeons.contracts import (
     PromptDungeonRoomNarrativeWorkflow,
     PromptedDungeonRoomNarrativeLineage,
 )
-from dm_assistant.orchestration.dungeons.prompting import _RunBoundGatewayClient
+from dm_assistant.orchestration.dungeons.prompting import (
+    _model_call_measurement,
+    _RunBoundGatewayClient,
+)
 from dm_assistant.orchestration.dungeons.service import (
     validate_dungeon_room_narrative_enrichment,
 )
@@ -406,7 +409,7 @@ class DungeonRoomNarrativePromptService:
             ),
             output=accepted_output,
         )
-        return self._dungeon_studio.enrich_prompted_room_narrative(
+        result = self._dungeon_studio.enrich_prompted_room_narrative(
             CreatePromptedDungeonRoomNarrativeWorkflow(
                 campaign_id=command.campaign_id,
                 artifact_id=command.artifact_id,
@@ -418,6 +421,9 @@ class DungeonRoomNarrativePromptService:
                 tool_runs=(_tool_run_pin(lineage),),
                 created_by=command.created_by,
             )
+        )
+        return result.model_copy(
+            update={"model_measurement": _model_call_measurement(submitted.model_runs)}
         )
 
 

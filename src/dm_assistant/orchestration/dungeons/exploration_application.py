@@ -203,6 +203,7 @@ def _failure_report(error: Exception) -> tuple[str, dict[str, JsonValue]]:
         return code, {
             "stage": "model_submission",
             "code": code,
+            "duration_ms": error.duration_ms,
             "usage": {
                 "limit_kind": error.limit_kind,
                 "token_limit": error.token_limit,

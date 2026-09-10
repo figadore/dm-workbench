@@ -137,13 +137,24 @@ from dm_assistant.orchestration.dungeons.contracts import (
     RegenerateDungeonWorkflow,
 )
 from dm_assistant.orchestration.dungeons.eval_application import (
+    BuildDungeonTierAFixedCaseEvidenceWorkflow,
     DungeonTierAFixedCaseApplicationService,
+    DungeonTierAFixedCaseEvidenceService,
+    DungeonTierAFixedCaseStructuralApplicationService,
+    DungeonTierAFixedCaseStructuralResult,
     DungeonTierAFixedCaseTaskResult,
+    PromptDungeonTierAFixedCaseStructuralWorkflow,
     PromptDungeonTierAFixedCaseTaskWorkflow,
 )
 from dm_assistant.orchestration.dungeons.evals import (
+    DungeonTierAArtifactEvidence,
     DungeonTierAEvalManifest,
+    DungeonTierAReviewerInput,
+    DungeonTierATaskMeasurement,
+    build_dungeon_tier_a_artifact_evidence,
+    build_dungeon_tier_a_fixed_case_context,
     load_dungeon_tier_a_eval_manifest,
+    validate_dungeon_tier_a_fixed_case_structure,
 )
 from dm_assistant.orchestration.dungeons.exploration_application import (
     DungeonExplorationPromptApplicationService,
@@ -267,6 +278,7 @@ from dm_assistant.orchestration.dungeons.web_prompt import (
 
 __all__ = [
     "ApproveDungeonWorkflow",
+    "BuildDungeonTierAFixedCaseEvidenceWorkflow",
     "DUNGEON_TIER_A_CANARY",
     "DUNGEON_TIER_A_CANARY_ID",
     "DUNGEON_TIER_A_CANARY_PROMPT",
@@ -311,9 +323,15 @@ __all__ = [
     "DungeonTierACanaryApplicationService",
     "DungeonTierACanaryProfiles",
     "DungeonTierACanaryRunResult",
+    "DungeonTierAArtifactEvidence",
     "DungeonTierAFixedCaseApplicationService",
+    "DungeonTierAFixedCaseEvidenceService",
+    "DungeonTierAFixedCaseStructuralApplicationService",
+    "DungeonTierAFixedCaseStructuralResult",
     "DungeonTierAFixedCaseTaskResult",
     "DungeonTierAEvalManifest",
+    "DungeonTierAReviewerInput",
+    "DungeonTierATaskMeasurement",
     "DungeonExplorationAffordance",
     "DungeonExplorationAffordanceApproval",
     "DungeonExplorationApproach",
@@ -454,6 +472,7 @@ __all__ = [
     "PromptDungeonRoomNarrativeWorkflow",
     "PromptDungeonStagedEnrichmentChainWorkflow",
     "PromptDungeonStagedEnrichmentWorkflow",
+    "PromptDungeonTierAFixedCaseStructuralWorkflow",
     "PromptDungeonTierAFixedCaseTaskWorkflow",
     "PromptDungeonTrapWorkflow",
     "PromptDungeonWorkflow",
@@ -466,7 +485,9 @@ __all__ = [
     "PromptedDungeonTrapLineage",
     "RegenerateDungeonWorkflow",
     "build_dungeon_enrichment_continuity_context",
+    "build_dungeon_tier_a_artifact_evidence",
     "build_dungeon_tier_a_canary_dispatches",
+    "build_dungeon_tier_a_fixed_case_context",
     "derive_dungeon_creative_continuity",
     "dungeon_exploration_task_contract_sha256",
     "load_dungeon_tier_a_eval_manifest",
@@ -481,5 +502,6 @@ __all__ = [
     "resolve_dungeon_trap_prompt_profile",
     "require_dungeon_cohesion_disposition",
     "summarize_final_staged_validation",
+    "validate_dungeon_tier_a_fixed_case_structure",
     "validate_final_staged_dungeon",
 ]

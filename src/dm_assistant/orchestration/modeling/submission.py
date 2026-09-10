@@ -72,12 +72,14 @@ class StructuredSubmissionBudgetExceeded(ModelRunAbstained):
         token_limit: int,
         input_tokens: int,
         output_tokens: int,
+        duration_ms: int,
     ) -> None:
         super().__init__("token budget exhausted before completion")
         self.limit_kind = limit_kind
         self.token_limit = token_limit
         self.input_tokens = input_tokens
         self.output_tokens = output_tokens
+        self.duration_ms = duration_ms
 
 
 class StructuredSubmissionRejected(ModelRunAbstained):
@@ -161,7 +163,7 @@ class StructuredSubmissionRunner:
             raise ModelRunAbstained(
                 "model run cancelled or timed out during submission"
             )
-        _enforce_measured_usage(profile, completion)
+        _enforce_measured_usage(profile, completion, started_at=started_at)
         if len(completion.tool_calls) != 1:
             raise ModelRunAbstained("model must submit exactly one structured call")
         call = completion.tool_calls[0]
@@ -221,11 +223,15 @@ class StructuredSubmissionRunner:
 
 
 def _enforce_measured_usage(
-    profile: ResolvedModelRunProfile, completion: GatewayCompletion
+    profile: ResolvedModelRunProfile,
+    completion: GatewayCompletion,
+    *,
+    started_at: datetime,
 ) -> None:
     """Fail before validation/publication when measured request usage exceeds a pin."""
     if completion.input_tokens is None or completion.output_tokens is None:
         return
+    duration_ms = max(0, int((datetime.now(UTC) - started_at).total_seconds() * 1000))
     configured_output = profile.override_notes.get("output_token_limit")
     if isinstance(configured_output, int) and completion.output_tokens > min(
         configured_output, profile.token_budget
@@ -235,6 +241,7 @@ def _enforce_measured_usage(
             token_limit=min(configured_output, profile.token_budget),
             input_tokens=completion.input_tokens,
             output_tokens=completion.output_tokens,
+            duration_ms=duration_ms,
         )
     if completion.input_tokens + completion.output_tokens > profile.token_budget:
         raise StructuredSubmissionBudgetExceeded(
@@ -242,6 +249,7 @@ def _enforce_measured_usage(
             token_limit=profile.token_budget,
             input_tokens=completion.input_tokens,
             output_tokens=completion.output_tokens,
+            duration_ms=duration_ms,
         )
 
 

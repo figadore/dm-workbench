@@ -427,7 +427,9 @@ authorization, while semantic support remains an eval concern.
 
 Standalone dungeon generation uses its campaign only as a preparation owner and contains no campaign
 revision, corpus, rules profile, retrieval, or citations unless the DM explicitly enables grounding.
-Missing lore remains unknown.
+Fixed synthetic evaluation grounding is a separate `synthetic_eval` mode: its facts cite only the
+packaged manifest case hash and cannot claim campaign revision, corpus, or rules pins. Missing lore
+remains unknown.
 
 ## 10. Core Campaign Data Model
 
@@ -779,13 +781,23 @@ exact target in deterministic order. A matching one-step coordinator invokes onl
 bounded chain repeats it and advances only accepted children. Planning/coordination performs no
 approval or canonical operation.
 
-Fixed Tier A evaluation tasks add a Workbench-owned wrapper around that same one-step seam. It loads
-the packaged frozen manifest, derives the exact next puzzle, exploration, feature, trap, objective,
-or room-narrative policy from the current parent, stores the complete policy and resolved profile in
-a private generation-context envelope, and exposes only body-free hashes in normal run inspection.
-The operator command executes one task and stops. A resume is eligible only from a failed wrapper and
-only when case, parent specification, policy, built context, model/profile, task contract,
-assignment, schema, and generator pins recompute exactly; drift fails before provider dispatch.
+Fixed Tier A evaluation uses a Workbench-owned structural wrapper plus wrappers around the same
+one-step enrichment seam. Structural startup loads the packaged case seed, builds only standalone or
+manifest-cited synthetic grounding, pins the opaque variant assignment, and validates requested room,
+loop, secret-route, gate, puzzle, exploration-affordance, and objective witnesses. Later wrappers
+derive the exact next puzzle, exploration, feature, trap, objective, or room-narrative policy from
+the current parent. Puzzle clue policy selects the exact puzzle room plus bounded adjacent room
+anchors so multiple distinct observable clues remain representable.
+
+Every wrapper stores its complete context or policy and resolved profile in a private generation-
+context envelope while normal inspection remains body-free. Each command executes one task and
+stops. Resume requires an unchanged failed wrapper with matching case, variant, parent, context or
+policy, profile, contract, assignment, schema, and generator pins; drift fails before dispatch. A
+whole-artifact evidence builder accepts only an exact contiguous wrapper/version chain ending at the
+current preparation-ready artifact and final gate. It emits cumulative measured latency/tokens,
+first-pass validity, repairs, artifact/final-validation hashes, and a separately blinded reviewer
+input. A historical structural wrapper rejected only by a superseded deterministic semantic check
+may be transparently marked reclassified, but the artifact must pass the current complete gate.
 
 ### Guide and approval gate
 

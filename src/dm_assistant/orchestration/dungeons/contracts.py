@@ -2230,6 +2230,32 @@ class DungeonGenerationRegressionCase(WorkflowModel):
     expected_diagnostics: tuple[dict[str, JsonValue], ...] = Field(min_length=1)
 
 
+class DungeonModelCallMeasurement(WorkflowModel):
+    """Body-free measured usage and first-pass outcome for one bounded task seam."""
+
+    duration_milliseconds: int = Field(ge=0)
+    input_tokens: int | None = Field(default=None, ge=0)
+    output_tokens: int | None = Field(default=None, ge=0)
+    usage_measured: bool
+    first_pass_schema_valid: bool
+    first_pass_semantic_valid: bool
+    repair_count: int = Field(ge=0, le=1)
+
+    @model_validator(mode="after")
+    def require_measurement_consistency(self) -> DungeonModelCallMeasurement:
+        if self.usage_measured != (
+            self.input_tokens is not None and self.output_tokens is not None
+        ):
+            raise ValueError("model-call measured usage must be present together")
+        if self.first_pass_semantic_valid and not self.first_pass_schema_valid:
+            raise ValueError("first-pass semantic validity requires schema validity")
+        if self.repair_count != int(
+            not (self.first_pass_schema_valid and self.first_pass_semantic_valid)
+        ):
+            raise ValueError("model-call repair count must match first-pass validity")
+        return self
+
+
 class DungeonWorkflowResult(WorkflowModel):
     success: bool
     artifact_id: UUID | None
@@ -2237,6 +2263,7 @@ class DungeonWorkflowResult(WorkflowModel):
     generation_run_id: UUID
     diagnostics: tuple[dict[str, JsonValue], ...]
     regression_case: DungeonGenerationRegressionCase | None = None
+    model_measurement: DungeonModelCallMeasurement | None = None
 
 
 class DungeonVersionComparison(WorkflowModel):

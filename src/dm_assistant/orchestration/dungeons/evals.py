@@ -10,14 +10,19 @@ from __future__ import annotations
 import json
 from hashlib import sha256
 from pathlib import Path
-from typing import Literal, Self
+from typing import Literal, Self, cast
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from dm_assistant.modules.modeling import ReasoningEffort, ResolvedModelRunProfile
 from dm_assistant.modules.preparation import (
+    ContextSourceLink,
     DungeonGenerationContext,
+    DungeonGenerationFact,
+    GenerationContextEnvelope,
+    GenerationContextPin,
+    VisibilityPolicy,
     canonical_json_sha256,
 )
 from dm_assistant.orchestration.dungeons.canary import DUNGEON_TIER_A_CANARY
@@ -26,6 +31,7 @@ from dm_assistant.orchestration.dungeons.contracts import (
     DungeonExplorationContextSelection,
     DungeonFeatureInteractionContextSelection,
     DungeonGenerationProposal,
+    DungeonModelCallMeasurement,
     DungeonObjectiveContextSelection,
     DungeonPuzzleClueApproval,
     DungeonPuzzleContextSelection,
@@ -35,6 +41,11 @@ from dm_assistant.orchestration.dungeons.contracts import (
 )
 from dm_assistant.orchestration.dungeons.exploration_prompting import (
     dungeon_exploration_task_contract_sha256,
+)
+from dm_assistant.orchestration.dungeons.final_validation import (
+    DungeonFinalValidationSummary,
+    summarize_final_staged_validation,
+    validate_final_staged_dungeon,
 )
 from dm_assistant.orchestration.dungeons.staged_enrichment import (
     DungeonStagedEnrichmentTaskKind,
@@ -61,7 +72,12 @@ from dm_dungeon import (
     validate_geometry,
     validate_topology,
 )
-from dm_dungeon.contracts import RoomMechanicMarkerKind
+from dm_dungeon.contracts import (
+    EncounterSlotIntent,
+    RoomMechanicMarkerKind,
+    RoomRole,
+    Visibility,
+)
 from dm_dungeon.layout import ORTHOGONAL_LAYOUT_GENERATOR_VERSION
 
 
@@ -148,6 +164,8 @@ class DungeonTierAEvalCase(_EvalModel):
     """One original synthetic Tier A brief, never a retained provider response."""
 
     case_id: str = Field(pattern=r"^tier_a_case_[0-9]{2}$")
+    seed: int = Field(ge=0, le=2**63 - 1)
+    room_count: int = Field(ge=4, le=8)
     title: str = Field(min_length=1, max_length=120)
     setting: str = Field(min_length=20, max_length=500)
     interaction_style: str = Field(min_length=20, max_length=300)
@@ -204,6 +222,73 @@ def load_dungeon_tier_a_eval_manifest() -> DungeonTierAEvalManifest:
 
     return DungeonTierAEvalManifest.model_validate_json(
         _DUNGEON_TIER_A_EVAL_MANIFEST_PATH.read_text(encoding="utf-8")
+    )
+
+
+def build_dungeon_tier_a_fixed_case_context(
+    manifest: DungeonTierAEvalManifest,
+    case_id: str,
+    *,
+    preparation_owner_id: UUID,
+) -> GenerationContextPin:
+    """Build exact standalone or synthetic-eval structural grounding from a case."""
+
+    cases = {case.case_id: case for case in manifest.cases}
+    case = cases.get(case_id)
+    if case is None:
+        raise ValueError(f"unknown Tier A fixed case: {case_id}")
+    case_sha256 = canonical_json_sha256(case.model_dump(mode="json"))
+    source_links: tuple[ContextSourceLink, ...] = ()
+    facts: tuple[DungeonGenerationFact, ...] = ()
+    grounding_mode: Literal["standalone", "synthetic_eval"] = "standalone"
+    if case.grounding == "synthetic_grounded":
+        grounding_mode = "synthetic_eval"
+        source_id = f"{case.case_id}_manifest"
+        source_links = (
+            ContextSourceLink(
+                source_kind="tier_a_eval_case",
+                source_id=source_id,
+                sha256=case_sha256,
+                visibility_policy=VisibilityPolicy.DM_ONLY,
+            ),
+        )
+        facts = tuple(
+            DungeonGenerationFact(
+                fact_id=f"eval_fact_{index:02d}",
+                kind="history",
+                summary=summary,
+                source_ids=(source_id,),
+                visibility_policy=VisibilityPolicy.DM_ONLY,
+            )
+            for index, summary in enumerate(case.authorized_facts, start=1)
+        )
+    payload = DungeonGenerationContext(
+        context_version="1.0.0",
+        prompt_input_sha256=canonical_json_sha256({"prompt": case.prompt}),
+        tones=(case.setting, case.interaction_style),
+        motif_variation_constraints=(
+            "Vary recurring motifs by room purpose instead of repeating one mechanism.",
+        ),
+        selected_facts=facts,
+        grounding_mode=grounding_mode,
+        preparation_owner_id=str(preparation_owner_id),
+        context_provenance="tier_a_eval_manifest",
+    )
+    payload_document = payload.model_dump(mode="json")
+    envelope = GenerationContextEnvelope(
+        context_kind="dungeon_generation",
+        payload_version=payload.context_version,
+        visibility_policy=VisibilityPolicy.DM_ONLY,
+        source_links=source_links,
+        payload=payload_document,
+        payload_sha256=canonical_json_sha256(payload_document),
+    )
+    return GenerationContextPin(
+        envelope_kind=envelope.context_kind,
+        payload_version=envelope.payload_version,
+        envelope=envelope.model_dump(mode="json"),
+        payload_sha256=envelope.payload_sha256,
+        source_links=source_links,
     )
 
 
@@ -364,7 +449,9 @@ class DungeonTierARunMeasurement(_EvalModel):
         description="Whether the initial output passed both strict validity checks."
     )
     repair_count: int = Field(
-        ge=0, le=1, description="The bounded repair count used to compute repair rate."
+        ge=0,
+        le=32,
+        description="Cumulative bounded repairs across the staged artifact workflow.",
     )
     final_valid: bool
 
@@ -382,10 +469,97 @@ class DungeonTierARunMeasurement(_EvalModel):
             raise ValueError("a first-pass-valid run cannot have a repair")
         if self.first_pass_valid and not self.final_valid:
             raise ValueError("a first-pass-valid run must remain valid")
-        if not self.first_pass_valid and self.final_valid and self.repair_count != 1:
-            raise ValueError("a repaired valid run must record exactly one repair")
+        if not self.first_pass_valid and self.final_valid and self.repair_count < 1:
+            raise ValueError("a repaired valid run must record at least one repair")
         if self.final_valid != (self.artifact_hash is not None):
             raise ValueError("only a final-valid run can identify a review artifact")
+        return self
+
+
+DungeonTierAReviewDimension = Literal[
+    "thematic_reinforcement",
+    "history_environment_causality",
+    "mechanic_objective_unity",
+    "progression",
+    "intentional_motif_variation",
+    "lore_consistency",
+    "clue_logic",
+    "player_agency",
+    "puzzle_comprehensibility",
+    "exploration_quality",
+    "dm_prep_usefulness",
+]
+
+_TIER_A_REVIEW_DIMENSIONS: tuple[DungeonTierAReviewDimension, ...] = (
+    "thematic_reinforcement",
+    "history_environment_causality",
+    "mechanic_objective_unity",
+    "progression",
+    "intentional_motif_variation",
+    "lore_consistency",
+    "clue_logic",
+    "player_agency",
+    "puzzle_comprehensibility",
+    "exploration_quality",
+    "dm_prep_usefulness",
+)
+
+
+class DungeonTierAReviewerInput(_EvalModel):
+    """Blinded artifact binding and rubric shape safe to give a human reviewer."""
+
+    rubric_version: Literal["dungeon-tier-a-human-rubric-v1"]
+    review_id: str = Field(pattern=r"^review_[a-z0-9_]+$")
+    case_id: str = Field(pattern=r"^tier_a_case_[0-9]{2}$")
+    variant_id: str = Field(pattern=r"^variant_[0-9]{2}$")
+    artifact_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    lore_consistency_required: bool
+    rating_dimensions: tuple[DungeonTierAReviewDimension, ...] = Field(
+        min_length=11, max_length=11
+    )
+
+    @model_validator(mode="after")
+    def require_fixed_rubric_shape(self) -> Self:
+        if self.rating_dimensions != _TIER_A_REVIEW_DIMENSIONS:
+            raise ValueError("Tier A reviewer input requires every dimension in order")
+        return self
+
+
+class DungeonTierATaskMeasurement(_EvalModel):
+    """One body-free structural or enrichment wrapper measurement."""
+
+    task_kind: Literal[
+        "structural",
+        "puzzle",
+        "exploration",
+        "feature_interaction",
+        "trap",
+        "objective",
+        "room_narrative",
+    ]
+    wrapper_run_id: UUID
+    measurement: DungeonModelCallMeasurement
+
+
+class DungeonTierAArtifactEvidence(_EvalModel):
+    """Whole-artifact operational evidence plus separately blinded reviewer input."""
+
+    evidence_version: Literal["dungeon-tier-a-artifact-evidence-v1"]
+    structural_wrapper_reclassified: bool = False
+    measurement: DungeonTierARunMeasurement
+    reviewer_input: DungeonTierAReviewerInput
+    final_validation: DungeonFinalValidationSummary
+
+    @model_validator(mode="after")
+    def require_one_exact_valid_artifact(self) -> Self:
+        if not self.measurement.final_valid or not self.final_validation.valid:
+            raise ValueError("Tier A artifact evidence requires final validity")
+        if (
+            self.measurement.case_id != self.reviewer_input.case_id
+            or self.measurement.variant_id != self.reviewer_input.variant_id
+            or self.measurement.artifact_hash != self.reviewer_input.artifact_hash
+        ):
+            raise ValueError("Tier A artifact evidence bindings do not match")
         return self
 
 
@@ -543,6 +717,50 @@ def build_dungeon_exploration_overage_protocol(
     )
 
 
+def validate_dungeon_tier_a_fixed_case_structure(
+    case: DungeonTierAEvalCase,
+    specification: DungeonStudioSpecification,
+) -> tuple[str, ...]:
+    """Return body-free fixed-case semantic mismatches before enrichment."""
+
+    package = specification.package
+    topology = package.topology
+    puzzle_rooms = tuple(room for room in package.rooms if room.role is RoomRole.PUZZLE)
+    exploration_slots = tuple(
+        slot
+        for slot in package.encounter_slots
+        if EncounterSlotIntent.EXPLORATION.value in slot.tags
+    )
+    feature_room_ids = {
+        marker.room_id
+        for marker in package.room_mechanic_markers
+        if marker.kind is RoomMechanicMarkerKind.FEATURE
+    }
+    objective_markers = tuple(
+        marker
+        for marker in package.room_mechanic_markers
+        if marker.kind is RoomMechanicMarkerKind.OBJECTIVE
+    )
+    codes: list[str] = []
+    if len(package.rooms) != case.room_count:
+        codes.append("fixed_case.structural_room_count_mismatch")
+    if len(topology.loops) != 1:
+        codes.append("fixed_case.structural_loop_count_mismatch")
+    if sum(loop.visibility is Visibility.DM_ONLY for loop in topology.loops) != 1:
+        codes.append("fixed_case.structural_secret_route_count_mismatch")
+    if len(topology.gates) != 1:
+        codes.append("fixed_case.structural_gate_count_mismatch")
+    if len(puzzle_rooms) != 1:
+        codes.append("fixed_case.structural_puzzle_count_mismatch")
+    if len(exploration_slots) != 1:
+        codes.append("fixed_case.structural_exploration_count_mismatch")
+    if any(slot.room_id not in feature_room_ids for slot in exploration_slots):
+        codes.append("fixed_case.exploration_affordance_missing")
+    if len(objective_markers) != 1:
+        codes.append("fixed_case.structural_objective_count_mismatch")
+    return tuple(codes)
+
+
 def build_dungeon_tier_a_fixed_case_dispatch(
     manifest: DungeonTierAEvalManifest,
     case_id: str,
@@ -561,7 +779,13 @@ def build_dungeon_tier_a_fixed_case_dispatch(
     case = cases.get(case_id)
     if case is None:
         raise ValueError(f"unknown Tier A fixed case: {case_id}")
-    _require_fixed_case_structural_context(case, specification)
+    _require_fixed_case_structural_context(manifest, case, specification)
+    structural_codes = validate_dungeon_tier_a_fixed_case_structure(case, specification)
+    if structural_codes:
+        raise ValueError(
+            "Tier A fixed-case structural requirements failed: "
+            + ", ".join(structural_codes)
+        )
     profiles = (
         puzzle_profile,
         exploration_profile,
@@ -587,18 +811,39 @@ def build_dungeon_tier_a_fixed_case_dispatch(
     policy: DungeonStagedEnrichmentPolicy
     if task.kind == "puzzle":
         room_id = task.room_ids[0]
+        presentation = {room.room_id: room.presentation_number for room in guide.rooms}
+        nearby_room_ids = {
+            endpoint
+            for connection in specification.package.topology.connections
+            if room_id in (connection.from_room_id, connection.to_room_id)
+            for endpoint in (connection.from_room_id, connection.to_room_id)
+            if endpoint != room_id
+        }
+        clue_room_ids = (
+            room_id,
+            *sorted(
+                nearby_room_ids,
+                key=lambda item: (presentation[item], item),
+            )[:5],
+        )
         policy = DungeonStagedPuzzlePolicy(
             selection=DungeonPuzzleContextSelection(
                 room_id=room_id,
                 continuity_fact_ids=continuity_fact_ids,
-                clue_locations=(
+                clue_locations=tuple(
                     DungeonPuzzleClueApproval(
-                        location_id=room_id,
+                        location_id=clue_room_id,
                         purpose=(
                             "Use player-observable details in the exact puzzle room "
-                            "as the local clue anchor."
+                            "as the primary clue anchor."
+                            if clue_room_id == room_id
+                            else (
+                                "Use player-observable details in this exact adjacent "
+                                "room as a distinct supporting clue anchor."
+                            )
                         ),
-                    ),
+                    )
+                    for clue_room_id in clue_room_ids
                 ),
                 tone=(case.setting, case.interaction_style),
                 constraints=(
@@ -774,6 +1019,7 @@ def _accepted_fixed_case_mechanic_ids(
 
 
 def _require_fixed_case_structural_context(
+    manifest: DungeonTierAEvalManifest,
     case: DungeonTierAEvalCase,
     specification: DungeonStudioSpecification,
 ) -> None:
@@ -786,12 +1032,17 @@ def _require_fixed_case_structural_context(
     context = DungeonGenerationContext.model_validate_json(
         json.dumps(payload, separators=(",", ":"), sort_keys=True)
     )
-    expected_prompt_hash = canonical_json_sha256({"prompt": case.prompt})
-    if context.prompt_input_sha256 != expected_prompt_hash:
-        raise ValueError("Tier A fixed-case structural prompt hash mismatch")
-    summaries = tuple(sorted(fact.summary for fact in context.selected_facts))
-    if summaries != tuple(sorted(case.authorized_facts)):
-        raise ValueError("Tier A fixed-case authorized facts mismatch")
+    try:
+        owner_id = UUID(context.preparation_owner_id)
+    except ValueError as error:
+        raise ValueError("Tier A fixed-case preparation owner is invalid") from error
+    expected = build_dungeon_tier_a_fixed_case_context(
+        manifest,
+        case.case_id,
+        preparation_owner_id=owner_id,
+    )
+    if pin != expected:
+        raise ValueError("Tier A fixed-case structural context mismatch")
 
 
 def _require_matching_fixed_case_profiles(
@@ -866,6 +1117,102 @@ def assess_dungeon_exploration_overage_evidence(
         materially_distinct_case_count=len(case_ids),
         repeated_failure_case_threshold=protocol.repeated_failure_case_threshold,
         matched_comparison_repeat_gate_met=repeat_gate_met,
+    )
+
+
+def build_dungeon_tier_a_artifact_evidence(
+    manifest: DungeonTierAEvalManifest,
+    *,
+    case_id: str,
+    variant_id: str,
+    variant_assignment_hash: str,
+    specification: DungeonStudioSpecification,
+    task_measurements: tuple[DungeonTierATaskMeasurement, ...],
+    structural_wrapper_reclassified: bool = False,
+) -> DungeonTierAArtifactEvidence:
+    """Aggregate exact wrapper measurements for one final valid staged artifact."""
+
+    cases = {case.case_id: case for case in manifest.cases}
+    case = cases.get(case_id)
+    if case is None:
+        raise ValueError(f"unknown Tier A fixed case: {case_id}")
+    if variant_id not in {variant.variant_id for variant in manifest.variants}:
+        raise ValueError(f"unknown Tier A fixed variant: {variant_id}")
+    _require_fixed_case_structural_context(manifest, case, specification)
+    staged = plan_dungeon_staged_enrichment(specification)
+    if staged.status != "complete":
+        raise ValueError("Tier A artifact evidence requires complete staged enrichment")
+    if (
+        specification.preparation_readiness is None
+        or not specification.preparation_readiness.ready
+    ):
+        raise ValueError("Tier A artifact evidence requires preparation readiness")
+    final = validate_final_staged_dungeon(specification)
+    if not final.valid:
+        raise ValueError(
+            "Tier A artifact evidence requires final deterministic validity"
+        )
+
+    expected_kinds = (
+        "structural",
+        *("puzzle" for _ in specification.puzzle_model_lineage),
+        *("exploration" for _ in specification.exploration_model_lineage),
+        *(
+            "feature_interaction"
+            for _ in specification.feature_interaction_model_lineage
+        ),
+        *("trap" for _ in specification.trap_model_lineage),
+        *("objective" for _ in specification.objective_model_lineage),
+        *("room_narrative" for _ in specification.room_narrative_model_lineage),
+    )
+    actual_kinds = tuple(item.task_kind for item in task_measurements)
+    if actual_kinds != expected_kinds:
+        raise ValueError("Tier A task measurements do not match artifact lineage")
+    wrapper_ids = [item.wrapper_run_id for item in task_measurements]
+    if len(wrapper_ids) != len(set(wrapper_ids)):
+        raise ValueError("Tier A task measurement wrapper IDs must be unique")
+    if not task_measurements:
+        raise ValueError("Tier A artifact evidence requires task measurements")
+    measurements = tuple(item.measurement for item in task_measurements)
+    if not all(item.usage_measured for item in measurements):
+        raise ValueError("Tier A artifact evidence requires measured usage")
+    input_tokens = sum(cast(int, item.input_tokens) for item in measurements)
+    output_tokens = sum(cast(int, item.output_tokens) for item in measurements)
+    first_schema_valid = all(item.first_pass_schema_valid for item in measurements)
+    first_semantic_valid = all(item.first_pass_semantic_valid for item in measurements)
+    repair_count = sum(item.repair_count for item in measurements)
+    artifact_hash = canonical_json_sha256(specification.model_dump(mode="json"))
+    measurement = DungeonTierARunMeasurement(
+        measurement_version=manifest.measurement_version,
+        run_id=f"run_{case_id}_{variant_id}",
+        case_id=case_id,
+        variant_id=variant_id,
+        variant_assignment_hash=variant_assignment_hash,
+        artifact_hash=artifact_hash,
+        latency_milliseconds=sum(item.duration_milliseconds for item in measurements),
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        first_pass_schema_valid=first_schema_valid,
+        first_pass_semantic_valid=first_semantic_valid,
+        first_pass_valid=first_schema_valid and first_semantic_valid,
+        repair_count=repair_count,
+        final_valid=True,
+    )
+    reviewer_input = DungeonTierAReviewerInput(
+        rubric_version=manifest.rubric_version,
+        review_id=f"review_{case_id}_{variant_id}",
+        case_id=case_id,
+        variant_id=variant_id,
+        artifact_hash=artifact_hash,
+        lore_consistency_required=case.grounding == "synthetic_grounded",
+        rating_dimensions=_TIER_A_REVIEW_DIMENSIONS,
+    )
+    return DungeonTierAArtifactEvidence(
+        evidence_version="dungeon-tier-a-artifact-evidence-v1",
+        structural_wrapper_reclassified=structural_wrapper_reclassified,
+        measurement=measurement,
+        reviewer_input=reviewer_input,
+        final_validation=summarize_final_staged_validation(final),
     )
 
 

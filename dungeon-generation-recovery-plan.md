@@ -206,12 +206,20 @@ repeat gate for considering a matched comparison; the provider-specificity judgm
 requirement, and explicit live authorization remain separate. The current canary supplies one such
 observation, so the repeat gate remains at one of two.
 
-Fixed-case task execution is reproducible rather than ad hoc. For all six staged seams, deterministic
-code derives the trusted policy from the packaged frozen manifest and exact current parent, persists
-the complete policy/profile in a private eval-run context envelope, and retains body-free case,
-parent, policy, context, profile, assignment, and contract hashes. The operator command runs exactly
-one next task. Only a failed wrapper with every pin unchanged may resume; pre-boundary attempts that
-lack these pins are not silently treated as replayable.
+Fixed-case execution is reproducible rather than ad hoc. Structural startup uses packaged seeds and
+either standalone context or manifest-hash-cited synthetic facts; it cannot claim campaign grounding.
+For all six staged seams, deterministic code derives the trusted policy from the exact current parent,
+persists complete context/policy/profile data privately, and retains body-free case, variant, parent,
+assignment, and contract hashes. Puzzle policy supplies the exact puzzle room plus bounded adjacent
+room clue anchors rather than forcing every distinct clue onto one component ID. Operator commands
+run exactly one task. Only a failed wrapper with every replay pin unchanged may resume; pre-boundary
+attempts are not silently replayable.
+
+Whole-artifact evidence requires an ordered contiguous wrapper/version chain, measured usage, a
+preparation-ready current artifact, and the final seven-check gate. Its reviewer input omits the
+variant assignment and provider identity. A structural wrapper rejected by a superseded deterministic
+semantic check can be explicitly marked reclassified only when the immutable artifact and full chain
+pass the current contract; the historical run status is not rewritten.
 
 ## 10. Stress Ladder
 

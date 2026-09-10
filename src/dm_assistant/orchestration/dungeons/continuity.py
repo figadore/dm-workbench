@@ -68,9 +68,14 @@ def derive_dungeon_creative_continuity(
             raise ConflictError(
                 "Standalone creative continuity must leave campaign lore unknown."
             )
-    elif any(value is None for value in grounded_pins):
+    elif context.grounding_mode == "selected_campaign":
+        if any(value is None for value in grounded_pins):
+            raise ConflictError(
+                "Selected campaign grounding requires exact revision and snapshot pins."
+            )
+    elif any(value is not None for value in grounded_pins):
         raise ConflictError(
-            "Selected campaign grounding requires exact revision and snapshot pins."
+            "Synthetic eval continuity cannot claim campaign grounding pins."
         )
 
     sources_by_id = {}
@@ -85,9 +90,9 @@ def derive_dungeon_creative_continuity(
 
     cited_source_ids: set[str] = set()
     for fact in context.selected_facts:
-        if context.grounding_mode != "selected_campaign":
+        if context.grounding_mode == "standalone":
             raise ConflictError(
-                "Ungrounded standalone creative continuity cannot contain campaign lore."
+                "Ungrounded standalone creative continuity cannot contain selected lore."
             )
         if fact.visibility_policy != envelope.visibility_policy:
             raise ConflictError(

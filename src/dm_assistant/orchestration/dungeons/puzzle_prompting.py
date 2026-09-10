@@ -36,7 +36,10 @@ from dm_assistant.orchestration.dungeons.contracts import (
     PromptDungeonPuzzleWorkflow,
     PromptedDungeonPuzzleLineage,
 )
-from dm_assistant.orchestration.dungeons.prompting import _RunBoundGatewayClient
+from dm_assistant.orchestration.dungeons.prompting import (
+    _model_call_measurement,
+    _RunBoundGatewayClient,
+)
 from dm_assistant.orchestration.dungeons.service import (
     validate_dungeon_puzzle_enrichment,
 )
@@ -161,6 +164,7 @@ class DungeonPuzzleSubmissionBudgetExceeded(StructuredSubmissionBudgetExceeded):
             token_limit=error.token_limit,
             input_tokens=error.input_tokens,
             output_tokens=error.output_tokens,
+            duration_ms=error.duration_ms,
         )
         estimated_input = request_profile.override_notes.get("estimated_input_tokens")
         workflow_output_limit = workflow_profile.override_notes.get(
@@ -188,6 +192,7 @@ class DungeonPuzzleSubmissionBudgetExceeded(StructuredSubmissionBudgetExceeded):
             "stage": "model_submission",
             "outcome": "token_budget_exhausted",
             "diagnostics": [],
+            "duration_ms": self.duration_ms,
             "usage": {
                 "measured": True,
                 "input_tokens": self.input_tokens,
@@ -513,7 +518,7 @@ class DungeonPuzzlePromptService:
             ),
             output=accepted_output,
         )
-        return self._dungeon_studio.enrich_prompted_puzzle(
+        result = self._dungeon_studio.enrich_prompted_puzzle(
             CreatePromptedDungeonPuzzleWorkflow(
                 campaign_id=command.campaign_id,
                 artifact_id=command.artifact_id,
@@ -525,6 +530,9 @@ class DungeonPuzzlePromptService:
                 tool_runs=(_tool_run_pin(lineage),),
                 created_by=command.created_by,
             )
+        )
+        return result.model_copy(
+            update={"model_measurement": _model_call_measurement(submitted.model_runs)}
         )
 
 

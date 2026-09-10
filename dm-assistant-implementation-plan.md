@@ -145,11 +145,16 @@ approval or canonical writes.
   count only measured output-ceiling failures above 2,048 and within the 6,000 cumulative budget
   that attempted no repair and published no artifact. Two distinct curated cases meet only the repeat
   gate, not the provider-specificity, quality-improvement, or explicit-authorization requirements.
-- Derive every fixed-case staged-task policy deterministically from the packaged frozen manifest and
-  exact current parent. Persist the complete trusted policy/profile in a private eval-run context
-  envelope while exposing only hashes through ordinary run inspection. Resume only a failed eval
-  wrapper whose case, parent, policy, context, profile, contract, assignment, schema, and generator
-  pins all still match. The operator command executes exactly one next task and never approves.
+- Start fixed cases from packaged seeds and Workbench-built standalone or synthetic-eval grounding;
+  derive every staged-task policy deterministically from that manifest and exact current parent.
+  Persist complete trusted contexts/policies/profiles in private eval-run envelopes while exposing
+  only hashes through ordinary inspection. Resume only failed wrappers whose case, variant, parent,
+  context/policy, profile, contract, assignment, schema, and generator pins still match. Commands
+  execute exactly one structural or enrichment task and never approve.
+- Aggregate only a contiguous structural/task wrapper chain whose current artifact is preparation-
+  ready and passes the final gate. Emit cumulative measured usage, latency, first-pass validity,
+  repairs, artifact hash, and a separately blinded fixed-rubric reviewer input without provider
+  bodies or assignment details.
 
 ### Provider rules
 

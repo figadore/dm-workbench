@@ -36,7 +36,10 @@ from dm_assistant.orchestration.dungeons.contracts import (
     PromptDungeonTrapWorkflow,
     PromptedDungeonTrapLineage,
 )
-from dm_assistant.orchestration.dungeons.prompting import _RunBoundGatewayClient
+from dm_assistant.orchestration.dungeons.prompting import (
+    _model_call_measurement,
+    _RunBoundGatewayClient,
+)
 from dm_assistant.orchestration.dungeons.service import (
     validate_dungeon_trap_enrichment,
 )
@@ -404,7 +407,7 @@ class DungeonTrapPromptService:
             ),
             output=accepted_output,
         )
-        return self._dungeon_studio.enrich_prompted_trap(
+        result = self._dungeon_studio.enrich_prompted_trap(
             CreatePromptedDungeonTrapWorkflow(
                 campaign_id=command.campaign_id,
                 artifact_id=command.artifact_id,
@@ -416,6 +419,9 @@ class DungeonTrapPromptService:
                 tool_runs=(_tool_run_pin(lineage),),
                 created_by=command.created_by,
             )
+        )
+        return result.model_copy(
+            update={"model_measurement": _model_call_measurement(submitted.model_runs)}
         )
 
 

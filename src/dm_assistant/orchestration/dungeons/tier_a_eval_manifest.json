@@ -13,6 +13,8 @@
   "cases": [
     {
       "case_id": "tier_a_case_01",
+      "seed": 714000101,
+      "room_count": 5,
       "title": "Salt-Marsh Signal House",
       "setting": "A storm-damaged signal house stranded among salt marsh channels.",
       "interaction_style": "environmental navigation with changing safe routes and spatial clues",
@@ -22,6 +24,8 @@
     },
     {
       "case_id": "tier_a_case_02",
+      "seed": 714000102,
+      "room_count": 6,
       "title": "Rootbound Embassy",
       "setting": "An abandoned greenhouse embassy where living partitions preserve traces of a failed accord.",
       "interaction_style": "social inference through environmental evidence and reciprocal affordances",
@@ -34,6 +38,8 @@
     },
     {
       "case_id": "tier_a_case_03",
+      "seed": 714000103,
+      "room_count": 7,
       "title": "Ashfall Memory Gallery",
       "setting": "A civic gallery half buried by warm volcanic ash after an orderly evacuation.",
       "interaction_style": "investigative reconstruction with risk and resource tradeoffs",

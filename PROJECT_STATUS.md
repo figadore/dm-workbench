@@ -5,50 +5,55 @@
 
 ## Current Task
 - **Task:** P7-14f — staged Tier A authoring and anti-overfitting evaluation.
-- **Current work:** complete fixed-case staged execution and its one-task operator command are
-  implemented; an authorized Luna canary completed case 01.
-- **Product state:** one staged live artifact is preparation-ready. The Tier A quality gate remains
-  red because cases 02/03 and the blinded human evidence matrix are incomplete.
+- **State:** fixed-case structural startup, one-step enrichment, and whole-artifact evidence are
+  implemented. Authorized Luna-fast `variant_01` canaries completed all three frozen cases.
+- **Product state:** three live artifacts are preparation-ready drafts. The Tier A quality gate is
+  still red because blinded human ratings and the remaining required case/variant matrix are absent.
 - **Schema head:** `0008_workbench_defaults`; no migration is involved.
 - **Retention gate:** **not crossed**. Active V1 contracts and disposable alpha data evolve in place.
 
 ## Completed Behavior
-- The packaged frozen manifest is shared by runtime operators and evaluator tests rather than loaded
-  from a test-only path.
-- The fixed-case planner now derives trusted policies for puzzle, exploration, feature interaction,
-  trap, objective, and room narrative from the exact current parent and manifest case.
-- Grounded cases select only the exact authorized continuity fact IDs. Objective context receives the
-  bounded accepted mechanic set; narrative receives exactly the planner-selected room set.
-- All six task profiles must retain one provider/model/adapter/effort assignment. Every task still
-  stores its complete policy/profile privately with body-free replay pins.
-- `dm dungeon fixed-case` requires case, artifact, current parent, provider, model, and effort; it
-  executes exactly one next task, supports exact failed-run resumption, and never approves or writes
-  canon.
+- The packaged manifest now owns each case's frozen seed, room count, standalone/synthetic-eval
+  grounding, exact synthetic facts, and opaque variant assignments.
+- `dm dungeon fixed-case-start` builds one structural proposal, validates manifest-specific topology
+  and content witnesses, stores private replay context, and supports exact failed-run resumption.
+- `dm dungeon fixed-case` still executes one exact enrichment task. All six task prompts receive the
+  fixed-case context; puzzle clue anchors now include bounded adjacent rooms for distinct exact IDs.
+- Successful model calls retain body-free measured tokens, latency, first-pass schema/semantic state,
+  and repairs. Budget rejection reports now retain measured duration as well as usage.
+- `dm dungeon fixed-case-evidence` accepts only an ordered contiguous structural/task wrapper chain,
+  the exact current preparation-ready draft, and the final seven-check gate. It emits aggregate
+  measurements plus a separately blinded fixed-rubric reviewer input.
+- A historical structural false rejection may be reported as reclassified only when the immutable
+  artifact passes the current structural semantics and complete final gate; run history is unchanged.
 
 ## Live Evidence
-- Explicit canary authorization was used for four new Luna-fast calls over case 01: feature, trap,
-  objective, and room narrative. All succeeded on the first submission with measured usage and no
-  repair.
-- Artifact `35ec4e9b-cbc5-416b-9ff7-3fade7865044` is complete and preparation-ready at version
-  `76a48d8a-1f9c-41c3-9533-890fd21419cd`; it remains a draft.
-- Final deterministic validation passed all seven checks with zero diagnostics, including exact
-  continuity/source lineage, required content, cross-task references, and player secrecy.
-- The earlier case-01 puzzle/exploration remain accepted but predate the exact wrapper. The frozen
-  exploration overage remains the only qualifying overage, so its repeat gate is **1 of 2**.
-- No retry, debug capture, budget/effort change, Terra comparison, approval, or canonical write ran.
+- Case 02 artifact `b6569a3e-8a75-4fd6-a2a5-bc30a9cb29e3`, final version
+  `8af0c7b8-f280-45fe-8e6a-06c879962006`, passed all seven final checks. Selected-chain evidence:
+  17,658 input tokens, 5,658 output tokens, 117,046 ms, one repair; structural wrapper reclassified.
+- Case 03 artifact `cc4a8ed0-cfb2-4d86-8411-e21192c66f25`, final version
+  `3a5f5434-a8d9-4b50-b7c6-49fb9806dda2`, passed all seven checks. Selected-chain evidence: 16,992
+  input tokens, 6,369 output tokens, 130,149 ms, two repairs.
+- Case 01 artifact `35ec4e9b-cbc5-416b-9ff7-3fade7865044` remains preparation-ready, but its structural,
+  puzzle, and exploration calls predate the wrapper and cannot form comparable whole-run evidence.
+- Initial case-02/03 puzzle attempts repeatedly reused one clue location and then exhausted repair
+  output allowance. The provider-independent adjacent-anchor contract fixed both subsequent runs.
+- A separate case-02 structural attempt omitted the required exploration affordance and stopped.
+  Both selected case-02/03 explorations succeeded, so the frozen exploration repeat gate remains
+  **1 of 2**. No Terra comparison, approval, campaign revision, or canonical write occurred.
 
 ## Verification
-- Root unit/eval suite: **242 passed**. Staged coordinator PostgreSQL integration: **10 passed**.
-- Focused Ruff, strict mypy, wheel package-data check, and `git diff --check` passed.
-- The work is runnable; there is no partial migration, unsafe write path, or intentional uncommitted
-  runtime work.
+- Root unit/eval suite: **244 passed**. Staged coordinator PostgreSQL integration: **12 passed**.
+- Focused Ruff/format, strict mypy, wheel package-data check, and `git diff --check` passed.
+- The work is runnable; there is no partial migration or unsafe write path.
 
 ## Single Next Recommended Task
-**Add reproducible fixed-case structural startup and whole-artifact evidence output for cases 02/03.**
+**Complete the three-case `variant_01` blinded review tranche.**
 
-First action: define and provider-free test a Workbench-owned structural wrapper that loads one
-manifest case, constructs only its authorized synthetic grounding, pins the opaque assignment, and
-emits body-free measurement/reviewer inputs before making another live call.
+First action: provider-free test and add a review-packet writer that combines each blinded reviewer
+input with only the final artifact material reviewers need, excluding assignment/provider identity.
+Then obtain a fresh wrapper-bound case-01 run and collect human ratings before deciding whether the
+remaining opaque variants require live execution.
 
 ## References
 [`dm-assistant-implementation-plan.md`](dm-assistant-implementation-plan.md) P7-14f;
