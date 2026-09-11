@@ -17,7 +17,8 @@ The existing browser still uses API-token login and a basic asset-oriented inter
 login, a polished inline review workspace, manual text editing, and component conversations are
 **planned**, not delivered by the documentation update. Existing faux Ask surfaces are not a completed
 campaign-grounded assistant. Passing technical checks does not establish that generated one-shots are
-ready to run without additional authoring.
+ready to run without additional authoring. Application-wide guidance, human-confirmed preferences and
+reusable non-executable procedures are also **planned**, not implemented by these documents.
 
 See [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact live task, evidence, and next action.
 
@@ -26,10 +27,10 @@ See [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the exact live task, evidence, 
 | Phase | Experience |
 | --- | --- |
 | **1 — A One-Shot Worth Running** | Review and walk through complete adventures with concrete clues, obstacles, opposition, and endings. |
-| **2 — Prompt to Play** | Sign in normally, generate, read map and guide together, manually edit room prose, save, and export. |
+| **2 — Prompt to Play** | Sign in, supply scoped guidance, generate, review/edit map and guide together, save, and export. |
 | **3 — Maps Worth Exploring** | Use attractive compact maps with meaningful terrain, consistent keys, and synchronized selection. |
-| **4 — Revise with Your Assistant** | Select a room/puzzle/dungeon, ask questions or request changes, then preview and accept/reject proposals. |
-| **5 — Bring Your Campaign** | Attach a captive, rumored relic, or selected lore without turning preparation into canon. |
+| **4 — Revise with Your Assistant** | Ask or propose scoped edits; separately confirm remembered preferences and reuse reviewed procedures when justified. |
+| **5 — Bring Your Campaign** | Attach selected facts, claims and hooks without turning preparation into canon. |
 | **6 — Remember What Happened** | Ask sourced campaign questions and review session outcomes into persistent memory. |
 
 Browser usability begins in phase 2, not after campaign integration. Map visual quality follows in

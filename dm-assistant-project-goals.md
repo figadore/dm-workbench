@@ -21,10 +21,11 @@ The ordered phases and task IDs live in
 
 1. **A One-Shot Worth Running:** prove complete adventure authoring against actual DM preparation work.
 2. **Prompt to Play:** integrate cohesive authoring into a pleasant, secure browser workspace, with
-   readable output, direct text editing, and meaningful draft versions.
+   readable output, direct text editing, meaningful draft versions, and explicit authoring preferences.
 3. **Maps Worth Exploring:** make layout, terrain, and visual presentation support the adventure.
 4. **Revise with Your Assistant:** discuss or revise a room, puzzle, obstacle, or whole dungeon in
-   visibly scoped conversations; preview and accept changes without losing unrelated work.
+   visibly scoped conversations; preview and accept changes without losing unrelated work. Separately
+   confirm remembered preferences and, when repeated work justifies it, reusable authoring recipes.
 5. **Bring Your Campaign:** supply selected facts, claims, and requirements, then retrieve relevant
    campaign evidence into the same generation and revision workflows.
 6. **Remember What Happened:** connect notes, questions, unresolved threads, and reviewed session
@@ -41,8 +42,9 @@ explicit party-size/level/rules assumption, and a chosen session-length target. 
 
 - a usable hook, clear objective, history explaining the location, and a concrete ending;
 - coherent but varied rooms, opposition or environmental pressure, and a meaningful route choice;
-- puzzles where appropriate, with actual clues, inscriptions/objects, answers, feedback, hints,
-  alternate approaches, and failure consequences—not instructions to invent them;
+- puzzles only when allowed and appropriate, never a mandatory quota per floor; when present, actual
+  clues, inscriptions/objects, answers, feedback, hints, alternate approaches, and failure consequences
+  are supplied—not instructions to invent them;
 - obstacles with visible affordances, actionable procedures, and concrete stakes;
 - inhabitants with motivations, tactics or reactions, and non-kill resolutions where appropriate;
 - readable keyed room guidance, a matching map, and secrecy-clean player exports;
@@ -95,6 +97,22 @@ facts require a visible scope-expansion proposal, never silent spillover.
 Conversations are bound to artifact version and selected components. Stale proposals cannot overwrite
 new edits. Useful conversations may be saved privately as user-facing work, separate from body-free
 operational logs and never included in player assets by default.
+
+## Adaptation Across the Application
+
+DM guidance should shape every relevant workflow, from adventure planning and encounters to NPCs,
+dialogue, revision and session preparation. Natural-language preferences, reported group tendencies,
+desired experiences and requirements are distinct inputs—not a fixed menu of feature switches.
+A tendency does not tell the assistant whether to embrace or counter it; that direction belongs to
+the DM. Guidance shapes preparation and presentation, never rewrites canonical reality.
+
+Phase 2 introduces scoped defaults and request overrides; phase 4 adds separately confirmed preference
+suggestions and, when useful, reviewed reusable procedures. The DM can inspect, change or remove them.
+Novel preferences should not require new schema fields. General seams for omitting optional content,
+using existing material and controlling adaptation replace feature-specific subsystems. Examples
+illustrate flexibility, not additional product commitments. Judge success by coherent application and
+reduced editing effort, not accumulated memories; personalization must not conceal generator defects.
+See architecture §9 for the shared contract.
 
 ## Campaign Grounding Without a Second Generator
 

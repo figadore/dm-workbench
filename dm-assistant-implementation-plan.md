@@ -34,6 +34,8 @@ Phase 1 needs a readable packet, not a new frontend. Phase 2 includes real infor
 browser authentication, and manual editing because poor review UX prevents useful feedback. Phase 3
 adds map visual quality and spatial interaction. Phase 4 adds contextual LLM collaboration after safe
 editing/versioning exists. Campaign integration and exact-scale print do not block this sequence.
+Application-wide guidance (architecture §9) starts in P7-16; each later workflow consumes relevant
+guidance as it is implemented, without adding feature-specific preference systems.
 
 ### Established foundation and supersession
 
@@ -78,7 +80,8 @@ Human confirmation of this standard is required before claiming phase acceptance
   authoring engine. Keep exact mechanical/reference validation and bounded correction.
 - Compare against existing packets on matched briefs/maps where possible. Label unmatched comparisons;
   do not attribute layout, prompt, or model changes to the authoring strategy alone.
-- Exercise provider-free fixtures first. Any live generation/comparison needs explicit authorization.
+- Exercise provider-free fixtures first, varying guidance across the existing briefs. Any live
+  generation/comparison needs explicit authorization.
 - Record total usage, latency, failures, actual missing work, and human editing time. At least three
   materially different briefs and a human tabletop walkthrough inform the decision; no provider matrix
   or model-brand-specific promotion gate is required.
@@ -102,6 +105,9 @@ If live authorization or human review is unavailable, stop at a runnable prototy
   not six mandatory task families. Freeze policy only after measuring realistic submissions.
 - Define one cohesive content submission with typed references and mechanics where consumed; prose
   remains prose. Resolve IDs, supported numeric policy, terrain, and guide assembly in code.
+- Carry relevant natural-language guidance through outline, content, repair and validation (§9).
+  Resolve structural implications before construction; support omission/reuse/adaptation through
+  existing domain services, not mandatory feature quotas or a subsystem per content type.
 - Keep intermediates in a durable attempt; publish a complete draft atomically. A failure leaves prior
   artifacts intact and recoverable map/checkpoint state, clearly marked incomplete and unapprovable.
 - Introduce the replacement behind shared application services, test it, switch the ordinary path,
@@ -152,6 +158,19 @@ any intentionally retained real-user enrollment or artifact, not retroactively a
 **Demo/gate:** prompt → progress → readable draft → manual room edit → save → DM/player export works
 through the browser, without JSON or a file-directory scavenger hunt. Test stale tabs, failed saves,
 secrecy, keyboard navigation, and narrow/wide layouts; Reese reviews the rendered workspace.
+
+### P7-16d — Author Your Way
+
+**Depends on:** P7-16a/b/c. **References:** architecture §§3, 9, 15, 17.
+
+- Add scoped natural-language guidance and saved defaults; distinguish observations, desired direction
+  and requirements. Show effective guidance/origins, request overrides and conflicts before dispatch.
+- Reuse one resolver across task contexts; add structured controls only for actual code consumers.
+  Pin applied guidance, protect existing work, and provide edit/disable/delete under §9's privacy policy.
+
+**Demo/gate:** a new preference influences multiple content types without a new schema field. A request
+can change the desired response to the same reported group tendency; a one-off override leaves saved
+defaults unchanged. Test scope/pins/privacy; human review checks coherent application across content.
 
 ## Phase 3 — Maps Worth Exploring
 
@@ -225,13 +244,37 @@ about pacing. Answers cannot modify artifacts, approve preparation, or commit ca
 **Demo/gate:** change one puzzle without losing edited room text; reject a suggestion; handle two
 stale tabs; accept a cross-room change only after seeing its scope. Player exports remain clean.
 
+### P7-18c — Remember My Preferences
+
+**Depends on:** P7-16d and P7-18b. **References:** architecture §§9, 15, 17.
+
+- Suggest lasting guidance only from authorized conversations/edits, with supporting examples and
+  proposed scope. Reuse P7-16d storage and separate human accept/edit/reject; Ask cannot activate it.
+- Acceptance of an artifact edit is not consent to a preference. Preserve §9's origin, conflict,
+  privacy and deletion boundaries; do not mine unrelated history or silently promote inferences.
+
+**Demo/gate:** inspect, confirm and disable a suggestion; unconfirmed suggestions, stale updates and
+other owners cannot change effective guidance or existing artifacts.
+
+### P7-18d — Reuse a Proven Procedure
+
+**Depends on:** P7-18c plus observed repeated authoring/review work. **References:** architecture §9.
+
+- Let the assistant propose a small non-executable procedure for human review/save/selection (§9).
+  Reuse guidance provenance/privacy; load relevant recipes under context budgets and pin their versions.
+- Preserve task authority and protected inputs; no separate agent, recipe framework or eval service.
+
+**Demo/gate:** reuse a reviewed procedure in another context and measure actual missing work/editing
+effort. Preference suggestions and recipe capture are additive, not gates blocking P7-19.
+
 ## Phase 5 — Bring Your Campaign
 
 **References:** architecture §§7, 9, 11–13, 15, 17.
 
 ### P7-19a — Attach Facts and Hooks
 
-**Depends on:** P7-18. Full P3/P5 knowledge modeling is not required for selected source grounding.
+**Depends on:** P7-18b; P7-18c/d are not prerequisites. Full P3/P5 knowledge modeling is not required
+for selected source grounding.
 
 - Add bounded DM-selected inputs for established facts, attributed claims, explicit unknowns, required
   placements/outcomes in preparation, and creative permissions, with immutable source/DM annotation

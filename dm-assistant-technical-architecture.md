@@ -102,7 +102,8 @@ The user sees one application with distinct workflows:
 - **Encounter Studio:** encounter composition plus deterministic arithmetic/completeness/map fit.
 - **Session Desk:** notes, extraction, grouped review, and canonical change-set submission.
 - **Assistant:** cited campaign/rules questions and other bounded model tasks.
-- **Settings:** non-secret provider/model/profile configuration and authentication coordination.
+- **Settings:** non-secret provider/model/profile configuration, authentication coordination, and
+  editable application-wide guidance; this is not campaign canon or developer policy.
 
 The web and CLI call the same application services. Handlers contain no duplicate business logic.
 Modules exchange typed contracts and opaque IDs, never each other's ORM objects.
@@ -467,10 +468,10 @@ relevant. Generated factual claims cite supplied packet IDs; post-checks verify 
 authorization, while semantic support remains an eval concern.
 
 Standalone dungeon generation uses its campaign only as a preparation owner. It reads no campaign
-lore/revision/corpus implicitly. A separately selected rules/creature input and party assumptions may
-support mechanics without enabling campaign-lore grounding. Standalone, selected campaign grounding,
-and `synthetic_eval` are explicit modes with strict payloads rather than ambiguous optional scope.
-Synthetic evaluation facts cite packaged fixtures and never masquerade as canonical campaign sources.
+lore/revision/corpus implicitly. Explicitly selected rules, party assumptions, guidance and preparation
+material may support authoring without enabling campaign-lore grounding. Selected material remains
+revision-pinned and authority-labelled, not implicitly canonical. Standalone, selected campaign
+grounding and `synthetic_eval` have strict payloads; synthetic facts cite packaged fixtures.
 
 Selected campaign grounding distinguishes established facts, attributed claims, unknowns, required
 preparation placements, and creative permissions. Inputs cite immutable evidence or an explicit DM
@@ -485,6 +486,57 @@ For a 4–8-room adventure, whole-artifact context is appropriate. Component con
 read context (possibly the whole authorized adventure) from write scope (only selected targets/fields).
 The server pins artifact/base version, selection, authorized sources, permissions, and context hash;
 the client or model cannot expand them by supplying IDs. Context changes require visible confirmation.
+
+### Application-wide guidance
+
+Guidance applies to every model-facing workflow as it is implemented: planning, component generation,
+encounters, NPCs/dialogue, revision, session preparation and assistant responses. P7-16 introduces it
+through the standalone workflow; P7-18 adds confirmed learning and reusable procedures.
+
+Natural-language guidance is first-class, not a fixed catalogue of feature settings. Distinguish
+reported observations about the group, desired experiences/strategies, creative preferences and binding
+requirements. An observation does not imply a desired response: "the party attacks first" could inform
+either combat-forward play or believable consequences, depending on the DM's direction. None of these
+asserts that a prepared event occurred or permits changing factual answers to suit a preference.
+
+The Workbench stores guidance with minimal owner, scope, origin and revision metadata. Resolve product
+and personal defaults, selected group/campaign guidance and request overrides; show effective guidance
+and origins. Surface contradictory requirements or ambiguous intent instead of silently choosing.
+New preferences need no new schema field unless deterministic code actually consumes one.
+
+A shared resolver supplies relevant guidance to each strict task-specific context compiler, not a
+universal payload or the entire memory in every prompt. Pin the selected guidance per attempt; preserve
+its applicable intent across outline, generation, repair and revision. Maintained task templates
+assemble it alongside authorized evidence and task contracts. Users edit guidance, not raw system/tool
+prompts. Security, source authority, write scope and supported mechanical policy remain code-owned.
+
+Keep general seams for including/omitting optional content, using authorized existing material, and
+preserving or explicitly adapting it. Apply structural implications before construction; exclusions
+must not leave broken dependencies or missing essentials. Reuse source selection and revision services,
+not a subsystem for each content type. A new preference is not necessarily a new capability: disclose
+unsupported operations and conflicts rather than silently ignoring them or inventing substitutes.
+
+Requirements can be expressed in prose without claiming deterministic enforcement. Check what code
+can prove; use semantic review for meaning and adherence. Known requirement violations block readiness
+until corrected or the human explicitly revises the brief. Guidance must shape content, not merely be
+repeated in it, and personalization must not conceal defects in enabled generation.
+
+### Remembering guidance and procedures
+
+Changes to defaults affect future requests, not in-flight attempts or existing artifacts. Revisions
+inherit their base context; applying new guidance requires explicit scope and dependency review (§12).
+The human can inspect, edit, override, disable or delete saved guidance. Learning from authorized
+conversations/edits produces suggestions with supporting examples and proposed scope; promotion needs
+separate human confirmation. Ask may display suggestions, never activate them. Accepting an artifact
+edit is not consent to a lasting preference; unrelated history and silence are not evidence of consent.
+
+When repeated work justifies it, the same review boundary can save a versioned, non-executable recipe
+for a reusable procedure. Load human-selected relevant recipes under context budgets; they cannot
+override requirements or grant tools/authority. No agent framework or model-weight training is needed.
+
+Guidance and recipes are private application data, not canon or repository `AGENTS.md` edits. Exclude
+them from player assets and generic retrieval. Define access/export/deletion/backup and minimal retained
+artifact provenance before persistence; real retained use triggers §3. No separate memory service.
 
 ## 10. Core Campaign Data Model
 
@@ -796,7 +848,7 @@ guide, and inspector. Geometry-affecting demand belongs in the package, not invi
 ### Whole-adventure authoring
 
 ```text
-brief + explicit rules/party assumptions + optional selected campaign context
+resolved brief + relevant guidance + authorized rules/party/source inputs
     -> bounded whole-adventure outline
     -> deterministic map construction and validation
     -> bounded whole-adventure content submission over the resolved map
@@ -998,6 +1050,9 @@ layouts are acceptance criteria. A large SPA, freeform geometry editor and illus
 not prerequisites; any client-framework decision needs a scoped rationale rather than a rewrite for
 its own sake.
 
+Expose applicable guidance, its origin and overrides (§9); distinguish "use for this request" from
+"save my default". Show conflicts before dispatch and require separate confirmation of learned guidance.
+
 ### Component conversations and proposed changes
 
 Phase 4 adds an inspector conversation for the whole dungeon or a selected room, puzzle, or obstacle.
@@ -1066,7 +1121,8 @@ Deterministic validation covers, where applicable:
 - dungeon connectivity, witnesses, gates, geometry, paths, capacity, scale, and stable IDs;
 - player secrecy and asset hash/media/dimension contracts;
 - creature completeness, encounter arithmetic/map fit, and puzzle/trap/noncombat completeness;
-- extraction evidence and dependency closure.
+- extraction evidence and dependency closure;
+- guidance scope, overrides, attempt pins, human confirmation, privacy and authority boundaries.
 
 Structural/security errors block commit or preparation approval. Semantic concerns may be DM-
 overridable warnings with recorded rationale. Authorization failures are never overridable through a
@@ -1087,6 +1143,12 @@ Evaluate enabled workflows at distinct levels:
   synthetic briefs. Pin inputs/profile/versions and report usage, latency, failures and corrections;
   compare matched conditions where possible and label confounds. Do not require provider matrices,
   model-brand-specific gates, or exact wrapper chains in production approval.
+
+Test guidance across different content types and workflow stages: unfamiliar prose preferences,
+observations versus desired responses, exclusions, protected inputs and conflicting scopes. Check
+code-owned guarantees deterministically and meaning/adherence through human review. Measure actual
+missing work and editing time; do not add feature-specific eval machinery or equate saved memory with
+improvement.
 
 The target one-shot requires roughly ten minutes' review without inventing central play material;
 measure this with the DM rather than declaring it from tests. The first release is scoped to standalone

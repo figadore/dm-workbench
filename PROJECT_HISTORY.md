@@ -101,6 +101,14 @@
 - Documentation realignment does not implement the new authoring pipeline, authentication, editor,
   or conversations. Alpha retention remains uncrossed; real retained use triggers the existing gate.
 
+## Application-Wide Guidance Design
+
+- Specified scoped natural-language guidance across model-facing workflows, separating reported
+  tendencies, desired direction and requirements. Structure only what code consumes; feature examples
+  do not establish dedicated subsystems. Architecture §9 owns the shared contract.
+- P7-16 introduces explicit guidance; P7-18 adds human-confirmed preferences and demand-driven reusable
+  procedures. These are planned capabilities, not implemented behavior or changes to model authority.
+
 ## Persistent Decisions
 
 - Models propose; humans approve preparation and commit canon.
