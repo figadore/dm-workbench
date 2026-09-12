@@ -109,6 +109,33 @@
 - P7-16 introduces explicit guidance; P7-18 adds human-confirmed preferences and demand-driven reusable
   procedures. These are planned capabilities, not implemented behavior or changes to model authority.
 
+## P7-15a Fresh Reference Packet
+
+- Following review of the two unaccepted candidates, authored a separate synthetic five-room caper
+  using explicitly licensed Dyson Logos cartography and published presentation/design references.
+  Added a static map-and-guide reading copy and lightweight stop-at-first-confusion feedback prompts.
+- This is a documentation target, not generated pipeline output, a kernel-validated map, a browser
+  application feature, or phase acceptance. Neither candidate was merged.
+- Reese completed a read-through, preferred model-made corrections, and after three feedback rounds
+  described the reference as “at least 95% good,” with only minor edits left. Findings covered delivery
+  cues, map callouts and causal gaps. This establishes a useful revised target, not first-pass generator
+  reliability, measured review/editing time, or tabletop acceptance.
+- Post-review P7-15b roadmap decision: test causal/counterfactual consistency in initial prompting
+  independently first; try an additional bounded editorial pass only if that is insufficient. Prefer
+  concise replacement over accumulated explanations and measure fresh-case human repair burden,
+  guide length and cost before larger investment. This changes the roadmap, not runtime prompts.
+
+## P7-15b Provider-Free Whole-Adventure Prototype
+
+- Added a disposable file adapter over the existing structured-submission runner, technical-repair
+  reservation, guide contracts/validators and pure map tools. Three adapted synthetic briefs share
+  one validated five-room map; on/off inputs differ only by the general consistency objective.
+- Fixture packets provide exact DM guides, audience-filtered SVG maps, input/hash pins, all-attempt
+  accounting and blank human worksheets. Schema/reference rejection, one cumulative repair, unknown
+  usage, overages, transport failures and no-overwrite output are covered without providers or DB writes.
+- Short scripted content and synthetic counters establish plumbing only. No editorial pass, production
+  authoring integration, live consistency benefit, human effort/readiness evidence or retention crossing.
+
 ## Persistent Decisions
 
 - Models propose; humans approve preparation and commit canon.

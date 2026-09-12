@@ -37,6 +37,11 @@ editing/versioning exists. Campaign integration and exact-scale print do not blo
 Application-wide guidance (architecture §9) starts in P7-16; each later workflow consumes relevant
 guidance as it is implemented, without adding feature-specific preference systems.
 
+Model-made corrections are a core usefulness requirement, not merely late polish. After the safe
+manual-edit/version boundary exists, use measured correction burden to reconsider whether a minimal
+P7-18a/b slice should precede major map expansion. This is a priority decision to evaluate, not an
+implicit reorder of the named phases or their dependencies; record any adopted change before coding.
+
 ### Established foundation and supersession
 
 Reuse P0 platform/auth/database, P1/P2 sources/retrieval foundations, P4 gateway/bounded runners,
@@ -64,11 +69,14 @@ gates merely to unlock this roadmap. Do not expand old orchestration while repla
   answer, obstacle procedure, consequence, and conclusion. Include only fields with a consumer.
 - Choose a bounded combat policy/authorized source input if combat is included; never treat synthetic
   test stat blocks as proven official balance. Do not defer essential opposition behind full P8.
-- Add a simple worksheet: missing essentials, review/edit minutes, map agreement, coherence/variety,
-  walkthrough findings, and “would I run it?” Do not build another evaluation service.
+- Collect lightweight chat feedback: first confusion, missing essentials and “would I run it?” No
+  compulsory worksheet, scores, full reread or human editing assignment. Capture review/edit minutes
+  and walkthrough findings when actually supplied; missing measurements remain unknown.
 
 **Demo/gate:** Reese can review the target packet format and scope; baseline defects are explicit.
-Human confirmation of this standard is required before claiming phase acceptance.
+Human confirmation of this standard is required before claiming phase acceptance. A near-ready
+reference reached through human-led corrections is a useful target, not a generator success rate.
+Do not substitute continued reference polishing for fresh authoring evidence in P7-15b.
 
 ### P7-15b — Try Whole-Adventure Authoring
 
@@ -78,17 +86,51 @@ Human confirmation of this standard is required before claiming phase acceptance
   Later production adds the outline pass; this experiment isolates authoring quality from layout.
 - Invoke existing gateway/runners through a disposable CLI/file adapter, not a second production
   authoring engine. Keep exact mechanical/reference validation and bounded correction.
-- Compare against existing packets on matched briefs/maps where possible. Label unmatched comparisons;
-  do not attribute layout, prompt, or model changes to the authoring strategy alone.
+- **Test initial prompting independently first:** add causal and counterfactual consistency as an
+  authoring objective, not an output section or an incident-specific question checklist. Behavior and
+  consequences should follow from established motives, knowledge and circumstances as those change.
+  Resolve inconsistencies by revising/simplifying the situation, not appending defensive explanations.
+- Compare that instruction-only change within the same whole-adventure adapter against its baseline:
+  hold brief, validated map, model/effort, presentation and technical-repair policy/budgets fixed.
+  Neither arm adds an editorial model pass. Use fresh synthetic cases, including held-out cases after
+  prompt tuning, rather than repeatedly repairing the reference adventure.
+- **Only if initial prompting is insufficient:** test an additional bounded consistency review and
+  revision against the prompt-only result. Budget/authorize it separately and measure its incremental
+  benefit and cost. This optional editorial pass is not the later production outline/content pair,
+  nor permission to remove required structural/mechanical validation or existing technical repairs.
+- Any editorial revision replaces flawed prose, removes unnecessary elements and updates affected
+  passages together within authorized scope. Preserve the brief, validated map and useful play detail
+  at roughly the agreed guide length; no mandatory rationale appendix, silent invented justification,
+  or deletion of essentials to meet a word count. Prose replacement does not overwrite immutable
+  versions or protected human work. No new agent framework, universal story schema or eval service.
+- Compare against existing packets where briefs/maps match; label unmatched comparisons and confounds.
+  Also assess usefulness against chat-assisted authoring plus a good map, not only a blank-page task.
 - Exercise provider-free fixtures first, varying guidance across the existing briefs. Any live
-  generation/comparison needs explicit authorization.
-- Record total usage, latency, failures, actual missing work, and human editing time. At least three
-  materially different briefs and a human tabletop walkthrough inform the decision; no provider matrix
-  or model-brand-specific promotion gate is required.
+  generation/comparison needs explicit authorization; adding the objective to the roadmap makes no
+  runtime prompt change and does not authorize a call.
+- Record all attempts, failures/corrections, cumulative usage/latency, guide length, actual missing
+  authoring work and human review/editing effort. Distinguish fewer causal repairs from mere added
+  exposition; an AI's favorable critique is not human evidence. At least three materially different
+  briefs and a human tabletop walkthrough inform the decision. Keep feedback lightweight, permit
+  early stopping, and do not require a provider matrix or model-brand-specific promotion gate.
 
-**Demo/gate:** complete independent one-shots, with a target of about ten minutes' review and no need
-to invent their core content. If they fail, fix the authoring approach before scaling infrastructure.
-If live authorization or human review is unavailable, stop at a runnable prototype; do not invent evidence.
+**Demo/gate:** complete independent one-shots, targeting about ten minutes' review without inventing
+core play material. Look for fewer human causal repairs without verbosity or loss of useful content;
+near-ready prose alone does not establish session length or tabletop usefulness. Adopt the simplest
+measured authoring approach that meets the target, not an automatic extra review call. If repeated
+human-led reconstruction persists, stop and revise the authoring approach or explicitly reconsider the
+product promise as collaborative authoring before scaling infrastructure. Do not silently lower the
+readiness target. If live authorization or human review is unavailable, stop at a runnable prototype.
+
+**Investment boundary:** agree a bounded trial before larger pipeline/workspace investment. Initial
+planning estimate: 1–2 focused engineering weeks, several hours of human feedback and a short tabletop
+walkthrough, with early stopping rather than a review quota. Conditional on useful authoring evidence,
+rough estimates were 6–12 additional engineering weeks for P7-16 and another 6–12 for maps/contextual
+revision. These are unaudited planning ranges using the existing foundation, not deadlines or proof
+that quality will converge; broader memory, encounter coverage and exact-scale print are excluded.
+The suggested 15–30-minute assisted-prep allowance was an unmeasured contingency, not a replacement
+for the ten-minute target. Quantify that tradeoff and obtain an explicit product decision rather than
+assuming more code will solve it.
 
 ## Phase 2 — Prompt to Play
 
@@ -102,7 +144,11 @@ If live authorization or human review is unavailable, stop at a runnable prototy
   relationships, opposition, and bounded geometry-relevant affordances.
 - Construct/validate the map with the existing pure engine; author the complete content with the whole
   small adventure and resolved map in context. Target two normal creative passes plus bounded repair,
-  not six mandatory task families. Freeze policy only after measuring realistic submissions.
+  not six mandatory task families. Carry P7-15b's measured causal/counterfactual consistency objective
+  into early outline/content prompting and any repairs as an authoring constraint, not extra guide
+  prose. Prefer concise replacement over explanatory accumulation. Add an editorial model pass only
+  if the prompt-first experiment justifies its incremental cost; it is not a third mandatory call.
+  Freeze policy only after measuring realistic submissions.
 - Define one cohesive content submission with typed references and mechanics where consumed; prose
   remains prose. Resolve IDs, supported numeric policy, terrain, and guide assembly in code.
 - Carry relevant natural-language guidance through outline, content, repair and validation (§9).

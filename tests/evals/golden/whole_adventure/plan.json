@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "title": "Fixed Five-Room Trial Site",
+  "premise": "A disposable synthetic site for comparing whole-adventure content on identical geometry.",
+  "themes": ["synthetic"],
+  "rooms": [
+    {"ref": "entry", "name": "Entrance", "role": "entrance", "purpose": "Introduce the site and observable evidence."},
+    {"ref": "gallery", "name": "Gallery", "role": "exploration", "purpose": "Present evidence and a route choice."},
+    {"ref": "hall", "name": "Inner Hall", "role": "puzzle", "purpose": "Resolve a puzzle using evidence available before the answer is needed."},
+    {"ref": "vault", "name": "Repository", "role": "objective", "purpose": "Resolve the prepared objective and its consequences."},
+    {"ref": "annex", "name": "Side Annex", "role": "optional", "purpose": "Offer an exploration challenge, the gate key and an optional secret bypass.", "encounter": "exploration"}
+  ],
+  "critical_path": ["entry", "gallery", "hall", "vault"],
+  "branches": [{"ref": "annex_branch", "from_room": "gallery", "rooms": ["annex"]}],
+  "loops": [{"ref": "annex_bypass", "from_room": "annex", "to_room": "vault", "secret": true}],
+  "gates": [{"ref": "inner_gate", "between_rooms": ["gallery", "hall"], "kind": "locked", "dependency_kind": "key", "dependency_room": "annex", "dependency_name": "Inner Gate Key"}],
+  "room_contents": [{"room_ref": "vault", "objective": "Prepared Objective"}]
+}

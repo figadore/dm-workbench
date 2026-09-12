@@ -45,6 +45,8 @@ standalone release.
   phases, task IDs, dependencies, demos, and acceptance gates.
 - [`dm-assistant-technical-architecture.md`](dm-assistant-technical-architecture.md) — target boundaries,
   authoring/revision design, security, context, persistence, and evaluation.
+- [P7-15a fresh reading packet](docs/p7-15a/last-pay-chest.html) — original five-room adventure on
+  attributed Dyson Logos cartography; open the HTML locally for map-and-guide review. Not playtested.
 - [`PROJECT_STATUS.md`](PROJECT_STATUS.md) — the only live resume point.
 - [`PROJECT_HISTORY.md`](PROJECT_HISTORY.md) — compact delivered milestones and durable decisions.
 
@@ -151,6 +153,20 @@ uv run dm-dungeon schema
 
 See [`packages/dungeon-engine/README.md`](packages/dungeon-engine/README.md) and its
 [`TOPOLOGY_MATH.md`](packages/dungeon-engine/src/dm_dungeon/validation/TOPOLOGY_MATH.md).
+
+## Provider-Free Whole-Adventure Prototype
+
+Exercise P7-15b's matched consistency-on/off prompts with three synthetic briefs and one validated map:
+
+```bash
+uv run --frozen python scripts/dungeon-whole-adventure-prototype.py \
+  --output generated/p7-15b-prototype
+```
+
+This writes fixture DM guides, DM/player SVG maps, attempt measurements and blank review worksheets.
+It makes no provider calls or editorial pass. Short scripted samples and synthetic token counters are
+plumbing checks, not authoring-quality or human-readiness evidence. See the
+[prototype instructions and limits](docs/p7-15b/README.md); the destination must not already exist.
 
 ## Verification
 

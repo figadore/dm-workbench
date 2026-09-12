@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' file:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<title>The Last Pay Chest — DM reading copy</title>
+<style>
+:root{color-scheme:light;--ink:#24332f;--muted:#5d665e;--paper:#fffdf7;--accent:#215b51;--line:#d8d9ca}
+*{box-sizing:border-box}html{scroll-padding-top:1.5rem}body{margin:0;background:#f1f0e7;color:var(--ink);font:17px/1.62 Georgia,'Times New Roman',serif}
+a{color:var(--accent);text-underline-offset:.16em}a:focus-visible{outline:3px solid #b67422;outline-offset:4px}
+.skip{position:absolute;left:-9999px}.skip:focus{left:1rem;top:1rem;padding:.5rem;background:white;z-index:5}
+.shell{max-width:1540px;margin:auto;display:grid;grid-template-columns:minmax(390px,.95fr) minmax(460px,1.05fr);gap:2.1rem;padding:2rem}
+aside{position:sticky;top:1rem;align-self:start;max-height:calc(100vh - 2rem);overflow:auto;font:14px/1.5 system-ui,sans-serif}
+.kicker{font:700 12px/1.4 system-ui,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--accent)}
+.map{display:block;width:100%;max-height:65vh;object-fit:contain;background:white;border:1px solid var(--line);border-radius:8px}
+.mobile-start{display:none}.map-link{display:block}.map-help{margin:.65rem 0;color:var(--muted);font-size:12px}
+nav{display:grid;grid-template-columns:1fr 1fr;gap:.4rem}nav a{display:flex;align-items:center;gap:.6rem;background:var(--paper);border:1px solid var(--line);padding:.5rem .65rem;border-radius:5px;text-decoration:none}
+nav b{color:white;background:var(--accent);font-size:12px;border-radius:50%;width:23px;height:23px;text-align:center;line-height:23px}
+.feedback{margin:1rem 0 0;padding:1rem;border-left:3px solid #b67422;background:#fcf6e6}.feedback strong{display:block;margin-bottom:.3rem}
+article{background:var(--paper);padding:2rem 2.25rem;border:1px solid var(--line);border-radius:8px;min-width:0}
+h1,h2,h3{font-family:system-ui,sans-serif;line-height:1.2;color:#163e36}h1{font-size:2.55rem;letter-spacing:-.055em;margin:0 0 .6rem}h2{font-size:1.6rem;margin:2.6rem 0 1rem;padding-top:1rem;border-top:1px solid var(--line);scroll-margin-top:1rem}h3{font-size:1.1rem;margin:1.7rem 0 .7rem}
+p{margin:.85rem 0}strong{font-weight:700}blockquote{margin:1.2rem 0;padding:.05rem 1rem;border-left:3px solid #b39a62;background:#f6f1e3;color:#3b392e}ul{padding-left:1.25rem}li{margin:.6rem 0}hr{border:0;border-top:1px solid var(--line);margin:2rem 0}
+article>p:last-child{font:13px/1.55 system-ui,sans-serif;color:var(--muted)}
+@media(min-width:1500px){body{font-size:18px}}
+@media(max-width:900px){.mobile-start{display:block;margin:0 0 1rem;padding:.6rem;background:var(--paper);border:1px solid var(--line);border-radius:5px}.shell{display:flex;flex-direction:column;padding:1rem;gap:1rem}aside{position:static;max-height:none;overflow:visible}.map{max-height:65vh}article{padding:1.4rem}h1{font-size:2rem}.feedback{margin-bottom:0}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+@media print{body{background:white;font-size:11pt}.shell{display:block;padding:0}aside{position:static;max-height:none;overflow:visible;break-after:page}.map{max-height:80vh}nav,.feedback,.map-help,.skip{display:none}article{border:0;padding:0}h2,h3{break-after:avoid}blockquote,li{break-inside:avoid}}
+</style></head><body><a class="skip" href="#the-job">Skip to the adventure</a>
+<div class="shell"><aside aria-label="DM map and room navigation"><p class="kicker">DM reading copy · original, untested adventure</p>
+<a class="mobile-start" href="#the-job">Read the opening ↓</a><a class="map-link" href="assets/last-pay-chest-map.png" target="_blank" rel="noopener"><img class="map" src="assets/last-pay-chest-map.png" alt="Five-room counting house. Entry connects to Mosaic Hall and Records; Records connects to Strongroom; Strongroom connects to Mosaic Hall and Counting Room; Counting Room also connects to Mosaic Hall. The red dashed cord crosses Mosaic Hall's southern opening; the safe is in Strongroom's northern aisle."></a>
+<p class="map-help">Click the map to enlarge. Red dashes: trip cord. Gold box: safe.<br>Cartography by Dyson Logos; adapted labels and props. DM-only.</p>
+<nav aria-label="Jump to a room"><a href="#room-1"><b>1</b> Entry Hall</a><a href="#room-2"><b>2</b> Mosaic Hall</a><a href="#room-3"><b>3</b> Records</a><a href="#room-4"><b>4</b> Strongroom</a><a href="#room-5"><b>5</b> Counting Room</a><a href="#settle-up">Settlement</a></nav>
+<div class="feedback"><strong>First confusion is enough.</strong>Read the opening and one room. Stop if it doesn't make sense.<br><br>“Stopped at ___; confused by ___; keep reading: yes/no.”<br><br>No form, scores, editing assignment, or timer required. Reply in chat.</div>
+</aside><article aria-label="Adventure guide"><h1 id="the-last-pay-chest">The Last Pay Chest</h1>
+<p><em>A small heist with an awkward question: whose money are you recovering?</em></p>
+<p><strong>Four level-3 D&amp;D 5e characters · five rooms · one storey with short stairs · target 60–90 minutes, untested.</strong> This is a noncombat caper: negotiation, a break-in, and a trap. No creature statistics or encounter-balance claim.</p>
+<p><a href="assets/last-pay-chest-map.png">DM map</a> · <a href="last-pay-chest.html">Browser reading copy</a></p>
+<h2 id="the-job">The job</h2>
+<blockquote>
+<p>“A hundred and twenty gold. Every coin belongs to the dock crew.” Foreman Iona puts a red-sealed payroll receipt on the table. “Nell took the money this morning. She's holed up in the old counting house. Bring it back, and I'll pay you twenty gold from my own purse. Please don't kill anyone over wages.”</p>
+</blockquote>
+<p>Nell took the wooden pay chest from the dock office while it was open for today's payout. Iona followed her to the old counting house, where Nell shouted, “Don't come in—I've set a trap!” Iona doesn't know what the trap is and won't risk finding out herself. The watch can investigate tomorrow; the crew needs its pay tonight. Iona lends the party a lantern and a knife. Start at the counting house entrance.</p>
+<p><strong>What is really happening — DM only:</strong> Nell, a former dockworker, stole the chest after Iona again refused the <strong>30 gp compensation</strong> promised when a loading crane crushed Nell's hand last winter. Nell wants her 30, not the crew's other 90. Iona signed a payment order but never sent it for payment; she admits the debt only when confronted with that document. She deliberately omitted it from her pitch.</p>
+<p><strong>Why this building matters:</strong> the old counting house is now an archive, not the payroll office. Its safe holds private employment records, including Nell's unpaid order; Nell doesn't know the order exists. She once stored nets here and knows the internal passages. She is staging a standoff: keep the payroll out of Iona's reach until the unpaid crew pressures Iona to settle. The threatened trap is meant to keep pursuers out, not merely slow them down. There is only one outside exit: the stairs in <strong>Entry Hall (1)</strong>.</p>
+<p><strong>The situation in one line:</strong> Nell has the money in the <strong>Counting Room (5)</strong>; proof of her claim is in the <strong>Strongroom (4)</strong>. Recovering the chest is easy compared with deciding how to settle the debt.</p>
+<p><strong>Two approaches:</strong> cross the <strong>Mosaic Hall (2)</strong> to confront Nell quickly, or take the side passage through <strong>Records (3)</strong> and the <strong>Strongroom (4)</strong> to investigate and approach her from behind. The map's upper stairs also connect the Strongroom to the Mosaic Hall. No doors are locked; only the small safe is.</p>
+<p><strong>If the party brings Iona inside:</strong> after they disable the net or show her a safe route around it, she accompanies them. She demands the chest and disputes Nell's claim, but won't start a fight. If the party insists on inspecting the safe, she gives them its combination, <strong>1704</strong>, rather than be seen blocking the inquiry. The settlement below works indoors too; bringing her in does not itself settle the debt.</p>
+<h2 id="room-1">1 — Entry Hall</h2>
+<p><strong>On arrival — read or paraphrase:</strong></p>
+<blockquote>
+<p>Two stone pillars frame a dusty hall. A passage bends toward a huge octopus mosaic; another curls north. On the wall hangs a brass plaque: “THE WORKERS PURCHASED THIS HALL — DAY 17, MONTH 04.”</p>
+</blockquote>
+<p><strong>Exits — DM reference, not read-aloud:</strong></p>
+<ul>
+<li>The curving north passage leads to <strong>Records (3)</strong>.</li>
+<li>The passage toward the mosaic leads to <strong>Mosaic Hall (2)</strong>.</li>
+<li>The entrance stairs lead back outside.</li>
+</ul>
+<p><strong>If someone calls into the building — Nell replies:</strong></p>
+<p>Nell hears the call from <strong>Counting Room (5)</strong> and shouts back. She wants them to stay away from her and the chest.</p>
+<blockquote>
+<p>“Stay where you are—there's a trap! Tell Iona I want my thirty.”</p>
+</blockquote>
+<p>If the party stays quiet, don't deliver this line here. If they answer, use <a href="#run-nell-dm-only">Run Nell</a>. If they offer to hear her claim without threatening her, she permits them to approach and explains the cord in <strong>Mosaic Hall (2)</strong>. Otherwise, she keeps telling them to stay back.</p>
+<h2 id="room-2">2 — Mosaic Hall</h2>
+<p><strong>On arrival — read or paraphrase:</strong></p>
+<blockquote>
+<p>An octopus fills the stone floor. A thin cord crosses the southern entrance at ankle height. Directly above it hangs a bundled fishing net. Broken crockery glints among its knots. Nell watches from the raised room to your right, one hand wrapped in a dirty bandage.</p>
+</blockquote>
+<p><strong>For the DM — running this room:</strong></p>
+<p><strong>The obstacle:</strong> pulling the ankle-height cord releases Nell's drop-net over the southern opening. Walking into the cord slowly triggers it just as surely as running. Both the cord and the overhead bundle are visible before crossing. The octopus is only a mosaic.</p>
+<ul>
+<li><strong>Step carefully over the cord:</strong> cross safely. Warn companions; it stays armed.</li>
+<li><strong>Cut the cord from the side with the supplied knife:</strong> the net drops into the empty opening. Pull it aside and the route is permanently safe. Cutting the cord while standing underneath drops it on you.</li>
+<li><strong>Catch the cord or deliberately spring it:</strong> one leading character is tangled and takes <strong>1d4 slashing damage</strong> from pottery. An untangled ally with a knife frees them immediately; alone, they cut themselves free in a minute. Without a blade, crawling out takes ten minutes. No repeat damage or additional roll. This is a custom trap, not a claim of official balance.</li>
+<li><strong>If the net falls — Nell's reaction:</strong> she hears the crash and calls, “Stay there and listen!” If the party answers, use <a href="#run-nell-dm-only">Run Nell</a> for her demand and responses. She does not attack or steal their gear. The noise reveals the disturbance, not hidden companions. The trap cannot reset itself.</li>
+</ul>
+<p><strong>Optional help, only if wanted:</strong> “You can see both the string and what it's holding up.” Then: “You don't have to stand under the net to release it.”</p>
+<p><strong>Routes:</strong> the short stairs beside the pillars lead to <strong>Counting Room (5)</strong>. The stairs on the north edge reach the <strong>Strongroom (4)</strong>. Neither route crosses another trap.</p>
+<h2 id="room-3">3 — Records</h2>
+<p><strong>On arrival — read or paraphrase:</strong></p>
+<blockquote>
+<p>A low writing table holds an open desk calendar and a pencilled note. Bootprints continue east toward the storerooms.</p>
+</blockquote>
+<p><strong>When someone examines the desk — show or read both entries below. No search roll.</strong></p>
+<p><strong>Pencilled note:</strong></p>
+<blockquote>
+<p>“Strongroom safe: four wheels. Day, then month. Our first day as owners, not my birthday. Keep the purchase plaque in the entry; I won't remember otherwise.”</p>
+</blockquote>
+<p><strong>Calendar entry:</strong></p>
+<blockquote>
+<p>“Nell — crane injury. Compensation agreed: 30 gold. Order filed in strongroom safe.”</p>
+</blockquote>
+<p><strong>For the DM:</strong> the note refers to the purchase plaque in <strong>Entry Hall (1)</strong>. The calendar supports Nell's claim, but it is a clerk's reminder, not Iona's signed payment order.</p>
+<p><strong>Optional hints:</strong> “Which day did the workers become owners?” If that doesn't help: “The entry plaque supplies the four digits, in the requested order.”</p>
+<p><strong>Routes:</strong> south returns to <strong>Entry Hall (1)</strong>; east reaches the western passage of the <strong>Strongroom (4)</strong>.</p>
+<h2 id="room-4">4 — Strongroom</h2>
+<p><strong>On arrival — read or paraphrase:</strong></p>
+<blockquote>
+<p>Three short storage aisles hold document niches. In the northern aisle sits a knee-high iron safe. Four brass number wheels sit beside its handle. An open passage at the far eastern end leads south.</p>
+</blockquote>
+<p><strong>For the DM — running this room:</strong></p>
+<p>The niches contain old cargo tallies, not treasure or another hidden clue. Nell passed through without searching them.</p>
+<p><strong>Opening the safe:</strong> set <strong>1704</strong>, turn the handle, and the door opens. Wrong combinations do nothing; the wheels give no partial-answer feedback. Trying all 10,000 combinations is not an instant action: at one attempt every six seconds it takes up to about seventeen hours. If this carries the unresolved standoff into the next morning, the watch arrives; see <a href="#settle-up">Settle up</a>.</p>
+<p><strong>Other approaches:</strong> with thieves' tools, a <strong>DC 13 Dexterity check</strong> opens it. One attempt takes ten minutes; on failure, a stiff inner pin jams and picks cannot open it during this visit. The correct combination still works. A crowbar, if someone brought one, opens the safe in ten noisy minutes with no roll, but bends it beyond repair. At the sound of the crowbar, Nell shouts from <strong>Counting Room (5)</strong>, “What are you breaking in there?” Use <a href="#run-nell-dm-only">Run Nell</a> if they answer. This changes no unseen timer and triggers no extra trap. Established character magic may offer another route under the table's rules.</p>
+<p><strong>When the safe opens — show or read this order, filed among the employment records:</strong></p>
+<blockquote>
+<p>“Approved: 30 gold to Nell for the crane injury incurred while unloading for the company. Pay from Iona's reserve, NOT the crew's wage chest. — Iona, signed and sealed.”</p>
+</blockquote>
+<p>The order is genuine. Its red seal matches Iona's payroll receipt; she will acknowledge it. Nell accepts a legible copy, but taking the original provides stronger leverage with Iona. The safe holds no money.</p>
+<p><strong>Routes:</strong> the west passage leads to <strong>Records (3)</strong> and down the short stairs to <strong>Mosaic Hall (2)</strong>. The long passage down the east side leads to <strong>Counting Room (5)</strong>. These are ordinary open routes, not secrets.</p>
+<h2 id="room-5">5 — Counting Room</h2>
+<p><strong>On arrival — read or paraphrase:</strong></p>
+<blockquote>
+<p>Nell sits beside a stone statue of an old guildmaster. An open wooden chest rests between her boots. Gold fills it; a separate little pile sits on her coat.</p>
+</blockquote>
+<p><strong>If the party enters openly or speaks to her here — Nell says:</strong></p>
+<blockquote>
+<p>“Thirty. That's all I'm taking. She promised it when the crane took my hand.”</p>
+</blockquote>
+<p>Don't deliver her line to an unnoticed scout.</p>
+<h3 id="run-nell-dm-only">Run Nell (DM only)</h3>
+<p><strong>Her plan:</strong> Nell is tired, angry, and frightened, not a hardened fighter. She wants a settlement, not a getaway: hold the wages until Iona pays what she owes, preferably with witnesses. She has already counted out thirty coins to display her demand. Now she guards the chest and waits for Iona's response. Her account of the injury and debt is true.</p>
+<p><strong>The only way out:</strong> the east passage through the Strongroom and the stairs through the Mosaic Hall are alternative internal routes. Both ultimately reach the <strong>Entry Hall (1)</strong> stairs, where the waiting crew can see her leave. There is no secret exit. If driven off, Nell can retreat along those passages, but surrenders rather than fighting past anyone who blocks her.</p>
+<p><strong>What she has:</strong> <strong>90 gp in the chest; 30 on her coat.</strong> She has spent or hidden nothing. Counting confirms the full 120. There is no second thief.</p>
+<p><strong>Run the conversation from what the party offers:</strong></p>
+<ul>
+<li><strong>Show the signed order and arrange a settlement with Iona:</strong> Nell puts all 120 back and insists on being present when Iona pays. If Iona is still outside, Nell carries the chest out with the party. No persuasion roll.</li>
+<li><strong>Promise to help, without the order:</strong> she offers them 90 and keeps 30. A better speech does not replace evidence or payment.</li>
+<li><strong>Pay her 30 from the party's own money:</strong> she returns the full chest. With the signed order, the party can reclaim that advance from Iona afterward.</li>
+<li><strong>Take 90 and let her keep 30:</strong> she accepts the compromise and leaves with the party to face Iona. The crew's shortage remains a problem to settle outside.</li>
+<li><strong>Distract her while someone approaches from the other route:</strong> one character makes a <strong>DC 13 Charisma (Deception) check</strong>. Success lets an accomplice lift the chest and carry it away. Failure means Nell sees them, grabs its handle, and demands a plain offer. No unchanged repeat roll. The separate pile of 30 stays with her unless the party also takes it.</li>
+<li><strong>Threaten or attack:</strong> she abandons the coins and flees away from the threat, or surrenders if surrounded. If cornered, she lets go of the chest. Resolve this as surrender, not an improvised combat encounter. Violence can recover the money, but does not settle her debt or win her cooperation.</li>
+</ul>
+<p><strong>If talks stall:</strong> Nell keeps guarding the payroll. She hopes Iona will give in before the watch arrives tomorrow; if not, she intends to put her grievance to them. She is not preparing an unseen escape. Ordinary exploration and conversation do not secretly advance to morning. If the party abandons the job overnight, use the withdrawal ending below.</p>
+<h2 id="settle-up">Settle up</h2>
+<p>Iona normally waits near the entrance with the dock crew. If the party has escorted her inside, resolve the same agreement there; no public audience is required. She has enough money in her personal purse to pay the fee and the compensation or top-up below.</p>
+<ul>
+<li><strong>Full chest and signed order:</strong> shown her signed order, Iona pays Nell 30 from her reserve, pays the party its promised 20, and distributes all 120 in wages. If the party advanced Nell's money, Iona reimburses them instead. Nell confirms the debt is settled; Iona withdraws her theft complaint.</li>
+<li><strong>Only 90 recovered, with the order:</strong> Iona tops up the wage chest by 30 from her reserve. Nell's retained 30 satisfies the debt; the crew gets 120 and the party gets its 20. No second compensation payment is due.</li>
+<li><strong>No order:</strong> Iona pays the promised 20 for returning either 90 or 120 but refuses any further compensation. With 90, each worker receives three-quarters of the expected wage; with 120, the crew is paid but Nell remains uncompensated unless the party paid her themselves. Say which happened; don't invent another quest to end this one.</li>
+<li><strong>Walk away from the unresolved standoff:</strong> if the party leaves Nell holding the whole payroll overnight without presenting the order, no reward is paid. The crew misses tonight's wages and refuses the morning's unloading. The watch arrives, takes Nell into custody for the theft, and returns the 120 to Iona for the crew. Without the order, Nell's compensation claim remains unresolved. This is a failed mediation, not a secret getaway or another required dungeon.</li>
+</ul>
+<p>The party can also take just the order outside: Iona gives them the separate 30 when shown her signed order; Nell exchanges all 120 for that payment. The party can reject their reward or give money away; apply that choice rather than silently making either side whole.</p>
+<hr />
+<p><strong>That is the whole adventure.</strong> Reply in any format: <strong>“Stopped at ___; confused by ___; keep reading: yes/no.”</strong> If you finished, substitute <strong>“Would run: yes / with changes / no”</strong> and name the biggest change. One positive observation is welcome, not homework.</p>
+<p><em>Original synthetic draft, not playtested or approved for play. DM-only: this guide and its map reveal the trap, safe, and hidden information. Cartography by Dyson Logos; adapted with labels under the source's free commercial-use license. <a href="reference-notes.md">Map, research, and author checks</a> are optional supporting material, not required reading.</em></p>
+</article></div></body></html>

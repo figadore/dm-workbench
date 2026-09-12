@@ -3,41 +3,60 @@
 > records durable milestones.
 
 ## Current Task
-- **Application-wide guidance design:** documentation complete; no runtime implementation, schema
-  change, or partial write path. P7-15a target-packet acceptance is not established by this change.
+- **P7-15b — Provider-free prompt-first whole-adventure prototype: complete and runnable.**
+  Stopped at the authorized fixture boundary; the live/human authoring-quality gate is not crossed.
 - **Schema head:** `0008_workbench_defaults`. **Retention gate:** not crossed.
 
-## Design Outcome
-- Architecture §9 owns the application-wide guidance contract: first-class natural language,
-  observations distinct from desired direction, relevant task context, scope/pins and human confirmation.
-- P7-16 introduces explicit guidance; P7-18 adds confirmed preferences and demand-driven procedures.
-  Later workflows reuse the same contract. No feature-specific settings catalogue or puzzle subsystem.
-- Removed puzzle-specific delivery commitments and shortened duplicated explanation in goals, plan,
-  README and history. Existing examples are not additional product requirements.
-- This change intentionally excludes the separate P7-15a adventure documents, map, and human-feedback
-  record. Their absence here does not mean no candidate authoring or human review has occurred.
+## Completed Behavior
+- `scripts/dungeon-whole-adventure-prototype.py` runs three adapted synthetic briefs against one
+  supported validated five-room map, with consistency instruction on/off and otherwise matched inputs.
+- Reuses the shared structured-submission runner, cumulative token/time repair reservation, existing
+  guide contracts/reference checks/projection and pure map compiler/validators/renderers. Adds an
+  experiment-only overview payload and requires the fixed gate's play-content entry.
+- Exactly one initial submission plus at most one technical repair; no outline or editorial call.
+  Repair retains the initial objective/brief/map. Missing usage prevents repair; overages reject.
+- Local packets include DM guide, DM/player SVG maps, exact inputs/schema/map/plan/profile pins,
+  hash manifest, guide word count, all-attempt diagnostics/counters and blank human worksheets.
+  Failure scenarios retain reports without accepted guides; existing output folders are not overwritten.
+- CLI exposes only fixture transport. No production prompts, DB schema, approval/canon, existing
+  application workflow or immutable artifact versions changed. No partial migration/write path.
+- Demo: `uv run --frozen python scripts/dungeon-whole-adventure-prototype.py --output generated/my-trial`
+  (destination must be new). `--scenario reference-repair` or `rejected` exercises failures.
+  `generated/p7-15b-prototype/` contains the ignored repair demo. See `docs/p7-15b/README.md`.
 
-## Implementation Baseline
-- Existing staged generation, token login, basic asset UI, and faux Ask surfaces remain implemented.
-  Cohesive authoring, normal owner login, the new editor, guidance and contextual conversations remain
-  planned. Technical checks alone do not establish adventure usefulness or human phase acceptance.
+## Evidence / Limits
+- Root unit/eval suite: **283 passed**. Pure dungeon suite: **139 passed**.
+- Focused Ruff check/format and mypy passed; `git diff --check` passed. CLI success, repair, final
+  rejection, matched inputs, usage/budget denial, transport failure, hashes and secrecy tested.
+- Fixture prose is intentionally short; identical scripted answers in both conditions prove no
+  consistency benefit. Token counters are synthetic, latency is local and cost/human effort are null.
+- Three settings adapt existing Tier A briefs to one five-room map; comparisons to prior packets are
+  unmatched. Gallery is reserved from live tuning, not unseen by fixture tests. Fresh held-out live
+  cases must be selected after prompt freeze. No live call or live budget is authorized.
+- Technical acceptance is not semantic completeness, causal correctness, map/prose agreement or
+  session-length evidence. No human walkthrough/review time, readiness or phase-wide acceptance claimed.
+- Ten-minute/no-core-authoring target remains. Test initial consistency prompting independently;
+  add a separately budgeted/authorized editorial pass only if prompt-only evidence is insufficient.
+
+## Preserved Earlier Work
+- Reese's revised Last Pay Chest is “at least 95% good”; stop broad reference polishing. Three human
+  correction rounds establish a target, not first-pass reliability. No measured edit minutes/playtest.
+- Preserve `docs/p7-15a/` and ignored reviewed snapshots under `generated/p7-15a-reviewed/`:
+  `complete-read-34b83807/` and `nell-plan-8690fea9/`. Licensed reference map is not this prototype's map.
+- Earlier candidates remain unmerged; static reader is not the P7-16 workspace. Existing alpha runnable.
 
 ## Intentional Uncommitted Work
-- Guidance documentation only: `dm-assistant-project-goals.md`, `dm-assistant-implementation-plan.md`,
-  `dm-assistant-technical-architecture.md`, `README.md`, `PROJECT_HISTORY.md`, and this handoff.
-- Conflicts in history/handoff resolved without importing unrelated target-packet milestones or
-  claiming that absent review files are available. The resolved documentation is staged for completion.
-- Existing alpha remains runnable. No live calls, preparation approval or canonical writes occurred.
-
-## Verification / Blockers
-- Provider-free `tests/evals/test_dungeon_evals.py`: **12 passed**.
-- Documentation links, handoff length, conflict-marker/index checks and `git diff --check` checked.
-- Candidate documents and existing human feedback must be reconciled separately before target
-  acceptance. Do not invent missing review/edit-time or tabletop evidence; live trials need permission.
+- Preserved pre-existing packet/roadmap work: `docs/p7-15a/`, `README.md`, `PROJECT_HISTORY.md`, this
+  handoff, `dm-assistant-implementation-plan.md`, and `dm-assistant-technical-architecture.md`.
+- Prototype: `scripts/dungeon-whole-adventure-prototype.py`,
+  `src/dm_assistant/orchestration/dungeons/whole_adventure_prototype.py`,
+  `tests/unit/test_whole_adventure_prototype.py`, `tests/evals/golden/whole_adventure/`,
+  `docs/p7-15b/README.md`, plus README/architecture/history/handoff additions. All intentional/runnable.
+- Generated packets remain ignored; no real campaign/rules material, credentials or provider responses.
 
 ## Single Next Recommended Task
-**P7-15a — Reconcile the target packet and review evidence.**
-First action: read P7-15a and inspect the separately authored candidates and existing human feedback;
-select the documents to bring into scope through a separate reviewed change. Use that evidence to
-confirm or revise the target rather than asking for a redundant initial review. Do not begin live
-trials or production refactoring before the relevant gates.
+**P7-15b — Agree the bounded live/human prompt-only trial.**
+First action: show Reese the fixture packet and obtain explicit model/effort, cumulative attempt/token/
+cost/time and human-feedback budgets plus provider authorization before adding or running live transport.
+Pin fresh development/held-out briefs and roughly 2,000-word guide budget for matched on/off conditions;
+no editorial pass or P7-16 pipeline/workspace investment is implied by fixture success.

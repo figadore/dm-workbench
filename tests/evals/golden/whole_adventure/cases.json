@@ -1,0 +1,35 @@
+[
+  {
+    "case_id": "signal_house",
+    "cohort": "development",
+    "adapted_from": "tier_a_case_01",
+    "title": "The Unsent Tide Warning",
+    "assumptions": "Four adventurers; system-neutral automatic outcomes, no official combat rules or imported sheets; three-hour session target, not established by fixtures.",
+    "prompt": "Recover an unsent warning from a storm-damaged salt-marsh signal house before the spring tide isolates it. Use the supplied five-room map unchanged. Design environmental navigation and spatial clues, with visible wind/water changes and recovery rather than an alarm or combat response. Do not invent unrepresented flooded terrain: use portable wet evidence and observable conditions outside instead.",
+    "guidance": "Favor short concrete observations over ornate sensory prose. Describe what characters notice, not what they must feel or do. Avoid linked machinery as the default obstacle.",
+    "authorized_facts": [],
+    "comparison_caveat": "Setting adapted from Tier A, with a new brief and fixed neutral map; not a matched comparison to prior packets. Fixture prose only tests transport and projection."
+  },
+  {
+    "case_id": "embassy",
+    "cohort": "development",
+    "adapted_from": "tier_a_case_02",
+    "title": "The Treaty Seed",
+    "assumptions": "Four adventurers; system-neutral automatic outcomes, no official combat rules or imported sheets; three-hour session target, not established by fixtures.",
+    "prompt": "Retrieve the dormant treaty seed from an abandoned greenhouse embassy. Use the supplied five-room map unchanged. Build social inference from observable evidence of reciprocal concessions and offer multiple approaches to an exploration obstacle. Do not invent living partitions or change wall geometry. Preserve the two synthetic facts and invent only preparation-local people and circumstances, not additional campaign history.",
+    "guidance": "Let disagreement have understandable stakes. Do not treat a desired player response as a mandatory action. Separate what an inhabitant believes from what the DM knows is true; avoid speeches explaining the moral.",
+    "authorized_facts": ["The Reed Delegation marked honest concessions with paired knots.", "The Orchard Delegation diverted the last shared cistern during a drought."],
+    "comparison_caveat": "Adapted from the six-room Tier A brief to five fixed rooms; unmatched to historical packets. Synthetic facts are preparation input, not a campaign attachment."
+  },
+  {
+    "case_id": "gallery",
+    "cohort": "held_out",
+    "adapted_from": "tier_a_case_03",
+    "title": "The Missing Evacuation Entry",
+    "assumptions": "Four adventurers; system-neutral automatic outcomes, no official combat rules or imported sheets; three-hour session target, not established by fixtures.",
+    "prompt": "Determine which evacuation record was deliberately left incomplete in a civic memory gallery after an orderly evacuation. Use the supplied five-room map unchanged. Compare incomplete public exhibits and offer risk/resource choices about preserving or disturbing evidence, with clear setbacks and recovery. Ash remains outside the mapped rooms; do not invent heat vents or unstable terrain absent from the map.",
+    "guidance": "Keep arrival text free of private solutions. Supply exact evidence rather than asking the DM to improvise records. Prefer an investigative resolution, not an obligatory fight or a machinery puzzle.",
+    "authorized_facts": [],
+    "comparison_caveat": "Adapted from seven rooms to a fixed five-room map; not matched to prior packets. Held out from live prompt tuning, not unseen by fixture tests; fresh live cases must be selected after prompt freeze."
+  }
+]

@@ -852,8 +852,8 @@ resolved brief + relevant guidance + authorized rules/party/source inputs
     -> bounded whole-adventure outline
     -> deterministic map construction and validation
     -> bounded whole-adventure content submission over the resolved map
-    -> structural/mechanical/source checks + editorial review
-    -> optional bounded correction
+    -> structural/mechanical/source checks
+    -> optional bounded correction; editorial review/revision only when justified
     -> atomic complete draft publication
 ```
 
@@ -862,6 +862,32 @@ quality with one existing map before integrating the outline pass. Reuse shared 
 measure actual input/output requirements before selecting production ceilings. Corrections, including
 schema repairs, count against one explicit cumulative attempt policy; no hidden retry loops. A
 model-based editorial pass is optional, separately authorized/budgeted, and never proves readiness.
+Test a consistency objective in initial prompting independently before introducing such a pass; add it
+only if prompt-only results are insufficient and measure its incremental benefit (§17).
+
+The disposable P7-15b file prototype wraps the existing Workbench `DungeonGuideContentPlan` with
+bounded overview prose, reusing the structured-submission runner, cumulative technical-repair
+reservation, guide validators/projection and pure map tools. Its fixture CLI has no live transport,
+editorial call, database publication or approval path. Three adapted synthetic briefs share one
+validated five-room map; paired inputs differ only by the consistency instruction. Short scripted
+responses and synthetic accounting counters are plumbing checks, not authoring-quality evidence or
+production ceilings. This experimental payload is not a new persistent story schema or a second
+production pipeline; production V1 evolution remains governed by §3.
+
+Causal and counterfactual consistency is an authoring objective: behavior and consequences should
+follow from established motives, knowledge and circumstances, including when circumstances change.
+Apply it from the earliest creative prompt and preserve it across outline, content and any repair.
+It is neither a new guide section nor a growing checklist of incidents from one reviewed adventure.
+Characters may be mistaken or irrational; their behavior must still be intelligible from the supplied
+situation. Natural-language instructions do not establish deterministic proof of this quality.
+
+Prefer revising/simplifying the underlying situation and replacing inconsistent prose over appending
+justifications. A conditional editorial pass produces a revised candidate, updating affected passages
+within authorized scope and retaining roughly the agreed guide length. Preserve useful play detail;
+necessary missing procedures may require words, but neither padding nor deleting essentials is a fix.
+An explanation invented by a reviewer is a proposed repair, not evidence that the old draft worked.
+This is editorial replacement, not permission to overwrite immutable versions, protected human text,
+source facts or validated geometry (§12). It requires no story-state ontology or additional framework.
 
 The outline designs premise/history, objective/opposition, room purposes, clue relationships,
 progression, and spatial affordances together. It requests bounded terrain/room needs without exact
@@ -912,7 +938,8 @@ by concise room keys. Supply concrete puzzle inscriptions/objects/evidence, a de
 observable feedback, hints/alternatives, and failure/retry behavior where applicable. Place clues in
 their keyed rooms, not only in a remote solution paragraph. Mystery for players must have a DM answer.
 
-Keep read-aloud distinct from DM secrets; group actionable room content without repeating the same
+Keep arrival read-aloud, private DM guidance and conditionally revealed text/dialogue distinct, with
+explicit delivery triggers where needed. Group actionable room content without repeating the same
 feature as separate exploration/puzzle/objective prose. Internal policy text such as “make this a
 meaningful room-local expression” or “do not invalidate progression” is never final guide content.
 No JSON, opaque IDs, or duplicate solution paragraphs are normal reading requirements.
@@ -1143,6 +1170,17 @@ Evaluate enabled workflows at distinct levels:
   synthetic briefs. Pin inputs/profile/versions and report usage, latency, failures and corrections;
   compare matched conditions where possible and label confounds. Do not require provider matrices,
   model-brand-specific gates, or exact wrapper chains in production approval.
+
+For the consistency experiment, first compare initial whole-adventure prompting with and without the
+causal/counterfactual objective, keeping brief, validated map, model/effort, rendering and technical-
+repair policy/budgets matched. Neither condition includes an added editorial model call. Use fresh
+synthetic briefs and held-out cases after tuning. Only if prompt-only quality is insufficient, compare
+an additional bounded editorial review/revision with that prompt-only baseline; do not attribute the
+benefit of extra calls to the initial instruction. Report guide length, causal repairs still needed,
+all attempts/corrections, cumulative cost/latency and actual human effort. The desired improvement is
+less missing work without explanatory bloat or lost play content, not higher self-assigned scores.
+A repeatedly human-revised reference establishes a target, not first-pass reliability. Compare practical
+value with chat-assisted authoring plus a map as well as prior packets, labelling unmatched conditions.
 
 Test guidance across different content types and workflow stages: unfamiliar prose preferences,
 observations versus desired responses, exclusions, protected inputs and conflicting scopes. Check
