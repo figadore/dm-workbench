@@ -39,6 +39,10 @@ from dm_assistant.orchestration.dungeons.service import (
     render_dungeon_dm_guide_text,
     validate_dungeon_guide_content,
 )
+from dm_assistant.orchestration.dungeons.trial_capture import (
+    PrivateTrialCapture,
+    TrialCaptureError,
+)
 from dm_assistant.orchestration.modeling import (
     GatewayClient,
     ModelRunAbstained,
@@ -327,10 +331,16 @@ class _MeasuredGateway:
         client: GatewayClient,
         attempt: dict[str, JsonValue],
         progress: Callable[[], None],
+        capture: PrivateTrialCapture | None,
+        number: int,
+        deadline: float,
     ) -> None:
         self.client = client
         self.attempt = attempt
         self.progress = progress
+        self.capture = capture
+        self.number = number
+        self.deadline = deadline
 
     def complete(
         self,
@@ -340,24 +350,57 @@ class _MeasuredGateway:
         allowed_tools: tuple[str, ...],
         tool_schemas: tuple[GatewayToolSchema, ...],
     ) -> GatewayCompletion:
-        self.attempt["dispatched"] = True
-        self.progress()  # Journal before provider contact; interrupted attempts remain visible.
-        started = time.monotonic()
+        started = None
         try:
+            if self.capture is not None:
+                self.capture.request(
+                    self.number,
+                    profile=profile,
+                    messages=messages,
+                    allowed_tools=allowed_tools,
+                    tool_schemas=tool_schemas,
+                )
+                self.attempt["capture_request"] = "saved"
+            self._check_deadline()
+            self.attempt["dispatched"] = True
+            self.progress()  # Durable dispatch intent before provider contact.
+            self._check_deadline()
+            started = time.monotonic()
             completion = self.client.complete(
                 profile=profile,
                 messages=messages,
                 allowed_tools=allowed_tools,
                 tool_schemas=tool_schemas,
             )
-            self.attempt["input_tokens"] = completion.input_tokens
-            self.attempt["output_tokens"] = completion.output_tokens
-            return completion
-        finally:
             self.attempt["gateway_elapsed_ms"] = int(
                 (time.monotonic() - started) * 1000
             )
+            started = None  # Private disk capture is not provider latency.
+            self.attempt["input_tokens"] = completion.input_tokens
+            self.attempt["output_tokens"] = completion.output_tokens
+            if self.capture is not None:
+                self.capture.candidates(self.number, completion)
+                self.attempt["capture_candidates"] = "saved"
+            return completion
+        except TrialCaptureError:
+            self.attempt["status"] = "capture_failed"
+            raise
+        except (KeyboardInterrupt, SystemExit):
+            self.attempt["status"] = "interrupted"
+            raise
+        finally:
+            if started is not None:
+                self.attempt["gateway_elapsed_ms"] = int(
+                    (time.monotonic() - started) * 1000
+                )
             self.progress()
+
+    def _check_deadline(self) -> None:
+        if time.monotonic() >= self.deadline:
+            raise ModelRunAbstained(
+                "time budget exhausted before provider contact",
+                code="submission_time_budget_exhausted",
+            )
 
 
 def run_trial(
@@ -368,6 +411,7 @@ def run_trial(
     brief: dict[str, JsonValue],
     consistency: bool,
     on_progress: Callable[[dict[str, JsonValue]], None] | None = None,
+    capture: PrivateTrialCapture | None = None,
 ) -> tuple[WholeAdventureSubmission | None, dict[str, JsonValue]]:
     """Reuse the shared runner/reservation; one cumulative budget, no editorial call."""
     if (
@@ -383,6 +427,8 @@ def run_trial(
         raise ValueError(
             "prototype requires one submit tool and one bounded technical repair"
         )
+    if capture is not None:
+        capture.begin()
     initial = build_input(fixed, brief, consistency=consistency)
     run_input = initial
     request_profile = profile
@@ -390,6 +436,7 @@ def run_trial(
     attempts: list[JsonValue] = []
     report: dict[str, JsonValue] = {
         "consistency_instruction": consistency,
+        "creative_capture_enabled": capture is not None,
         "brief_sha256": canonical_json_sha256(brief),
         "plan_sha256": canonical_json_sha256(fixed.plan.model_dump(mode="json")),
         "layout_request_sha256": canonical_json_sha256(
@@ -410,6 +457,8 @@ def run_trial(
     }
 
     def progress() -> None:
+        if capture is not None:
+            capture.journal(report)
         if on_progress is not None:
             on_progress(report)
 
@@ -425,8 +474,15 @@ def run_trial(
             "diagnostics": [],
             "status": "pending",
         }
+        if capture is not None:
+            attempt.update(
+                {"capture_request": "pending", "capture_candidates": "pending"}
+            )
         attempts.append(attempt)
-        runner = StructuredSubmissionRunner(_MeasuredGateway(client, attempt, progress))
+        progress()
+        runner = StructuredSubmissionRunner(
+            _MeasuredGateway(client, attempt, progress, capture, number + 1, deadline)
+        )
 
         def validate(value: WholeAdventureSubmission) -> ToolResult:
             return ToolResult(
@@ -459,7 +515,7 @@ def run_trial(
                 report["terminal_code"] = "rejected_after_technical_repair"
                 break
             # Keep the exact initial objective and all map/brief inputs on repair.
-            # The rejected structured payload is transient, never an operational report.
+            # Creative payload stays out of reports; only explicit private capture retains it.
             rejected = json.dumps(record.tool_invocations[0].arguments, sort_keys=True)
             chunks = [rejected[i : i + 12000] for i in range(0, len(rejected), 12000)]
             run_input = initial.model_copy(

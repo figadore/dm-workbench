@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 from uuid import NAMESPACE_URL, UUID, uuid5
@@ -22,6 +23,10 @@ from dm_assistant.modules.modeling import (
     ReasoningLevel,
     ResolvedModelRunProfile,
     ToolCall,
+)
+from dm_assistant.orchestration.dungeons.trial_capture import (
+    PrivateTrialCapture,
+    TrialCaptureError,
 )
 from dm_assistant.orchestration.dungeons.whole_adventure_prototype import (
     PRESENTATION_EXAMPLE,
@@ -159,6 +164,11 @@ def main() -> int:
         help="Explicitly authorize one live case/condition, at most two calls.",
     )
     parser.add_argument(
+        "--retain-creative-candidates",
+        action="store_true",
+        help="Opt in to private exact request/candidate capture; acknowledge synthetic inputs reviewed secret-free. Does not enable live calls.",
+    )
+    parser.add_argument(
         "--brief",
         type=Path,
         help="One synthetic brief JSON object (required for live).",
@@ -185,6 +195,15 @@ def main() -> int:
     output = args.output.resolve()
     if output.exists():
         parser.error(f"destination already exists: {output}")
+    if (
+        args.retain_creative_candidates
+        and output.is_relative_to(ROOT)
+        and not output.is_relative_to(ROOT / "generated")
+    ):
+        parser.error(
+            "private capture inside this repository must be under ignored generated/"
+        )
+    preserve_incomplete = args.live or args.retain_creative_candidates
     fixed = build_fixed_map(
         DungeonPlan.model_validate_json((FIXTURES / "plan.json").read_bytes())
     )
@@ -225,10 +244,10 @@ def main() -> int:
         (False, True) if args.consistency == "both" else (args.consistency == "on",)
     )
     output.parent.mkdir(parents=True, exist_ok=True)
-    if args.live:
+    if preserve_incomplete:
         output.mkdir(
             mode=0o700
-        )  # Exclusive claim; retain interrupted live attempt journals.
+        )  # Exclusive claim; never clean away live or opted-in capture evidence.
         staging = output
     else:
         staging = Path(tempfile.mkdtemp(prefix=f".{output.name}-", dir=output.parent))
@@ -243,6 +262,8 @@ def main() -> int:
         temporary.replace(path)
 
     try:
+        if args.retain_creative_candidates:
+            (staging / ".gitignore").write_text("*\n", encoding="utf-8")
         (staging / "package.json").write_text(
             to_canonical_json(fixed.package), encoding="utf-8"
         )
@@ -307,8 +328,12 @@ def main() -> int:
                         target,
                         {
                             **value,
-                            "evidence_kind": "live_feasibility",
-                            "usage_kind": "gateway_measured_input_includes_cache",
+                            "evidence_kind": "live_feasibility"
+                            if args.live
+                            else "provider_free_fixture",
+                            "usage_kind": "gateway_measured_input_includes_cache"
+                            if args.live
+                            else "synthetic_test_counters_not_provider_measurements",
                             "quality_or_readiness_established": False,
                         },
                     )
@@ -324,7 +349,10 @@ def main() -> int:
                     fixed=fixed,
                     brief=brief,
                     consistency=consistency,
-                    on_progress=journal if args.live else None,
+                    on_progress=journal if preserve_incomplete else None,
+                    capture=PrivateTrialCapture(folder / "creative-capture")
+                    if args.retain_creative_candidates
+                    else None,
                 )
                 attempts = report["attempts"]
                 if args.live and isinstance(attempts, list):
@@ -386,6 +414,7 @@ def main() -> int:
                 if args.live
                 else "provider_free_fixture",
                 "live_calls": live_calls,
+                "creative_capture_enabled": args.retain_creative_candidates,
                 "editorial_calls": 0,
                 "word_count_method": "len(complete_rendered_markdown.split()); includes headings and deterministic mechanics",
                 "files": {
@@ -397,12 +426,15 @@ def main() -> int:
                 },
             },
         )
-        if not args.live:
+        if not preserve_incomplete:
             if output.exists():
                 raise FileExistsError(output)
             staging.rename(output)
+    except TrialCaptureError as error:
+        print(str(error), file=sys.stderr)
+        return 1
     finally:
-        if not args.live and staging.exists():
+        if not preserve_incomplete and staging.exists():
             shutil.rmtree(staging)
     print(
         f"P7-15b {'live feasibility' if args.live else 'provider-free'} packet: {output}"

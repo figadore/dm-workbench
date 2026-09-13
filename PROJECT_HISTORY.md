@@ -187,6 +187,18 @@
   schema migration, approval/canon, retention crossing or P7-16 advance. Failed/reference packets remain
   untouched. Repository-wide static checks expose unrelated Library/scope/campaign-knowledge defects.
 
+## P7-15b Private Diagnostic Capture
+
+- Added off-by-default `--retain-creative-candidates` to the existing disposable prototype. Actual
+  normalized gateway requests and allowed creative argument objects are saved before runner checks,
+  including rejected candidates and complete dispatched repair inputs; no transport/debug hook added.
+- Exclusive private directories, mode-0600 atomic request/candidate files and body-free journals retain
+  incomplete attempts without overwrite/retry. Write failure or an expired cumulative deadline blocks
+  further dispatch; capture adds no calls or approval/canon writes. Capture files remain ignored.
+- Provider-free tests cover exact reduced profiles/schemas, repair context, rejection/overage, exclusions,
+  defaults, interruptions, permissions and fail-closed CLI behavior. The synthetic demo's manifest and
+  permissions were verified; no live call, human readiness evidence or retention crossing occurred.
+
 ## Persistent Decisions
 
 - Models propose; humans approve preparation and commit canon.

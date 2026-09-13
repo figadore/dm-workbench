@@ -421,6 +421,16 @@ operational logs. Persist their useful answer text and provenance under an expli
 not raw provider transport envelopes or reasoning. Transient full debug capture is explicit, local,
 sensitive, and not ordinary persistence.
 
+The disposable P7-15b adapter has a separate, off-by-default `--retain-creative-candidates` opt-in for
+reviewed secret-free synthetic inputs. It captures exact normalized requests at the actual gateway
+call boundary and only the allowed submission tool's argument objects before any runner rejection.
+This covers rejected candidates and full dispatched repair inputs without enabling gateway debug,
+transport/reasoning capture, model calls or production persistence. New private directories and atomic
+exclusive mode-0600 request/candidate files prevent overwrite; a body-free journal records dispatch
+intent and capture disposition. Capture-write failure stops the trial, and incomplete packets remain
+for explicit local review/deletion. See [the narrow retention policy](docs/p7-15b/README.md#private-diagnostic-capture-and-retention).
+This disposable synthetic diagnostic policy does not cross the alpha retention gate.
+
 Pins reproduce accepted inputs and deterministic compilation/rendering, not identical future model
 outputs. Evaluation samples the ordinary workflow through a small adapter; reproducibility does not
 require a wrapper-version chain or a database artifact for every creative subtask.

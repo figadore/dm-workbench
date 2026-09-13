@@ -63,8 +63,10 @@ Live mode claims a new private output directory and writes input pins and body-f
 before contacting the provider. It preserves interrupted/failed directories rather than cleaning
 away evidence; a missing final manifest means an incomplete run, not permission to retry it. Never
 rerun to replace an interrupted attempt without checking its journal and obtaining any needed new
-call authorization. Only accepted creative content is saved as `submission.json` and guide prose;
-raw provider envelopes and reasoning are not persisted. Production artifact/canon writes remain absent.
+call authorization. By default, only accepted creative content is saved as `submission.json` and guide
+prose. Separately authorized `--retain-creative-candidates` also preserves exact normalized dispatch
+requests and allowed submission arguments before validation, under `creative-capture/` per condition.
+Neither mode persists provider envelopes or hidden reasoning. Production artifact/canon writes remain absent.
 
 The first Astra feasibility packet lives under ignored `generated/p7-15b-astra-high-01/`. It used two
 calls (initial reference rejection, then accepted technical repair), 321,752 ms of gateway time,
@@ -135,7 +137,8 @@ provider usage or recommended live budgets**. Cost and human effort remain null.
 `len(complete_rendered_markdown.split())`, including headings and deterministic mechanics. Rejected
 candidates are not accepted guide exports. The CLI continues across all cases so one rejection does
 not hide the others; unexpected programming errors fail the staged packet write rather than publish
-partial output.
+partial output. Opted-in capture packets, like live packets, instead keep their exclusively claimed
+output directory on any interruption or failure; no final manifest is written for an incomplete packet.
 
 Live trials require explicit provider authorization and an agreed bounded attempt/time policy,
 model/effort, guide-length objective and usage/spending policy; this feasibility trial explicitly
@@ -186,11 +189,45 @@ exclusion. The synthetic review packet's small word ceiling includes the recover
 the whole-adventure roughly 2,000-word objective and ten-minute human-review target are unchanged.
 The failed packet and Last Pay Chest remain untouched. No human visual/play-readiness claim is made.
 
-## Private diagnostic-retention policy (capture implementation not yet supplied)
+## Private diagnostic capture and retention
 
-Before a further diagnostic trial, obtain separate explicit consent to capture creative candidates;
-`--live` alone currently does **not** enable this capture. Do not run another diagnostic trial until
-capture is implemented/tested or Reese explicitly revises this policy.
+`--retain-creative-candidates` implements the separate capture opt-in. It acknowledges that the inputs
+are synthetic and have been reviewed as secret-free; it does **not** authorize or enable live transport.
+`--live` alone does **not** enable capture. Obtain separate explicit consent before using it in a live
+trial. This implementation was exercised only with fake gateways, not a new live experiment.
+
+Provider-free demonstration (new destination required):
+
+```bash
+uv run --frozen python scripts/dungeon-whole-adventure-prototype.py \
+  --retain-creative-candidates --scenario reference-repair --consistency on \
+  --output generated/p7-15b-private-capture-demo
+```
+
+Each condition gets a private `creative-capture/` directory containing:
+
+- `consent.json`: the invocation's opt-in and synthetic-input acknowledgement, not a human review score;
+- `01-request.json` / `02-request.json`: the exact normalized messages, actual remaining-budget profile,
+  allowed tools and tool schemas passed to the gateway, including repair context and constrained-sampling
+  adjustments. A denied repair has no dispatch request file because it was never sent;
+- `01-candidates.json` / `02-candidates.json`: lists of **only** `submit_whole_adventure` argument objects,
+  saved before runner count/usage/schema/reference checks. An unauthorized/no-tool completion produces
+  an empty list; multiple allowed submissions are retained even though the runner rejects their count;
+- `journal.json`: body-free attempt/capture states, acceptance and measurements. Candidate files themselves
+  are not renamed on acceptance/rejection; the journal gives their disposition;
+- `.gitignore`: excludes the directory's contents from ordinary Git additions.
+
+Absent candidate files or `pending` capture states mean missing evidence, not an empty candidate.
+`dispatched: true` records durable **dispatch intent** immediately before provider contact, not proof of
+provider receipt; interrupted usage remains unknown. A filesystem failure can leave private `.pending-*`
+files or the last durable journal state. Preserve these, and do not retry blindly. Request/candidate files
+are published atomically without replacement; only the body-free journal is replaced. A capture or
+journal failure stops without repair or accepted-guide publication. Opted-in fixture packets retain their
+incomplete directory too. A missing root manifest means packet completion was not established.
+
+Within this repository, capture output must be under ignored `generated/`; external output directories
+also get an ignore-all `.gitignore`. The capture directory is mode 0700 and its files are 0600, including
+pending files. Complete data is flushed before atomic publication; captures never use gateway debug hooks.
 
 - Scope: this disposable synthetic single-case trial only, in a newly claimed ignored private directory
   (directory mode 0700; capture files 0600). No database, Git copy, routine log or automatic upload.
@@ -200,8 +237,11 @@ capture is implemented/tested or Reese explicitly revises this policy.
   if schema/reference validation rejects them. Retain accepted and rejected candidates separately by
   attempt; never overwrite a prior candidate. Record missing/interrupted capture truthfully.
 - Exclude credentials, provider headers/envelopes, raw transport chunks, hidden reasoning, arbitrary
-  tool calls and assistant commentary. Inputs must be synthetic and reviewed free of secrets before
-  capture opt-in; automatic redaction would no longer be an exact request record.
+  tool calls and assistant commentary. Only user messages without opaque continuity signatures are
+  accepted at this prototype's request-capture boundary. Environment variables and gateway credentials
+  are never read by capture. Inputs must be synthetic and reviewed free of secrets before opt-in;
+  automatic redaction would no longer be an exact request record. This is not an automatic secret
+  detector for free-form creative prose or profile overrides; do not put secrets into those inputs.
 - Routine measurements remain body-free. Capture must be off by default, opt-in visibly journaled,
   and cancellation/failure must not silently resubmit. Local deletion happens only at Reese's request
   after diagnostic review; until then preserve the directory and flag incomplete captures.
@@ -213,6 +253,7 @@ retention gate, authorize a provider/editorial call, select a seed or establish 
 
 ```bash
 uv run --frozen pytest -q tests/unit/test_whole_adventure_prototype.py \
+  tests/unit/test_whole_adventure_capture.py \
   tests/evals/test_dungeon_evals.py tests/unit/test_dungeon_guide_content_contract.py \
   tests/unit/test_dungeon_review_packet.py tests/unit/test_prompted_dungeon_workflow.py
 ```
