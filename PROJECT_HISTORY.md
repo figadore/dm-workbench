@@ -136,6 +136,41 @@
 - Short scripted content and synthetic counters establish plumbing only. No editorial pass, production
   authoring integration, live consistency benefit, human effort/readiness evidence or retention crossing.
 
+## P7-15b Astra/High Feasibility Sample
+
+- Reese authorized the current session model (`openai-codex/gpt-6-astra`, high reasoning), up to two
+  submissions and ten minutes of cumulative model-run time, measuring usage without a financial cap.
+  Updated the pinned gateway to `pi-ai` 0.85.1; disabled hidden SDK retries/Codex fallback submissions,
+  retained technical ceilings and included cached input in normalized usage. Added explicit single-case
+  live CLI opt-in with pre-contact attempt journals; production publication/approval remains absent.
+- One fresh consistency-on sample used both calls: unsupported feature-reference rejection followed
+  by accepted technical repair. Gateway time was 321,752 ms; cumulative usage 30,069 input and 8,241
+  output tokens. Accepted guide was 2,987 words, 49.35% over the approximately 2,000-word objective.
+- Exact unedited creative output and pins are ignored under `generated/p7-15b-astra-high-01/`.
+  No third/editorial call, matched comparison, dollar-charge estimate, human readiness result,
+  tabletop evidence or retention crossing is implied. Technical repair exposed a content-slot
+  constraint; human review must judge the resulting play material and organization.
+
+- Reese's subsequent review took **28 minutes** and found substantial confusion, weak scene setup,
+  an unfamiliar/uncompelling theme, misplaced document/clue content and poor map/guide navigation.
+  This is a failed readiness result, not minor polish. Audit confirmed restrictive content slots,
+  code-imposed overview order, dual numbering and missing directional/sensory projection. Initial
+  request/final submission are retained; first-response/full-repair-prompt bodies are not. The private
+  audit labels those gaps; no new call or rewrite was made. Human review is recorded in
+  `docs/p7-15b/reviews/astra-high-reese-review.md`; editing time and tabletop evidence remain unknown.
+
+## P7-15b Reference-Led Authoring Correction
+
+- Reese explicitly selected **The Last Pay Chest** (Nell/Iona) as the workable structural reference,
+  not Bellglass/Neris or an inferred preferred section order. Plan/architecture now specify its short
+  job/DM context, map-numbered local room keys and concluding settlement pattern without copying its
+  plot, noncombat scope, session-length assumption or unsupported reference-map geometry.
+- Planned correction separates ordinary room-local private prose from mechanical feature reservations,
+  preserves local clue/document/conditional-delivery content, and gives code one numbering/exit scheme.
+  Provider-free projection/secrecy checks precede further full trials; private diagnostic retention
+  must cover creative candidates/repair inputs without blanket transport capture. Documentation only:
+  no implementation, seed selection, live authorization, readiness result or phase advance is implied.
+
 ## Persistent Decisions
 
 - Models propose; humans approve preparation and commit canon.

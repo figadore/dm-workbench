@@ -50,7 +50,7 @@ const MAX_MESSAGES = 32;
 const MAX_MESSAGE_CHARACTERS = 32_000;
 const MAX_PROMPT_CHARACTERS = 128_000;
 const MAX_TOOLS = 16;
-const MAX_OUTPUT_TOKENS = 16_384;
+const MAX_OUTPUT_TOKENS = 131_072;
 
 export function parseStreamRequest(value: unknown): GatewayStreamRequest {
   const object = expectObject(value, "request must be a JSON object");
@@ -145,7 +145,7 @@ export function parseStreamRequest(value: unknown): GatewayStreamRequest {
     object.time_limit_seconds,
     "time_limit_seconds must be an integer",
   );
-  if (timeLimitSeconds < 1 || timeLimitSeconds > 300) {
+  if (timeLimitSeconds < 1 || timeLimitSeconds > 600) {
     throw new GatewayRequestError(
       "time_limit_seconds",
       "time_limit_seconds is outside the allowed range",

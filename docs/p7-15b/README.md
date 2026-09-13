@@ -1,8 +1,9 @@
-# P7-15b Provider-Free Whole-Adventure Prototype
+# P7-15b Whole-Adventure Prototype
 
 This disposable file adapter exercises one complete structured content submission over an existing
-supported map grammar. It is not the production two-pass pipeline, a review workspace, a live
-comparison, or evidence that a one-shot is ready to run. `PROJECT_STATUS.md` owns task state.
+supported map grammar. Fixture mode is provider-free; explicitly authorized live mode samples one
+brief and one condition. Neither is the production two-pass pipeline, a review workspace or proof
+that a one-shot is ready to run. `PROJECT_STATUS.md` owns task state.
 
 ## Run it
 
@@ -28,7 +29,58 @@ player guide, approval, canonical write, database publication, or retained artif
 To exercise a reference rejection followed by its one allowed technical repair, use
 `--scenario reference-repair` with a different output directory. `--scenario rejected` preserves both
 failed attempts, emits no accepted guide, and exits 1. `--consistency on` or `off` selects one arm;
-the default emits both. No option enables live transport or an editorial pass.
+the default emits both. These fixture commands never enable live transport. No mode adds an editor.
+
+## Explicit single-case live trial
+
+After user authorization, run in an environment with the private gateway URL and internal caller
+secret configured (for example the Workbench container). Never pass provider credentials to Python:
+
+```bash
+python scripts/dungeon-whole-adventure-prototype.py --live \
+  --provider openai-codex --model gpt-6-astra --consistency on \
+  --brief tests/evals/golden/whole_adventure/astra_feasibility_brief.json \
+  --output generated/p7-15b-astra-high-trial
+```
+
+`--live` requires one explicit brief, provider, exact model and consistency condition. It cannot run
+both arms or synthetic failure injection. Catalog/authentication checks happen before submission;
+there is no model fallback. High reasoning is the Workbench's `deep` effort, verified against Astra's
+wire request in a provider-free test. Normalized task profiles keep one initial call plus at most one
+technical repair under a **600-second cumulative model-run deadline**. This clock excludes engineering
+setup and human review. A successful first submission stops after one call.
+
+For the authorized feasibility trial, Reese requested usage measurement rather than a financial cap.
+The profile therefore uses advertised model capacity, bounded by the existing task-contract maximum
+of 262,144 cumulative tokens and the transport's 131,072-token output ceiling. Astra advertises
+128,000 output tokens; its profile uses that value. These are technical safety limits, not a spending
+budget, and are still validated. Ordinary smaller task limits remain unchanged. SDK retries are off;
+Codex uses SSE with no WebSocket fallback submission. The gateway counts cached input as input usage.
+Subscription dollar cost stays unknown; do not equate catalog prices with actual charges.
+
+Live mode claims a new private output directory and writes input pins and body-free attempt journals
+before contacting the provider. It preserves interrupted/failed directories rather than cleaning
+away evidence; a missing final manifest means an incomplete run, not permission to retry it. Never
+rerun to replace an interrupted attempt without checking its journal and obtaining any needed new
+call authorization. Only accepted creative content is saved as `submission.json` and guide prose;
+raw provider envelopes and reasoning are not persisted. Production artifact/canon writes remain absent.
+
+The first Astra feasibility packet lives under ignored `generated/p7-15b-astra-high-01/`. It used two
+calls (initial reference rejection, then accepted technical repair), 321,752 ms of gateway time,
+30,069 normalized input tokens including cached input, and 8,241 output tokens. The accepted guide
+is 2,987 words—49.35% above the roughly 2,000-word target. This is an actual provider measurement,
+not evidence of human readiness or a consistency-instruction effect. No editorial rewrite or third
+call was made. The first rejection arose from optional prose entries targeting features absent from
+the fixed plan; the repair moved that material into existing content slots. Reese subsequently spent
+**28 minutes reviewing** and reported substantial confusion and an unusable result. This failed the
+readiness target; it is not a minor-polish success. [The human-review record](reviews/astra-high-reese-review.md)
+separates actual feedback from code-inspection findings. The authored guide remains unedited.
+
+A local step-by-step audit is saved as
+`generated/p7-15b-astra-high-audit/prompts-and-responses.md`. It includes the exact initial normalized
+messages/schema, retained accepted submission and known repair instruction/diagnostics. The rejected
+first submission and complete repair request were not retained; those gaps are explicitly labeled.
+No new generation or runtime correction was made to produce the audit.
 
 ## Chosen inputs and comparison boundary
 
@@ -84,11 +136,33 @@ candidates are not accepted guide exports. The CLI continues across all cases so
 not hide the others; unexpected programming errors fail the staged packet write rather than publish
 partial output.
 
-Any live adapter/trial requires separately agreed model/effort, cumulative attempts/tokens/cost/time,
-guide-length and human-feedback budgets plus explicit provider authorization. Readiness still needs
-fresh-case human missing-authoring/causal-repair observations, actual effort and a tabletop walkthrough.
+Live trials require explicit provider authorization and an agreed bounded attempt/time policy,
+model/effort, guide-length objective and usage/spending policy; this feasibility trial explicitly
+waives a monetary ceiling, not technical validation. The first sample has 28 reported human review
+minutes and a negative result; editing time and tabletop duration remain unknown. Readiness still
+needs usable fresh-case results, actual human effort and a tabletop walkthrough.
 The ten-minute/no-core-authoring target is unchanged; this prototype does not cross that gate or justify
 an added editorial call or broader pipeline/workspace investment.
+
+## Planned correction: The Last Pay Chest as the structural reference
+
+Reese explicitly selected [The Last Pay Chest](../p7-15a/last-pay-chest.md), with Nell and Iona,
+not the earlier Bellglass/Neris adventure. The [P7-15b implementation-plan task](../../dm-assistant-implementation-plan.md#p7-15b--try-whole-adventure-authoring)
+and [architecture §13](../../dm-assistant-technical-architecture.md#13-dungeon-generation) specify the
+correction; this documentation does not implement it or authorize another generation.
+
+The reference provides a short pitch/assumptions and map access, **The job** with hook and essential
+DM context, map-numbered rooms with their own evidence/procedures/triggered dialogue and routes, then
+**Settle up**. Use that actual information flow with flexible room sections—not a newly invented
+preferred ordering, a mandatory template for every room, or the same payroll story. Its noncombat
+premise, 60–90-minute target and licensed map are not constraints or validated inputs for other seeds.
+
+The planned adapter change supplies ordinary room-local private prose independently of mechanical
+feature reservations, one code-owned map/guide numbering scheme, code-derived exits and lossless
+projection of required authored information. Small provider-free note/clue/delivery/rendering/secrecy
+fixtures precede live trials. Later diagnostic capture needs a narrow explicit private policy for
+requests and submitted creative candidates, including rejected ones, without raw transport/reasoning
+or Git retention. The reviewed failed packet remains untouched; seed selection is a separate decision.
 
 ## Focused checks
 

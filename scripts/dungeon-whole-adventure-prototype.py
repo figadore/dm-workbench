@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""P7-15b provider-free file adapter over the shared structured submission runner."""
+"""P7-15b fixture-first file adapter with explicit single-case live opt-in."""
 
 from __future__ import annotations
 
@@ -7,13 +7,15 @@ import argparse
 import copy
 import hashlib
 import json
+import os
 import shutil
 import tempfile
 from pathlib import Path
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from pydantic import JsonValue
 
+from dm_assistant.adapters.model_gateway import GatewayProvider, PiGatewayClient
 from dm_assistant.modules.modeling import (
     PromptMessage,
     ReasoningEffort,
@@ -76,6 +78,39 @@ def fixture_profile() -> ResolvedModelRunProfile:
     )
 
 
+def live_profile(provider: GatewayProvider, model_id: str) -> ResolvedModelRunProfile:
+    """Use catalog capacity, not fixture ceilings or a monetary spending target."""
+    model = next((item for item in provider.models if item.id == model_id), None)
+    if not provider.authenticated or model is None:
+        raise ValueError(
+            "selected provider must be authenticated and advertise the exact model"
+        )
+    if not {"text", "thinking", "tool_calls"}.issubset(model.capabilities):
+        raise ValueError("selected model must support text, reasoning and tool calls")
+    return fixture_profile().model_copy(
+        update={
+            "endpoint_profile_id": uuid5(
+                NAMESPACE_URL, f"pi_ai:{provider.id}:{model.id}"
+            ),
+            "provider_id": provider.id,
+            "model_id": model.id,
+            "runtime_adapter": "pi_ai",
+            "requested_effort": ReasoningEffort.DEEP,
+            "resolved_reasoning_level": ReasoningLevel.HIGH,
+            "supported_efforts": (ReasoningEffort.DEEP,),
+            "observed_capabilities": model.capabilities,
+            "time_budget_seconds": 600,
+            "token_budget": min(model.context_window, 262_144),
+            "override_notes": {
+                "output_token_limit": min(model.max_output_tokens, 131_072),
+                "repair_limit": 1,
+                "ceiling_policy": "technical_capacity_only_no_monetary_ceiling",
+                "sdk_retries": 0,
+            },
+        }
+    )
+
+
 class FixtureGateway:
     """No network/configuration access; fixed synthetic counters exercise reservation."""
 
@@ -116,7 +151,35 @@ def main() -> int:
     parser.add_argument(
         "--scenario", choices=("valid", "reference-repair", "rejected"), default="valid"
     )
+    parser.add_argument(
+        "--live",
+        action="store_true",
+        help="Explicitly authorize one live case/condition, at most two calls.",
+    )
+    parser.add_argument(
+        "--brief",
+        type=Path,
+        help="One synthetic brief JSON object (required for live).",
+    )
+    parser.add_argument(
+        "--provider", help="Exact gateway provider ID (required for live)."
+    )
+    parser.add_argument(
+        "--model",
+        help="Exact gateway model ID (required for live); high effort is fixed.",
+    )
     args = parser.parse_args()
+    if args.live:
+        if (
+            not (args.brief and args.provider and args.model)
+            or args.consistency == "both"
+            or args.scenario != "valid"
+        ):
+            parser.error(
+                "--live requires --brief, --provider, --model, one --consistency condition, and --scenario valid"
+            )
+    elif args.brief or args.provider or args.model:
+        parser.error("--brief/--provider/--model require explicit --live")
     output = args.output.resolve()
     if output.exists():
         parser.error(f"destination already exists: {output}")
@@ -125,17 +188,57 @@ def main() -> int:
     )
     cases = json.loads((FIXTURES / "cases.json").read_text())
     profile = fixture_profile()
+    gateway: PiGatewayClient | None = None
+    if args.live:
+        brief = json.loads(args.brief.read_text(encoding="utf-8"))
+        if not isinstance(brief, dict) or not all(
+            isinstance(brief.get(key), str) and brief[key].strip()
+            for key in ("case_id", "title", "assumptions", "prompt")
+        ):
+            parser.error(
+                "live brief requires nonempty case_id, title, assumptions and prompt strings"
+            )
+        case_id = brief["case_id"]
+        if not case_id.isascii() or not all(c.isalnum() or c in "_-" for c in case_id):
+            parser.error(
+                "case_id must contain only ASCII letters, digits, underscores or hyphens"
+            )
+        cases = [brief]
+        try:
+            gateway = PiGatewayClient(
+                base_url=os.environ["DM_MODEL_GATEWAY_URL"],
+                internal_token=os.environ["DM_MODEL_GATEWAY_INTERNAL_TOKEN"],
+            )
+        except KeyError:
+            parser.error(
+                "live mode requires configured DM_MODEL_GATEWAY_URL and DM_MODEL_GATEWAY_INTERNAL_TOKEN"
+            )
+        provider = next(
+            (item for item in gateway.providers() if item.id == args.provider), None
+        )
+        if provider is None:
+            parser.error("selected provider is not in the gateway catalog")
+        profile = live_profile(provider, args.model)
     conditions = (
         (False, True) if args.consistency == "both" else (args.consistency == "on",)
     )
     output.parent.mkdir(parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix=f".{output.name}-", dir=output.parent))
+    if args.live:
+        output.mkdir(
+            mode=0o700
+        )  # Exclusive claim; retain interrupted live attempt journals.
+        staging = output
+    else:
+        staging = Path(tempfile.mkdtemp(prefix=f".{output.name}-", dir=output.parent))
     all_accepted = True
+    live_calls = 0
 
     def save_json(path: Path, value: object) -> None:
-        path.write_text(
+        temporary = path.with_name(f".{path.name}.tmp")
+        temporary.write_text(
             json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
+        temporary.replace(path)
 
     try:
         (staging / "package.json").write_text(
@@ -167,40 +270,76 @@ def main() -> int:
                 rendered.svg, encoding="utf-8"
             )
         for brief in cases:
-            response = json.loads((FIXTURES / f"{brief['case_id']}.json").read_text())
+            response = (
+                {}
+                if args.live
+                else json.loads((FIXTURES / f"{brief['case_id']}.json").read_text())
+            )
             for consistency in conditions:
                 folder = staging / brief["case_id"] / ("on" if consistency else "off")
                 folder.mkdir(parents=True)
                 bad = copy.deepcopy(response)
-                bad["guide_content"]["room_narratives"][0]["room_ref"] = "missing_room"
-                responses = {
-                    "valid": [response],
-                    "reference-repair": [bad, response],
-                    "rejected": [bad, bad],
-                }[args.scenario]
-                submission, report = run_trial(
-                    FixtureGateway(responses),
-                    profile=profile,
-                    fixed=fixed,
-                    brief=brief,
-                    consistency=consistency,
-                )
-                report.update(
-                    {
-                        "evidence_kind": "provider_free_fixture",
-                        "usage_kind": "synthetic_test_counters_not_provider_measurements",
-                        "scenario": args.scenario,
-                        "guide_words": None,
-                        "guide_sha256": None,
-                        "quality_or_readiness_established": False,
-                    }
-                )
+                if not args.live:
+                    bad["guide_content"]["room_narratives"][0]["room_ref"] = (
+                        "missing_room"
+                    )
                 save_json(folder / "brief.json", brief)
                 save_json(
                     folder / "input.json",
                     build_input(fixed, brief, consistency=consistency).model_dump(
                         mode="json"
                     ),
+                )
+
+                def journal(
+                    value: dict[str, JsonValue],
+                    target: Path = folder / "measurement.json",
+                ) -> None:
+                    save_json(
+                        target,
+                        {
+                            **value,
+                            "evidence_kind": "live_feasibility",
+                            "usage_kind": "gateway_measured_input_includes_cache",
+                            "quality_or_readiness_established": False,
+                        },
+                    )
+
+                responses = {
+                    "valid": [response],
+                    "reference-repair": [bad, response],
+                    "rejected": [bad, bad],
+                }[args.scenario]
+                submission, report = run_trial(
+                    gateway if gateway is not None else FixtureGateway(responses),
+                    profile=profile,
+                    fixed=fixed,
+                    brief=brief,
+                    consistency=consistency,
+                    on_progress=journal if args.live else None,
+                )
+                attempts = report["attempts"]
+                if args.live and isinstance(attempts, list):
+                    live_calls += len(
+                        [
+                            item
+                            for item in attempts
+                            if isinstance(item, dict) and item["dispatched"]
+                        ]
+                    )
+                report.update(
+                    {
+                        "evidence_kind": "live_feasibility"
+                        if args.live
+                        else "provider_free_fixture",
+                        "usage_kind": "gateway_measured_input_includes_cache"
+                        if args.live
+                        else "synthetic_test_counters_not_provider_measurements",
+                        "scenario": args.scenario,
+                        "guide_words": None,
+                        "guide_sha256": None,
+                        "quality_or_readiness_established": False,
+                    }
                 )
                 if submission is not None:
                     guide = render_trial_guide(fixed, brief, submission)
@@ -215,8 +354,12 @@ def main() -> int:
                 save_json(folder / "measurement.json", report)
                 (folder / "human-review.md").write_text(
                     "# Human review — blank, not AI evidence\n\n"
-                    "Provider-free fixture only; short plumbing samples are not full one-shots.\n"
-                    "Condition labels are visible; this packet is not blinded.\n\n"
+                    + (
+                        "Live single-case feasibility sample; not readiness evidence.\n"
+                        if args.live
+                        else "Provider-free fixture only; short plumbing samples are not full one-shots.\n"
+                    )
+                    + "Condition labels are visible; this packet is not blinded.\n\n"
                     "- Reviewer/date and exact guide hash:\n"
                     "- Would you run it? What core authoring is still missing?\n"
                     "- Causal repairs needed (quote passages; do not supply imagined excuses):\n"
@@ -231,8 +374,10 @@ def main() -> int:
             staging / "manifest.json",
             {
                 "task": "P7-15b",
-                "evidence_kind": "provider_free_fixture",
-                "live_calls": 0,
+                "evidence_kind": "live_feasibility"
+                if args.live
+                else "provider_free_fixture",
+                "live_calls": live_calls,
                 "editorial_calls": 0,
                 "word_count_method": "len(complete_rendered_markdown.split()); includes headings and deterministic mechanics",
                 "files": {
@@ -244,16 +389,17 @@ def main() -> int:
                 },
             },
         )
-        if output.exists():
-            raise FileExistsError(output)
-        staging.rename(output)
+        if not args.live:
+            if output.exists():
+                raise FileExistsError(output)
+            staging.rename(output)
     finally:
-        if staging.exists():
+        if not args.live and staging.exists():
             shutil.rmtree(staging)
-    print(f"Provider-free P7-15b packet: {output}")
     print(
-        "Synthetic counters only; no live/human quality evidence. DM guide is private."
+        f"P7-15b {'live feasibility' if args.live else 'provider-free'} packet: {output}"
     )
+    print("DM guide is private; technical acceptance is not human readiness evidence.")
     return 0 if all_accepted else 1
 
 

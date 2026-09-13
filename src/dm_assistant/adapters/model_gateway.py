@@ -34,7 +34,7 @@ def _profile_output_token_limit(profile: ResolvedModelRunProfile) -> int:
     """Use an explicit task cap when present; never exceed gateway policy."""
     configured = profile.override_notes.get("output_token_limit")
     if isinstance(configured, int) and configured > 0:
-        return min(configured, 16_384)
+        return min(configured, 131_072)
     return 16_384
 
 

@@ -4,7 +4,7 @@ This is the private Node 22.19+ model transport and provider-credential boundary
 for the DM Assistant. It owns no campaign, retrieval, canonical, preparation, or
 arbitrary filesystem state.
 
-`@earendil-works/pi-ai` is pinned and lockfile-resolved at `0.84.1`. The only
+`@earendil-works/pi-ai` is pinned and lockfile-resolved at `0.85.1` (including `gpt-6-astra`). The only
 registered providers are GitHub Copilot subscription OAuth, OpenAI Codex OAuth,
 OpenAI API-key fallback, and Pi's deterministic faux provider. Automated tests
 use faux only. OAuth and live-model
@@ -43,6 +43,13 @@ account/subscription permits the intended endpoint, model, and workload. This
 gateway does not treat an OAuth login as authorization for unattended or
 high-volume workloads. Live OAuth and model checks are manual, explicitly
 opt-in operational checks; CI exercises only the deterministic faux provider.
+
+Python owns retry budgets: SDK retries are disabled, and Codex defaults to SSE without a
+WebSocket fallback submission. Provider-free wire tests cover Astra's high-effort mapping and a
+single request on a retryable provider rejection. Transport ceilings are 131,072 output tokens
+and 600 seconds; each task still pins its own smaller limits. Normalized input usage includes
+cache reads/writes. Codex does not enforce an output cap before consumption; measured Python
+ceilings still reject overages, and subscription usage is not a dollar charge estimate.
 
 ## Checks
 

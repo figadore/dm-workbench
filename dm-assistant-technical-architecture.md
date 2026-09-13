@@ -392,6 +392,17 @@ versioned task profile records task kind, model profile, normalized effort, cont
 allowed tools, output schema/limit, fallback order, and instruction version. Every run pins the exact
 resolved snapshot and overrides. Model branding never substitutes for task-specific evals.
 
+P7-15b's explicitly authorized strongest-model feasibility trial uses the current session's exact
+Codex model at high effort, at most two submissions and a 600-second cumulative model-run deadline.
+Reese chose usage measurement rather than a monetary ceiling; this does not remove technical context,
+output or validation limits. The transport accepts up to 131,072 output tokens and 600 seconds per
+request so task profiles can use advertised model capacity instead of a feature-sized transport cap;
+existing smaller task ceilings remain unchanged. Gateway SDK retries are disabled and Codex uses SSE
+without WebSocket fallback, keeping provider submissions within Python's attempt count. Normalized
+input accounting includes cache-read/write tokens, not just uncached input. The pinned `pi-ai` 0.85.1
+catalog supplies Astra; authentication remains gateway-owned. This feasibility sample does not replace
+the later matched prompt comparison or human readiness evidence.
+
 A provider advertises `hard_output_token_limit` only when a provider-free wire-contract test proves it
 serializes a supported pre-consumption limit. Codex subscription omits unsupported output-limit fields
 and therefore does not advertise that capability; strict measured post-response publication ceilings,
@@ -867,8 +878,10 @@ only if prompt-only results are insufficient and measure its incremental benefit
 
 The disposable P7-15b file prototype wraps the existing Workbench `DungeonGuideContentPlan` with
 bounded overview prose, reusing the structured-submission runner, cumulative technical-repair
-reservation, guide validators/projection and pure map tools. Its fixture CLI has no live transport,
-editorial call, database publication or approval path. Three adapted synthetic briefs share one
+reservation, guide validators/projection and pure map tools. Fixture mode remains provider-free;
+explicit live mode selects one brief/condition through the existing gateway, journals attempts before
+contact and refuses to overwrite prior output. Neither mode adds an editorial call, database
+publication or approval path. Three adapted synthetic briefs share one
 validated five-room map; paired inputs differ only by the consistency instruction. Short scripted
 responses and synthetic accounting counters are plumbing checks, not authoring-quality evidence or
 production ceilings. This experimental payload is not a new persistent story schema or a second
@@ -899,6 +912,16 @@ The content pass sees the whole small adventure, resolved map and references, se
 supported mechanical policies. It authors the actual hook/ending, keyed rooms, inhabitants/reactions,
 clues/answers, obstacles/consequences, and meaningful rewards or resolutions. Different content types
 may have distinct typed records without becoming independent calls or child artifact versions.
+
+Ordinary room-local DM prose must not depend on a pre-reserved mechanical feature. A note's text,
+examinable evidence or an inhabitant's reactions can belong to a room without creating a geometry
+component. Evolve the Workbench content contract in place with simple local prose and explicit delivery
+cues; keep typed mechanical/geometry targets separate. Reference repairs must not relocate material
+into another room's feature slot to pass validation. This corrects the prototype's restrictive slot
+boundary, not the pure package's authority or exact-reference checks. Authoring context should include
+a compact code-resolved map brief (one room-number scheme, names, exits, state and supported mechanics)
+and a pinned presentation exemplar. The exemplar supplies structure, not campaign facts, invented
+geometry or a required story formula; it is not a substitute for selected authorized inputs.
 
 If content requires unsupported terrain or contradicts the outline/map, reject or surface the
 mismatch. Do not silently describe absent geometry. A correction may fit the existing map; structural
@@ -933,10 +956,32 @@ Avoid accidental softlocks without requiring every setback to leave the adventur
 
 ### Guide, completeness, and approval
 
-Assemble an adventure overview (hook, assumptions, stakes, background, progression, ending) followed
-by concise room keys. Supply concrete puzzle inscriptions/objects/evidence, a definite answer,
-observable feedback, hints/alternatives, and failure/retry behavior where applicable. Place clues in
-their keyed rooms, not only in a remote solution paragraph. Mystery for players must have a DM answer.
+Use [The Last Pay Chest](docs/p7-15a/last-pay-chest.md), explicitly selected by Reese, as the workable
+presentation reference—not an inferred personal section-order rule. Its information flow is:
+
+- a short pitch, explicit party/rules/session assumptions and immediately available map links;
+- **The job:** a player-facing hook, the essential private truth, why this place matters, a concise
+  situation/route overview and only the advance DM knowledge needed to run the opening;
+- map-numbered room keys with arrival text, local observations/examinable documents, actionable DM
+  procedures, conditional revelations/dialogue and exits/routes at the point of use; substantial NPC
+  behavior sits with the encounter and is linked from relevant earlier reactions;
+- **Settle up:** concrete resolutions after the room keys, with links from play procedures as needed.
+
+These are reference patterns, not mandatory repeated headings or fields in every room. Preserve useful
+variation; do not force an extensive ending or progression essay before introducing the rooms. Reuse
+its readable organization, not the payroll dispute, cast, noncombat scope, 60–90-minute target or map
+geometry. The reference was human-revised and is not proof of first-pass reliability or tabletop length.
+The supported validated-map boundary remains unchanged.
+
+Supply concrete puzzle inscriptions/objects/evidence, a definite answer, observable feedback,
+hints/alternatives, and failure/retry behavior where applicable. Keep a document and its actual text
+in the room where it is examined; put the solution/procedure with its encounter, not in an unrelated
+key or objective record. Mystery for players must have a DM answer. Code supplies the same room
+numbers across map, guide and cross-references and derives exit directions/destinations from validated
+openings. Rendering must preserve required authored sensory and delivery material rather than silently
+omit fields, duplicate titles, introduce a competing numbering scheme or print unexplained solutions
+before the situation. Provider-free fixtures check these projection and reference guarantees; human
+review still judges comprehensibility and compelling play.
 
 Keep arrival read-aloud, private DM guidance and conditionally revealed text/dialogue distinct, with
 explicit delivery triggers where needed. Group actionable room content without repeating the same

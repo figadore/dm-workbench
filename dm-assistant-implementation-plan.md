@@ -86,6 +86,30 @@ Do not substitute continued reference polishing for fresh authoring evidence in 
   Later production adds the outline pass; this experiment isolates authoring quality from layout.
 - Invoke existing gateway/runners through a disposable CLI/file adapter, not a second production
   authoring engine. Keep exact mechanical/reference validation and bounded correction.
+- **Correct the content/presentation boundary before further full-adventure trials:** use
+  [The Last Pay Chest](docs/p7-15a/last-pay-chest.md), explicitly selected by Reese, as the workable
+  structural exemplar. Its short pitch/assumptions and map links lead into **The job** (player hook,
+  essential DM truth, why the place matters and brief route orientation), numbered room keys with
+  local play material and triggered revelations, then **Settle up** with concrete outcomes.
+  Borrow information placement, not its plot, noncombat premise, exact headings or session length.
+- Give every room ordinary private DM prose without requiring a reserved mechanical feature.
+  Keep notes and their examinable text, clues, NPC reactions and procedures at their encounter
+  locations; repairs must not move evidence into another room merely to satisfy a typed slot.
+  Evolve the active Workbench content contract in place, separate from validated geometry/mechanics;
+  do not create another feature pipeline or universal story schema.
+- Code supplies one map-linked room-number scheme and exit directions/destinations. Project required
+  authored material without silently dropping sensory/delivery fields or adding a second generic
+  title/numbering system. Use a compact readable resolved-map brief and a pinned presentation example
+  in model context, rather than relying on engineering JSON and instructions alone. Reference content
+  is an exemplar, not authorized campaign facts or a geometry specification.
+- Prove room-local note/clue placement, conditional text delivery, numbered/directional references,
+  content projection and player-secret exclusion on small provider-free fixtures before live use.
+  Preserve the failed Astra packet and human review as evidence; do not send Reese another long
+  repair exercise. Seed/model comparisons do not establish full-adventure readiness or authorize calls.
+- For subsequent diagnostic trials, define explicit private opt-in retention of exact requests and
+  submitted creative candidates, including rejected candidates and repair inputs, before dispatch.
+  Keep them out of Git and routine logs; exclude raw transport, reasoning and credentials. This does
+  not retroactively recover the first Astra response or change the alpha retention gate.
 - **Test initial prompting independently first:** add causal and counterfactual consistency as an
   authoring objective, not an output section or an incident-specific question checklist. Behavior and
   consequences should follow from established motives, knowledge and circumstances as those change.

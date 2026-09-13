@@ -13,6 +13,10 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from dm_assistant.adapters.model_gateway import (
+    GatewayProvider,
+    _profile_output_token_limit,
+)
 from dm_assistant.orchestration.dungeons.whole_adventure_prototype import (
     CONSISTENCY_INSTRUCTION,
     TOOL,
@@ -232,6 +236,138 @@ def test_transport_failure_has_unknown_usage_and_no_raw_body(fixed):
     assert report["cumulative_input_tokens"] is None
     assert "private transport body" not in json.dumps(report)
     assert report["attempts"][0]["dispatched"] is True
+
+
+def test_progress_journals_dispatch_before_contact_and_all_attempts(fixed):
+    snapshots = []
+
+    class JournalGateway(Gateway):
+        def complete(self, **kwargs):
+            assert snapshots[-1]["attempts"][-1]["dispatched"] is True
+            assert snapshots[-1]["attempts"][-1]["input_tokens"] is None
+            return super().complete(**kwargs)
+
+    gateway = JournalGateway([{}, response()])
+    accepted, report = run_trial(
+        gateway,
+        fixed=fixed,
+        profile=ADAPTER["fixture_profile"](),
+        brief=CASES[0],
+        consistency=True,
+        on_progress=lambda value: snapshots.append(copy.deepcopy(value)),
+    )
+    assert accepted is not None
+    assert len(snapshots[-1]["attempts"]) == 2
+    assert snapshots[-1] == report
+    assert '"guide_content":' not in json.dumps(snapshots)
+
+
+def astra_provider():
+    return GatewayProvider.model_validate(
+        {
+            "id": "openai-codex",
+            "name": "Synthetic Codex",
+            "authenticated": True,
+            "authModes": ["oauth"],
+            "models": [
+                {
+                    "id": "gpt-6-astra",
+                    "name": "Synthetic Astra",
+                    "capabilities": ["text", "thinking", "tool_calls"],
+                    "contextWindow": 272_000,
+                    "maxOutputTokens": 128_000,
+                }
+            ],
+        }
+    )
+
+
+def test_live_profile_uses_exact_catalog_high_effort_and_technical_capacity():
+    provider = astra_provider()
+    profile = ADAPTER["live_profile"](provider, "gpt-6-astra")
+    assert profile.model_id == "gpt-6-astra"
+    assert profile.requested_effort.value == "deep"
+    assert profile.resolved_reasoning_level.value == "high"
+    assert profile.time_budget_seconds == 600
+    assert profile.token_budget == 262_144
+    assert _profile_output_token_limit(profile) == 128_000
+    assert _profile_output_token_limit(ADAPTER["fixture_profile"]()) == 16_000
+    assert profile.override_notes["sdk_retries"] == 0
+    with pytest.raises(ValueError):
+        ADAPTER["live_profile"](provider, "not-in-catalog")
+    with pytest.raises(ValueError):
+        ADAPTER["live_profile"](
+            provider.model_copy(update={"authenticated": False}), "gpt-6-astra"
+        )
+
+
+@pytest.mark.parametrize("interrupt", (False, True))
+def test_live_cli_is_explicit_single_case_and_preserves_interrupted_journal(
+    tmp_path, monkeypatch, interrupt
+):
+    output = tmp_path / "live"
+    brief_file = tmp_path / "brief.json"
+    brief_file.write_text(json.dumps(CASES[0]))
+    calls = []
+
+    class FakeClient(Gateway):
+        def __init__(self, **kwargs):
+            super().__init__([response()])
+
+        def providers(self):
+            return (astra_provider(),)
+
+        def complete(self, **kwargs):
+            calls.append(kwargs)
+            measurement = json.loads(
+                (output / "signal_house/on/measurement.json").read_text()
+            )
+            assert measurement["attempts"][0]["dispatched"] is True
+            assert measurement["evidence_kind"] == "live_feasibility"
+            if interrupt:
+                raise KeyboardInterrupt
+            return super().complete(**kwargs)
+
+    monkeypatch.setitem(ADAPTER["main"].__globals__, "PiGatewayClient", FakeClient)
+    monkeypatch.setenv("DM_MODEL_GATEWAY_URL", "http://fixture.invalid")
+    monkeypatch.setenv("DM_MODEL_GATEWAY_INTERNAL_TOKEN", "synthetic-internal-token")
+    args = [
+        str(SCRIPT),
+        "--output",
+        str(output),
+        "--live",
+        "--provider",
+        "openai-codex",
+        "--model",
+        "gpt-6-astra",
+        "--brief",
+        str(brief_file),
+    ]
+    # Default 'both' must fail before even one live submission.
+    monkeypatch.setattr(sys, "argv", args)
+    with pytest.raises(SystemExit) as error:
+        ADAPTER["main"]()
+    assert error.value.code == 2
+    assert not calls
+    monkeypatch.setattr(sys, "argv", [*args, "--consistency", "on"])
+    if interrupt:
+        with pytest.raises(KeyboardInterrupt):
+            ADAPTER["main"]()
+        assert not (output / "manifest.json").exists()
+        assert (
+            json.loads((output / "signal_house/on/measurement.json").read_text())[
+                "attempts"
+            ][0]["input_tokens"]
+            is None
+        )
+    else:
+        assert ADAPTER["main"]() == 0
+        assert json.loads((output / "manifest.json").read_text())["live_calls"] == 1
+    assert len(calls) == 1
+    with pytest.raises(SystemExit) as error:
+        ADAPTER["main"]()
+    assert error.value.code == 2
+    assert len(calls) == 1
 
 
 def test_invalid_fixed_map_fails_before_any_submission():

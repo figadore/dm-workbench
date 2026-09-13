@@ -259,17 +259,20 @@ function writePiEvent(response: ServerResponse, event: { readonly type: string; 
   }
 }
 
-function normalizeUsage(value: unknown): { input_tokens: number; output_tokens: number } | undefined {
+export function normalizeUsage(value: unknown): { input_tokens: number; output_tokens: number } | undefined {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return undefined;
   }
   // `pi-ai` normalizes every provider's final message to this pinned contract.
   // Do not inspect provider-native usage field names at the gateway boundary.
   const usage = value as Partial<Usage>;
-  if (!isNonNegativeInteger(usage.input) || !isNonNegativeInteger(usage.output)) {
+  if (!isNonNegativeInteger(usage.input) || !isNonNegativeInteger(usage.output)
+    || !isNonNegativeInteger(usage.cacheRead) || !isNonNegativeInteger(usage.cacheWrite)) {
     return undefined;
   }
-  return { input_tokens: usage.input, output_tokens: usage.output };
+  // pi-ai input excludes cached tokens. Charge all model input for cumulative
+  // accounting; these counts are usage, not an estimate of subscription dollars.
+  return { input_tokens: usage.input + usage.cacheRead + usage.cacheWrite, output_tokens: usage.output };
 }
 
 function isNonNegativeInteger(value: unknown): value is number {

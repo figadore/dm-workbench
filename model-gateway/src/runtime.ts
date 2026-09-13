@@ -233,7 +233,10 @@ class PiAiGatewayRuntime implements GatewayRuntime {
         reasoning: toPiEffort(request.effort),
         signal,
         fetch: this.providerFetch,
-        transport: this.providerTransport,
+        // Python owns the cumulative attempt policy; never hide SDK retries or
+        // Codex WebSocket-to-SSE resubmission behind one gateway request.
+        maxRetries: 0,
+        transport: this.providerTransport ?? (request.provider === "openai-codex" ? "sse" : undefined),
         onResponse: (response) => {
           providerHttpStatus = response.status;
         },

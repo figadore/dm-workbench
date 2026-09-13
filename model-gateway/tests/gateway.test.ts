@@ -25,9 +25,16 @@ import {
   GatewayRuntimeError,
   type GatewayRuntime,
 } from "../src/runtime.js";
-import { createGatewayServer } from "../src/server.js";
+import { createGatewayServer, normalizeUsage } from "../src/server.js";
 
 const INTERNAL_TOKEN = "a".repeat(32);
+
+test("normalized input usage includes cache reads and writes without inventing unknown counts", () => {
+  assert.deepEqual(normalizeUsage({ input: 12, output: 7, cacheRead: 100, cacheWrite: 5 }), {
+    input_tokens: 117, output_tokens: 7,
+  });
+  assert.equal(normalizeUsage({ input: 12, output: 7 }), undefined);
+});
 
 test("health, catalog, and streams require the internal caller token", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "dm-gateway-"));
@@ -63,6 +70,7 @@ test("health, catalog, and streams require the internal caller token", async (t)
   assert.match(catalogText, /faux-deterministic-v1/);
   assert.match(catalogText, /github-copilot/);
   assert.match(catalogText, /openai-codex/);
+  assert.match(catalogText, /gpt-6-astra/);
   assert.doesNotMatch(catalogText, /access|refresh|credential/i);
   const catalogDocument = JSON.parse(catalogText) as {
     providers: { id: string; models: { capabilities: string[] }[] }[];
@@ -149,6 +157,45 @@ test("the pinned Codex transport omits unsupported output-limit fields", async (
   assert.equal(capturedPayload?.max_output_tokens, undefined);
   assert.equal(capturedPayload?.max_tokens, undefined);
   assert.equal(capturedPayload?.max_completion_tokens, undefined);
+});
+
+test("Astra high effort has one wire attempt even on rate limits", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "dm-gateway-"));
+  const credentials = new FileCredentialStore(join(directory, "credentials.json"));
+  await credentials.modify("openai-codex", async () => ({
+    type: "oauth", access: syntheticCodexAccessToken(),
+    refresh: "synthetic-refresh-token", expires: Number.MAX_SAFE_INTEGER,
+  }));
+  let calls = 0;
+  const runtime = createPiAiRuntime({
+    credentials,
+    providerTransport: "sse",
+    providerFetch: async (_input, init) => {
+      calls++;
+      const body = init?.body;
+      assert.ok(typeof body === "string" || body instanceof Uint8Array);
+      const encoded = Buffer.from(body);
+      const decoded = new Headers(init?.headers).get("content-encoding") === "zstd"
+        ? zstdDecompressSync(encoded) : encoded;
+      const payload = JSON.parse(decoded.toString("utf8"));
+      assert.equal(payload.model, "gpt-6-astra");
+      assert.equal(payload.reasoning.effort, "high");
+      assert.equal(payload.max_output_tokens, undefined);
+      return new Response(JSON.stringify({ error: { message: "synthetic rate limit" } }), {
+        status: 429, headers: { "content-type": "application/json" },
+      });
+    },
+  });
+  const request = parseStreamRequest(fauxStreamRequest({
+    provider: "openai-codex", model: "gpt-6-astra", effort: "deep",
+    output_token_limit: 128_000, time_limit_seconds: 600,
+  }));
+  await assert.rejects(async () => {
+    for await (const _event of runtime.stream(request, new AbortController().signal)) { /* drain */ }
+  }, (error: unknown) => error instanceof GatewayRuntimeError && error.code === "usage_limit");
+  assert.equal(calls, 1);
+  assert.throws(() => parseStreamRequest(fauxStreamRequest({ time_limit_seconds: 601 })));
+  assert.throws(() => parseStreamRequest(fauxStreamRequest({ output_token_limit: 131_073 })));
 });
 
 test("the standard OpenAI API transport serializes its documented hard output limit", async () => {

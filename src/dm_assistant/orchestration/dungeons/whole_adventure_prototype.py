@@ -1,13 +1,14 @@
 """Disposable P7-15b file experiment; not a production authoring/publication path.
 
 One complete submission over a fixed map, at most one technical repair, no editor.
-The CLI supplies only synthetic fixture transport. Live budgets are not established.
+The CLI defaults to fixtures; live transport requires explicit single-case authorization.
 """
 
 from __future__ import annotations
 
 import json
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
@@ -201,9 +202,15 @@ def content_diagnostics(
 class _MeasuredGateway:
     """Capture every dispatched attempt, including runner rejection before a record."""
 
-    def __init__(self, client: GatewayClient, attempt: dict[str, JsonValue]) -> None:
+    def __init__(
+        self,
+        client: GatewayClient,
+        attempt: dict[str, JsonValue],
+        progress: Callable[[], None],
+    ) -> None:
         self.client = client
         self.attempt = attempt
+        self.progress = progress
 
     def complete(
         self,
@@ -214,6 +221,7 @@ class _MeasuredGateway:
         tool_schemas: tuple[GatewayToolSchema, ...],
     ) -> GatewayCompletion:
         self.attempt["dispatched"] = True
+        self.progress()  # Journal before provider contact; interrupted attempts remain visible.
         started = time.monotonic()
         try:
             completion = self.client.complete(
@@ -229,6 +237,7 @@ class _MeasuredGateway:
             self.attempt["gateway_elapsed_ms"] = int(
                 (time.monotonic() - started) * 1000
             )
+            self.progress()
 
 
 def run_trial(
@@ -238,6 +247,7 @@ def run_trial(
     fixed: FixedMap,
     brief: dict[str, JsonValue],
     consistency: bool,
+    on_progress: Callable[[dict[str, JsonValue]], None] | None = None,
 ) -> tuple[WholeAdventureSubmission | None, dict[str, JsonValue]]:
     """Reuse the shared runner/reservation; one cumulative budget, no editorial call."""
     if (
@@ -278,6 +288,12 @@ def run_trial(
         "cost_usd": None,
         "human_review": None,
     }
+
+    def progress() -> None:
+        if on_progress is not None:
+            on_progress(report)
+
+    progress()
     accepted: WholeAdventureSubmission | None = None
     for number in range(2):
         attempt: dict[str, JsonValue] = {
@@ -290,7 +306,7 @@ def run_trial(
             "status": "pending",
         }
         attempts.append(attempt)
-        runner = StructuredSubmissionRunner(_MeasuredGateway(client, attempt))
+        runner = StructuredSubmissionRunner(_MeasuredGateway(client, attempt, progress))
 
         def validate(value: WholeAdventureSubmission) -> ToolResult:
             return ToolResult(
@@ -372,6 +388,7 @@ def run_trial(
             if all(isinstance(value, int) for value in values)
             else None
         )
+    progress()
     return accepted, report
 
 
