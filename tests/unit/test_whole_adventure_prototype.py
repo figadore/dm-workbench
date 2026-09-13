@@ -19,12 +19,14 @@ from dm_assistant.adapters.model_gateway import (
 )
 from dm_assistant.orchestration.dungeons.whole_adventure_prototype import (
     CONSISTENCY_INSTRUCTION,
+    PRESENTATION_EXAMPLE,
     TOOL,
     WholeAdventureSubmission,
     build_fixed_map,
     build_input,
     content_diagnostics,
     render_trial_guide,
+    resolved_map_brief,
     run_trial,
 )
 from dm_assistant.orchestration.modeling.service import (
@@ -260,6 +262,238 @@ def test_progress_journals_dispatch_before_contact_and_all_attempts(fixed):
     assert len(snapshots[-1]["attempts"]) == 2
     assert snapshots[-1] == report
     assert '"guide_content":' not in json.dumps(snapshots)
+
+
+def test_room_local_note_is_lossless_private_and_map_linked(fixed):
+    from dm_assistant.orchestration.dungeons.service import build_dungeon_dm_guide
+    from dm_dungeon import RenderAudience, SvgRenderRequest, render_svg
+
+    document = response()
+    note = json.loads((FIXTURES / "local_note.json").read_text())
+    document["guide_content"]["room_narratives"][1] = note
+    submission = WholeAdventureSubmission.model_validate_json(json.dumps(document))
+    assert not content_diagnostics(fixed, submission)
+    guide = build_dungeon_dm_guide(
+        fixed.request, fixed.package, fixed.plan, submission.guide_content
+    )
+    text = render_trial_guide(fixed, CASES[0], submission)
+    assert text.count("\n# ") == 0
+    assert text.index("## The job") < text.index("## 1 —") < text.index("## Settle up")
+    assert "[DM map](../../dm-map.svg)" in text
+    for room in guide.rooms:
+        assert str(room.presentation_number) == room.map_reference.token
+        assert f"## {room.map_reference.token} — {room.name}" in text
+    gallery = next(room for room in guide.rooms if room.name == "Gallery")
+    local = text.split(f"## {gallery.map_reference.token} — Gallery\n", 1)[1].split(
+        "\n## ", 1
+    )[0]
+    for value in (
+        *note["sensory_details"],
+        note["local_content"][0]["delivery"],
+        note["local_content"][0]["revealed_text"],
+    ):
+        assert value in local
+        assert text.count(value) == 1
+    vault = next(room for room in guide.rooms if room.name == "Repository")
+    assert (
+        f"[Repository ({vault.map_reference.token})](#room-{vault.map_reference.token})"
+        in local
+    )
+    assert "[[room:" not in text
+    assert f'<a id="room-{gallery.map_reference.token}"></a>\n\n## ' in text
+    puzzle = submission.guide_content.entries[2]
+    assert text.index(puzzle.situation) < text.index(puzzle.solution)
+    assert "**Exits — DM reference:**" in local
+    assert (
+        gallery.local_content[0].revealed_text
+        == note["local_content"][0]["revealed_text"]
+    )
+    player = render_svg(
+        fixed.package,
+        SvgRenderRequest(
+            schema_version="1.0.0",
+            package_id=fixed.package.id,
+            floor_id=fixed.package.floors[0].id,
+            audience=RenderAudience.PLAYER,
+        ),
+    ).svg
+    assert player is not None
+    assert "Inspector Vale" not in player
+    assert "dispatch" not in player
+    assert not fixed.plan.room_contents or all(
+        item.room_ref != "gallery" or item.feature is None
+        for item in fixed.plan.room_contents
+    )
+
+
+@pytest.mark.parametrize("missing", ("delivery", "revealed_text"))
+def test_conditional_room_text_requires_its_delivery_pair(missing):
+    document = response()
+    del document["guide_content"]["room_narratives"][1]["local_content"][0][missing]
+    with pytest.raises(ValidationError, match="delivery cue"):
+        WholeAdventureSubmission.model_validate_json(json.dumps(document))
+
+
+@pytest.mark.parametrize("location", ("overview", "local", "mechanical"))
+def test_unknown_explicit_room_links_are_rejected_not_guessed(fixed, location):
+    document = response()
+    if location == "overview":
+        document["background"] += " See [[room:absent]]."
+    elif location == "local":
+        document["guide_content"]["room_narratives"][1]["local_content"][0][
+            "dm_text"
+        ] += " See [[room:absent]]."
+    else:
+        document["guide_content"]["entries"][0]["adjudication"] += (
+            " See [[room:absent]]."
+        )
+    submission = WholeAdventureSubmission.model_validate_json(json.dumps(document))
+    assert content_diagnostics(fixed, submission)
+    with pytest.raises(ValueError, match="technically rejected"):
+        render_trial_guide(fixed, CASES[0], submission)
+
+
+@pytest.mark.parametrize("extra", ("visibility", "geometry", "approved_for_play"))
+def test_local_prose_cannot_grant_authority_or_change_map(extra):
+    document = response()
+    document["guide_content"]["room_narratives"][1]["local_content"][0][extra] = (
+        "forbidden"
+    )
+    with pytest.raises(ValidationError, match="Extra inputs"):
+        WholeAdventureSubmission.model_validate_json(json.dumps(document))
+
+
+@pytest.mark.parametrize(
+    "reference", ("[[room:private document body]]", "[[room:unfinished")
+)
+def test_invalid_prose_link_diagnostics_remain_body_free(fixed, reference):
+    document = response()
+    document["background"] = reference
+    submission = WholeAdventureSubmission.model_validate_json(json.dumps(document))
+    diagnostics = content_diagnostics(fixed, submission)
+    assert diagnostics
+    assert reference not in json.dumps(diagnostics)
+
+
+def test_resolved_context_uses_exact_openings_not_destination_bearings(fixed):
+    from dm_assistant.orchestration.dungeons.guide_presentation import room_exit_lines
+    from dm_assistant.orchestration.dungeons.service import build_dungeon_dm_guide
+
+    guide = build_dungeon_dm_guide(fixed.request, fixed.package, fixed.plan)
+    openings = {
+        (item.corridor_id, item.room_id): item.approach_direction.value
+        for item in fixed.package.passage_openings
+    }
+    for connection in guide.connections:
+        assert (
+            connection.from_direction
+            == openings[connection.connection_id, connection.from_room_id]
+        )
+        assert (
+            connection.to_direction
+            == openings[connection.connection_id, connection.to_room_id]
+        )
+        for room in guide.rooms:
+            if room.room_id in (connection.from_room_id, connection.to_room_id):
+                assert any(
+                    connection.map_reference.token in line
+                    for line in room_exit_lines(guide, room)
+                )
+    secret = next(
+        connection for connection in guide.connections if connection.concealed
+    )
+    # The bent bypass leaves Annex eastward but Repository northward, NOT westward.
+    assert (secret.from_direction, secret.to_direction) == ("east", "north")
+    context = build_input(fixed, CASES[0], consistency=False)
+    assert context.messages[1].content == resolved_map_brief(fixed)
+    assert context.messages[2].content == PRESENTATION_EXAMPLE
+    assert "1 — Entrance" in context.messages[1].content
+    assert "Inner Gate Key" in context.messages[1].content
+    assert "Secret discovery DC 13" in context.messages[1].content
+    assert "structure only" in context.messages[2].content
+
+
+def test_technical_repair_can_keep_unreserved_evidence_in_its_original_room(fixed):
+    document = response()
+    local = document["guide_content"]["room_narratives"][1]["local_content"]
+    bad = copy.deepcopy(document)
+    # A spurious feature target cannot be accepted, even with ordinary prose available.
+    bad["guide_content"]["entries"].append(
+        {
+            "kind": "feature",
+            "ref": "dispatch",
+            "room_ref": "gallery",
+            "feature_name": "Dispatch",
+            "situation": local[0]["revealed_text"],
+            "adjudication": local[0]["dm_text"],
+            "player_choices": bad["guide_content"]["entries"][0]["player_choices"],
+        }
+    )
+    gateway = Gateway([bad, document])
+    accepted, report = trial(fixed, gateway)
+    assert accepted is not None
+    assert report["attempts"][0]["status"] == "references_rejected"
+    assert "Never move it to another room" in gateway.inputs[1][-1].content
+    repaired = accepted.guide_content.model_dump(mode="json")
+    original = WholeAdventureSubmission.model_validate_json(json.dumps(document))
+    assert (
+        accepted.guide_content.room_narratives[1].local_content
+        == original.guide_content.room_narratives[1].local_content
+    )
+    assert not any(entry["kind"] == "feature" for entry in repaired["entries"])
+
+
+def test_existing_detail_template_preserves_local_fields_and_escapes_prose(fixed):
+    from types import SimpleNamespace
+
+    from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+    from dm_assistant.orchestration.dungeons.service import build_dungeon_dm_guide
+
+    document = response()
+    document["guide_content"]["room_narratives"][1]["local_content"][0]["dm_text"] = (
+        "<script>synthetic-secret</script>"
+    )
+    submission = WholeAdventureSubmission.model_validate_json(json.dumps(document))
+    guide = build_dungeon_dm_guide(
+        fixed.request, fixed.package, fixed.plan, submission.guide_content
+    )
+    template = Environment(
+        loader=FileSystemLoader(ROOT / "src/dm_assistant/web/templates"),
+        autoescape=select_autoescape(),
+    ).get_template("dungeon_detail.html")
+    version = SimpleNamespace(
+        id="synthetic-version",
+        version_number=1,
+        change_summary="Fixture",
+        parent_version_id=None,
+        specification_sha256="synthetic",
+        specification={"layout_request": {"brief": {"summary": "Fixture"}}},
+        validation_report={},
+        input_pins=SimpleNamespace(model_dump=lambda **kwargs: {}),
+    )
+    html = template.render(
+        detail={
+            "title": "Fixture",
+            "lifecycle": "draft",
+            "current_version_id": version.id,
+        },
+        versions=[version],
+        dm_notes_by_version={version.id: SimpleNamespace(source_prompt=None)},
+        dm_guides_by_version={version.id: guide},
+        generation_runs={version.id: None},
+        version_assets={version.id: []},
+        campaign_id="synthetic",
+        csrf_token="synthetic",
+    )
+    assert "<script>synthetic-secret</script>" not in html
+    assert "&lt;script&gt;synthetic-secret&lt;/script&gt;" in html
+    assert "When someone unfolds the dispatch" in html
+    assert "Inspection complete. The landing is unsafe." in html
+    assert "The paper smells faintly of mint." in html
+    assert "2 — Gallery" in html
+    assert "(Map " not in html
+    assert "Exits — DM reference:" in html
 
 
 def astra_provider():

@@ -70,6 +70,38 @@ def test_svg_render_is_byte_deterministic_and_hash_pinned(
 
 
 @pytest.mark.parametrize("audience", tuple(RenderAudience))
+def test_shared_room_numbers_are_entry_first_and_array_order_independent(
+    synthetic_package: DungeonPackage,
+    audience: RenderAudience,
+) -> None:
+    package = synthetic_package
+    key = build_map_key(package, "floor_upper", audience, scale=20)
+    rooms = [entry for entry in key.entries if entry.kind.value == "room"]
+    assert rooms[0].component_id == "room_entrance"
+    assert rooms[0].token == "1"
+    assert [entry.token for entry in rooms] == [
+        str(i) for i in range(1, len(rooms) + 1)
+    ]
+    reordered = package.model_copy(
+        update={
+            "rooms": tuple(reversed(package.rooms)),
+            "topology": package.topology.model_copy(
+                update={
+                    "rooms": tuple(reversed(package.topology.rooms)),
+                    "connections": tuple(reversed(package.topology.connections)),
+                }
+            ),
+        }
+    )
+    assert build_map_key(reordered, "floor_upper", audience, scale=20) == key
+    if audience is RenderAudience.PLAYER:
+        hidden_ids = {
+            room.id for room in package.rooms if room.visibility is Visibility.DM_ONLY
+        }
+        assert not hidden_ids.intersection(entry.component_id for entry in rooms)
+
+
+@pytest.mark.parametrize("audience", tuple(RenderAudience))
 def test_upper_floor_svg_matches_golden_snapshot(
     synthetic_package: DungeonPackage,
     audience: RenderAudience,

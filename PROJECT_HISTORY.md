@@ -171,6 +171,22 @@
   must cover creative candidates/repair inputs without blanket transport capture. Documentation only:
   no implementation, seed selection, live authorization, readiness result or phase advance is implied.
 
+## P7-15b Provider-Free Local Content and Presentation
+
+- Evolved active Workbench V1 room prose with bounded private local passages and paired conditional
+  delivery/text, independent of mechanical reservations. Explicit local room links validate and resolve
+  in code; exact mechanical targets remain enforced. Small examinable-note and repair fixtures pass.
+- Shared audience-filtered map keys now number rooms entry-first via public-route traversal; the guide
+  consumes those numbers and exact opening directions/destinations at both ends. Rendering preserves
+  sensory/local/feature material, introduces a puzzle's situation before its solution, and assembles
+  pitch/assumptions/maps, The job, room keys, then Settle up without a duplicate title.
+- Prototype inputs pin a readable map brief and short synthetic presentation example following Last
+  Pay Chest's information flow. Existing detail-template projection is tested without a database.
+  Private candidate/request/repair capture policy is defined, but capture implementation remains absent.
+- Provider-free root and pure suites pass; no live calls, adventure-quality/human visual evidence,
+  schema migration, approval/canon, retention crossing or P7-16 advance. Failed/reference packets remain
+  untouched. Repository-wide static checks expose unrelated Library/scope/campaign-knowledge defects.
+
 ## Persistent Decisions
 
 - Models propose; humans approve preparation and commit canon.

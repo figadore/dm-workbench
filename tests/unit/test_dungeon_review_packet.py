@@ -284,9 +284,11 @@ def test_review_packet_contains_exact_maps_guide_rubric_and_blank_worksheet(
     assert "automatically identifies the threshold plate" in guide_text
     assert "visible pull-wire" not in guide_text
     assert guide_text.count("##### Choices and consequences") == 5
-    assert len(guide_text.split()) <= 900
+    # Synthetic packet ceiling includes formerly dropped cues and two-sided exits;
+    # this is not a relaxation of the whole-adventure 2,000-word objective.
+    assert len(guide_text.split()) <= 1200
     assert not re.search(r"(?i)\b(index|tabs?|holdings?|east-seal)\b", guide_text)
-    assert "**Sensory cues:**" not in guide_text
+    assert "**Sensory cues:**" in guide_text
     assert "**Purpose:**" not in guide_text
     assert "**Room mechanics:**" not in guide_text
     assert "Passage:" not in guide_text
@@ -301,20 +303,17 @@ def test_review_packet_contains_exact_maps_guide_rubric_and_blank_worksheet(
             assert markdown_lines[index - 1] == ""
 
     room_sections = re.findall(
-        r"(?ms)^### (\d+)\. ([^\n]+) \(Map ([^)]+)\)\n(.*?)(?=^### |^## Preparation blockers|\Z)",
+        r"(?ms)^## (\d+) — ([^\n]+)\n(.*?)(?=^<a id=|^## Preparation blockers|\Z)",
         guide_text,
     )
-    assert [(number, name, token) for number, name, token, _ in room_sections] == [
-        ("1", "Archive Entry", "2"),
-        ("2", "Record Gallery", "3"),
-        ("3", "Flooded Cataloguing Annex", "5"),
-        ("4", "Sealed Hall", "4"),
-        ("5", "Synthetic Vault", "1"),
+    assert [(number, name) for number, name, _ in room_sections] == [
+        (room.map_reference.token, room.name) for room in specification.dm_guide.rooms
     ]
-    for _, _, _, body in room_sections:
+    assert room_sections[0][:2] == ("1", "Archive Entry")
+    for _, _, body in room_sections:
         assert body.startswith("\n**Read aloud**\n\n> ")
 
-    sections_by_name = {name: body for _, name, _, body in room_sections}
+    sections_by_name = {name: body for _, name, body in room_sections}
     annex = sections_by_name["Flooded Cataloguing Annex"]
     assert "Three-Wave Brass Key" in annex
     assert "Exploration challenge" in annex

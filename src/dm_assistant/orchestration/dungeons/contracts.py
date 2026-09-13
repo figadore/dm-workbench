@@ -1476,12 +1476,32 @@ DungeonGuideContentEntry = Annotated[
 ]
 
 
+class DungeonGuideLocalContent(WorkflowModel):
+    """Private room-local prose, independent of reserved mechanical targets."""
+
+    heading: str = Field(min_length=1, max_length=200)
+    dm_text: GuideContentText
+    delivery: GuideContentText | None = None
+    revealed_text: GuideContentText | None = None
+
+    @model_validator(mode="after")
+    def require_delivery_with_revelation(self) -> DungeonGuideLocalContent:
+        if (self.delivery is None) != (self.revealed_text is None):
+            raise ValueError(
+                "revealed text and its delivery cue must be supplied together"
+            )
+        return self
+
+
 class DungeonGuideRoomNarrative(WorkflowModel):
-    """Sensory arrival material for one plan-local room."""
+    """Arrival and ordinary private play material for one plan-local room."""
 
     room_ref: GuideLocalRef
     read_aloud: GuideContentText
     sensory_details: tuple[GuideContentText, ...] = Field(min_length=2, max_length=4)
+    local_content: tuple[DungeonGuideLocalContent, ...] = Field(
+        default=(), max_length=8
+    )
 
 
 class DungeonGuideContentPlan(WorkflowModel):
@@ -1578,6 +1598,9 @@ class DungeonGuideRoom(WorkflowModel):
     tags: tuple[str, ...] = ()
     read_aloud: str | None = Field(default=None, min_length=1, max_length=2_000)
     sensory_details: tuple[str, ...] = Field(default=(), max_length=4)
+    local_content: tuple[DungeonGuideLocalContent, ...] = Field(
+        default=(), max_length=8
+    )
     preparation_note: str | None = Field(default=None, min_length=1, max_length=4_000)
     encounter_slot: EncounterSlotIntent | None = None
     encounter_slot_id: str | None = Field(default=None, min_length=1, max_length=200)
@@ -1609,6 +1632,8 @@ class DungeonGuideConnection(WorkflowModel):
     passage: str = Field(min_length=1, max_length=32)
     from_room_id: str = Field(min_length=1, max_length=200)
     to_room_id: str = Field(min_length=1, max_length=200)
+    from_direction: Literal["north", "east", "south", "west"] | None = None
+    to_direction: Literal["north", "east", "south", "west"] | None = None
     endpoint: VerticalEndpointSide | None = None
     endpoint_kind: EndpointDoorKind | None = None
     concealed: bool = False
@@ -1749,8 +1774,13 @@ class DungeonDmGuide(WorkflowModel):
         presentation_numbers = [item.presentation_number for item in self.rooms]
         if presentation_numbers != list(range(1, len(self.rooms) + 1)):
             raise ValueError(
-                "DM guide rooms require entry-first sequential presentation numbers"
+                "DM guide rooms require sequential map-key presentation numbers"
             )
+        if any(
+            str(room.presentation_number) != room.map_reference.token
+            for room in self.rooms
+        ):
+            raise ValueError("guide room numbers must match the shared map key")
         ids = [
             *(item.room_id for item in self.rooms),
             *(item.component_id for item in self.connections),

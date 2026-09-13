@@ -17,6 +17,7 @@ uv run --frozen python scripts/dungeon-whole-adventure-prototype.py \
 The output directory must not exist. It contains:
 
 - one shared validated map, plan, layout request and submission schema;
+- the exact readable `resolved-map-brief.md` and pinned synthetic `presentation-example.md`;
 - `dm-map.svg` and independently audience-filtered `player-map.svg`;
 - three cases, each with `on/` and `off/` consistency conditions;
 - each condition's exact input, brief, accepted synthetic submission, `dm-guide.md`, body-free
@@ -108,7 +109,7 @@ Neither condition calls an editor, performs an outline pass or changes a product
 
 ## Reused boundaries and limitations
 
-The experiment wraps the existing `DungeonGuideContentPlan` with five bounded overview prose fields;
+The experiment wraps the existing `DungeonGuideContentPlan` with a short pitch and five bounded overview prose fields;
 it does not introduce persistent story-state records or a parallel production engine. It reuses
 `StructuredSubmissionRunner`, `reserve_structured_submission_repair`, existing guide reference checks,
 map construction/validation, guide projection and rendering. The adapter additionally requires a
@@ -144,12 +145,12 @@ needs usable fresh-case results, actual human effort and a tabletop walkthrough.
 The ten-minute/no-core-authoring target is unchanged; this prototype does not cross that gate or justify
 an added editorial call or broader pipeline/workspace investment.
 
-## Planned correction: The Last Pay Chest as the structural reference
+## Provider-free content/presentation correction
 
 Reese explicitly selected [The Last Pay Chest](../p7-15a/last-pay-chest.md), with Nell and Iona,
 not the earlier Bellglass/Neris adventure. The [P7-15b implementation-plan task](../../dm-assistant-implementation-plan.md#p7-15b--try-whole-adventure-authoring)
 and [architecture §13](../../dm-assistant-technical-architecture.md#13-dungeon-generation) specify the
-correction; this documentation does not implement it or authorize another generation.
+correction. The provider-free implementation does not authorize another generation.
 
 The reference provides a short pitch/assumptions and map access, **The job** with hook and essential
 DM context, map-numbered rooms with their own evidence/procedures/triggered dialogue and routes, then
@@ -157,12 +158,56 @@ DM context, map-numbered rooms with their own evidence/procedures/triggered dial
 preferred ordering, a mandatory template for every room, or the same payroll story. Its noncombat
 premise, 60–90-minute target and licensed map are not constraints or validated inputs for other seeds.
 
-The planned adapter change supplies ordinary room-local private prose independently of mechanical
-feature reservations, one code-owned map/guide numbering scheme, code-derived exits and lossless
-projection of required authored information. Small provider-free note/clue/delivery/rendering/secrecy
-fixtures precede live trials. Later diagnostic capture needs a narrow explicit private policy for
-requests and submitted creative candidates, including rejected ones, without raw transport/reasoning
-or Git retention. The reviewed failed packet remains untouched; seed selection is a separate decision.
+The active V1 room narrative now accepts bounded `local_content`: a heading and private `dm_text`,
+plus an optional paired `delivery` cue and `revealed_text`. A dispatch, clue or NPC reaction needs no
+reserved feature. Mechanical entries still require exact existing targets; ordinary prose does not
+replace required puzzle/gate procedures. The signal-house fixture demonstrates an examinable dispatch
+in Gallery without reserving a feature there. It is a small regression sample, not a new full adventure.
+
+The shared pure map key allocates entry-first room numbers by public-route breadth-first traversal,
+with stable-ID tie breaks after audience filtering. The Workbench uses those numbers, not a second
+plan-order ordinal. Exits use each passage opening's departure direction (including bent passages),
+numbered destination, door callout and state at both ends. Unsupported/missing opening directions stay
+unavailable rather than being guessed from room centres. This does not add outside exits or map grammar.
+Explicit `[[room:local_ref]]` prose links validate against the plan and resolve to code-owned room links.
+Natural-language names/numbers/directions outside that syntax still require human consistency review.
+
+The assembled prototype guide has one title, pitch/assumptions/map links, The job, numbered rooms and
+Settle up after the rooms. Sensory cues, local delivery/text and feature descriptions are no longer
+silently dropped; the existing authenticated detail template also preserves local content/cues/exits.
+The model sees the readable map brief and pinned short presentation sample alongside exact engineering
+inputs. The sample borrows the reference's information flow, not its plot or map. Technical repair
+instructions explicitly preserve evidence location. No deterministic test proves a model will obey
+that instruction or that prose is causally consistent.
+
+Tests cover local note text and conditional dialogue placement, required delivery pairs, explicit
+references, exact two-sided exits, map/guide numbering, unchanged pure geometry and player-secret
+exclusion. The synthetic review packet's small word ceiling includes the recovered cues and exits;
+the whole-adventure roughly 2,000-word objective and ten-minute human-review target are unchanged.
+The failed packet and Last Pay Chest remain untouched. No human visual/play-readiness claim is made.
+
+## Private diagnostic-retention policy (capture implementation not yet supplied)
+
+Before a further diagnostic trial, obtain separate explicit consent to capture creative candidates;
+`--live` alone currently does **not** enable this capture. Do not run another diagnostic trial until
+capture is implemented/tested or Reese explicitly revises this policy.
+
+- Scope: this disposable synthetic single-case trial only, in a newly claimed ignored private directory
+  (directory mode 0700; capture files 0600). No database, Git copy, routine log or automatic upload.
+- Before each dispatch, retain the exact normalized messages, tool schema and resolved profile actually
+  sent, including the complete technical-repair input. A capture-write failure must prevent dispatch.
+- Immediately after a completion, retain only the allowed submission tool's creative arguments, even
+  if schema/reference validation rejects them. Retain accepted and rejected candidates separately by
+  attempt; never overwrite a prior candidate. Record missing/interrupted capture truthfully.
+- Exclude credentials, provider headers/envelopes, raw transport chunks, hidden reasoning, arbitrary
+  tool calls and assistant commentary. Inputs must be synthetic and reviewed free of secrets before
+  capture opt-in; automatic redaction would no longer be an exact request record.
+- Routine measurements remain body-free. Capture must be off by default, opt-in visibly journaled,
+  and cancellation/failure must not silently resubmit. Local deletion happens only at Reese's request
+  after diagnostic review; until then preserve the directory and flag incomplete captures.
+
+This policy cannot recover the first Astra candidate/repair request. It does not cross the alpha
+retention gate, authorize a provider/editorial call, select a seed or establish play readiness.
 
 ## Focused checks
 

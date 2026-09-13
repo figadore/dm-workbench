@@ -24,10 +24,12 @@ from dm_assistant.modules.modeling import (
     ToolCall,
 )
 from dm_assistant.orchestration.dungeons.whole_adventure_prototype import (
+    PRESENTATION_EXAMPLE,
     TOOL,
     build_fixed_map,
     build_input,
     render_trial_guide,
+    resolved_map_brief,
     run_trial,
 )
 from dm_assistant.orchestration.modeling.service import (
@@ -252,6 +254,12 @@ def main() -> int:
         )
         save_json(
             staging / "submission-schema.json", TOOL.input_schema.model_json_schema()
+        )
+        (staging / "resolved-map-brief.md").write_text(
+            resolved_map_brief(fixed), encoding="utf-8"
+        )
+        (staging / "presentation-example.md").write_text(
+            PRESENTATION_EXAMPLE, encoding="utf-8"
         )
         for audience in RenderAudience:
             rendered = render_svg(

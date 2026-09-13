@@ -854,7 +854,11 @@ rather than a universal optional-field object. Structure what code consumes, not
 Local refs are noncanonical handles. Code derives stable IDs from semantic identity/compiler policy,
 independent of seed, prose, and array order. Established IDs enter revision workflows explicitly;
 deterministic package code never calls `uuid4()`. Display numbering is separate and shared by map,
-guide, and inspector. Geometry-affecting demand belongs in the package, not invisible prose.
+guide, and inspector. The shared map key numbers audience-visible rooms entry-first by breadth-first
+traversal of public connections, breaking ties by stable ID and appending disconnected rooms by ID.
+Secret shortcuts cannot reorder the ordinary approach; filtering precedes allocation. Workbench guide
+numbers come from that key, not an independent plan traversal. Geometry-affecting demand belongs in
+the package, not invisible prose.
 
 ### Whole-adventure authoring
 
@@ -915,8 +919,10 @@ may have distinct typed records without becoming independent calls or child arti
 
 Ordinary room-local DM prose must not depend on a pre-reserved mechanical feature. A note's text,
 examinable evidence or an inhabitant's reactions can belong to a room without creating a geometry
-component. Evolve the Workbench content contract in place with simple local prose and explicit delivery
-cues; keep typed mechanical/geometry targets separate. Reference repairs must not relocate material
+component. The Workbench room narrative carries bounded local passages (`heading`, private `dm_text`,
+and optional paired `delivery`/`revealed_text`); typed mechanical/geometry targets stay separate.
+Explicit `[[room:local_ref]]` prose links validate against the plan and resolve in code. Plain prose
+claims still require review; this is not a story-reference ontology. Reference repairs must not relocate material
 into another room's feature slot to pass validation. This corrects the prototype's restrictive slot
 boundary, not the pure package's authority or exact-reference checks. Authoring context should include
 a compact code-resolved map brief (one room-number scheme, names, exits, state and supported mechanics)

@@ -214,9 +214,38 @@ def build_map_key(
         MapCalloutKind.OBJECTIVE: "O",
         MapCalloutKind.TRANSITION: "X",
     }
+    # One shared entry-first numbering policy. Traverse public connections only;
+    # a secret bypass must not pull an objective ahead of the ordinary approach.
+    # Candidate rooms have already passed audience filtering.
+    room_ids = {item[1] for item in candidates if item[0] is MapCalloutKind.ROOM}
+    entry_ids = sorted(
+        room.id
+        for room in package.rooms
+        if room.id in room_ids and room.role.value == "entrance"
+    )
+    neighbours: dict[str, set[str]] = {room_id: set() for room_id in room_ids}
+    for connection in package.topology.connections:
+        if connection.visibility.value != "player_safe":
+            continue
+        a, b = connection.from_room_id, connection.to_room_id
+        if a in room_ids and b in room_ids:
+            neighbours[a].add(b)
+            neighbours[b].add(a)
+    ordered: list[str] = []
+    for start in (*entry_ids, *sorted(room_ids)):
+        pending = [start]
+        while pending:
+            room_id = pending.pop(0)
+            if room_id in ordered:
+                continue
+            ordered.append(room_id)
+            pending.extend(sorted(neighbours[room_id] - set(ordered)))
+    room_order = {room_id: index for index, room_id in enumerate(ordered)}
     numbered: list[tuple[MapCalloutKind, str, GridPoint, str, tuple[str, ...]]] = []
     for kind in MapCalloutKind:
         items = sorted(item for item in candidates if item[0] is kind)
+        if kind is MapCalloutKind.ROOM:
+            items.sort(key=lambda item: room_order[item[1]])
         for number, (_, component_id, anchor, badges) in enumerate(items, start=1):
             token = (
                 str(number)

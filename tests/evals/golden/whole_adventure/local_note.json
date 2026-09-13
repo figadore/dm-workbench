@@ -1,0 +1,19 @@
+{
+  "room_ref": "gallery",
+  "read_aloud": "A folded dispatch rests beneath a blue paperweight.",
+  "sensory_details": ["The paper smells faintly of mint.", "A loose corner taps against the desk."],
+  "local_content": [
+    {
+      "heading": "Examine the dispatch",
+      "dm_text": "No search roll. The dispatch is genuine; it records an inspection, not a new exit. Keep this evidence here, not with the Annex key. The seal matches the wrapper in [[room:vault]].",
+      "delivery": "When someone unfolds the dispatch, show or read its text. Do not read it on arrival.",
+      "revealed_text": "Inspection complete. The landing is unsafe. Send the warning before the next boat arrives. — Inspector Vale"
+    },
+    {
+      "heading": "If someone calls for the inspector",
+      "dm_text": "Vale has already left the building. Nobody answers; this does not start a hidden timer.",
+      "delivery": null,
+      "revealed_text": null
+    }
+  ]
+}

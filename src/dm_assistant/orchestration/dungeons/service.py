@@ -182,6 +182,12 @@ from dm_dungeon.export import (
 )
 from dm_dungeon.rendering import SVG_RENDERER_VERSION
 
+from .guide_presentation import (
+    resolve_room_references,
+    room_exit_lines,
+    room_reference_targets,
+)
+
 if TYPE_CHECKING:
     from dm_assistant.orchestration.dungeons.final_validation import (
         DungeonCohesionReviewDisposition,
@@ -4271,7 +4277,10 @@ def validate_dungeon_guide_content(
     content_entries = content_plan.entries if content_plan is not None else ()
 
     for narrative in room_narratives:
-        if narrative.room_ref in rooms:
+        if (
+            narrative.room_ref in rooms
+            and room_reference_targets(narrative) <= rooms.keys()
+        ):
             accepted_room_narratives.append(narrative)
         else:
             issues.append(
@@ -4308,7 +4317,7 @@ def validate_dungeon_guide_content(
         )
         supplied_targets.add((entry.kind, target_ref))
         room = rooms.get(entry.room_ref)
-        valid = room is not None
+        valid = room is not None and room_reference_targets(entry) <= rooms.keys()
         if isinstance(entry, DungeonGuideGateContent):
             gate = gates.get(entry.gate_ref)
             valid = valid and gate is not None
@@ -4552,22 +4561,14 @@ def build_dungeon_dm_guide(
     }
     guide_rooms: list[DungeonGuideRoom] = []
     plan_rooms_by_ref = {room.ref: room for room in plan.rooms}
-    ordered_room_refs = []
-    for critical_room_ref in plan.critical_path:
-        ordered_room_refs.append(critical_room_ref)
-        ordered_room_refs.extend(
-            room_ref
-            for branch in plan.branches
-            if branch.from_room == critical_room_ref
-            for room_ref in branch.rooms
-        )
-    ordered_room_refs.extend(
-        room_ref
-        for branch in plan.branches
-        if branch.from_room not in plan.critical_path
-        for room_ref in branch.rooms
+    room_tokens = {
+        item.component_id: int(item.token)
+        for item in map_callouts
+        if item.component_id in rooms_by_id
+    }
+    ordered_room_refs = sorted(
+        plan_rooms_by_ref, key=lambda ref: room_tokens[room_ids_by_ref[ref]]
     )
-    ordered_room_refs.extend(sorted(set(plan_rooms_by_ref) - set(ordered_room_refs)))
     for presentation_number, room_ref in enumerate(ordered_room_refs, start=1):
         plan_room = plan_rooms_by_ref[room_ref]
         room_id = room_ids_by_ref[plan_room.ref]
@@ -4590,6 +4591,7 @@ def build_dungeon_dm_guide(
                 sensory_details=(
                     narrative.sensory_details if narrative is not None else ()
                 ),
+                local_content=narrative.local_content if narrative is not None else (),
                 preparation_note=plan_room.purpose,
                 encounter_slot=plan_room.encounter,
                 encounter_slot_id=(
@@ -4645,6 +4647,24 @@ def build_dungeon_dm_guide(
                 trap_effect=None,
             )
         )
+
+    openings = {
+        (item.corridor_id, item.room_id): item.approach_direction.value
+        for item in package.passage_openings
+    }
+    guide_connections = [
+        connection.model_copy(
+            update={
+                "from_direction": openings.get(
+                    (connection.connection_id, connection.from_room_id)
+                ),
+                "to_direction": openings.get(
+                    (connection.connection_id, connection.to_room_id)
+                ),
+            }
+        )
+        for connection in guide_connections
+    ]
 
     guide_dependencies: list[DungeonGuideDependency] = []
     if plan.gates:
@@ -4783,7 +4803,7 @@ def build_dungeon_dm_guide(
             )
         )
 
-    return DungeonDmGuide(
+    guide = DungeonDmGuide(
         schema_version="1.0.0",
         title=plan.title,
         premise=plan.premise,
@@ -4796,6 +4816,23 @@ def build_dungeon_dm_guide(
         objectives=tuple(guide_objectives),
         features=tuple(guide_features),
         content_issues=content_validation.issues,
+    )
+    rooms_by_ref = {
+        ref: next(room for room in guide.rooms if room.room_id == room_id)
+        for ref, room_id in room_ids_by_ref.items()
+    }
+
+    def resolve(value: JsonValue) -> JsonValue:
+        if isinstance(value, str):
+            return resolve_room_references(value, rooms_by_ref)
+        if isinstance(value, list):
+            return [resolve(item) for item in value]
+        if isinstance(value, dict):
+            return {key: resolve(item) for key, item in value.items()}
+        return value
+
+    return DungeonDmGuide.model_validate_json(
+        json.dumps(resolve(guide.model_dump(mode="json")))
     )
 
 
@@ -4938,41 +4975,69 @@ def _dm_notes_text(request: LayoutRequest, dm_notes: DungeonDmNotes) -> str:
     return "\n".join(sections) + "\n"
 
 
-def render_dungeon_dm_guide_text(guide: DungeonDmGuide) -> str:
-    """Render an exact DM guide as a portable provider-free review document."""
+def render_dungeon_dm_guide_text(
+    guide: DungeonDmGuide, *, room_keys_only: bool = False
+) -> str:
+    """Render an exact DM guide, optionally inside a whole-adventure document."""
 
-    return _dm_guide_text(guide)
+    return _dm_guide_text(guide, room_keys_only=room_keys_only)
 
 
-def _dm_guide_text(guide: DungeonDmGuide) -> str:
+def _dm_guide_text(guide: DungeonDmGuide, *, room_keys_only: bool = False) -> str:
     """Render a concise, exploration-ordered Markdown DM document."""
 
-    sections = [f"# {guide.title} — DM guide", "", guide.premise]
+    sections = (
+        [] if room_keys_only else [f"# {guide.title} — DM guide", "", guide.premise]
+    )
     gate_connections = {
         connection.gate_id: connection
         for connection in guide.connections
         if connection.gate_id is not None
     }
-    if guide.rooms:
+    if guide.rooms and not room_keys_only:
         sections.extend(("", "## Room-by-room guide"))
     for room in guide.rooms:
         sections.extend(
             (
                 "",
-                f"### {room.presentation_number}. {room.name} "
-                f"(Map {room.map_reference.token})",
+                f'<a id="room-{room.map_reference.token}"></a>',
+                "",
+                f"## {room.map_reference.token} — {room.name}",
                 "",
                 "**Read aloud**",
                 "",
-                f"> {room.read_aloud or 'Unknown; complete before play.'}",
+                _blockquote(room.read_aloud or "Unknown; complete before play."),
             )
         )
+        if room.sensory_details:
+            sections.extend(
+                (
+                    "",
+                    "**Sensory cues:**",
+                    "",
+                    *(f"- {detail}" for detail in room.sensory_details),
+                )
+            )
+        for passage in room.local_content:
+            sections.extend(("", f"### {passage.heading}", "", passage.dm_text))
+            if passage.delivery is not None and passage.revealed_text is not None:
+                sections.extend(
+                    (
+                        "",
+                        f"**Delivery:** {passage.delivery}",
+                        "",
+                        _blockquote(passage.revealed_text),
+                    )
+                )
+        exits = room_exit_lines(guide, room)
+        if exits:
+            sections.extend(("", "**Exits — DM reference:**", "", *exits))
 
         for connection in guide.connections:
-            if (
-                connection.from_room_id == room.room_id
-                and _connection_has_actionable_state(connection)
-            ):
+            if room.room_id in (
+                connection.from_room_id,
+                connection.to_room_id,
+            ) and _connection_has_actionable_state(connection):
                 _append_connection_state(sections, connection)
         if room.encounter_slot is not None:
             heading = (
@@ -5035,15 +5100,18 @@ def _dm_guide_text(guide: DungeonDmGuide) -> str:
         for puzzle in guide.puzzles:
             if puzzle.room_id != room.room_id:
                 continue
-            sections.extend(
-                ("", f"#### {puzzle.name}", "", f"- **Solution:** {puzzle.solution}")
-            )
-            _append_runnable_content(sections, puzzle.content)
+            sections.extend(("", f"#### {puzzle.name}"))
+            _append_runnable_content(sections, puzzle.content, solution=puzzle.solution)
         for feature in guide.features:
             if feature.room_id != room.room_id:
                 continue
             sections.extend(
-                ("", f"#### {feature.map_reference.token} — {feature.name}")
+                (
+                    "",
+                    f"#### {feature.map_reference.token} — {feature.name}",
+                    "",
+                    feature.description,
+                )
             )
             if feature.content is not None:
                 _append_runnable_content(sections, feature.content)
@@ -5062,6 +5130,10 @@ def _dm_guide_text(guide: DungeonDmGuide) -> str:
             f"- {issue.code}: {issue.message}" for issue in guide.content_issues
         )
     return "\n".join(sections) + "\n"
+
+
+def _blockquote(text: str) -> str:
+    return "\n".join(f"> {line}" for line in text.splitlines())
 
 
 def _connection_has_actionable_state(connection: DungeonGuideConnection) -> bool:
@@ -5111,12 +5183,16 @@ def _append_connection_state(
 
 
 def _append_runnable_content(
-    sections: list[str], content: DungeonGuideRunnableContent
+    sections: list[str],
+    content: DungeonGuideRunnableContent,
+    *,
+    solution: str | None = None,
 ) -> None:
+    sections.extend(("", f"- **Situation:** {content.situation}"))
+    if solution is not None:
+        sections.append(f"- **Solution:** {solution}")
     sections.extend(
         (
-            "",
-            f"- **Situation:** {content.situation}",
             f"- **Run it:** {content.adjudication}",
             "",
             "##### Choices and consequences",

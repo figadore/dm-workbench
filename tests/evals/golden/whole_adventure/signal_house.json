@@ -1,4 +1,5 @@
 {
+  "pitch": "Recover a coastal warning before its pilot departs.",
   "hook": "A boat pilot offers passage home if the party recovers the warning before her last safe departure. She waits outside for three ten-minute exploration turns, then leaves a tied skiff and departs. This tiny synthetic sample exercises plumbing, not a full session.",
   "background": "The warning reports a collapsed coastal landing. Its messenger turned back during the storm; the warning remains inside the Repository, labeled Prepared Objective on the fixed map.",
   "opposition": "There are no hostile creatures. Wind outside makes leaving by skiff slow, not impossible. Missing the pilot means rowing home and reaching the landing after one cargo boat has already grounded; its crew survives but needs help unloading.",
@@ -8,7 +9,7 @@
     "schema_version": "1.0.0",
     "room_narratives": [
       {"room_ref": "entry", "read_aloud": "A card shows three marks: a hill above a house above a wave. Beside it reads: highest first.", "sensory_details": ["The ink is dry.", "Wind whistles outside."]},
-      {"room_ref": "gallery", "read_aloud": "A route card pairs hill with north, house with east, and wave with south. The Inner Hall door has a keyhole.", "sensory_details": ["The card is legible.", "Salt dust coats the door handle."]},
+      {"room_ref": "gallery", "read_aloud": "A route card pairs hill with north, house with east, and wave with south. The Inner Hall door has a keyhole. A folded dispatch rests beneath a blue paperweight.", "sensory_details": ["The paper smells faintly of mint.", "A loose corner taps against the desk."], "local_content": [{"heading": "Examine the dispatch", "dm_text": "No search roll. The dispatch is genuine inspection evidence. The seal matches the wrapper in [[room:vault]].", "delivery": "When someone unfolds the dispatch, show or read its text. Do not read it on arrival.", "revealed_text": "Inspection complete. The landing is unsafe. Send the warning before the next boat arrives. — Inspector Vale"}, {"heading": "If someone calls for the inspector", "dm_text": "Vale has already left the building. Nobody answers; this does not start a hidden timer."}]},
       {"room_ref": "annex", "read_aloud": "Wet paper sleeves surround a brass key and a folded route card on a tray.", "sensory_details": ["The sleeves cling together.", "The key is visible."]},
       {"room_ref": "hall", "read_aloud": "A slate asks: read our three directions highest first. Blank lines wait below it.", "sensory_details": ["Chalk lies beside the slate.", "Old marks have been wiped away."]},
       {"room_ref": "vault", "read_aloud": "A sealed warning lies on a desk. Its wrapper reads: collapsed landing, divert incoming boats.", "sensory_details": ["The wrapper is intact.", "A spare sheet lies beside it."]}

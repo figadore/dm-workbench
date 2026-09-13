@@ -179,9 +179,16 @@ def test_guide_content_semantics_project_onto_exact_guide_ids() -> None:
     assert readiness is not None and readiness.ready
     text = render_dungeon_dm_guide_text(guide)
     assert "## Room-by-room guide" in text
-    assert "### 1. Archive Entry (Map 2)" in text
+    assert "## 1 — Archive Entry" in text
+    assert all(
+        str(room.presentation_number) == room.map_reference.token
+        for room in guide.rooms
+    )
     assert "**Read aloud**" in text
-    assert "**Sensory cues:**" not in text
+    assert "**Sensory cues:**" in text
+    assert all(
+        detail in text for room in guide.rooms for detail in room.sensory_details
+    )
     assert "**Find:**" in text
     assert "**Situation:**" in text
     assert "**Run it:**" in text

@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{{ detail.title }} — Dungeon Studio{% endblock %}
 {% block content %}
-{% macro runnable_content(content) -%}
-{% if content %}<div class="runnable-content"><p><strong>Situation:</strong> {{ content.situation }}</p><p><strong>Run it:</strong> {{ content.adjudication }}</p><p><strong>Choices and consequences:</strong></p><ol>{% for choice in content.player_choices %}<li><strong>{{ choice.action }}</strong> — {{ choice.outcome }}</li>{% endfor %}</ol></div>{% endif %}
+{% macro runnable_content(content, solution=none) -%}
+{% if content %}<div class="runnable-content"><p><strong>Situation:</strong> {{ content.situation }}</p>{% if solution %}<p><strong>Solution:</strong> {{ solution }}</p>{% endif %}<p><strong>Run it:</strong> {{ content.adjudication }}</p><p><strong>Choices and consequences:</strong></p><ol>{% for choice in content.player_choices %}<li><strong>{{ choice.action }}</strong> — {{ choice.outcome }}</li>{% endfor %}</ol></div>{% endif %}
 {%- endmacro %}
 <p><a href="/dungeons?campaign_id={{ campaign_id }}">← Dungeon Studio</a></p>
 <h1>{{ detail.title }}</h1>
@@ -25,17 +25,25 @@
     {% if preparation_readiness and not preparation_readiness["ready"] %}<p><strong>Preparation incomplete:</strong> this version cannot be approved for play until the following DM-only details are completed.</p><ul>{% for diagnostic in preparation_readiness["diagnostics"] %}<li>{{ diagnostic["message"] }}</li>{% endfor %}</ul>{% endif %}
     <h4>Room-by-room guide</h4>
     {% for room in dm_guide.rooms %}<section class="guide-room">
-      <h5>{{ room.presentation_number }}. {{ room.name }} <small>(Map {{ room.map_reference.token }})</small></h5>
+      <h5>{{ room.map_reference.token }} — {{ room.name }}</h5>
       <blockquote><strong>Read aloud:</strong> {{ room.read_aloud or "Unknown; complete before play." }}</blockquote>
-      {% for connection in dm_guide.connections %}{% if connection.from_room_id == room.room_id and (connection.concealed or connection.gate_id or connection.trap_id or connection.endpoint) %}
+      {% if room.sensory_details %}<p><strong>Sensory cues:</strong></p><ul>{% for detail in room.sensory_details %}<li>{{ detail }}</li>{% endfor %}</ul>{% endif %}
+      {% for passage in room.local_content %}<h6>{{ passage.heading }}</h6><p>{{ passage.dm_text }}</p>{% if passage.delivery %}<p><strong>Delivery:</strong> {{ passage.delivery }}</p><blockquote>{{ passage.revealed_text }}</blockquote>{% endif %}{% endfor %}
+      <p><strong>Exits — DM reference:</strong></p><ul>
+      {% for connection in dm_guide.connections %}{% if room.room_id in (connection.from_room_id, connection.to_room_id) %}
+      {% set target = connection.to_room_id if connection.from_room_id == room.room_id else connection.from_room_id %}
+      {% set direction = connection.from_direction if connection.from_room_id == room.room_id else connection.to_direction %}
+      <li>{{ (direction|title) if direction else "Direction unavailable" }}: {{ connection.passage }}{% if connection.map_reference %} ({{ connection.map_reference.token }}){% endif %} to {% for destination in dm_guide.rooms %}{% if destination.room_id == target %}{{ destination.name }} ({{ destination.map_reference.token }}){% endif %}{% endfor %} — {{ "secret; " if connection.concealed else "" }}{{ connection.gate_kind.value if connection.gate_id else "open" }}{{ "; trapped" if connection.trap_id else "" }}.</li>
+      {% endif %}{% endfor %}</ul>
+      {% for connection in dm_guide.connections %}{% if room.room_id in (connection.from_room_id, connection.to_room_id) and (connection.concealed or connection.gate_id or connection.trap_id or connection.endpoint) %}
       <h6>{{ connection.map_reference.token if connection.map_reference else "Transition" }} — {{ "Secret " if connection.concealed else "" }}{{ connection.passage|title }}</h6>
       <ul>{% if connection.concealed %}<li><strong>Find:</strong> discovery DC {{ connection.discovery_difficulty }}; check method is DM-adjudicated.</li>{% endif %}{% if connection.gate_id %}<li><strong>Open:</strong> unlock DC {{ connection.unlock_difficulty }}.</li>{% endif %}{% if connection.trap_id %}<li><strong>Trigger:</strong> {{ connection.trap_trigger }}</li><li><strong>Disable:</strong> DC {{ connection.disable_difficulty }}.</li><li><strong>Consequence:</strong> {{ connection.trap_effect }}</li>{% endif %}{% if connection.endpoint %}<li><strong>Transition:</strong> {{ connection.endpoint.value }} {{ connection.endpoint_kind.value }}.</li>{% endif %}</ul>
       {% endif %}{% endfor %}
       {% if room.encounter_slot %}<h6>{{ "Exploration challenge" if room.encounter_slot.value == "exploration" else (room.encounter_slot.value|title ~ " scene pressure") }}</h6>{% if room.encounter_content %}{{ runnable_content(room.encounter_content) }}{% else %}<p><strong>Preparation blocker:</strong> Runnable details are missing.</p>{% endif %}{% endif %}
       {% for item in dm_guide.dependencies %}{% if item.room_id == room.room_id %}<h6>{{ item.name }}{% for connection in dm_guide.connections %}{% if connection.gate_id == item.target_gate_id %} — opens {{ connection.map_reference.token if connection.map_reference else connection.connection_id }}{% endif %}{% endfor %}</h6>{% if item.discovery %}<p><strong>Find:</strong> {{ item.discovery }}</p>{% endif %}{{ runnable_content(item.content) }}{% endif %}{% endfor %}
       {% for item in dm_guide.traps %}{% if item.room_id == room.room_id %}<h6>{{ item.map_reference.token }} — {{ item.name }}</h6><ul>{% if item.warning %}<li><strong>Warning:</strong> {{ item.warning }}</li>{% endif %}<li><strong>Trigger:</strong> {{ item.trigger }}</li>{% if item.detection and item.disable %}<li><strong>Detect:</strong> DC {{ item.detection_difficulty }}; {{ item.detection }}</li><li><strong>Disable:</strong> DC {{ item.disable_difficulty }}; {{ item.disable }}</li>{% else %}<li><strong>Detect / disable:</strong> DC {{ item.detection_difficulty }} / DC {{ item.disable_difficulty }}; methods unknown; complete before play.</li>{% endif %}<li><strong>Consequence:</strong> {{ item.effect }}</li>{% for consequence in item.consequences %}<li><strong>Further consequence:</strong> {{ consequence }}</li>{% endfor %}{% if item.reset_or_recovery %}<li><strong>Reset / recovery:</strong> {{ item.reset_or_recovery }}</li>{% endif %}</ul>{% endif %}{% endfor %}
-      {% for item in dm_guide.puzzles %}{% if item.room_id == room.room_id %}<h6>{{ item.name }}</h6><p><strong>Solution:</strong> {{ item.solution }}</p>{{ runnable_content(item.content) }}{% endif %}{% endfor %}
-      {% for item in dm_guide.features %}{% if item.room_id == room.room_id %}<h6>{{ item.map_reference.token }} — {{ item.name }}</h6>{{ runnable_content(item.content) }}{% endif %}{% endfor %}
+      {% for item in dm_guide.puzzles %}{% if item.room_id == room.room_id %}<h6>{{ item.name }}</h6>{{ runnable_content(item.content, item.solution) }}{% endif %}{% endfor %}
+      {% for item in dm_guide.features %}{% if item.room_id == room.room_id %}<h6>{{ item.map_reference.token }} — {{ item.name }}</h6><p>{{ item.description }}</p>{{ runnable_content(item.content) }}{% endif %}{% endfor %}
       {% for item in dm_guide.objectives %}{% if item.room_id == room.room_id %}<h6>{{ item.map_reference.token }} — {{ item.name }}</h6>{{ runnable_content(item.content) }}{% endif %}{% endfor %}
     </section>{% endfor %}
     {% elif dm_notes.room_notes %}<h3>Room notes</h3><ol>{% for note in dm_notes.room_notes %}<li id="room-note-{{ note.room_id }}"><strong>{{ note.name }}</strong>: {{ note.text }}</li>{% endfor %}</ol><p>DM-map callouts use these room-note numbers; they are excluded from all player outputs.</p>{% endif %}

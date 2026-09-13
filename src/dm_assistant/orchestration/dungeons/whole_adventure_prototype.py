@@ -20,7 +20,20 @@ from dm_assistant.modules.modeling import (
     ToolResult,
 )
 from dm_assistant.modules.preparation import canonical_json_sha256
-from dm_assistant.orchestration.dungeons.contracts import DungeonGuideContentPlan
+from dm_assistant.orchestration.dungeons.contracts import (
+    DungeonDmGuide,
+    DungeonGuideContentPlan,
+    DungeonGuideFeature,
+    DungeonGuideObjective,
+    DungeonGuideRoom,
+    DungeonGuideTrap,
+)
+from dm_assistant.orchestration.dungeons.guide_presentation import (
+    resolve_room_references,
+    room_exit_lines,
+    room_link,
+    room_reference_targets,
+)
 from dm_assistant.orchestration.dungeons.service import (
     build_dungeon_dm_guide,
     render_dungeon_dm_guide_text,
@@ -77,8 +90,46 @@ BASE_INSTRUCTION = (
     "to invent core material. Invention is authorized only for this synthetic preparation; "
     "preserve supplied facts, distinguish claims from reality, and leave other campaign "
     "facts unknown. Nothing is approved, used or canonical. Target roughly 2,000 words "
-    "for the assembled guide, not padding or removal of essentials to meet a count."
+    "for the assembled guide, not padding or removal of essentials to meet a count. "
+    "Follow the pinned presentation example's information flow, not its facts or plot. "
+    "Supply a short pitch. The job uses hook, background (essential truth and why this "
+    "place matters), opposition (only advance DM context), and progression (short route "
+    "orientation). Put substantial NPC reactions, examinable notes with their exact text, "
+    "and procedures in the encountered room's local_content, not overview essays or "
+    "unrelated feature slots. Each local passage has a heading and private dm_text; "
+    "conditionally delivered text requires both delivery and revealed_text. Do not put "
+    "conditional dialogue or unrevealed answers in arrival read_aloud/sensory_details. "
+    "Mechanical entries remain required for reserved targets; ordinary prose needs no "
+    "feature reservation. Never relocate evidence to satisfy one. Use [[room:local_ref]] "
+    "for room cross-references, never invent numbers. Code adds numbered keys and exact "
+    "exits; do not duplicate those headings/lists. Ending renders after rooms as Settle up."
 )
+
+# Pinned synthetic presentation sample, not a new adventure or campaign input.
+# Information flow selected from docs/p7-15a/last-pay-chest.md; plot/geometry not copied.
+PRESENTATION_EXAMPLE = """Presentation example — structure only, not authorized facts or geometry.
+# The Delayed Dispatch
+*A retrieval with a choice about who receives a warning.*
+Assumptions: supplied party/rules/session target. [DM map] [Player map]
+## The job
+A pilot asks for a missing warning before departure.
+DM truth: the warning records a failed inspection, not sabotage. This building stores
+undelivered dispatches. Start in the entry; code supplies the actual room links/routes.
+## 1 — Example room (number/name supplied by code)
+On arrival — read or paraphrase:
+> A folded dispatch rests beneath a paperweight.
+Sensory cues: paper smells of mint; its loose corner taps against the desk.
+### Examine the dispatch
+For the DM: genuine inspection evidence. No search roll.
+Delivery: only when someone unfolds it, show or read:
+> Inspection complete. The landing is unsafe. Send the warning before the next boat.
+### If someone calls for the inspector
+The inspector has left. Nobody answers; no hidden timer starts.
+Exits — DM reference: code supplies actual directions, numbered destinations and state.
+## Settle up
+Delivering the warning diverts the boat; leaving it means the crew reaches the unsafe landing.
+Use flexible local headings. Other adventures may need combat, puzzles or different outcomes.
+"""
 
 
 class WholeAdventureSubmission(BaseModel):
@@ -86,6 +137,7 @@ class WholeAdventureSubmission(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
+    pitch: str = Field(min_length=1, max_length=500)
     hook: str = Field(min_length=1, max_length=4000)
     background: str = Field(min_length=1, max_length=4000)
     opposition: str = Field(min_length=1, max_length=4000)
@@ -144,6 +196,60 @@ def build_fixed_map(plan: DungeonPlan, *, seed: int = 715_000_101) -> FixedMap:
     return FixedMap(plan, request, package)
 
 
+def _rooms_by_ref(
+    fixed: FixedMap, guide: DungeonDmGuide
+) -> dict[str, DungeonGuideRoom]:
+    assert fixed.request.certificate is not None
+    rooms = {room.room_id: room for room in guide.rooms}
+    return {item.ref: rooms[item.room_id] for item in fixed.request.certificate.rooms}
+
+
+def resolved_map_brief(fixed: FixedMap) -> str:
+    """Readable DM-only map context, derived from the same projection as rendering."""
+    guide = build_dungeon_dm_guide(fixed.request, fixed.package, fixed.plan)
+    rooms = _rooms_by_ref(fixed, guide)
+    lines = [
+        "Resolved map brief — DM only; immutable geometry/mechanics.",
+        "Directions name the departure wall, not the compass bearing of the destination.",
+        "Only listed internal routes are validated; no extra outside exits are implied.",
+        f"Start: {room_link(rooms[fixed.plan.critical_path[0]])}.",
+    ]
+    for ref, room in sorted(
+        rooms.items(), key=lambda item: item[1].presentation_number
+    ):
+        lines.extend(
+            (
+                f"\n{room.map_reference.token} — {room.name}; local ref {ref}; role {room.role.value}.",
+                f"Purpose: {room.preparation_note}",
+                *room_exit_lines(guide, room),
+            )
+        )
+        if room.encounter_slot:
+            lines.append(f"Reserved encounter: {room.encounter_slot.value}.")
+        for dependency in guide.dependencies:
+            if dependency.room_id == room.room_id:
+                lines.append(
+                    f"Gate dependency here: {dependency.name} ({dependency.kind})."
+                )
+        for connection in guide.connections:
+            if room.room_id in (connection.from_room_id, connection.to_room_id):
+                if connection.gate_id:
+                    lines.append(f"Gate unlock DC {connection.unlock_difficulty}.")
+                if connection.concealed:
+                    lines.append(
+                        f"Secret discovery DC {connection.discovery_difficulty}."
+                    )
+        targets: tuple[
+            DungeonGuideFeature | DungeonGuideObjective | DungeonGuideTrap, ...
+        ] = (*guide.features, *guide.objectives, *guide.traps)
+        for item in targets:
+            if item.room_id == room.room_id:
+                lines.append(
+                    f"Reserved map target: {item.name} ({item.map_reference.token})."
+                )
+    return "\n".join(lines)
+
+
 def build_input(
     fixed: FixedMap, brief: dict[str, JsonValue], *, consistency: bool
 ) -> ModelRunInput:
@@ -162,7 +268,11 @@ def build_input(
             ),
         ),
     )
-    messages = [PromptMessage(role="user", content=instruction)]
+    messages = [
+        PromptMessage(role="user", content=instruction),
+        PromptMessage(role="user", content=resolved_map_brief(fixed)),
+        PromptMessage(role="user", content=PRESENTATION_EXAMPLE),
+    ]
     for name, document in documents:
         text = json.dumps(document, sort_keys=True, separators=(",", ":"))
         # Respect the existing normalized transport message ceiling, without dropping map data.
@@ -186,6 +296,16 @@ def content_diagnostics(
         issue.model_dump(mode="json")
         for issue in validate_dungeon_guide_content(fixed.plan, content).issues
     ]
+    unknown_refs = room_reference_targets(submission) - {
+        room.ref for room in fixed.plan.rooms
+    }
+    if unknown_refs:
+        diagnostics.append(
+            {
+                "code": "guide_content.target_invalid",
+                "message": "Unknown or malformed explicit room reference.",
+            }
+        )
     # The legacy validator does not require gate-dependency entries. This complete
     # submission must not silently leave its fixed gate without a play procedure.
     supplied_gates = {
@@ -357,7 +477,10 @@ def run_trial(
                             role="user",
                             content=(
                                 "Replace the complete submission, correcting only these technical "
-                                "diagnostics within the same brief/map and authoring objective:\n"
+                                "diagnostics within the same brief/map and authoring objective. "
+                                "Keep evidence at its encounter location; ordinary room-local "
+                                "content does not require a reserved feature. Never move it "
+                                "to another room just to satisfy a mechanical slot:\n"
                                 + json.dumps(diagnostics, sort_keys=True)
                             ),
                         ),
@@ -397,16 +520,21 @@ def render_trial_guide(
 ) -> str:
     if content_diagnostics(fixed, submission):
         raise ValueError("cannot render a technically rejected submission")
-    overview = "\n\n".join(
-        f"## {name.title()}\n\n{getattr(submission, name)}"
-        for name in ("hook", "background", "opposition", "progression", "ending")
-    )
     guide = build_dungeon_dm_guide(
         fixed.request, fixed.package, fixed.plan, submission.guide_content
     )
-    return (
-        f"# {brief['title']}\n\n"
+    rooms_by_ref = _rooms_by_ref(fixed, guide)
+    entrance = rooms_by_ref[fixed.plan.critical_path[0]]
+    text = (
+        f"# {brief['title']}\n\n*{submission.pitch}*\n\n"
         "DM-only disposable prototype — not approved or canonical.\n\n"
-        f"Assumptions: {brief['assumptions']}\n\n{overview}\n\n"
-        + render_dungeon_dm_guide_text(guide)
+        f"Assumptions: {brief['assumptions']}\n\n"
+        "[DM map](../../dm-map.svg) · [Player map](../../player-map.svg)\n\n"
+        f"## The job\n\n{submission.hook}\n\n"
+        f"**DM truth / why this place matters:** {submission.background}\n\n"
+        f"{submission.opposition}\n\nStart at {room_link(entrance)}.\n\n"
+        f"{submission.progression}\n\n"
+        + render_dungeon_dm_guide_text(guide, room_keys_only=True)
+        + f"\n## Settle up\n\n{submission.ending}\n"
     )
+    return resolve_room_references(text, rooms_by_ref)

@@ -172,7 +172,7 @@ def test_browser_prompt_faux_gateway_persists_draft(
             assert "Exploration challenge" in detail.text
             assert "Encounter slot:" not in detail.text
             assert "not yet populated" not in detail.text
-            assert "Sensory cues:" not in detail.text
+            assert "Sensory cues:" in detail.text
             assert "Room mechanics:" not in detail.text
             assert "discovery DC 13; check method is DM-adjudicated" in detail.text
             assert "unlock DC 13" in detail.text
